@@ -1,5 +1,7 @@
 #include "app/Application.h"
 #include "app/Localization.h"
+#include "doc/OrdoApplication.h"
+#include "platform/FileDialog.h"
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -13,12 +15,19 @@
 #include <TCollection_AsciiString.hxx>
 
 #include <cstring>
+#include <sstream>
 #include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
 
 namespace OrdoCAD {
+
+static std::string LabelKey(const TDF_Label& label) {
+    std::ostringstream oss;
+    label.EntryDump(oss);
+    return oss.str();
+}
 
 static void LoadCyrillicFont() {
     ImGuiIO& io = ImGui::GetIO();
@@ -28,8 +37,6 @@ static void LoadCyrillicFont() {
         "../../assets/fonts/Roboto-Regular.ttf",
         "C:/Windows/Fonts/segoeui.ttf",
         "C:/Windows/Fonts/arial.ttf",
-        "C:/Windows/Fonts/tahoma.ttf",
-        "/System/Library/Fonts/Helvetica.ttc",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     };
     for (const auto& path : candidates) {
@@ -38,12 +45,8 @@ static void LoadCyrillicFont() {
         ImFont* font = io.Fonts->AddFontFromFileTTF(
             path.c_str(), 18.0f, nullptr,
             io.Fonts->GetGlyphRangesCyrillic());
-        if (font) {
-            std::cout << "OrdoCAD: loaded font '" << path << "'\n";
-            return;
-        }
+        if (font) { std::cout << "OrdoCAD: font '" << path << "'\n"; return; }
     }
-    std::cerr << "OrdoCAD: no Cyrillic font found\n";
     io.Fonts->AddFontDefault();
 }
 
@@ -64,14 +67,12 @@ Application::Application() {
     myOcctView = std::make_unique<OcctView>();
     try {
         if (!myOcctView->Init(myWindow->GetNativeWindow(), fbW, fbH)) {
-            myOcctView.reset();
-            return;
+            myOcctView.reset(); return;
         }
     } catch (...) { myOcctView.reset(); return; }
 
     myDocument = std::make_unique<OrdoDocument>();
     myDocument->CreateBaseGeometry();
-    myDocument->CreateTestTree();
 
     RefreshView();
     if (myOcctView) myOcctView->FitAll();
@@ -103,39 +104,73 @@ void Application::RefreshView() {
     if (!myOcctView || !myDocument) return;
     myOcctView->ClearAllShapes();
 
-    TDF_Label root = myDocument->MainLabel();
-    TDF_ChildIterator it(root, false);
-    int count = 0;
-    for (; it.More(); it.Next()) {
-        TDF_Label child = it.Value();
-        TopoDS_Shape s = myDocument->GetShape(child);
+    // Рекурсивный обход всего дерева
+    std::function<void(const TDF_Label&)> walk = [&](const TDF_Label& l) {
+        TopoDS_Shape s = myDocument->GetShape(l);
         if (!s.IsNull()) {
-            bool isSys = OrdoDocument::IsSystem(child);
-            myOcctView->DisplayShape(s, child, isSys);
-            ++count;
-        }
-        // Дети базовой геометрии — плоскости, оси, точка
-        if (OrdoDocument::GetType(child) == FT_Origin) {
-            TDF_ChildIterator subIt(child, false);
-            for (; subIt.More(); subIt.Next()) {
-                TDF_Label sub = subIt.Value();
-                TopoDS_Shape ss = myDocument->GetShape(sub);
-                if (!ss.IsNull()) {
-                    myOcctView->DisplayShape(ss, sub, true);
-                    ++count;
-                }
+            myOcctView->DisplayShape(s, l, OrdoDocument::IsSystem(l));
+            // Применяем сохранённую видимость
+            std::string key = LabelKey(l);
+            auto it = myVisibility.find(key);
+            if (it != myVisibility.end() && !it->second) {
+                myOcctView->SetShapeVisible(l, false);
             }
         }
-    }
-    std::cout << "RefreshView: " << count << " shape(s)\n";
-    myOcctView->Redraw();
+        TDF_ChildIterator it(l, false);
+        for (; it.More(); it.Next()) walk(it.Value());
+    };
+    walk(myDocument->MainLabel());
+
     myOcctView->Redraw();
 }
 
-// Отрисовка одного узла дерева. Возвращает true, если запрошено удаление.
-static bool DrawLabelTree(const TDF_Label& label,
-                           const TDF_Label& selectedLabel,
-                           TDF_Label& pendingDelete) {
+void Application::OnNewDocument() {
+    if (!myDocument) return;
+    OrdoApplication::Instance().CloseDocument(myDocument->GetDoc());
+    myDocument = std::make_unique<OrdoDocument>();
+    myDocument->CreateBaseGeometry();
+    myCurrentPath.clear();
+    myVisibility.clear();
+    RefreshView();
+    if (myOcctView) myOcctView->FitAll();
+}
+
+void Application::OnSave() {
+    if (!myDocument) return;
+    std::string path = myCurrentPath;
+    if (path.empty()) {
+        if (!ShowFileDialog(true, path, "Сохранить как")) return;
+    }
+    if (OrdoApplication::Instance().SaveDocument(myDocument->GetDoc(), path)) {
+        myCurrentPath = path;
+        std::strncpy(myFilePathBuffer, path.c_str(), sizeof(myFilePathBuffer) - 1);
+        myFilePathBuffer[sizeof(myFilePathBuffer) - 1] = '\0';
+        std::cout << "Saved to: " << myCurrentPath << "\n";
+    }
+}
+
+void Application::OnOpen() {
+    std::string path = myCurrentPath;
+    if (!ShowFileDialog(false, path, "Открыть файл")) return;
+
+    Handle(TDocStd_Document) loaded =
+        OrdoApplication::Instance().OpenDocument(path);
+    if (loaded.IsNull()) { std::cerr << "Open failed\n"; return; }
+
+    myDocument = std::make_unique<OrdoDocument>();
+    myDocument->SetDocument(loaded);
+    myCurrentPath = path;
+    myVisibility.clear();
+    std::strncpy(myFilePathBuffer, path.c_str(), sizeof(myFilePathBuffer) - 1);
+    myFilePathBuffer[sizeof(myFilePathBuffer) - 1] = '\0';
+    RefreshView();
+    if (myOcctView) myOcctView->FitAll();
+}
+
+// === Дерево ===
+
+bool Application::DrawLabelTree(const TDF_Label& label,
+                                 const TDF_Label& selectedLabel) {
     std::string labelName = "<unnamed>";
     Handle(TDataStd_Name) nameAttr;
     if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
@@ -152,26 +187,45 @@ static bool DrawLabelTree(const TDF_Label& label,
     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
                                 ImGuiTreeNodeFlags_SpanAvailWidth |
                                 ImGuiTreeNodeFlags_DefaultOpen;
-    if (!hasChildren) {
+    if (!hasChildren)
         flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-    }
-    if (!selectedLabel.IsNull() && selectedLabel.IsEqual(label)) {
+    if (!selectedLabel.IsNull() && selectedLabel.IsEqual(label))
         flags |= ImGuiTreeNodeFlags_Selected;
+
+    ImGui::PushID(LabelKey(label).c_str());
+
+    // Чекбокс видимости для системных элементов с геометрией
+    if (isSystem && (type == FT_Plane || type == FT_Axis)) {
+        std::string key = LabelKey(label);
+        bool visible = true;
+        auto it = myVisibility.find(key);
+        if (it != myVisibility.end()) visible = it->second;
+
+        if (ImGui::Checkbox("##vis", &visible)) {
+            myVisibility[key] = visible;
+            if (myOcctView) myOcctView->SetShapeVisible(label, visible);
+        }
+        ImGui::SameLine();
     }
 
-    ImGui::PushID(label.Tag());
-
-    // Системные — серым цветом
     if (isSystem) ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(160, 160, 160, 255));
     bool opened = ImGui::TreeNodeEx(labelName.c_str(), flags);
     if (isSystem) ImGui::PopStyleColor();
 
-    // Контекстное меню — только для не-системных
-    if (!isSystem && ImGui::BeginPopupContextItem("##ctx")) {
+    // Контекстное меню
+    if (ImGui::BeginPopupContextItem("##ctx")) {
         ImGui::TextDisabled("%s", labelName.c_str());
         ImGui::Separator();
-        if (ImGui::MenuItem(Tr("btn.delete").c_str())) {
-            pendingDelete = label;
+
+        if (type == FT_Plane) {
+            if (ImGui::MenuItem(Tr("btn.createSketch").c_str())) {
+                myPendingCreateSketchLabel = label;
+            }
+        }
+        if (!isSystem) {
+            if (ImGui::MenuItem(Tr("btn.delete").c_str())) {
+                myPendingDeleteLabel = label;
+            }
         }
         ImGui::EndPopup();
     }
@@ -183,47 +237,59 @@ static bool DrawLabelTree(const TDF_Label& label,
     if (opened && hasChildren) {
         TDF_ChildIterator it(label, false);
         for (; it.More(); it.Next()) {
-            if (DrawLabelTree(it.Value(), selectedLabel, pendingDelete)) {
-                requested = true;
-            }
+            if (DrawLabelTree(it.Value(), selectedLabel)) requested = true;
         }
         ImGui::TreePop();
     }
 
     ImGui::PopID();
-    return requested || !pendingDelete.IsNull();
+    return requested || !myPendingDeleteLabel.IsNull()
+                     || !myPendingCreateSketchLabel.IsNull();
+}
+
+void Application::DrawMenuBar() {
+    if (ImGui::BeginMainMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("New")) OnNewDocument();
+            if (ImGui::MenuItem("Open...  (Ctrl+O)")) OnOpen();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Save  (Ctrl+S)")) OnSave();
+            if (ImGui::MenuItem("Save As...")) { myCurrentPath.clear(); OnSave(); }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Exit"))
+                glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("View")) {
+            if (ImGui::MenuItem("Fit All")) {
+                if (myOcctView) myOcctView->FitAll();
+            }
+            if (ImGui::MenuItem("Fullscreen (F11)")) myWindow->ToggleFullscreen();
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Language")) {
+            Language cur = Localization::Instance().GetLanguage();
+            if (ImGui::MenuItem("English", nullptr, cur == Language::EN))
+                Localization::Instance().SetLanguage(Language::EN);
+            if (ImGui::MenuItem("Русский", nullptr, cur == Language::RU))
+                Localization::Instance().SetLanguage(Language::RU);
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
+    }
 }
 
 void Application::DrawDocumentTree() {
     ImGuiIO& io = ImGui::GetIO();
-    const float panelWidth = 320.0f;
+    const float panelWidth = 340.0f;
 
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(0, 20), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 20), ImGuiCond_Always);
 
     ImGui::Begin("##ocaf_tree", nullptr,
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus |
         ImGuiWindowFlags_NoTitleBar);
-
-    ImGui::Text("%s", Tr("lang.label").c_str());
-    ImGui::SameLine();
-    Language curLang = Localization::Instance().GetLanguage();
-    if (ImGui::RadioButton(Tr("lang.en").c_str(), curLang == Language::EN))
-        Localization::Instance().SetLanguage(Language::EN);
-    ImGui::SameLine();
-    if (ImGui::RadioButton(Tr("lang.ru").c_str(), curLang == Language::RU))
-        Localization::Instance().SetLanguage(Language::RU);
-    ImGui::Separator();
-
-    if (ImGui::Button(myWindow->IsFullscreen()
-                        ? Tr("btn.exitFullscreen").c_str()
-                        : Tr("btn.fullscreen").c_str()))
-        myWindow->ToggleFullscreen();
-    ImGui::SameLine();
-    if (ImGui::Button(Tr("btn.maximize").c_str()))
-        myWindow->Maximize();
-    ImGui::Separator();
 
     ImGui::Text("%s", Tr("panel.title").c_str());
     ImGui::TextDisabled("%s", Tr("panel.hint.delete").c_str());
@@ -236,6 +302,10 @@ void Application::DrawDocumentTree() {
         myNewBoxPos[0] = myNewBoxPos[1] = myNewBoxPos[2] = 0.0f;
         myNewBoxSize[0] = myNewBoxSize[1] = myNewBoxSize[2] = 100.0f;
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Save")) OnSave();
+    ImGui::SameLine();
+    if (ImGui::Button("Open")) OnOpen();
     ImGui::Separator();
 
     if (!myDocument || myDocument->GetDoc().IsNull()) {
@@ -251,41 +321,40 @@ void Application::DrawDocumentTree() {
 
     if (ImGui::TreeNodeEx(Tr("panel.document").c_str(),
             ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
-        // Сначала — базовые элементы (Origin), потом пользовательские
         TDF_Label baseLabel = myDocument->GetBaseGeometryLabel();
 
-        // Origin group
         if (!baseLabel.IsNull()) {
             ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(160, 160, 160, 255));
             bool opened = ImGui::TreeNodeEx("Origin",
                 ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth);
             ImGui::PopStyleColor();
-
             if (opened) {
                 TDF_ChildIterator it(baseLabel, false);
-                for (; it.More(); it.Next()) {
-                    DrawLabelTree(it.Value(), selectedLabel, myPendingDeleteLabel);
-                }
+                for (; it.More(); it.Next())
+                    DrawLabelTree(it.Value(), selectedLabel);
                 ImGui::TreePop();
             }
         }
 
-        // Пользовательские фичи
         TDF_ChildIterator it(root, false);
         for (; it.More(); it.Next()) {
             TDF_Label child = it.Value();
             if (child.IsEqual(baseLabel)) continue;
-            DrawLabelTree(child, selectedLabel, myPendingDeleteLabel);
+            DrawLabelTree(child, selectedLabel);
         }
         ImGui::TreePop();
     }
 
     ImGui::End();
 
+    // Обработка отложенных операций
+    if (!myPendingCreateSketchLabel.IsNull() && myDocument) {
+        myDocument->AddSketchFeature(myPendingCreateSketchLabel);
+        myPendingCreateSketchLabel = TDF_Label();
+    }
     if (!myPendingDeleteLabel.IsNull() && myDocument) {
         myDocument->RemoveFeature(myPendingDeleteLabel);
         myPendingDeleteLabel = TDF_Label();
-        myHasPendingDelete = false;
         RefreshView();
         if (myOcctView) myOcctView->FitAll();
     }
@@ -320,9 +389,8 @@ void Application::DrawAddBoxDialog() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button(Tr("btn.cancel").c_str(), ImVec2(120, 0))) {
+        if (ImGui::Button(Tr("btn.cancel").c_str(), ImVec2(120, 0)))
             ImGui::CloseCurrentPopup();
-        }
         ImGui::EndPopup();
     }
 }
@@ -330,6 +398,8 @@ void Application::DrawAddBoxDialog() {
 void Application::Run() {
     bool prevF11 = false;
     bool prevDelete = false;
+    bool prevCtrlS = false;
+    bool prevCtrlO = false;
 
     while (!myWindow->ShouldClose()) {
         myWindow->PollEvents();
@@ -350,22 +420,32 @@ void Application::Run() {
         }
         prevDelete = curDelete;
 
+        bool ctrl = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS
+                 || glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
+        bool curCtrlS = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_S) == GLFW_PRESS;
+        if (curCtrlS && !prevCtrlS) OnSave();
+        prevCtrlS = curCtrlS;
+
+        bool curCtrlO = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_O) == GLFW_PRESS;
+        if (curCtrlO && !prevCtrlO) OnOpen();
+        prevCtrlO = curCtrlO;
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        DrawMenuBar();
         DrawDocumentTree();
         DrawAddBoxDialog();
 
         ImGuiIO& io = ImGui::GetIO();
-        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 360, 10), ImGuiCond_Always);
+        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 360, 30), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_Always);
         ImGui::Begin(Tr("debug.title").c_str(), nullptr,
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_AlwaysAutoResize);
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         if (myOcctView) {
-            ImGui::Text("%s", Tr("debug.view.active").c_str());
             TDF_Label sel = myOcctView->GetSelectedLabel();
             if (!sel.IsNull()) {
                 char buf[128];
@@ -374,17 +454,12 @@ void Application::Run() {
             } else {
                 ImGui::TextDisabled("%s", Tr("debug.selected.none").c_str());
             }
-        } else {
-            ImGui::Text("%s", Tr("debug.view.inactive").c_str());
         }
+        if (!myCurrentPath.empty()) ImGui::Text("File: %s", myCurrentPath.c_str());
+        else ImGui::TextDisabled("File: <unsaved>");
         ImGui::Separator();
-        ImGui::Text("%s", Tr("debug.controls").c_str());
-        ImGui::BulletText("%s", Tr("debug.lmb").c_str());
-        ImGui::BulletText("%s", Tr("debug.rmb").c_str());
-        ImGui::BulletText("%s", Tr("debug.mmb").c_str());
-        ImGui::BulletText("%s", Tr("debug.wheel").c_str());
-        ImGui::BulletText("%s", Tr("debug.delete").c_str());
-        ImGui::BulletText("%s", Tr("debug.f11").c_str());
+        ImGui::Text("Ctrl+S save, Ctrl+O open");
+        ImGui::Text("RMB on plane - create sketch");
         ImGui::End();
 
         ImGui::Render();

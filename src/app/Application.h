@@ -6,7 +6,9 @@
 
 #include <TDF_Label.hxx>
 
+#include <map>
 #include <memory>
+#include <string>
 
 namespace OrdoCAD {
 
@@ -22,20 +24,33 @@ private:
     std::unique_ptr<OcctView>     myOcctView;
     std::unique_ptr<OrdoDocument> myDocument;
 
-    // Состояние диалога «Add Box»
+    // Add Box dialog
     bool  myShowAddBoxDialog = false;
     char  myNewBoxName[128]  = "Box";
     float myNewBoxPos[3]     = { 0.0f, 0.0f, 0.0f };
     float myNewBoxSize[3]    = { 100.0f, 100.0f, 100.0f };
 
-    // Отложенное удаление: помечаем метку во время обхода дерева,
-    // удаляем после обхода (иначе сломаем итератор).
+    // Save/Open
+    std::string myCurrentPath;
+    char        myFilePathBuffer[512] = "D:/test_ordocad/part.cbf";
+
+    // Видимость объектов (ключ — Entry-строка метки)
+    std::map<std::string, bool> myVisibility;
+
+    // Отложенные операции
     TDF_Label myPendingDeleteLabel;
-    bool      myHasPendingDelete = false;
+    TDF_Label myPendingCreateSketchLabel;
 
     void DrawDocumentTree();
     void DrawAddBoxDialog();
+    void DrawMenuBar();
     void RefreshView();
+    void OnSave();
+    void OnOpen();
+    void OnNewDocument();
+
+    bool DrawLabelTree(const TDF_Label& label,
+                       const TDF_Label& selectedLabel);
 };
 
 } // namespace OrdoCAD

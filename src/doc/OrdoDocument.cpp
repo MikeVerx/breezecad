@@ -30,9 +30,34 @@ OrdoDocument::OrdoDocument() {
 
 OrdoDocument::~OrdoDocument() = default;
 
+void OrdoDocument::SetDocument(const Handle(TDocStd_Document)& doc) {
+    myDoc = doc;
+    myBaseLabel = TDF_Label();
+    RefreshNextFeatureId();
+
+    // Найти существующий Origin (тег 1)
+    if (!myDoc.IsNull()) {
+        TDF_Label candidate = myDoc->Main().FindChild(1, false);
+        if (!candidate.IsNull()) {
+            myBaseLabel = candidate;
+        }
+    }
+}
+
 TDF_Label OrdoDocument::MainLabel() const {
     if (myDoc.IsNull()) return TDF_Label();
     return myDoc->Main();
+}
+
+void OrdoDocument::RefreshNextFeatureId() {
+    if (myDoc.IsNull()) return;
+    int maxTag = 0;
+    TDF_ChildIterator it(myDoc->Main(), false);
+    for (; it.More(); it.Next()) {
+        if (it.Value().Tag() > maxTag) maxTag = it.Value().Tag();
+    }
+    myNextFeatureId = maxTag + 1;
+    std::cout << "OrdoDocument: next feature id = " << myNextFeatureId << "\n";
 }
 
 // === Системная геометрия ===
@@ -40,15 +65,14 @@ TDF_Label OrdoDocument::MainLabel() const {
 void OrdoDocument::CreateBaseGeometry() {
     if (myDoc.IsNull()) return;
 
-    // Создаём контейнер "Origin" с тегом 1
     myBaseLabel = MainLabel().FindChild(1, true);
     TDataStd_Name::Set(myBaseLabel, TCollection_ExtendedString("Origin"));
     TDataStd_Integer::Set(myBaseLabel, FT_Origin);
 
-    const double planeSize = 100.0;   // полразмера плоскости
-    const double axisLen   = 100.0;   // полудлина оси
+    const double planeSize = 100.0;
+    const double axisLen   = 100.0;
 
-    // 1. Origin — точка в (0,0,0)
+    // Origin Point
     {
         TDF_Label l = myBaseLabel.FindChild(1, true);
         TDataStd_Name::Set(l, TCollection_ExtendedString("Origin Point"));
@@ -56,8 +80,7 @@ void OrdoDocument::CreateBaseGeometry() {
         TopoDS_Shape v = BRepBuilderAPI_MakeVertex(gp_Pnt(0, 0, 0)).Shape();
         TNaming_Builder(l).Generated(v);
     }
-
-    // 2. XY Plane (Z = 0)
+    // XY Plane
     {
         TDF_Label l = myBaseLabel.FindChild(2, true);
         TDataStd_Name::Set(l, TCollection_ExtendedString("XY Plane"));
@@ -67,8 +90,7 @@ void OrdoDocument::CreateBaseGeometry() {
             -planeSize, planeSize, -planeSize, planeSize).Shape();
         TNaming_Builder(l).Generated(f);
     }
-
-    // 3. YZ Plane (X = 0)
+    // YZ Plane
     {
         TDF_Label l = myBaseLabel.FindChild(3, true);
         TDataStd_Name::Set(l, TCollection_ExtendedString("YZ Plane"));
@@ -78,8 +100,7 @@ void OrdoDocument::CreateBaseGeometry() {
             -planeSize, planeSize, -planeSize, planeSize).Shape();
         TNaming_Builder(l).Generated(f);
     }
-
-    // 4. XZ Plane (Y = 0)
+    // XZ Plane
     {
         TDF_Label l = myBaseLabel.FindChild(4, true);
         TDataStd_Name::Set(l, TCollection_ExtendedString("XZ Plane"));
@@ -89,8 +110,7 @@ void OrdoDocument::CreateBaseGeometry() {
             -planeSize, planeSize, -planeSize, planeSize).Shape();
         TNaming_Builder(l).Generated(f);
     }
-
-    // 5. X Axis
+    // X Axis
     {
         TDF_Label l = myBaseLabel.FindChild(5, true);
         TDataStd_Name::Set(l, TCollection_ExtendedString("X Axis"));
@@ -99,8 +119,7 @@ void OrdoDocument::CreateBaseGeometry() {
         TopoDS_Shape e = BRepBuilderAPI_MakeEdge(lin, -axisLen, axisLen).Shape();
         TNaming_Builder(l).Generated(e);
     }
-
-    // 6. Y Axis
+    // Y Axis
     {
         TDF_Label l = myBaseLabel.FindChild(6, true);
         TDataStd_Name::Set(l, TCollection_ExtendedString("Y Axis"));
@@ -109,8 +128,7 @@ void OrdoDocument::CreateBaseGeometry() {
         TopoDS_Shape e = BRepBuilderAPI_MakeEdge(lin, -axisLen, axisLen).Shape();
         TNaming_Builder(l).Generated(e);
     }
-
-    // 7. Z Axis
+    // Z Axis
     {
         TDF_Label l = myBaseLabel.FindChild(7, true);
         TDataStd_Name::Set(l, TCollection_ExtendedString("Z Axis"));
@@ -120,10 +138,8 @@ void OrdoDocument::CreateBaseGeometry() {
         TNaming_Builder(l).Generated(e);
     }
 
-    // Сдвигаем счётчик, чтобы пользовательские фичи не попали в диапазон 1..7
     myNextFeatureId = 10;
-
-    std::cout << "OrdoDocument: base geometry created (Origin + 3 planes + 3 axes)\n";
+    std::cout << "OrdoDocument: base geometry created\n";
 }
 
 TDF_Label OrdoDocument::GetBaseGeometryLabel() const {
@@ -138,7 +154,6 @@ TDF_Label OrdoDocument::AddBoxFeature(const std::string& name,
     if (myDoc.IsNull()) return TDF_Label();
 
     TDF_Label label = MainLabel().FindChild(myNextFeatureId++, true);
-
     TDataStd_Name::Set(label, TCollection_ExtendedString(name.c_str()));
     TDataStd_Integer::Set(label, FT_Box);
 
@@ -164,7 +179,28 @@ TDF_Label OrdoDocument::AddCylinderFeature(const std::string& name,
     return label;
 }
 
-// === Проверки ===
+TDF_Label OrdoDocument::AddSketchFeature(const TDF_Label& parentPlane) {
+    if (myDoc.IsNull() || parentPlane.IsNull()) return TDF_Label();
+
+    // Находим свободный тег среди детей плоскости
+    int tag = 1;
+    while (!parentPlane.FindChild(tag, false).IsNull()) tag++;
+
+    // Имя эскиза — Sketch1, Sketch2... по количеству уже имеющихся
+    int count = 0;
+    TDF_ChildIterator it(parentPlane, false);
+    for (; it.More(); it.Next()) count++;
+    std::string name = "Sketch" + std::to_string(count + 1);
+
+    TDF_Label label = parentPlane.FindChild(tag, true);
+    TDataStd_Name::Set(label, TCollection_ExtendedString(name.c_str()));
+    TDataStd_Integer::Set(label, FT_Sketch);
+
+    std::cout << "OrdoDocument: added sketch '" << name
+              << "' under plane tag=" << parentPlane.Tag() << "\n";
+    return label;
+}
+
 
 int OrdoDocument::GetType(const TDF_Label& label) {
     Handle(TDataStd_Integer) attr;
@@ -178,13 +214,10 @@ bool OrdoDocument::IsSystem(const TDF_Label& label) {
     return GetType(label) < 0;
 }
 
-// === Удаление ===
-
 void OrdoDocument::RemoveFeature(const TDF_Label& label) {
     if (label.IsNull()) return;
     if (IsSystem(label)) {
-        std::cout << "OrdoDocument: refusing to delete system feature (tag="
-                  << label.Tag() << ")\n";
+        std::cout << "OrdoDocument: refusing to delete system feature\n";
         return;
     }
 
@@ -198,8 +231,6 @@ void OrdoDocument::RemoveFeature(const TDF_Label& label) {
     label.ForgetAllAttributes(true);
     std::cout << "OrdoDocument: removed feature '" << name << "'\n";
 }
-
-// === Чтение форм ===
 
 TopoDS_Shape OrdoDocument::GetShape(const TDF_Label& label) const {
     Handle(TNaming_NamedShape) ns;
@@ -226,14 +257,5 @@ std::vector<TopoDS_Shape> OrdoDocument::GetAllShapes() const {
     CollectShapes(MainLabel(), shapes);
     return shapes;
 }
-
-void OrdoDocument::CreateTestTree() {
-    // Пользовательское дерево — пока только куб и цилиндр
-    AddBoxFeature("Box", 100.0, 100.0, 100.0, 0.0, 0.0, 0.0);
-    AddCylinderFeature("Cylinder", 30.0, 150.0);
-}
-
-bool OrdoDocument::Save(const std::string& /*path*/) { return true; }
-bool OrdoDocument::Load(const std::string& /*path*/) { return true; }
 
 } // namespace OrdoCAD

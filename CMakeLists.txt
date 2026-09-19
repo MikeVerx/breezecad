@@ -38,6 +38,7 @@ add_executable(ordocad
     src/main.cpp
     src/app/Application.cpp
     src/app/Localization.cpp
+    src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp
     src/doc/OrdoApplication.cpp
@@ -57,6 +58,10 @@ target_link_libraries(ordocad PRIVATE
     imgui
     opengl32
 )
+
+if(WIN32)
+    target_link_libraries(ordocad PRIVATE comdlg32)
+endif()
 
 # --- Копируем DLL OCCT после сборки ---
 add_custom_command(TARGET ordocad POST_BUILD

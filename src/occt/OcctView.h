@@ -30,12 +30,14 @@ public:
     void OnMouseMove(double x, double y);
     void OnMouseScroll(double xoffset, double yoffset);
 
-    // isSystem = true → серый цвет, полупрозрачность
     void DisplayShape(const TopoDS_Shape& shape,
                       const TDF_Label& label,
                       bool isSystem = false);
     void ClearAllShapes();
     void FitAll();
+
+    // Управление видимостью объекта по метке
+    void SetShapeVisible(const TDF_Label& label, bool visible);
 
     TDF_Label GetSelectedLabel() const;
     void ClearSelection();

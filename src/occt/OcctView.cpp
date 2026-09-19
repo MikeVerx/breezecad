@@ -182,6 +182,22 @@ void OcctView::ClearAllShapes() {
     myShapeEntries.clear();
 }
 
+void OcctView::SetShapeVisible(const TDF_Label& label, bool visible) {
+    if (myContext.IsNull()) return;
+    for (auto& e : myShapeEntries) {
+        if (e.Label.IsEqual(label)) {
+            if (visible) {
+                myContext->Display(e.Shape, false);
+            } else {
+                myContext->Erase(e.Shape, false);
+            }
+            myContext->UpdateCurrentViewer();
+            if (!myView.IsNull()) myView->Redraw();
+            return;
+        }
+    }
+}
+
 TDF_Label OcctView::GetSelectedLabel() const {
     if (myContext.IsNull()) return TDF_Label();
     if (myContext->NbSelected() == 0) return TDF_Label();
