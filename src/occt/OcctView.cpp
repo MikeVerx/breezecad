@@ -1,8 +1,7 @@
 #include "occt/OcctView.h"
 
-#include <AIS_Shape.hxx>
-#include <NCollection_Vec2.hxx>
 #include <Prs3d_Drawer.hxx>
+#include <Prs3d_TypeOfHighlight.hxx>
 #include <Prs3d_LineAspect.hxx>
 #include <Quantity_Color.hxx>
 
@@ -49,6 +48,12 @@ bool OcctView::Init(GLFWwindow* glfwWindow, int width, int height) {
     aDrawer->SetFaceBoundaryDraw(true);
     aDrawer->SetFaceBoundaryAspect(
         new Prs3d_LineAspect(Quantity_NOC_BLACK, Aspect_TOL_SOLID, 1.5));
+
+    // Явно задаём цвета выделения (на случай, если тема не задаёт)
+    myContext->HighlightStyle(Prs3d_TypeOfHighlight_LocalSelected)
+        ->SetColor(Quantity_NOC_GREEN);
+    myContext->HighlightStyle(Prs3d_TypeOfHighlight_LocalDynamic)
+        ->SetColor(Quantity_NOC_YELLOW);
 
     myView = myViewer->CreateView();
     myView->SetImmediateUpdate(false);
@@ -97,15 +102,42 @@ bool OcctView::Init(GLFWwindow* glfwWindow, int width, int height) {
     return true;
 }
 
-void OcctView::DisplayShape(const TopoDS_Shape& shape) {
+void OcctView::DisplayShape(const TopoDS_Shape& shape, const TDF_Label& label) {
     if (shape.IsNull()) return;
     Handle(AIS_Shape) ais = new AIS_Shape(shape);
+    // Делаем объект выбираемым
     myContext->Display(ais, AIS_Shaded, 0, false);
+    myContext->Activate(ais, 0);  // selection mode 0 — whole shape
+    myShapeEntries.push_back({ label, ais });
 }
 
 void OcctView::ClearAllShapes() {
     if (myContext.IsNull()) return;
     myContext->RemoveAll(false);
+    myShapeEntries.clear();
+}
+
+TDF_Label OcctView::GetSelectedLabel() const {
+    if (myContext.IsNull()) return TDF_Label();
+    if (myContext->NbSelected() == 0) return TDF_Label();
+
+    myContext->InitSelected();
+    if (!myContext->MoreSelected()) return TDF_Label();
+
+    Handle(AIS_InteractiveObject) obj = myContext->SelectedInteractive();
+    if (obj.IsNull()) return TDF_Label();
+
+    for (const auto& e : myShapeEntries) {
+        if (e.Shape == obj) return e.Label;
+    }
+    return TDF_Label();
+}
+
+void OcctView::ClearSelection() {
+    if (myContext.IsNull()) return;
+    myContext->ClearSelected(false);
+    myContext->UpdateCurrentViewer();
+    if (!myView.IsNull()) myView->Redraw();
 }
 
 void OcctView::FitAll() {
@@ -129,51 +161,104 @@ void OcctView::Resize(int width, int height) {
     myView->MustBeResized();
 }
 
-void OcctView::OnMouseButton(int button, int action, int mods) {
-    Aspect_VKeyMouse btn = Aspect_VKeyMouse_NONE;
-    switch (button) {
-        case GLFW_MOUSE_BUTTON_LEFT:   btn = Aspect_VKeyMouse_LeftButton; break;
-        case GLFW_MOUSE_BUTTON_MIDDLE: btn = Aspect_VKeyMouse_MiddleButton; break;
-        case GLFW_MOUSE_BUTTON_RIGHT:  btn = Aspect_VKeyMouse_RightButton; break;
-        default: return;
-    }
+// Преобразование координат мыши GLFW (пиксели окна) в координаты framebuffer
+// (учитывает HiDPI-масштабирование)
+static void CursorToFb(GLFWwindow* w, double x, double y, int& outX, int& outY) {
+    int winW = 1, winH = 1;
+    glfwGetWindowSize(w, &winW, &winH);
+    int fbW = 1, fbH = 1;
+    glfwGetFramebufferSize(w, &fbW, &fbH);
 
-    if (action == GLFW_PRESS) {
-        myMouseButtons |= btn;
-    } else if (action == GLFW_RELEASE) {
-        myMouseButtons = static_cast<Aspect_VKeyMouse>(myMouseButtons & ~btn);
-    } else {
-        return;
-    }
+    double scaleX = (winW > 0) ? (double)fbW / winW : 1.0;
+    double scaleY = (winH > 0) ? (double)fbH / winH : 1.0;
 
-    myMouseFlags = Aspect_VKeyFlags_NONE;
-    if (mods & GLFW_MOD_SHIFT)   myMouseFlags |= Aspect_VKeyFlags_SHIFT;
-    if (mods & GLFW_MOD_CONTROL) myMouseFlags |= Aspect_VKeyFlags_CTRL;
-    if (mods & GLFW_MOD_ALT)     myMouseFlags |= Aspect_VKeyFlags_ALT;
-    if (mods & GLFW_MOD_SUPER)   myMouseFlags |= Aspect_VKeyFlags_META;
+    outX = (int)(x * scaleX);
+    outY = (int)(y * scaleY);
+}
 
+void OcctView::OnMouseButton(int button, int action, int /*mods*/) {
     double xpos, ypos;
     glfwGetCursorPos(myGlfwWindow, &xpos, &ypos);
-    NCollection_Vec2<int> pos((int)xpos, (int)ypos);
 
-    UpdateMouseButtons(pos, myMouseButtons, myMouseFlags, false);
-    FlushViewEvents(myContext, myView, true);
+    int px, py;
+    CursorToFb(myGlfwWindow, xpos, ypos, px, py);
+
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == GLFW_PRESS) {
+            myLeftPressed = true;
+            myPressX = xpos;
+            myPressY = ypos;
+        } else if (action == GLFW_RELEASE) {
+            if (myLeftPressed) {
+                double dx = xpos - myPressX;
+                double dy = ypos - myPressY;
+                if (dx*dx + dy*dy < 25.0) {
+                    // Это клик — пробуем выделить
+                    myContext->ClearSelected(false);
+                    myContext->MoveTo(px, py, myView, false);
+
+                    Handle(AIS_InteractiveObject) detected = myContext->DetectedInteractive();
+                    if (!detected.IsNull()) {
+                        myContext->AddSelect(detected);
+                        std::cout << "Selection: detected and added, nb=" 
+                                  << myContext->NbSelected() << "\n";
+                    } else {
+                        std::cout << "Selection: nothing at (" << px << "," << py << ")\n";
+                    }
+                    myContext->UpdateCurrentViewer();
+                    myView->Redraw();
+                }
+                myLeftPressed = false;
+            }
+        }
+    } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+        if (action == GLFW_PRESS) {
+            myRotating = true;
+            myLastX = xpos;
+            myLastY = ypos;
+            myView->StartRotation(px, py);
+        } else if (action == GLFW_RELEASE) {
+            myRotating = false;
+        }
+    } else if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
+        if (action == GLFW_PRESS) {
+            myPanning = true;
+            myLastX = xpos;
+            myLastY = ypos;
+        } else if (action == GLFW_RELEASE) {
+            myPanning = false;
+        }
+    }
 }
 
 void OcctView::OnMouseMove(double x, double y) {
-    NCollection_Vec2<int> pos((int)x, (int)y);
-    UpdateMousePosition(pos, myMouseButtons, myMouseFlags, false);
-    FlushViewEvents(myContext, myView, true);
+    int px, py;
+    CursorToFb(myGlfwWindow, x, y, px, py);
+
+    if (myRotating) {
+        myView->Rotation(px, py);
+        myView->Redraw();
+    } else if (myPanning) {
+        // Панорамирование — в пикселях framebuffer
+        int lastPx, lastPy;
+        CursorToFb(myGlfwWindow, myLastX, myLastY, lastPx, lastPy);
+        myView->Pan(px - lastPx, -(py - lastPy));
+        myView->Redraw();
+    }
+    myLastX = x;
+    myLastY = y;
 }
 
 void OcctView::OnMouseScroll(double /*xoffset*/, double yoffset) {
     double xpos, ypos;
     glfwGetCursorPos(myGlfwWindow, &xpos, &ypos);
-    NCollection_Vec2<int> pos((int)xpos, (int)ypos);
 
-    Aspect_ScrollDelta scrollDelta(pos, yoffset);
-    UpdateMouseScroll(scrollDelta);
-    FlushViewEvents(myContext, myView, true);
+    int px, py;
+    CursorToFb(myGlfwWindow, xpos, ypos, px, py);
+
+    myView->StartZoomAtPoint(px, py);
+    myView->ZoomAtPoint(px, py, px, py + (int)(yoffset * 40));
+    myView->Redraw();
 }
 
 } // namespace OrdoCAD

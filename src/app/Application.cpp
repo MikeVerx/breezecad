@@ -82,16 +82,27 @@ Application::~Application() {
 void Application::RefreshView() {
     if (!myOcctView || !myDocument) return;
     myOcctView->ClearAllShapes();
-    auto shapes = myDocument->GetAllShapes();
-    std::cout << "RefreshView: displaying " << shapes.size() << " shape(s)\n";
-    for (const auto& s : shapes) {
-        myOcctView->DisplayShape(s);
+
+    // Обходим дерево и отображаем формы с сохранением связи метка ↔ AIS
+    TDF_Label root = myDocument->MainLabel();
+    TDF_ChildIterator it(root, false);
+    int count = 0;
+    for (; it.More(); it.Next()) {
+        TDF_Label child = it.Value();
+        TopoDS_Shape s = myDocument->GetShape(child);
+        if (!s.IsNull()) {
+            myOcctView->DisplayShape(s, child);
+            ++count;
+        }
     }
+    std::cout << "RefreshView: displaying " << count << " shape(s)\n";
     myOcctView->Redraw();
 }
 
-// Возвращает true, если узел запросил удаление (через контекстное меню)
-static bool DrawLabelTree(const TDF_Label& label, TDF_Label& pendingDelete) {
+// Возвращает true, если был запрошен delete
+static bool DrawLabelTree(const TDF_Label& label,
+                           const TDF_Label& selectedLabel,
+                           TDF_Label& pendingDelete) {
     std::string labelName = "<unnamed>";
     Handle(TDataStd_Name) nameAttr;
     if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
@@ -115,12 +126,15 @@ static bool DrawLabelTree(const TDF_Label& label, TDF_Label& pendingDelete) {
         flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
     }
 
-    // Уникальный ID для ImGui, т.к. имена могут повторяться
+    // Подсветка, если эта метка соответствует выделенному в 3D объекту
+    if (!selectedLabel.IsNull() && selectedLabel.IsEqual(label)) {
+        flags |= ImGuiTreeNodeFlags_Selected;
+    }
+
     ImGui::PushID(label.Tag());
 
     bool opened = ImGui::TreeNodeEx(labelName.c_str(), flags);
 
-    // Контекстное меню по правому клику на узле
     if (ImGui::BeginPopupContextItem("##ctx")) {
         ImGui::TextDisabled("%s", labelName.c_str());
         ImGui::Separator();
@@ -133,13 +147,13 @@ static bool DrawLabelTree(const TDF_Label& label, TDF_Label& pendingDelete) {
     ImGui::SameLine();
     ImGui::TextDisabled("[type=%d, tag=%d]", type, label.Tag());
 
-    bool childRequestedDelete = false;
+    bool requested = false;
 
     if (opened && hasChildren) {
         TDF_ChildIterator it(label, false);
         for (; it.More(); it.Next()) {
-            if (DrawLabelTree(it.Value(), pendingDelete)) {
-                childRequestedDelete = true;
+            if (DrawLabelTree(it.Value(), selectedLabel, pendingDelete)) {
+                requested = true;
             }
         }
         ImGui::TreePop();
@@ -147,7 +161,7 @@ static bool DrawLabelTree(const TDF_Label& label, TDF_Label& pendingDelete) {
 
     ImGui::PopID();
 
-    return childRequestedDelete || !pendingDelete.IsNull();
+    return requested || !pendingDelete.IsNull();
 }
 
 void Application::DrawDocumentTree() {
@@ -174,7 +188,7 @@ void Application::DrawDocumentTree() {
     ImGui::Separator();
 
     ImGui::Text("OCAF Document Tree");
-    ImGui::TextDisabled("Right-click a node to delete");
+    ImGui::TextDisabled("RMB on node - delete, Delete key - remove selected");
     ImGui::Separator();
 
     if (ImGui::Button("Add Box")) {
@@ -191,24 +205,26 @@ void Application::DrawDocumentTree() {
         return;
     }
 
+    TDF_Label selectedLabel;
+    if (myOcctView) selectedLabel = myOcctView->GetSelectedLabel();
+
     TDF_Label root = myDocument->MainLabel();
 
     if (ImGui::TreeNodeEx("Document (BinOcaf)",
             ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
         TDF_ChildIterator it(root, false);
         for (; it.More(); it.Next()) {
-            DrawLabelTree(it.Value(), myPendingDeleteLabel);
+            DrawLabelTree(it.Value(), selectedLabel, myPendingDeleteLabel);
         }
         ImGui::TreePop();
     }
 
     ImGui::End();
 
-    // === Отложенное удаление ===
+    // Отложенное удаление
     if (!myPendingDeleteLabel.IsNull() && myDocument) {
         myDocument->RemoveFeature(myPendingDeleteLabel);
         myPendingDeleteLabel = TDF_Label();
-        myHasPendingDelete = false;
         RefreshView();
         if (myOcctView) myOcctView->FitAll();
     }
@@ -255,16 +271,29 @@ void Application::DrawAddBoxDialog() {
 }
 
 void Application::Run() {
-    bool prevF11 = false;
+    bool prevF11    = false;
+    bool prevDelete = false;
 
     while (!myWindow->ShouldClose()) {
         myWindow->PollEvents();
 
+        // F11
         bool curF11 = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_F11) == GLFW_PRESS;
-        if (curF11 && !prevF11) {
-            myWindow->ToggleFullscreen();
-        }
+        if (curF11 && !prevF11) myWindow->ToggleFullscreen();
         prevF11 = curF11;
+
+        // Delete
+        bool curDelete = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_DELETE) == GLFW_PRESS;
+        if (curDelete && !prevDelete && myOcctView && myDocument) {
+            TDF_Label sel = myOcctView->GetSelectedLabel();
+            if (!sel.IsNull()) {
+                myDocument->RemoveFeature(sel);
+                myOcctView->ClearSelection();
+                RefreshView();
+                myOcctView->FitAll();
+            }
+        }
+        prevDelete = curDelete;
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -282,16 +311,23 @@ void Application::Run() {
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         if (myOcctView) {
             ImGui::Text("OCCT view: active");
+            TDF_Label sel = myOcctView->GetSelectedLabel();
+            if (!sel.IsNull()) {
+                ImGui::Text("Selected: tag=%d", sel.Tag());
+            } else {
+                ImGui::TextDisabled("Selected: none");
+            }
         } else {
             ImGui::Text("OCCT view: NOT initialized");
         }
         ImGui::Separator();
         ImGui::Text("Controls:");
-        ImGui::BulletText("LMB - rotate");
+        ImGui::BulletText("LMB - select");
+        ImGui::BulletText("RMB - rotate");
         ImGui::BulletText("MMB - pan");
         ImGui::BulletText("Wheel - zoom");
+        ImGui::BulletText("Delete - remove selected");
         ImGui::BulletText("F11 - fullscreen");
-        ImGui::BulletText("RMB on tree node - delete");
         ImGui::End();
 
         ImGui::Render();

@@ -1,24 +1,26 @@
 #pragma once
 
 #include <AIS_InteractiveContext.hxx>
-#include <AIS_ViewController.hxx>
+#include <AIS_Shape.hxx>
 #include <Aspect_DisplayConnection.hxx>
 #include <Aspect_NeutralWindow.hxx>
 #include <Aspect_RenderingContext.hxx>
 #include <OpenGl_GraphicDriver.hxx>
 #include <V3d_View.hxx>
 #include <V3d_Viewer.hxx>
-
+#include <TDF_Label.hxx>
 #include <TopoDS_Shape.hxx>
 
 #include <GLFW/glfw3.h>
 
+#include <vector>
+
 namespace OrdoCAD {
 
-class OcctView : public AIS_ViewController {
+class OcctView {
 public:
     OcctView();
-    ~OcctView() override;
+    ~OcctView();
 
     bool Init(GLFWwindow* glfwWindow, int width, int height);
     void Redraw();
@@ -28,12 +30,21 @@ public:
     void OnMouseMove(double x, double y);
     void OnMouseScroll(double xoffset, double yoffset);
 
-    // === Работа с геометрией из документа ===
-    void DisplayShape(const TopoDS_Shape& shape);   // добавить форму в сцену
-    void ClearAllShapes();                          // убрать всё из сцены
-    void FitAll();                                  // вписать всё в вид
+    // Отобразить форму и запомнить её связь с меткой OCAF
+    void DisplayShape(const TopoDS_Shape& shape, const TDF_Label& label);
+    void ClearAllShapes();
+    void FitAll();
+
+    // Получить метку выделенного объекта (или null, если ничего не выбрано)
+    TDF_Label GetSelectedLabel() const;
+    void ClearSelection();
 
 private:
+    struct ShapeEntry {
+        TDF_Label         Label;
+        Handle(AIS_Shape) Shape;
+    };
+
     Handle(Aspect_DisplayConnection) myDisplayConnection;
     Handle(OpenGl_GraphicDriver)     myDriver;
     Handle(V3d_Viewer)               myViewer;
@@ -42,11 +53,19 @@ private:
     Handle(Aspect_NeutralWindow)     myWindow;
 
     GLFWwindow* myGlfwWindow = nullptr;
-    int myWidth = 0;
+    int myWidth  = 0;
     int myHeight = 0;
 
-    Aspect_VKeyMouse myMouseButtons = Aspect_VKeyMouse_NONE;
-    Aspect_VKeyFlags myMouseFlags   = Aspect_VKeyFlags_NONE;
+    // Состояние мыши
+    bool   myRotating    = false;
+    bool   myPanning     = false;
+    bool   myLeftPressed = false;
+    double myLastX  = 0.0;
+    double myLastY  = 0.0;
+    double myPressX = 0.0;
+    double myPressY = 0.0;
+
+    std::vector<ShapeEntry> myShapeEntries;
 };
 
 } // namespace OrdoCAD
