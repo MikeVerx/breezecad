@@ -37,6 +37,7 @@ bool OcctView::Init(GLFWwindow* glfwWindow, int width, int height) {
 
     myDisplayConnection = new Aspect_DisplayConnection();
     myDriver = new OpenGl_GraphicDriver(myDisplayConnection);
+    myDriver->ChangeOptions().buffersNoSwap = true;  // GLFW сам делает SwapBuffers
 
     myViewer = new V3d_Viewer(myDriver);
     myViewer->SetDefaultLights();
@@ -51,6 +52,7 @@ bool OcctView::Init(GLFWwindow* glfwWindow, int width, int height) {
         new Prs3d_LineAspect(Quantity_NOC_BLACK, Aspect_TOL_SOLID, 1.5));
 
     myView = myViewer->CreateView();
+    myView->SetImmediateUpdate(false);  // не даём OCCT самому делать swap/redraw
 
     myWindow = new Aspect_NeutralWindow();
     myWindow->SetVirtual(true);

@@ -39,6 +39,8 @@ add_executable(ordocad
     src/app/Application.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp
+    src/doc/OrdoApplication.cpp
+    src/doc/OrdoDocument.cpp
 )
 
 target_include_directories(ordocad PRIVATE src)
@@ -49,6 +51,7 @@ target_link_libraries(ordocad PRIVATE
     TKPrim TKTopAlgo TKBO
     TKDESTEP
     TKV3d TKOpenGl TKService TKMesh
+    TKCAF TKLCAF TKBin
     glfw
     imgui
     opengl32

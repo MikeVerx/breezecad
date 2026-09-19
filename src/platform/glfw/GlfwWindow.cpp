@@ -30,6 +30,7 @@ GlfwWindow::GlfwWindow(int width, int height, const std::string& title) {
     }
 
     glfwMakeContextCurrent(myWindow);
+    glfwSwapInterval(1);  // VSync — убирает мигание при быстрой перерисовке
     glfwSetWindowUserPointer(myWindow, this);
 
     glfwSetMouseButtonCallback(myWindow, [](GLFWwindow* w, int b, int a, int m) {
@@ -69,5 +70,41 @@ void GlfwWindow::SetMouseButtonCallback(MouseButtonCallback cb) { myMouseButtonC
 void GlfwWindow::SetCursorPosCallback(CursorPosCallback cb)     { myCursorPosCb   = std::move(cb); }
 void GlfwWindow::SetScrollCallback(ScrollCallback cb)           { myScrollCb      = std::move(cb); }
 void GlfwWindow::SetResizeCallback(ResizeCallback cb)           { myResizeCb      = std::move(cb); }
+
+void GlfwWindow::ToggleFullscreen() {
+    if (!myWindow) return;
+
+    if (!myIsFullscreen) {
+        // Запоминаем текущее состояние
+        glfwGetWindowPos(myWindow, &mySavedX, &mySavedY);
+        glfwGetWindowSize(myWindow, &mySavedW, &mySavedH);
+
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        if (!monitor) return;
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+        if (!mode) return;
+
+        glfwSetWindowMonitor(myWindow, monitor,
+                             0, 0,
+                             mode->width, mode->height,
+                             mode->refreshRate);
+        myIsFullscreen = true;
+    } else {
+        glfwSetWindowMonitor(myWindow, nullptr,
+                             mySavedX, mySavedY,
+                             mySavedW, mySavedH,
+                             0);
+        myIsFullscreen = false;
+    }
+}
+
+void GlfwWindow::Maximize() {
+    if (!myWindow) return;
+    if (glfwGetWindowAttrib(myWindow, GLFW_MAXIMIZED)) {
+        glfwRestoreWindow(myWindow);
+    } else {
+        glfwMaximizeWindow(myWindow);
+    }
+}
 
 } // namespace OrdoCAD
