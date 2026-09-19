@@ -37,6 +37,7 @@ target_link_libraries(imgui PUBLIC glfw)
 add_executable(ordocad
     src/main.cpp
     src/app/Application.cpp
+    src/app/Localization.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp
     src/doc/OrdoApplication.cpp

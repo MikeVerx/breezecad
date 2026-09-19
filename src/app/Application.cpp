@@ -1,4 +1,5 @@
 #include "app/Application.h"
+#include "app/Localization.h"
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -12,10 +13,52 @@
 #include <TCollection_AsciiString.hxx>
 
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <string>
+#include <vector>
 
 namespace OrdoCAD {
+
+// Пытаемся загрузить шрифт с поддержкой кириллицы.
+// Порядок: свой в assets/ → системные шрифты Windows/macOS/Linux.
+static void LoadCyrillicFont() {
+    ImGuiIO& io = ImGui::GetIO();
+
+    const std::vector<std::string> candidates = {
+        // Сначала — если пользователь положил свой шрифт
+        "assets/fonts/Roboto-Regular.ttf",
+        "../assets/fonts/Roboto-Regular.ttf",
+        "../../assets/fonts/Roboto-Regular.ttf",
+        // Windows
+        "C:/Windows/Fonts/segoeui.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/tahoma.ttf",
+        // macOS
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/Library/Fonts/Arial.ttf",
+        // Linux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    };
+
+    for (const auto& path : candidates) {
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec)) continue;
+
+        ImFont* font = io.Fonts->AddFontFromFileTTF(
+            path.c_str(), 18.0f, nullptr,
+            io.Fonts->GetGlyphRangesCyrillic());
+
+        if (font) {
+            std::cout << "OrdoCAD: loaded font '" << path << "'\n";
+            return;
+        }
+    }
+
+    std::cerr << "OrdoCAD: no Cyrillic font found, using default (may show boxes)\n";
+    io.Fonts->AddFontDefault();
+}
 
 Application::Application() {
     myWindow = std::make_unique<GlfwWindow>(1280, 720, "OrdoCAD - Prototype");
@@ -27,6 +70,9 @@ Application::Application() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
+
+    LoadCyrillicFont();
+
     ImGui_ImplGlfw_InitForOpenGL(myWindow->GetNativeWindow(), true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
@@ -83,7 +129,6 @@ void Application::RefreshView() {
     if (!myOcctView || !myDocument) return;
     myOcctView->ClearAllShapes();
 
-    // Обходим дерево и отображаем формы с сохранением связи метка ↔ AIS
     TDF_Label root = myDocument->MainLabel();
     TDF_ChildIterator it(root, false);
     int count = 0;
@@ -99,7 +144,6 @@ void Application::RefreshView() {
     myOcctView->Redraw();
 }
 
-// Возвращает true, если был запрошен delete
 static bool DrawLabelTree(const TDF_Label& label,
                            const TDF_Label& selectedLabel,
                            TDF_Label& pendingDelete) {
@@ -125,8 +169,6 @@ static bool DrawLabelTree(const TDF_Label& label,
     if (!hasChildren) {
         flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
     }
-
-    // Подсветка, если эта метка соответствует выделенному в 3D объекту
     if (!selectedLabel.IsNull() && selectedLabel.IsEqual(label)) {
         flags |= ImGuiTreeNodeFlags_Selected;
     }
@@ -138,7 +180,7 @@ static bool DrawLabelTree(const TDF_Label& label,
     if (ImGui::BeginPopupContextItem("##ctx")) {
         ImGui::TextDisabled("%s", labelName.c_str());
         ImGui::Separator();
-        if (ImGui::MenuItem("Delete")) {
+        if (ImGui::MenuItem(Tr("btn.delete").c_str())) {
             pendingDelete = label;
         }
         ImGui::EndPopup();
@@ -166,7 +208,7 @@ static bool DrawLabelTree(const TDF_Label& label,
 
 void Application::DrawDocumentTree() {
     ImGuiIO& io = ImGui::GetIO();
-    const float panelWidth = 280.0f;
+    const float panelWidth = 320.0f;
 
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y), ImGuiCond_Always);
@@ -178,29 +220,44 @@ void Application::DrawDocumentTree() {
         ImGuiWindowFlags_NoBringToFrontOnFocus |
         ImGuiWindowFlags_NoTitleBar);
 
-    if (ImGui::Button(myWindow->IsFullscreen() ? "Exit Fullscreen (F11)" : "Fullscreen (F11)")) {
+    ImGui::Text("%s", Tr("lang.label").c_str());
+    ImGui::SameLine();
+    Language curLang = Localization::Instance().GetLanguage();
+    if (ImGui::RadioButton(Tr("lang.en").c_str(), curLang == Language::EN)) {
+        Localization::Instance().SetLanguage(Language::EN);
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton(Tr("lang.ru").c_str(), curLang == Language::RU)) {
+        Localization::Instance().SetLanguage(Language::RU);
+    }
+    ImGui::Separator();
+
+    if (ImGui::Button(myWindow->IsFullscreen()
+                        ? Tr("btn.exitFullscreen").c_str()
+                        : Tr("btn.fullscreen").c_str())) {
         myWindow->ToggleFullscreen();
     }
     ImGui::SameLine();
-    if (ImGui::Button("Maximize")) {
+    if (ImGui::Button(Tr("btn.maximize").c_str())) {
         myWindow->Maximize();
     }
     ImGui::Separator();
 
-    ImGui::Text("OCAF Document Tree");
-    ImGui::TextDisabled("RMB on node - delete, Delete key - remove selected");
+    ImGui::Text("%s", Tr("panel.title").c_str());
+    ImGui::TextDisabled("%s", Tr("panel.hint.delete").c_str());
     ImGui::Separator();
 
-    if (ImGui::Button("Add Box")) {
+    if (ImGui::Button(Tr("btn.addBox").c_str())) {
         myShowAddBoxDialog = true;
-        std::strncpy(myNewBoxName, "Box", sizeof(myNewBoxName) - 1);
+        std::strncpy(myNewBoxName, Tr("default.boxName").c_str(), sizeof(myNewBoxName) - 1);
+        myNewBoxName[sizeof(myNewBoxName) - 1] = '\0';
         myNewBoxPos[0] = myNewBoxPos[1] = myNewBoxPos[2] = 0.0f;
         myNewBoxSize[0] = myNewBoxSize[1] = myNewBoxSize[2] = 100.0f;
     }
     ImGui::Separator();
 
     if (!myDocument || myDocument->GetDoc().IsNull()) {
-        ImGui::Text("Document: NULL");
+        ImGui::Text("%s", Tr("panel.document.null").c_str());
         ImGui::End();
         return;
     }
@@ -210,7 +267,7 @@ void Application::DrawDocumentTree() {
 
     TDF_Label root = myDocument->MainLabel();
 
-    if (ImGui::TreeNodeEx("Document (BinOcaf)",
+    if (ImGui::TreeNodeEx(Tr("panel.document").c_str(),
             ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
         TDF_ChildIterator it(root, false);
         for (; it.More(); it.Next()) {
@@ -221,10 +278,10 @@ void Application::DrawDocumentTree() {
 
     ImGui::End();
 
-    // Отложенное удаление
     if (!myPendingDeleteLabel.IsNull() && myDocument) {
         myDocument->RemoveFeature(myPendingDeleteLabel);
         myPendingDeleteLabel = TDF_Label();
+        myHasPendingDelete = false;
         RefreshView();
         if (myOcctView) myOcctView->FitAll();
     }
@@ -232,28 +289,29 @@ void Application::DrawDocumentTree() {
 
 void Application::DrawAddBoxDialog() {
     if (myShowAddBoxDialog) {
-        ImGui::OpenPopup("Add Box");
+        ImGui::OpenPopup(Tr("dlg.addBox.title").c_str());
         myShowAddBoxDialog = false;
     }
 
-    if (ImGui::BeginPopupModal("Add Box", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::InputText("Name", myNewBoxName, sizeof(myNewBoxName));
+    if (ImGui::BeginPopupModal(Tr("dlg.addBox.title").c_str(), nullptr,
+                                ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::InputText(Tr("dlg.name").c_str(), myNewBoxName, sizeof(myNewBoxName));
 
         ImGui::Separator();
-        ImGui::Text("Position (corner):");
+        ImGui::Text("%s", Tr("dlg.position").c_str());
         ImGui::InputFloat("X##pos", &myNewBoxPos[0]);
         ImGui::InputFloat("Y##pos", &myNewBoxPos[1]);
         ImGui::InputFloat("Z##pos", &myNewBoxPos[2]);
 
         ImGui::Separator();
-        ImGui::Text("Size:");
+        ImGui::Text("%s", Tr("dlg.size").c_str());
         ImGui::InputFloat("DX", &myNewBoxSize[0]);
         ImGui::InputFloat("DY", &myNewBoxSize[1]);
         ImGui::InputFloat("DZ", &myNewBoxSize[2]);
 
         ImGui::Separator();
 
-        if (ImGui::Button("OK", ImVec2(120, 0))) {
+        if (ImGui::Button(Tr("btn.ok").c_str(), ImVec2(120, 0))) {
             if (myDocument) {
                 myDocument->AddBoxFeature(myNewBoxName,
                                           myNewBoxSize[0], myNewBoxSize[1], myNewBoxSize[2],
@@ -263,7 +321,7 @@ void Application::DrawAddBoxDialog() {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+        if (ImGui::Button(Tr("btn.cancel").c_str(), ImVec2(120, 0))) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -277,12 +335,10 @@ void Application::Run() {
     while (!myWindow->ShouldClose()) {
         myWindow->PollEvents();
 
-        // F11
         bool curF11 = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_F11) == GLFW_PRESS;
         if (curF11 && !prevF11) myWindow->ToggleFullscreen();
         prevF11 = curF11;
 
-        // Delete
         bool curDelete = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_DELETE) == GLFW_PRESS;
         if (curDelete && !prevDelete && myOcctView && myDocument) {
             TDF_Label sel = myOcctView->GetSelectedLabel();
@@ -303,31 +359,33 @@ void Application::Run() {
         DrawAddBoxDialog();
 
         ImGuiIO& io = ImGui::GetIO();
-        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 340, 10), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(330, 0), ImGuiCond_Always);
-        ImGui::Begin("OrdoCAD Debug", nullptr,
+        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 360, 10), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_Always);
+        ImGui::Begin(Tr("debug.title").c_str(), nullptr,
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_AlwaysAutoResize);
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         if (myOcctView) {
-            ImGui::Text("OCCT view: active");
+            ImGui::Text("%s", Tr("debug.view.active").c_str());
             TDF_Label sel = myOcctView->GetSelectedLabel();
             if (!sel.IsNull()) {
-                ImGui::Text("Selected: tag=%d", sel.Tag());
+                char buf[128];
+                std::snprintf(buf, sizeof(buf), Tr("debug.selected.tag").c_str(), sel.Tag());
+                ImGui::Text("%s", buf);
             } else {
-                ImGui::TextDisabled("Selected: none");
+                ImGui::TextDisabled("%s", Tr("debug.selected.none").c_str());
             }
         } else {
-            ImGui::Text("OCCT view: NOT initialized");
+            ImGui::Text("%s", Tr("debug.view.inactive").c_str());
         }
         ImGui::Separator();
-        ImGui::Text("Controls:");
-        ImGui::BulletText("LMB - select");
-        ImGui::BulletText("RMB - rotate");
-        ImGui::BulletText("MMB - pan");
-        ImGui::BulletText("Wheel - zoom");
-        ImGui::BulletText("Delete - remove selected");
-        ImGui::BulletText("F11 - fullscreen");
+        ImGui::Text("%s", Tr("debug.controls").c_str());
+        ImGui::BulletText("%s", Tr("debug.lmb").c_str());
+        ImGui::BulletText("%s", Tr("debug.rmb").c_str());
+        ImGui::BulletText("%s", Tr("debug.mmb").c_str());
+        ImGui::BulletText("%s", Tr("debug.wheel").c_str());
+        ImGui::BulletText("%s", Tr("debug.delete").c_str());
+        ImGui::BulletText("%s", Tr("debug.f11").c_str());
         ImGui::End();
 
         ImGui::Render();
