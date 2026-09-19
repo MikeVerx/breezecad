@@ -7,6 +7,15 @@
 #include <AIS_SelectionModesConcurrency.hxx>
 #include <AIS_SelectionModesConcurrency.hxx>
 #include <Quantity_Color.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
+#include <BRepBuilderAPI_MakeWire.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
+#include <Geom_Plane.hxx>
+#include <gp_Ax3.hxx>
+#include <gp_Pln.hxx>
+#include <gp_Lin.hxx>
+#include <Aspect_TypeOfLine.hxx>
+#include <Prs3d_Presentation.hxx>
 
 #ifdef _WIN32
   #define GLFW_EXPOSE_NATIVE_WIN32
@@ -198,6 +207,141 @@ void OcctView::SetShapeVisible(const TDF_Label& label, bool visible) {
     }
 }
 
+void OcctView::BuildSketchGrid(const gp_Dir& normal, const gp_Pnt& origin) {
+    // Строим локальную систему координат на плоскости:
+    // Z = нормаль, X и Y — произвольные перпендикулярные
+    gp_Ax3 ax(origin, normal);
+    gp_Dir uDir = ax.XDirection();
+    gp_Dir vDir = ax.YDirection();
+
+    const int    nLines = 20;       // -20..+20
+    const double step   = 10.0;     // шаг 10 мм
+    const double ext    = nLines * step;
+
+    // Осевые линии (X и Y) — красная и зелёная
+    TopoDS_Shape xAxis = BRepBuilderAPI_MakeEdge(
+        gp_Lin(origin, uDir), -ext, ext).Shape();
+    TopoDS_Shape yAxis = BRepBuilderAPI_MakeEdge(
+        gp_Lin(origin, vDir), -ext, ext).Shape();
+
+    Handle(AIS_Shape) xAis = new AIS_Shape(xAxis);
+    Handle(AIS_Shape) yAis = new AIS_Shape(yAxis);
+
+    Handle(Prs3d_Drawer) xDrawer = new Prs3d_Drawer();
+    xDrawer->SetLineAspect(new Prs3d_LineAspect(Quantity_NOC_RED, Aspect_TOL_SOLID, 2.0));
+    xAis->SetAttributes(xDrawer);
+
+    Handle(Prs3d_Drawer) yDrawer = new Prs3d_Drawer();
+    yDrawer->SetLineAspect(new Prs3d_LineAspect(Quantity_NOC_GREEN, Aspect_TOL_SOLID, 2.0));
+    yAis->SetAttributes(yDrawer);
+
+    // Добавляем в контекст как временные (не выбираемые)
+    myContext->Display(xAis, false);
+    myContext->Display(yAis, false);
+    myContext->Deactivate(xAis);
+    myContext->Deactivate(yAis);
+
+    // Сетка — набор тонких серых линий, параллельных осям
+    Quantity_Color grey(0.35, 0.35, 0.35, Quantity_TOC_RGB);
+
+    // Линии параллельно X
+    for (int i = -nLines; i <= nLines; i++) {
+        if (i == 0) continue;
+        gp_Pnt start = origin.Translated(gp_Vec(uDir) * -ext + gp_Vec(vDir) * (i * step));
+        gp_Pnt end   = origin.Translated(gp_Vec(uDir) *  ext + gp_Vec(vDir) * (i * step));
+        TopoDS_Shape line = BRepBuilderAPI_MakeEdge(start, end).Shape();
+        Handle(AIS_Shape) ais = new AIS_Shape(line);
+        Handle(Prs3d_Drawer) dr = new Prs3d_Drawer();
+        dr->SetLineAspect(new Prs3d_LineAspect(grey, Aspect_TOL_SOLID, 1.0));
+        ais->SetAttributes(dr);
+        myContext->Display(ais, false);
+        myContext->Deactivate(ais);
+    }
+    // Линии параллельно Y
+    for (int i = -nLines; i <= nLines; i++) {
+        if (i == 0) continue;
+        gp_Pnt start = origin.Translated(gp_Vec(vDir) * -ext + gp_Vec(uDir) * (i * step));
+        gp_Pnt end   = origin.Translated(gp_Vec(vDir) *  ext + gp_Vec(uDir) * (i * step));
+        TopoDS_Shape line = BRepBuilderAPI_MakeEdge(start, end).Shape();
+        Handle(AIS_Shape) ais = new AIS_Shape(line);
+        Handle(Prs3d_Drawer) dr = new Prs3d_Drawer();
+        dr->SetLineAspect(new Prs3d_LineAspect(grey, Aspect_TOL_SOLID, 1.0));
+        ais->SetAttributes(dr);
+        myContext->Display(ais, false);
+        myContext->Deactivate(ais);
+    }
+
+    myContext->UpdateCurrentViewer();
+}
+
+void OcctView::EnterSketchMode(const gp_Dir& planeNormal, const gp_Pnt& planeOrigin) {
+    if (myInSketchMode) return;
+    myInSketchMode = true;
+
+    // 1. Работаем с камерой напрямую
+    Handle(Graphic3d_Camera) cam = myView->Camera();
+
+    // Точка, куда смотрит камера — центр плоскости
+    cam->SetCenter(gp_Pnt(planeOrigin.X(), planeOrigin.Y(), planeOrigin.Z()));
+
+    // Направление взгляда — вдоль нормали (камера смотрит СТОРОНА -normal)
+    cam->SetDirection(gp_Dir(-planeNormal.X(), -planeNormal.Y(), -planeNormal.Z()));
+
+    // "Верх" камеры — X-ось плоскости (или Y, если нормаль параллельна X)
+    gp_Ax3 ax(planeOrigin, planeNormal);
+    cam->SetUp(ax.YDirection());
+
+    // Расстояние до объекта
+    cam->SetDistance(500.0);
+    cam->SetScale(3.0);
+
+    // 2. Ортогональная проекция
+    cam->SetProjectionType(Graphic3d_Camera::Projection_Orthographic);
+
+    // 3. Строим сетку
+    BuildSketchGrid(planeNormal, planeOrigin);
+
+    // 4. Вписываем вид
+    myView->FitAll(0.01, false);
+    myView->Redraw();
+
+    std::cout << "OcctView: entered sketch mode\n";
+}
+
+void OcctView::ExitSketchMode() {
+    if (!myInSketchMode) return;
+    myInSketchMode = false;
+
+    // 1. Возвращаем перспективу
+    myView->Camera()->SetProjectionType(Graphic3d_Camera::Projection_Perspective);
+
+    // 2. Убираем сетку и осевые линии.
+    //    Просто очищаем весь контекст и заново показываем только те объекты,
+    //    что зарегистрированы в myShapeEntries.
+    myContext->RemoveAll(false);
+    for (auto& e : myShapeEntries) {
+        myContext->Display(e.Shape, false);
+        if (e.IsSystem) {
+            myContext->SetTransparency(e.Shape, 0.95f, false);
+            if (e.Shape->Shape().ShapeType() == TopAbs_FACE) {
+                myContext->Activate(e.Shape, 4);
+            } else {
+                myContext->Activate(e.Shape, 0);
+            }
+        } else {
+            myContext->Activate(e.Shape, 0);
+        }
+    }
+    myContext->UpdateCurrentViewer();
+
+    // 3. Возвращаем камеру
+    myView->FitAll(0.01, false);
+    myView->ZFitAll();
+    myView->Redraw();
+
+    std::cout << "OcctView: exited sketch mode\n";
+}
+
 TDF_Label OcctView::GetSelectedLabel() const {
     if (myContext.IsNull()) return TDF_Label();
     if (myContext->NbSelected() == 0) return TDF_Label();
@@ -271,6 +415,7 @@ void OcctView::OnMouseButton(int button, int action, int /*mods*/) {
             }
         }
     } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+        if (myInSketchMode) return;  // в режиме эскиза вращение отключено
         if (action == GLFW_PRESS) {
             myRotating = true;
             myLastX = xpos; myLastY = ypos;

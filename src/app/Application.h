@@ -24,30 +24,33 @@ private:
     std::unique_ptr<OcctView>     myOcctView;
     std::unique_ptr<OrdoDocument> myDocument;
 
-    // Add Box dialog
     bool  myShowAddBoxDialog = false;
     char  myNewBoxName[128]  = "Box";
     float myNewBoxPos[3]     = { 0.0f, 0.0f, 0.0f };
     float myNewBoxSize[3]    = { 100.0f, 100.0f, 100.0f };
 
-    // Save/Open
     std::string myCurrentPath;
     char        myFilePathBuffer[512] = "D:/test_ordocad/part.cbf";
 
-    // Видимость объектов (ключ — Entry-строка метки)
     std::map<std::string, bool> myVisibility;
 
-    // Отложенные операции
     TDF_Label myPendingDeleteLabel;
     TDF_Label myPendingCreateSketchLabel;
+    TDF_Label myPendingEnterSketchLabel;   // двойной клик по эскизу → войти
+
+    // Активный эскиз (если в режиме 2D)
+    TDF_Label myActiveSketchLabel;
 
     void DrawDocumentTree();
     void DrawAddBoxDialog();
     void DrawMenuBar();
+    void DrawSketchOverlay();
     void RefreshView();
     void OnSave();
     void OnOpen();
     void OnNewDocument();
+    void EnterSketch(const TDF_Label& sketchLabel);
+    void ExitSketch();
 
     bool DrawLabelTree(const TDF_Label& label,
                        const TDF_Label& selectedLabel);

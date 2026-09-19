@@ -10,6 +10,8 @@
 #include <V3d_Viewer.hxx>
 #include <TDF_Label.hxx>
 #include <TopoDS_Shape.hxx>
+#include <gp_Dir.hxx>
+#include <gp_Pnt.hxx>
 
 #include <GLFW/glfw3.h>
 
@@ -36,11 +38,17 @@ public:
     void ClearAllShapes();
     void FitAll();
 
-    // Управление видимостью объекта по метке
     void SetShapeVisible(const TDF_Label& label, bool visible);
 
     TDF_Label GetSelectedLabel() const;
     void ClearSelection();
+
+    // === Режим эскиза ===
+    // Войти в режим 2D-рисования на плоскости с заданной нормалью и точкой
+    void EnterSketchMode(const gp_Dir& planeNormal, const gp_Pnt& planeOrigin);
+    // Выйти из режима эскиза (вернуть 3D)
+    void ExitSketchMode();
+    bool IsInSketchMode() const { return myInSketchMode; }
 
 private:
     struct ShapeEntry {
@@ -68,7 +76,14 @@ private:
     double myPressX = 0.0;
     double myPressY = 0.0;
 
+    // Состояние режима эскиза
+    bool                       myInSketchMode = false;
+    Handle(AIS_Shape)          mySketchGridShape;
+    Handle(AIS_InteractiveObject) mySavedViewState; // для сохранения камеры
+
     std::vector<ShapeEntry> myShapeEntries;
+
+    void BuildSketchGrid(const gp_Dir& normal, const gp_Pnt& origin);
 };
 
 } // namespace OrdoCAD

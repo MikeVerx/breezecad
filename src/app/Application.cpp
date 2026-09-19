@@ -13,6 +13,12 @@
 #include <TDataStd_Name.hxx>
 #include <TDataStd_Integer.hxx>
 #include <TCollection_AsciiString.hxx>
+#include <BRepAdaptor_Surface.hxx>
+#include <TopoDS.hxx>
+#include <TopoDS_Face.hxx>
+#include <gp_Pnt.hxx>
+#include <gp_Vec.hxx>
+#include <gp_Dir.hxx>
 
 #include <cstring>
 #include <sstream>
@@ -212,6 +218,12 @@ bool Application::DrawLabelTree(const TDF_Label& label,
     bool opened = ImGui::TreeNodeEx(labelName.c_str(), flags);
     if (isSystem) ImGui::PopStyleColor();
 
+    // Двойной клик по эскизу → войти в режим 2D
+    if (type == FT_Sketch && ImGui::IsItemHovered()
+        && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        myPendingEnterSketchLabel = label;
+    }
+
     // Контекстное меню
     if (ImGui::BeginPopupContextItem("##ctx")) {
         ImGui::TextDisabled("%s", labelName.c_str());
@@ -352,12 +364,71 @@ void Application::DrawDocumentTree() {
         myDocument->AddSketchFeature(myPendingCreateSketchLabel);
         myPendingCreateSketchLabel = TDF_Label();
     }
+    if (!myPendingEnterSketchLabel.IsNull() && myDocument) {
+        EnterSketch(myPendingEnterSketchLabel);
+        myPendingEnterSketchLabel = TDF_Label();
+    }
     if (!myPendingDeleteLabel.IsNull() && myDocument) {
         myDocument->RemoveFeature(myPendingDeleteLabel);
         myPendingDeleteLabel = TDF_Label();
         RefreshView();
         if (myOcctView) myOcctView->FitAll();
     }
+}
+
+void Application::EnterSketch(const TDF_Label& sketchLabel) {
+    if (!myDocument || !myOcctView || sketchLabel.IsNull()) return;
+
+    // Родитель эскиза — плоскость. Берём её геометрию и вычисляем нормаль.
+    TDF_Label parentPlane = sketchLabel.Father();
+    if (parentPlane.IsNull()) {
+        std::cerr << "EnterSketch: no parent plane\n";
+        return;
+    }
+
+    TopoDS_Shape planeShape = myDocument->GetShape(parentPlane);
+    if (planeShape.IsNull() || planeShape.ShapeType() != TopAbs_FACE) {
+        std::cerr << "EnterSketch: parent is not a face\n";
+        return;
+    }
+
+    TopoDS_Face face = TopoDS::Face(planeShape);
+    BRepAdaptor_Surface surf(face);
+    Standard_Real u = (surf.FirstUParameter() + surf.LastUParameter()) * 0.5;
+    Standard_Real v = (surf.FirstVParameter() + surf.LastVParameter()) * 0.5;
+    gp_Pnt p;
+    gp_Vec du, dv;
+    surf.D1(u, v, p, du, dv);
+    gp_Dir normal = du.Crossed(dv);
+
+    myOcctView->EnterSketchMode(normal, p);
+    myActiveSketchLabel = sketchLabel;
+    std::cout << "Application: entered sketch mode\n";
+}
+
+void Application::ExitSketch() {
+    if (myOcctView) myOcctView->ExitSketchMode();
+    myActiveSketchLabel = TDF_Label();
+    std::cout << "Application: exited sketch mode\n";
+}
+
+void Application::DrawSketchOverlay() {
+    if (myActiveSketchLabel.IsNull()) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f - 100, 30), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(200, 0), ImGuiCond_Always);
+    ImGui::Begin("##sketch_overlay", nullptr,
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_AlwaysAutoResize);
+
+    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "SKETCH MODE");
+    ImGui::Separator();
+    if (ImGui::Button("Finish Sketch", ImVec2(180, 30))) {
+        ExitSketch();
+    }
+    ImGui::End();
 }
 
 void Application::DrawAddBoxDialog() {
@@ -430,6 +501,14 @@ void Application::Run() {
         if (curCtrlO && !prevCtrlO) OnOpen();
         prevCtrlO = curCtrlO;
 
+        // Esc — выход из режима эскиза
+        static bool prevEsc = false;
+        bool curEsc = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_ESCAPE) == GLFW_PRESS;
+        if (curEsc && !prevEsc && !myActiveSketchLabel.IsNull()) {
+            ExitSketch();
+        }
+        prevEsc = curEsc;
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
@@ -437,6 +516,7 @@ void Application::Run() {
         DrawMenuBar();
         DrawDocumentTree();
         DrawAddBoxDialog();
+        DrawSketchOverlay();
 
         ImGuiIO& io = ImGui::GetIO();
         ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 360, 30), ImGuiCond_Always);
