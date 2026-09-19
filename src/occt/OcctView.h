@@ -2,6 +2,8 @@
 
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>
+#include <AIS_Line.hxx>
+#include <AIS_ColoredShape.hxx>
 #include <AIS_Point.hxx>
 #include <Aspect_DisplayConnection.hxx>
 #include <Aspect_NeutralWindow.hxx>
@@ -61,13 +63,14 @@ public:
     void ClearPreviewLine();
 
     // Показать постоянную линию эскиза
-    void DisplaySketchLine(const TopoDS_Shape& line, const TDF_Label& label);
+    void DisplaySketchLine(const TopoDS_Shape& line, const TDF_Label& label, int style = 0);
 
 private:
     struct ShapeEntry {
-        TDF_Label         Label;
-        Handle(AIS_Shape) Shape;
-        bool              IsSystem;
+        TDF_Label                     Label;
+        Handle(AIS_InteractiveObject) Shape;
+        TopoDS_Shape                  TopoShape;
+        bool                          IsSystem;
     };
 
     Handle(Aspect_DisplayConnection) myDisplayConnection;
@@ -91,7 +94,7 @@ private:
 
     bool              myInSketchMode = false;
     gp_Pln            mySketchPlane;
-    Handle(AIS_Shape) myPreviewLine;
+    Handle(AIS_Line) myPreviewLine;
     Handle(AIS_Point) myStartMarker;
     Handle(AIS_Point) myEndMarker;
 

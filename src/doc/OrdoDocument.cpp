@@ -215,7 +215,8 @@ bool OrdoDocument::IsSystem(const TDF_Label& label) {
 }
 
 TDF_Label OrdoDocument::AddSketchLine(const TDF_Label& sketchLabel,
-                                      const gp_Pnt& p1, const gp_Pnt& p2) {
+                                      const gp_Pnt& p1, const gp_Pnt& p2,
+                                      LineStyle style) {
     if (myDoc.IsNull() || sketchLabel.IsNull()) return TDF_Label();
 
     try {
@@ -225,6 +226,10 @@ TDF_Label OrdoDocument::AddSketchLine(const TDF_Label& sketchLabel,
 
         TDF_Label lineLabel = sketchLabel.FindChild(tag, true);
         TDataStd_Integer::Set(lineLabel, FT_SketchLine);
+
+        // Стиль линии — в дочерней метке с тегом 100
+        TDF_Label styleLabel = lineLabel.FindChild(100, true);
+        TDataStd_Integer::Set(styleLabel, static_cast<int>(style));
 
         TopoDS_Shape edge = BRepBuilderAPI_MakeEdge(p1, p2).Shape();
         if (edge.IsNull()) {
@@ -240,6 +245,18 @@ TDF_Label OrdoDocument::AddSketchLine(const TDF_Label& sketchLabel,
         std::cerr << "AddSketchLine unknown exception\n";
         return TDF_Label();
     }
+}
+
+LineStyle OrdoDocument::GetLineStyle(const TDF_Label& lineLabel) {
+    if (lineLabel.IsNull()) return LS_Normal;
+    TDF_Label styleLabel = lineLabel.FindChild(100, false);
+    if (styleLabel.IsNull()) return LS_Normal;
+    Handle(TDataStd_Integer) attr;
+    if (styleLabel.FindAttribute(TDataStd_Integer::GetID(), attr)) {
+        int v = attr->Get();
+        if (v >= 0 && v <= 2) return static_cast<LineStyle>(v);
+    }
+    return LS_Normal;
 }
 
 void OrdoDocument::RemoveLastSketchLine(const TDF_Label& sketchLabel) {

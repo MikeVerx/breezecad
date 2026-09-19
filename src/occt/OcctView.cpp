@@ -1,4 +1,10 @@
 #include "occt/OcctView.h"
+#include <TopoDS.hxx>
+#include <TopoDS_Edge.hxx>
+#include <BRep_Tool.hxx>
+#include <Geom_Curve.hxx>
+#include <Geom_CartesianPoint.hxx>
+#include <AIS_Line.hxx>
 
 #include <Prs3d_Drawer.hxx>
 #include <Prs3d_PointAspect.hxx>
@@ -51,6 +57,8 @@ bool OcctView::Init(GLFWwindow* glfwWindow, int width, int height) {
     myDisplayConnection = new Aspect_DisplayConnection();
     myDriver = new OpenGl_GraphicDriver(myDisplayConnection);
     myDriver->ChangeOptions().buffersNoSwap = true;
+    // Включаем Compatibility Profile для поддержки толстых линий
+    myDriver->ChangeOptions().contextCompatible = true;
 
     myViewer = new V3d_Viewer(myDriver);
     myViewer->SetDefaultLights();
@@ -151,7 +159,7 @@ void OcctView::DisplayShape(const TopoDS_Shape& shape,
     ais->SetDisplayMode(AIS_Shaded);
 
     if (isSystem) {
-        Quantity_Color grey(1.0, 1.0, 1.0, Quantity_TOC_RGB);  // белая сетка
+        Quantity_Color grey(0.35, 0.35, 0.4, Quantity_TOC_RGB);  // бледная сетка
 
         Handle(Prs3d_Drawer) drawer = new Prs3d_Drawer();
         drawer->SetFaceBoundaryDraw(true);
@@ -186,7 +194,7 @@ void OcctView::DisplayShape(const TopoDS_Shape& shape,
         myContext->Activate(ais, 0);
     }
 
-    myShapeEntries.push_back({ label, ais, isSystem });
+    myShapeEntries.push_back({ label, ais, shape, isSystem });
 }
 
 void OcctView::ClearAllShapes() {
@@ -212,62 +220,66 @@ void OcctView::SetShapeVisible(const TDF_Label& label, bool visible) {
 }
 
 void OcctView::BuildSketchGrid(const gp_Dir& normal, const gp_Pnt& origin) {
-    // Строим локальную систему координат на плоскости:
-    // Z = нормаль, X и Y — произвольные перпендикулярные
     gp_Ax3 ax(origin, normal);
     gp_Dir uDir = ax.XDirection();
     gp_Dir vDir = ax.YDirection();
 
-    const int    nLines = 20;       // -20..+20
-    const double step   = 10.0;     // шаг 10 мм
+    const int    nLines = 20;
+    const double step   = 10.0;
     const double ext    = nLines * step;
 
-    // Осевые линии (X и Y) — красная и зелёная штрих-пунктирные
-    TopoDS_Shape xAxis = BRepBuilderAPI_MakeEdge(
-        gp_Lin(origin, uDir), -ext, ext).Shape();
-    TopoDS_Shape yAxis = BRepBuilderAPI_MakeEdge(
-        gp_Lin(origin, vDir), -ext, ext).Shape();
+    Quantity_Color gridColor(0.18, 0.18, 0.22, Quantity_TOC_RGB);
+
+    // Сетка — тонкая
+    for (int i = -nLines; i <= nLines; i++) {
+        if (i == 0) continue;
+
+        gp_Pnt s1 = origin.Translated(gp_Vec(uDir) * -ext + gp_Vec(vDir) * (i * step));
+        gp_Pnt e1 = origin.Translated(gp_Vec(uDir) *  ext + gp_Vec(vDir) * (i * step));
+        TopoDS_Shape l1 = BRepBuilderAPI_MakeEdge(s1, e1).Shape();
+        Handle(AIS_Shape) a1 = new AIS_Shape(l1);
+        a1->SetDisplayMode(AIS_WireFrame);
+        Handle(Prs3d_LineAspect) as1 = new Prs3d_LineAspect(gridColor, Aspect_TOL_SOLID, 1.0);
+        a1->Attributes()->SetWireAspect(as1);
+        myContext->Display(a1, false);
+        myContext->SetColor(a1, gridColor, false);
+        myContext->SetWidth(a1, 1.0, false);
+        myContext->Deactivate(a1);
+
+        gp_Pnt s2 = origin.Translated(gp_Vec(vDir) * -ext + gp_Vec(uDir) * (i * step));
+        gp_Pnt e2 = origin.Translated(gp_Vec(vDir) *  ext + gp_Vec(uDir) * (i * step));
+        TopoDS_Shape l2 = BRepBuilderAPI_MakeEdge(s2, e2).Shape();
+        Handle(AIS_Shape) a2 = new AIS_Shape(l2);
+        a2->SetDisplayMode(AIS_WireFrame);
+        Handle(Prs3d_LineAspect) as2 = new Prs3d_LineAspect(gridColor, Aspect_TOL_SOLID, 1.0);
+        a2->Attributes()->SetWireAspect(as2);
+        myContext->Display(a2, false);
+        myContext->SetColor(a2, gridColor, false);
+        myContext->SetWidth(a2, 1.0, false);
+        myContext->Deactivate(a2);
+    }
+
+    // Осевые X (красная) и Y (зелёная) — штрих-пунктирные, толстые
+    TopoDS_Shape xAxis = BRepBuilderAPI_MakeEdge(gp_Lin(origin, uDir), -ext, ext).Shape();
+    TopoDS_Shape yAxis = BRepBuilderAPI_MakeEdge(gp_Lin(origin, vDir), -ext, ext).Shape();
 
     Handle(AIS_Shape) xAis = new AIS_Shape(xAxis);
-    Handle(AIS_Shape) yAis = new AIS_Shape(yAxis);
-
+    xAis->SetDisplayMode(AIS_WireFrame);
+    Handle(Prs3d_LineAspect) xAsp = new Prs3d_LineAspect(Quantity_NOC_RED, Aspect_TOL_DOTDASH, 4.0);
+    xAis->Attributes()->SetWireAspect(xAsp);
     myContext->Display(xAis, false);
     myContext->SetColor(xAis, Quantity_NOC_RED, false);
-    myContext->SetWidth(xAis, 2.0, false);
+    myContext->SetWidth(xAis, 4.0, false);
     myContext->Deactivate(xAis);
 
+    Handle(AIS_Shape) yAis = new AIS_Shape(yAxis);
+    yAis->SetDisplayMode(AIS_WireFrame);
+    Handle(Prs3d_LineAspect) yAsp = new Prs3d_LineAspect(Quantity_NOC_GREEN, Aspect_TOL_DOTDASH, 4.0);
+    yAis->Attributes()->SetWireAspect(yAsp);
     myContext->Display(yAis, false);
     myContext->SetColor(yAis, Quantity_NOC_GREEN, false);
-    myContext->SetWidth(yAis, 2.0, false);
+    myContext->SetWidth(yAis, 4.0, false);
     myContext->Deactivate(yAis);
-
-    // Сетка — набор тонких серых линий, параллельных осям
-    Quantity_Color grey(1.0, 1.0, 1.0, Quantity_TOC_RGB);  // белая сетка
-
-    // Линии параллельно X
-    for (int i = -nLines; i <= nLines; i++) {
-        if (i == 0) continue;
-        gp_Pnt start = origin.Translated(gp_Vec(uDir) * -ext + gp_Vec(vDir) * (i * step));
-        gp_Pnt end   = origin.Translated(gp_Vec(uDir) *  ext + gp_Vec(vDir) * (i * step));
-        TopoDS_Shape line = BRepBuilderAPI_MakeEdge(start, end).Shape();
-        Handle(AIS_Shape) ais = new AIS_Shape(line);
-        myContext->Display(ais, false);
-        myContext->SetColor(ais, grey, false);
-        myContext->SetWidth(ais, 1.5, false);
-        myContext->Deactivate(ais);
-    }
-    // Линии параллельно Y
-    for (int i = -nLines; i <= nLines; i++) {
-        if (i == 0) continue;
-        gp_Pnt start = origin.Translated(gp_Vec(vDir) * -ext + gp_Vec(uDir) * (i * step));
-        gp_Pnt end   = origin.Translated(gp_Vec(vDir) *  ext + gp_Vec(uDir) * (i * step));
-        TopoDS_Shape line = BRepBuilderAPI_MakeEdge(start, end).Shape();
-        Handle(AIS_Shape) ais = new AIS_Shape(line);
-        myContext->Display(ais, false);
-        myContext->SetColor(ais, grey, false);
-        myContext->SetWidth(ais, 1.5, false);
-        myContext->Deactivate(ais);
-    }
 
     myContext->UpdateCurrentViewer();
 }
@@ -328,7 +340,7 @@ void OcctView::ExitSketchMode() {
         myContext->Display(e.Shape, false);
         if (e.IsSystem) {
             myContext->SetTransparency(e.Shape, 0.95f, false);
-            if (e.Shape->Shape().ShapeType() == TopAbs_FACE) {
+            if (e.TopoShape.ShapeType() == TopAbs_FACE) {
                 myContext->Activate(e.Shape, 4);
             } else {
                 myContext->Activate(e.Shape, 0);
@@ -346,7 +358,7 @@ void OcctView::ExitSketchMode() {
 
     // 4. Возвращаем селекцию объектов
     for (auto& e : myShapeEntries) {
-        if (e.IsSystem && e.Shape->Shape().ShapeType() == TopAbs_FACE) {
+        if (e.IsSystem && e.TopoShape.ShapeType() == TopAbs_FACE) {
             myContext->Activate(e.Shape, 4);
         } else {
             myContext->Activate(e.Shape, 0);
@@ -386,61 +398,52 @@ bool OcctView::ScreenToPlane(int px, int py, gp_Pnt& out) const {
 void OcctView::ShowPreviewLine(const gp_Pnt& from, const gp_Pnt& to) {
     if (myContext.IsNull()) return;
 
-    // Проверка: точки должны различаться
     double dx = to.X() - from.X();
     double dy = to.Y() - from.Y();
     double dz = to.Z() - from.Z();
     if (dx*dx + dy*dy + dz*dz < 1e-6) return;
 
     try {
-        // === Линия-превью ===
         ClearPreviewLine();
 
-        TopoDS_Shape edge = BRepBuilderAPI_MakeEdge(from, to).Shape();
-        if (edge.IsNull()) return;
-        myPreviewLine = new AIS_Shape(edge);
-        Handle(Prs3d_Drawer) dr = new Prs3d_Drawer();
-        dr->SetLineAspect(new Prs3d_LineAspect(Quantity_NOC_YELLOW, Aspect_TOL_DASH, 1.5));
-        myPreviewLine->SetAttributes(dr);
+        Handle(Geom_CartesianPoint) gp1 = new Geom_CartesianPoint(from);
+        Handle(Geom_CartesianPoint) gp2 = new Geom_CartesianPoint(to);
+        myPreviewLine = new AIS_Line(gp1, gp2);
+
+        Handle(Prs3d_LineAspect) aspect = new Prs3d_LineAspect(
+            Quantity_NOC_YELLOW, Aspect_TOL_DASH, 10.0);
+        myPreviewLine->Attributes()->SetLineAspect(aspect);
+        myPreviewLine->SetWidth(10.0);
+        myPreviewLine->SetColor(Quantity_NOC_YELLOW);
 
         myContext->Display(myPreviewLine, false);
+        myContext->SetZLayer(myPreviewLine, Graphic3d_ZLayerId_Topmost);
         myContext->Deactivate(myPreviewLine);
 
-        // === Маркер стартовой точки (зелёный) ===
-        {
-            Handle(Geom_Point) gStart = new Geom_CartesianPoint(from);
-            myStartMarker = new AIS_Point(gStart);
-            Handle(Prs3d_PointAspect) pa = new Prs3d_PointAspect(
-                Aspect_TOM_O, Quantity_NOC_GREEN, 3.0);
-            Handle(Prs3d_Drawer) dr1 = new Prs3d_Drawer();
-            dr1->SetPointAspect(pa);
-            myStartMarker->SetAttributes(dr1);
-            myContext->Display(myStartMarker, false);
-            myContext->Deactivate(myStartMarker);
-        }
+        // Маркеры
+        Handle(Geom_Point) gStart = new Geom_CartesianPoint(from);
+        myStartMarker = new AIS_Point(gStart);
+        Handle(Prs3d_PointAspect) pa1 = new Prs3d_PointAspect(
+            Aspect_TOM_O, Quantity_NOC_GREEN, 3.0);
+        Handle(Prs3d_Drawer) dr1 = new Prs3d_Drawer();
+        dr1->SetPointAspect(pa1);
+        myStartMarker->SetAttributes(dr1);
+        myContext->Display(myStartMarker, false);
+        myContext->Deactivate(myStartMarker);
 
-        // === Маркер конечной точки (жёлтый) ===
-        {
-            Handle(Geom_Point) gEnd = new Geom_CartesianPoint(to);
-            myEndMarker = new AIS_Point(gEnd);
-            Handle(Prs3d_PointAspect) pa = new Prs3d_PointAspect(
-                Aspect_TOM_O, Quantity_NOC_YELLOW, 3.0);
-            Handle(Prs3d_Drawer) dr2 = new Prs3d_Drawer();
-            dr2->SetPointAspect(pa);
-            myEndMarker->SetAttributes(dr2);
-            myContext->Display(myEndMarker, false);
-            myContext->Deactivate(myEndMarker);
-        }
+        Handle(Geom_Point) gEnd = new Geom_CartesianPoint(to);
+        myEndMarker = new AIS_Point(gEnd);
+        Handle(Prs3d_PointAspect) pa2 = new Prs3d_PointAspect(
+            Aspect_TOM_O, Quantity_NOC_YELLOW, 3.0);
+        Handle(Prs3d_Drawer) dr2 = new Prs3d_Drawer();
+        dr2->SetPointAspect(pa2);
+        myEndMarker->SetAttributes(dr2);
+        myContext->Display(myEndMarker, false);
+        myContext->Deactivate(myEndMarker);
 
         myContext->UpdateCurrentViewer();
         if (!myView.IsNull()) myView->Redraw();
-    } catch (const std::exception& e) {
-        std::cerr << "ShowPreviewLine exception: " << e.what() << "\n";
-        myPreviewLine.Nullify();
-        myStartMarker.Nullify();
-        myEndMarker.Nullify();
     } catch (...) {
-        std::cerr << "ShowPreviewLine unknown exception\n";
         myPreviewLine.Nullify();
         myStartMarker.Nullify();
         myEndMarker.Nullify();
@@ -536,17 +539,54 @@ void OcctView::ClearPreviewLine() {
     myContext->UpdateCurrentViewer();
 }
 
-void OcctView::DisplaySketchLine(const TopoDS_Shape& line, const TDF_Label& label) {
+void OcctView::DisplaySketchLine(const TopoDS_Shape& line, const TDF_Label& label, int style) {
     if (line.IsNull() || myContext.IsNull()) return;
+    if (line.ShapeType() != TopAbs_EDGE) return;
 
-    Handle(AIS_Shape) ais = new AIS_Shape(line);
-    Handle(Prs3d_Drawer) dr = new Prs3d_Drawer();
-    dr->SetLineAspect(new Prs3d_LineAspect(Quantity_Color(0.65, 0.3, 1.0, Quantity_TOC_RGB), Aspect_TOL_SOLID, 3.5));
-    ais->SetAttributes(dr);
+    TopoDS_Edge edge = TopoDS::Edge(line);
+    Standard_Real first, last;
+    Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, first, last);
+    if (curve.IsNull()) return;
+
+    gp_Pnt p1 = curve->Value(first);
+    gp_Pnt p2 = curve->Value(last);
+
+    Handle(Geom_CartesianPoint) gp1 = new Geom_CartesianPoint(p1);
+    Handle(Geom_CartesianPoint) gp2 = new Geom_CartesianPoint(p2);
+    Handle(AIS_Line) ais = new AIS_Line(gp1, gp2);
+
+    Quantity_Color color;
+    Aspect_TypeOfLine tol;
+    double width;
+
+    switch (style) {
+        case 1:  // Construction
+            color = Quantity_Color(0.55, 0.55, 0.75, Quantity_TOC_RGB);
+            tol   = Aspect_TOL_DASH;
+            width = 6.0;
+            break;
+        case 2:  // Centerline
+            color = Quantity_Color(0.9, 0.45, 0.15, Quantity_TOC_RGB);
+            tol   = Aspect_TOL_DOTDASH;
+            width = 7.0;
+            break;
+        default: // Normal
+            color = Quantity_Color(0.75, 0.2, 1.0, Quantity_TOC_RGB);
+            tol   = Aspect_TOL_SOLID;
+            width = 12.0;
+            break;
+    }
+
+    Handle(Prs3d_LineAspect) aspect = new Prs3d_LineAspect(color, tol, width);
+    ais->Attributes()->SetLineAspect(aspect);
+    ais->SetWidth(width);
+    ais->SetColor(color);
 
     myContext->Display(ais, false);
+    myContext->SetZLayer(ais, Graphic3d_ZLayerId_Topmost);
     myContext->Deactivate(ais);
-    myShapeEntries.push_back({ label, ais, false });
+
+    myShapeEntries.push_back({ label, ais, line, false });
     myContext->UpdateCurrentViewer();
 }
 

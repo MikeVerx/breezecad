@@ -15,12 +15,11 @@ GlfwWindow::GlfwWindow(int width, int height, const std::string& title) {
         return;
     }
 
+    // Compatibility Profile — только он поддерживает толстые линии (glLineWidth > 1)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
+    // Не указываем Core Profile — по умолчанию будет Compatibility
+    // glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     myWindow = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
     if (!myWindow) {

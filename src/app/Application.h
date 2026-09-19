@@ -47,6 +47,7 @@ private:
     bool mySnapToPoints = true;
     bool myAutoContinue = true;
     bool myOrthoMode    = false;  // Shift — угол кратен 45°
+    LineStyle myCurrentLineStyle = LS_Normal;
 
     // === Состояние рисования ===
     bool   myHasSketchStart = false;

@@ -22,6 +22,13 @@ enum FeatureType {
     FT_Other      = 99
 };
 
+// Стиль линии эскиза (как в Inventor)
+enum LineStyle {
+    LS_Normal       = 0,  // обычная геометрия — фиолетовая сплошная
+    LS_Construction = 1,  // вспомогательная — серая пунктирная
+    LS_Centerline   = 2   // осевая — красно-коричневая штрих-пунктирная
+};
+
 class OrdoDocument {
 public:
     OrdoDocument();
@@ -46,7 +53,11 @@ public:
 
     // === Линии эскиза ===
     TDF_Label AddSketchLine(const TDF_Label& sketchLabel,
-                            const gp_Pnt& p1, const gp_Pnt& p2);
+                            const gp_Pnt& p1, const gp_Pnt& p2,
+                            LineStyle style = LS_Normal);
+
+    // Получить стиль линии (по умолчанию LS_Normal)
+    static LineStyle GetLineStyle(const TDF_Label& lineLabel);
     void RemoveLastSketchLine(const TDF_Label& sketchLabel);
     void ClearSketch(const TDF_Label& sketchLabel);
 

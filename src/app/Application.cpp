@@ -396,7 +396,8 @@ void Application::RefreshSketchLines() {
         TDF_Label lineLabel = it.Value();
         TopoDS_Shape s = myDocument->GetShape(lineLabel);
         if (!s.IsNull()) {
-            myOcctView->DisplaySketchLine(s, lineLabel);
+            LineStyle style = OrdoDocument::GetLineStyle(lineLabel);
+            myOcctView->DisplaySketchLine(s, lineLabel, static_cast<int>(style));
         }
     }
 }
@@ -610,8 +611,11 @@ void Application::OnSketchClick(int px, int py) {
                   << mySketchStartPoint.Y() << "," << mySketchStartPoint.Z()
                   << " end at " << p.X() << "," << p.Y() << "," << p.Z() << ")\n";
 
+        std::cout << "Sketch: creating line with style="
+                  << static_cast<int>(myCurrentLineStyle) << "\n";
+
         try {
-            myDocument->AddSketchLine(myActiveSketchLabel, mySketchStartPoint, p);
+            myDocument->AddSketchLine(myActiveSketchLabel, mySketchStartPoint, p, myCurrentLineStyle);
             myOcctView->ClearPreviewLine();
 
             TopoDS_Shape line = BRepBuilderAPI_MakeEdge(mySketchStartPoint, p).Shape();
@@ -622,7 +626,7 @@ void Application::OnSketchClick(int px, int py) {
                 if (it.Value().Tag() > maxTag) maxTag = it.Value().Tag();
             }
             TDF_Label lineLabel = myActiveSketchLabel.FindChild(maxTag, false);
-            myOcctView->DisplaySketchLine(line, lineLabel);
+            myOcctView->DisplaySketchLine(line, lineLabel, static_cast<int>(myCurrentLineStyle));
 
             if (myAutoContinue && !loopClosed) {
                 mySketchStartPoint = p;
@@ -742,6 +746,21 @@ void Application::DrawSketchOverlay() {
             RefreshView();
         }
     }
+    ImGui::Separator();
+    ImGui::Text("Line Style:");
+
+    // Normal — фиолетовая (основная геометрия)
+    if (ImGui::RadioButton("Normal (purple)", myCurrentLineStyle == LS_Normal))
+        myCurrentLineStyle = LS_Normal;
+
+    // Construction — серая пунктирная (вспомогательная)
+    if (ImGui::RadioButton("Construction (dashed)", myCurrentLineStyle == LS_Construction))
+        myCurrentLineStyle = LS_Construction;
+
+    // Centerline — коричневая штрих-пунктирная (осевая)
+    if (ImGui::RadioButton("Centerline (dot-dash)", myCurrentLineStyle == LS_Centerline))
+        myCurrentLineStyle = LS_Centerline;
+
     ImGui::Separator();
     ImGui::Text("Snapping:");
     ImGui::Checkbox("To Grid (10mm)", &mySnapToGrid);
