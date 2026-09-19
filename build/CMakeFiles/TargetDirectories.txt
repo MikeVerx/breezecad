@@ -1,3 +1,0 @@
-D:/home/Мишаня/OrdoCAD/build/CMakeFiles/ordocad.dir
-D:/home/Мишаня/OrdoCAD/build/CMakeFiles/edit_cache.dir
-D:/home/Мишаня/OrdoCAD/build/CMakeFiles/rebuild_cache.dir
