@@ -5,6 +5,7 @@
 #include "doc/OrdoDocument.h"
 
 #include <TDF_Label.hxx>
+#include <gp_Pnt.hxx>
 
 #include <map>
 #include <memory>
@@ -36,21 +37,30 @@ private:
 
     TDF_Label myPendingDeleteLabel;
     TDF_Label myPendingCreateSketchLabel;
-    TDF_Label myPendingEnterSketchLabel;   // двойной клик по эскизу → войти
+    TDF_Label myPendingEnterSketchLabel;
 
-    // Активный эскиз (если в режиме 2D)
     TDF_Label myActiveSketchLabel;
+
+    // Настройки привязок
+    bool mySnapToGrid  = true;
+    bool mySnapToPoints = true;
+
+    // Состояние рисования линии
+    bool    myHasSketchStart = false;
+    gp_Pnt  mySketchStartPoint;
 
     void DrawDocumentTree();
     void DrawAddBoxDialog();
     void DrawMenuBar();
     void DrawSketchOverlay();
     void RefreshView();
+    void RefreshSketchLines();
     void OnSave();
     void OnOpen();
     void OnNewDocument();
     void EnterSketch(const TDF_Label& sketchLabel);
     void ExitSketch();
+    void OnSketchClick(int px, int py);
 
     bool DrawLabelTree(const TDF_Label& label,
                        const TDF_Label& selectedLabel);

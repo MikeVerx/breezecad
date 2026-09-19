@@ -214,6 +214,65 @@ bool OrdoDocument::IsSystem(const TDF_Label& label) {
     return GetType(label) < 0;
 }
 
+TDF_Label OrdoDocument::AddSketchLine(const TDF_Label& sketchLabel,
+                                      const gp_Pnt& p1, const gp_Pnt& p2) {
+    if (myDoc.IsNull() || sketchLabel.IsNull()) return TDF_Label();
+
+    try {
+        // Находим свободный тег
+        int tag = 1;
+        while (!sketchLabel.FindChild(tag, false).IsNull()) tag++;
+
+        TDF_Label lineLabel = sketchLabel.FindChild(tag, true);
+        TDataStd_Integer::Set(lineLabel, FT_SketchLine);
+
+        TopoDS_Shape edge = BRepBuilderAPI_MakeEdge(p1, p2).Shape();
+        if (edge.IsNull()) {
+            std::cerr << "AddSketchLine: edge is null\n";
+            return TDF_Label();
+        }
+        TNaming_Builder(lineLabel).Generated(edge);
+        return lineLabel;
+    } catch (const std::exception& e) {
+        std::cerr << "AddSketchLine exception: " << e.what() << "\n";
+        return TDF_Label();
+    } catch (...) {
+        std::cerr << "AddSketchLine unknown exception\n";
+        return TDF_Label();
+    }
+}
+
+void OrdoDocument::RemoveLastSketchLine(const TDF_Label& sketchLabel) {
+    if (myDoc.IsNull() || sketchLabel.IsNull()) return;
+
+    int maxTag = 0;
+    TDF_ChildIterator it(sketchLabel, false);
+    for (; it.More(); it.Next()) {
+        if (it.Value().Tag() > maxTag) maxTag = it.Value().Tag();
+    }
+    if (maxTag == 0) return;
+
+    TDF_Label last = sketchLabel.FindChild(maxTag, false);
+    if (!last.IsNull()) {
+        last.ForgetAllAttributes(true);
+        std::cout << "OrdoDocument: removed last sketch line (tag=" << maxTag << ")\n";
+    }
+}
+
+void OrdoDocument::ClearSketch(const TDF_Label& sketchLabel) {
+    if (myDoc.IsNull() || sketchLabel.IsNull()) return;
+
+    std::vector<TDF_Label> toRemove;
+    TDF_ChildIterator it(sketchLabel, false);
+    for (; it.More(); it.Next()) {
+        toRemove.push_back(it.Value());
+    }
+    for (auto& l : toRemove) {
+        l.ForgetAllAttributes(true);
+    }
+    std::cout << "OrdoDocument: cleared sketch\n";
+}
+
 void OrdoDocument::RemoveFeature(const TDF_Label& label) {
     if (label.IsNull()) return;
     if (IsSystem(label)) {

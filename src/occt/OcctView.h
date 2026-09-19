@@ -2,6 +2,7 @@
 
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>
+#include <AIS_Point.hxx>
 #include <Aspect_DisplayConnection.hxx>
 #include <Aspect_NeutralWindow.hxx>
 #include <Aspect_RenderingContext.hxx>
@@ -11,6 +12,7 @@
 #include <TDF_Label.hxx>
 #include <TopoDS_Shape.hxx>
 #include <gp_Dir.hxx>
+#include <gp_Pln.hxx>
 #include <gp_Pnt.hxx>
 
 #include <GLFW/glfw3.h>
@@ -44,11 +46,21 @@ public:
     void ClearSelection();
 
     // === Режим эскиза ===
-    // Войти в режим 2D-рисования на плоскости с заданной нормалью и точкой
     void EnterSketchMode(const gp_Dir& planeNormal, const gp_Pnt& planeOrigin);
-    // Выйти из режима эскиза (вернуть 3D)
     void ExitSketchMode();
     bool IsInSketchMode() const { return myInSketchMode; }
+    const gp_Pln& GetSketchPlane() const { return mySketchPlane; }
+
+    // Конвертация экранных координат в точку на плоскости эскиза
+    bool ScreenToPlane(int px, int py, gp_Pnt& out) const;
+
+    // Показать/обновить/убрать превью-линию
+    void ShowPreviewLine(const gp_Pnt& from, const gp_Pnt& to);
+    void ShowCursorMarker(const gp_Pnt& p);
+    void ClearPreviewLine();
+
+    // Показать постоянную линию эскиза
+    void DisplaySketchLine(const TopoDS_Shape& line, const TDF_Label& label);
 
 private:
     struct ShapeEntry {
@@ -76,10 +88,11 @@ private:
     double myPressX = 0.0;
     double myPressY = 0.0;
 
-    // Состояние режима эскиза
-    bool                       myInSketchMode = false;
-    Handle(AIS_Shape)          mySketchGridShape;
-    Handle(AIS_InteractiveObject) mySavedViewState; // для сохранения камеры
+    bool              myInSketchMode = false;
+    gp_Pln            mySketchPlane;
+    Handle(AIS_Shape) myPreviewLine;
+    Handle(AIS_Point) myStartMarker;
+    Handle(AIS_Point) myEndMarker;
 
     std::vector<ShapeEntry> myShapeEntries;
 
