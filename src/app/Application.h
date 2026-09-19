@@ -4,6 +4,8 @@
 #include "occt/OcctView.h"
 #include "doc/OrdoDocument.h"
 
+#include <TDF_Label.hxx>
+
 #include <memory>
 
 namespace OrdoCAD {
@@ -25,6 +27,11 @@ private:
     char  myNewBoxName[128]  = "Box";
     float myNewBoxPos[3]     = { 0.0f, 0.0f, 0.0f };
     float myNewBoxSize[3]    = { 100.0f, 100.0f, 100.0f };
+
+    // Отложенное удаление: помечаем метку во время обхода дерева,
+    // удаляем после обхода (иначе сломаем итератор).
+    TDF_Label myPendingDeleteLabel;
+    bool      myHasPendingDelete = false;
 
     void DrawDocumentTree();
     void DrawAddBoxDialog();

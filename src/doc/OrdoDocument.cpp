@@ -49,7 +49,7 @@ TDF_Label OrdoDocument::AddBoxFeature(const std::string& name,
     TDF_Label label = MainLabel().FindChild(myNextFeatureId++, true);
 
     TDataStd_Name::Set(label, TCollection_ExtendedString(name.c_str()));
-    TDataStd_Integer::Set(label, 2);  // type = 2 (Box)
+    TDataStd_Integer::Set(label, 2);
 
     gp_Pnt corner(px, py, pz);
     TopoDS_Shape box = BRepPrimAPI_MakeBox(corner, dx, dy, dz).Shape();
@@ -78,6 +78,24 @@ TDF_Label OrdoDocument::AddCylinderFeature(const std::string& name,
     builder.Generated(cyl);
 
     return label;
+}
+
+void OrdoDocument::RemoveFeature(const TDF_Label& label) {
+    if (label.IsNull()) return;
+
+    // Имя для лога
+    std::string name = "<unnamed>";
+    Handle(TDataStd_Name) nameAttr;
+    if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
+        TCollection_AsciiString ascii(nameAttr->Get());
+        name = ascii.ToCString();
+    }
+
+    // ForgetAllAttributes(true) — удаляет все атрибуты метки
+    // и рекурсивно всех её детей. Метка становится "пустой".
+    label.ForgetAllAttributes(true);
+
+    std::cout << "OrdoDocument: removed feature '" << name << "'\n";
 }
 
 TopoDS_Shape OrdoDocument::GetShape(const TDF_Label& label) const {

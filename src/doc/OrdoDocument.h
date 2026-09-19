@@ -19,13 +19,15 @@ public:
 
     TDF_Label AddFeature(const std::string& name, int type);
 
-    // Куб с позицией и размерами
     TDF_Label AddBoxFeature(const std::string& name,
                             double dx, double dy, double dz,
                             double px = 0.0, double py = 0.0, double pz = 0.0);
 
     TDF_Label AddCylinderFeature(const std::string& name,
                                  double radius, double height);
+
+    // Удалить метку и все её атрибуты (рекурсивно с детьми)
+    void RemoveFeature(const TDF_Label& label);
 
     TopoDS_Shape GetShape(const TDF_Label& label) const;
     std::vector<TopoDS_Shape> GetAllShapes() const;

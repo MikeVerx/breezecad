@@ -90,7 +90,8 @@ void Application::RefreshView() {
     myOcctView->Redraw();
 }
 
-static void DrawLabelTree(const TDF_Label& label) {
+// Возвращает true, если узел запросил удаление (через контекстное меню)
+static bool DrawLabelTree(const TDF_Label& label, TDF_Label& pendingDelete) {
     std::string labelName = "<unnamed>";
     Handle(TDataStd_Name) nameAttr;
     if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
@@ -114,18 +115,39 @@ static void DrawLabelTree(const TDF_Label& label) {
         flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
     }
 
+    // Уникальный ID для ImGui, т.к. имена могут повторяться
+    ImGui::PushID(label.Tag());
+
     bool opened = ImGui::TreeNodeEx(labelName.c_str(), flags);
+
+    // Контекстное меню по правому клику на узле
+    if (ImGui::BeginPopupContextItem("##ctx")) {
+        ImGui::TextDisabled("%s", labelName.c_str());
+        ImGui::Separator();
+        if (ImGui::MenuItem("Delete")) {
+            pendingDelete = label;
+        }
+        ImGui::EndPopup();
+    }
 
     ImGui::SameLine();
     ImGui::TextDisabled("[type=%d, tag=%d]", type, label.Tag());
 
+    bool childRequestedDelete = false;
+
     if (opened && hasChildren) {
         TDF_ChildIterator it(label, false);
         for (; it.More(); it.Next()) {
-            DrawLabelTree(it.Value());
+            if (DrawLabelTree(it.Value(), pendingDelete)) {
+                childRequestedDelete = true;
+            }
         }
         ImGui::TreePop();
     }
+
+    ImGui::PopID();
+
+    return childRequestedDelete || !pendingDelete.IsNull();
 }
 
 void Application::DrawDocumentTree() {
@@ -152,9 +174,9 @@ void Application::DrawDocumentTree() {
     ImGui::Separator();
 
     ImGui::Text("OCAF Document Tree");
+    ImGui::TextDisabled("Right-click a node to delete");
     ImGui::Separator();
 
-    // === Кнопка добавления куба ===
     if (ImGui::Button("Add Box")) {
         myShowAddBoxDialog = true;
         std::strncpy(myNewBoxName, "Box", sizeof(myNewBoxName) - 1);
@@ -175,12 +197,21 @@ void Application::DrawDocumentTree() {
             ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
         TDF_ChildIterator it(root, false);
         for (; it.More(); it.Next()) {
-            DrawLabelTree(it.Value());
+            DrawLabelTree(it.Value(), myPendingDeleteLabel);
         }
         ImGui::TreePop();
     }
 
     ImGui::End();
+
+    // === Отложенное удаление ===
+    if (!myPendingDeleteLabel.IsNull() && myDocument) {
+        myDocument->RemoveFeature(myPendingDeleteLabel);
+        myPendingDeleteLabel = TDF_Label();
+        myHasPendingDelete = false;
+        RefreshView();
+        if (myOcctView) myOcctView->FitAll();
+    }
 }
 
 void Application::DrawAddBoxDialog() {
@@ -260,6 +291,7 @@ void Application::Run() {
         ImGui::BulletText("MMB - pan");
         ImGui::BulletText("Wheel - zoom");
         ImGui::BulletText("F11 - fullscreen");
+        ImGui::BulletText("RMB on tree node - delete");
         ImGui::End();
 
         ImGui::Render();
