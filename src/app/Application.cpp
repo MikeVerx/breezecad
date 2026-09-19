@@ -29,6 +29,7 @@
 #include <gp_Ax3.hxx>
 #include <gp_Pln.hxx>
 
+#define _USE_MATH_DEFINES
 #include <cmath>
 #include <cstring>
 #include <sstream>
@@ -400,6 +401,93 @@ void Application::RefreshSketchLines() {
     }
 }
 
+// Вычисление длины и угла в плоскости эскиза
+static void ComputeLengthAngle(const gp_Pln& plane, const gp_Pnt& from, const gp_Pnt& to,
+                               double& length, double& angleDeg) {
+    gp_Ax3 ax = plane.Position();
+    gp_Pnt origin = ax.Location();
+    gp_Dir xDir = ax.XDirection();
+    gp_Dir yDir = ax.YDirection();
+
+    gp_Vec v(from, to);
+    double u = v.Dot(gp_Vec(xDir));
+    double w = v.Dot(gp_Vec(yDir));
+
+    length = std::sqrt(u*u + w*w);
+    angleDeg = std::atan2(w, u) * 180.0 / M_PI;
+}
+
+// Принудительное выравнивание угла к ближайшему кратному 90° (Компас-стиль)
+static gp_Pnt ApplyOrtho(const gp_Pln& plane, const gp_Pnt& from, const gp_Pnt& to) {
+    gp_Ax3 ax = plane.Position();
+    gp_Pnt origin = ax.Location();
+    gp_Dir xDir = ax.XDirection();
+    gp_Dir yDir = ax.YDirection();
+
+    gp_Vec v(from, to);
+    double u = v.Dot(gp_Vec(xDir));
+    double w = v.Dot(gp_Vec(yDir));
+
+    double len = std::sqrt(u*u + w*w);
+    if (len < 1e-6) return to;
+
+    // Выбираем ближайшее направление: 0 / 90 / 180 / 270
+    double u2 = 0.0, w2 = 0.0;
+    if (std::abs(u) >= std::abs(w)) {
+        u2 = (u >= 0) ? len : -len;
+        w2 = 0.0;
+    } else {
+        u2 = 0.0;
+        w2 = (w >= 0) ? len : -len;
+    }
+
+    gp_Pnt result = from;  // орто работает от стартовой точки
+    result.Translate(gp_Vec(xDir) * u2);
+    result.Translate(gp_Vec(yDir) * w2);
+    return result;
+}
+
+// Проверка: попадает ли точка p в существующую вершину эскиза
+// (Origin или конец уже нарисованной линии).
+// skip — точка, которую нужно игнорировать (старт новой линии,
+//        чтобы случайно не «замкнуться» на только что начатой линии).
+static bool IsPointOnExistingVertex(const gp_Pnt& p, const TDF_Label& sketchLabel,
+                                     const gp_Pnt& skip,
+                                     double threshold) {
+    auto dist2 = [](const gp_Pnt& a, const gp_Pnt& b) {
+        double dx = a.X()-b.X(), dy = a.Y()-b.Y(), dz = a.Z()-b.Z();
+        return dx*dx + dy*dy + dz*dz;
+    };
+
+    double th2 = threshold * threshold;
+
+    // Origin
+    gp_Pnt origin(0, 0, 0);
+    if (dist2(p, origin) < th2 && dist2(skip, origin) > th2)
+        return true;
+
+    // Концы уже нарисованных линий эскиза
+    TDF_ChildIterator it(sketchLabel, false);
+    for (; it.More(); it.Next()) {
+        TDF_Label lineLabel = it.Value();
+        Handle(TNaming_NamedShape) ns;
+        if (lineLabel.FindAttribute(TNaming_NamedShape::GetID(), ns) && !ns.IsNull()) {
+            TopoDS_Shape s = ns->Get();
+            if (!s.IsNull() && s.ShapeType() == TopAbs_EDGE) {
+                TopoDS_Edge e = TopoDS::Edge(s);
+                TopExp_Explorer exp(e, TopAbs_VERTEX);
+                for (; exp.More(); exp.Next()) {
+                    gp_Pnt vp = BRep_Tool::Pnt(TopoDS::Vertex(exp.Current()));
+                    if (dist2(skip, vp) > th2 && dist2(p, vp) < th2) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
 // Округление точки до сетки (шаг 10 мм) в плоскости эскиза.
 static gp_Pnt SnapToGridPoint(const gp_Pnt& p, const gp_Pln& plane) {
     gp_Ax3 ax = plane.Position();
@@ -471,27 +559,33 @@ void Application::OnSketchClick(int px, int py) {
     gp_Pnt p;
     if (!myOcctView->ScreenToPlane(px, py, p)) return;
 
-    // Сначала — привязка к известным точкам (Origin, концы линий)
-    bool snapped = false;
-    if (mySnapToPoints) {
-        gp_Pnt snapP;
-        // Порог 3 мм в мировых координатах
-        if (SnapToKnownPoint(p, myActiveSketchLabel, myDocument->GetDoc(),
-                              3.0, snapP)) {
-            p = snapP;
-            snapped = true;
-        }
-    }
+    // 1. Shift → ortho mode (45°)
+    bool shiftHeld = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS
+                  || glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
 
-    // Если не привязались к точке — пробуем сетку
-    if (!snapped && mySnapToGrid) {
-        p = SnapToGridPoint(p, myOcctView->GetSketchPlane());
+    if (myHasSketchStart && shiftHeld) {
+        p = ApplyOrtho(myOcctView->GetSketchPlane(), mySketchStartPoint, p);
+    } else {
+        // 2. Привязка к известным точкам
+        bool snapped = false;
+        if (mySnapToPoints) {
+            gp_Pnt snapP;
+            if (SnapToKnownPoint(p, myActiveSketchLabel, myDocument->GetDoc(),
+                                  3.0, snapP)) {
+                p = snapP;
+                snapped = true;
+            }
+        }
+        // 3. Привязка к сетке
+        if (!snapped && mySnapToGrid) {
+            p = SnapToGridPoint(p, myOcctView->GetSketchPlane());
+        }
     }
 
     if (!myHasSketchStart) {
         mySketchStartPoint = p;
         myHasSketchStart = true;
-        std::cout << "Sketch: start point set (" << p.X() << "," << p.Y() << "," << p.Z() << ")\n";
+        std::cout << "Sketch: start point set\n";
     } else {
         // Проверяем, что точки не совпадают
         double dx = p.X() - mySketchStartPoint.X();
@@ -504,14 +598,24 @@ void Application::OnSketchClick(int px, int py) {
             return;
         }
 
+        // 1. Проверка замыкания — ДО создания линии.
+        //    Если конечная точка p совпадает с существующей вершиной эскиза
+        //    (Origin или концом другой линии, кроме старта этой линии) — замыкание.
+        bool loopClosed = IsPointOnExistingVertex(p, myActiveSketchLabel,
+                                                   mySketchStartPoint,
+                                                   0.5);  // порог 0.5 мм
+
+        std::cout << "Sketch: loop check = " << (loopClosed ? "CLOSED" : "open")
+                  << " (start was at " << mySketchStartPoint.X() << ","
+                  << mySketchStartPoint.Y() << "," << mySketchStartPoint.Z()
+                  << " end at " << p.X() << "," << p.Y() << "," << p.Z() << ")\n";
+
         try {
             myDocument->AddSketchLine(myActiveSketchLabel, mySketchStartPoint, p);
             myOcctView->ClearPreviewLine();
-            myOcctView->ShowCursorMarker(p);
 
             TopoDS_Shape line = BRepBuilderAPI_MakeEdge(mySketchStartPoint, p).Shape();
 
-            // Найдём последнюю метку
             int maxTag = 0;
             TDF_ChildIterator it(myActiveSketchLabel, false);
             for (; it.More(); it.Next()) {
@@ -520,14 +624,25 @@ void Application::OnSketchClick(int px, int py) {
             TDF_Label lineLabel = myActiveSketchLabel.FindChild(maxTag, false);
             myOcctView->DisplaySketchLine(line, lineLabel);
 
-            std::cout << "Sketch: line added\n";
+            if (myAutoContinue && !loopClosed) {
+                mySketchStartPoint = p;
+                myHasSketchStart = true;
+                myOcctView->ShowCursorMarker(p);
+                std::cout << "Sketch: line added, continuing\n";
+            } else {
+                myHasSketchStart = false;
+                myOcctView->ClearPreviewLine();
+                if (loopClosed) {
+                    std::cout << "Sketch: line added, loop closed\n";
+                } else {
+                    std::cout << "Sketch: line added, stopped\n";
+                }
+            }
         } catch (const std::exception& e) {
             std::cerr << "Sketch: exception creating line: " << e.what() << "\n";
         } catch (...) {
             std::cerr << "Sketch: unknown exception creating line\n";
         }
-
-        myHasSketchStart = false;
     }
 }
 
@@ -576,6 +691,26 @@ void Application::ExitSketch() {
     std::cout << "Application: exited sketch mode\n";
 }
 
+void Application::DrawPreviewInfo() {
+    if (!myHasPreview || myActiveSketchLabel.IsNull()) return;
+
+    // Позиция — рядом с курсором
+    ImVec2 pos = ImVec2((float)myMouseX + 20, (float)myMouseY + 20);
+
+    ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.75f);
+    ImGui::Begin("##preview_info", nullptr,
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing |
+        ImGuiWindowFlags_NoNav);
+
+    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "%.2f mm", myPreviewLength);
+    ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%.1f°", myPreviewAngle);
+
+    ImGui::End();
+}
+
 void Application::DrawSketchOverlay() {
     if (myActiveSketchLabel.IsNull()) return;
 
@@ -611,9 +746,11 @@ void Application::DrawSketchOverlay() {
     ImGui::Text("Snapping:");
     ImGui::Checkbox("To Grid (10mm)", &mySnapToGrid);
     ImGui::Checkbox("To Points (Origin, Ends)", &mySnapToPoints);
+    ImGui::Checkbox("Auto-Continue", &myAutoContinue);
     ImGui::Separator();
     ImGui::TextDisabled("LMB: click start, click end");
-    ImGui::TextDisabled("Esc: exit sketch");
+    ImGui::TextDisabled("Shift: ortho (0/90 deg)");
+    ImGui::TextDisabled("Esc: cancel line / exit sketch");
     ImGui::End();
 }
 
@@ -689,23 +826,44 @@ void Application::Run() {
 
                     gp_Pnt cur;
                     if (myOcctView->ScreenToPlane(px, py, cur)) {
-                        bool curSnapped = false;
-                        if (mySnapToPoints) {
-                            gp_Pnt snapP;
-                            if (SnapToKnownPoint(cur, myActiveSketchLabel,
-                                                  myDocument->GetDoc(),
-                                                  3.0, snapP)) {
-                                cur = snapP;
-                                curSnapped = true;
+                        bool shiftHeld = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS
+                                      || glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+
+                        if (myHasSketchStart && shiftHeld) {
+                            cur = ApplyOrtho(myOcctView->GetSketchPlane(), mySketchStartPoint, cur);
+                        } else {
+                            bool curSnapped = false;
+                            if (mySnapToPoints) {
+                                gp_Pnt snapP;
+                                if (SnapToKnownPoint(cur, myActiveSketchLabel,
+                                                      myDocument->GetDoc(),
+                                                      3.0, snapP)) {
+                                    cur = snapP;
+                                    curSnapped = true;
+                                }
+                            }
+                            if (!curSnapped && mySnapToGrid) {
+                                cur = SnapToGridPoint(cur, myOcctView->GetSketchPlane());
                             }
                         }
-                        if (!curSnapped && mySnapToGrid) {
-                            cur = SnapToGridPoint(cur, myOcctView->GetSketchPlane());
-                        }
+
                         if (myHasSketchStart) {
                             myOcctView->ShowPreviewLine(mySketchStartPoint, cur);
+
+                            // Считаем длину и угол для отображения
+                            ComputeLengthAngle(myOcctView->GetSketchPlane(),
+                                                mySketchStartPoint, cur,
+                                                myPreviewLength, myPreviewAngle);
+                            myHasPreview = true;
                         } else {
-                            myOcctView->ShowCursorMarker(cur);
+                            // Проверяем: подсветить зелёным, если точка попадает
+                            // в существующую вершину (снап сработает при клике)
+                            bool willSnap = IsPointOnExistingVertex(cur,
+                                              myActiveSketchLabel,
+                                              gp_Pnt(1e9, 1e9, 1e9),  // skip невозможно
+                                              3.0);
+                            myOcctView->ShowCursorMarkerHighlighted(cur, willSnap);
+                            myHasPreview = false;
                         }
                     }
                 }
@@ -752,11 +910,20 @@ void Application::Run() {
         if (curCtrlO && !prevCtrlO) OnOpen();
         prevCtrlO = curCtrlO;
 
-        // Esc — выход из режима эскиза
+        // Esc — сначала прерывает текущую линию, потом выходит из эскиза
         static bool prevEsc = false;
         bool curEsc = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_ESCAPE) == GLFW_PRESS;
         if (curEsc && !prevEsc && !myActiveSketchLabel.IsNull()) {
-            ExitSketch();
+            if (myHasSketchStart) {
+                // Прервать текущую цепочку линий
+                myHasSketchStart = false;
+                if (myOcctView) myOcctView->ClearPreviewLine();
+                myHasPreview = false;
+                std::cout << "Sketch: line chain cancelled\n";
+            } else {
+                // Нечего прерывать — выходим из эскиза
+                ExitSketch();
+            }
         }
         prevEsc = curEsc;
 
@@ -764,10 +931,19 @@ void Application::Run() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        // Запоминаем позицию мыши для превью
+        {
+            double mx, my;
+            glfwGetCursorPos(myWindow->GetNativeWindow(), &mx, &my);
+            myMouseX = mx;
+            myMouseY = my;
+        }
+
         DrawMenuBar();
         DrawDocumentTree();
         DrawAddBoxDialog();
         DrawSketchOverlay();
+        DrawPreviewInfo();
 
         ImGuiIO& io = ImGui::GetIO();
         ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 360, 30), ImGuiCond_Always);

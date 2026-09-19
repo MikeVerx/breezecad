@@ -447,6 +447,42 @@ void OcctView::ShowPreviewLine(const gp_Pnt& from, const gp_Pnt& to) {
     }
 }
 
+void OcctView::ShowCursorMarkerHighlighted(const gp_Pnt& p, bool highlight) {
+    if (myContext.IsNull()) return;
+
+    try {
+        if (!myStartMarker.IsNull()) {
+            myContext->Remove(myStartMarker, false);
+            myStartMarker.Nullify();
+        }
+        if (!myEndMarker.IsNull()) {
+            myContext->Remove(myEndMarker, false);
+            myEndMarker.Nullify();
+        }
+        if (!myPreviewLine.IsNull()) {
+            myContext->Remove(myPreviewLine, false);
+            myPreviewLine.Nullify();
+        }
+
+        Handle(Geom_Point) gP = new Geom_CartesianPoint(p);
+        myEndMarker = new AIS_Point(gP);
+
+        Quantity_Color col = highlight ? Quantity_NOC_GREEN : Quantity_NOC_YELLOW;
+        Handle(Prs3d_PointAspect) pa = new Prs3d_PointAspect(
+            Aspect_TOM_O, col, highlight ? 5.0 : 3.0);
+        Handle(Prs3d_Drawer) dr = new Prs3d_Drawer();
+        dr->SetPointAspect(pa);
+        myEndMarker->SetAttributes(dr);
+
+        myContext->Display(myEndMarker, false);
+        myContext->Deactivate(myEndMarker);
+        myContext->UpdateCurrentViewer();
+        if (!myView.IsNull()) myView->Redraw();
+    } catch (...) {
+        myEndMarker.Nullify();
+    }
+}
+
 void OcctView::ShowCursorMarker(const gp_Pnt& p) {
     if (myContext.IsNull()) return;
 

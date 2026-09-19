@@ -57,6 +57,7 @@ public:
     // Показать/обновить/убрать превью-линию
     void ShowPreviewLine(const gp_Pnt& from, const gp_Pnt& to);
     void ShowCursorMarker(const gp_Pnt& p);
+    void ShowCursorMarkerHighlighted(const gp_Pnt& p, bool highlight);
     void ClearPreviewLine();
 
     // Показать постоянную линию эскиза
