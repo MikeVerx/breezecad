@@ -5,29 +5,62 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
-# --- Путь к установленному OCCT ---
+# --- Поиск OCCT ---
 set(OCCT_ROOT "$ENV{HOME}/occt/install")
-
-# --- Находим OCCT через его конфиг (он лежит в install/cmake) ---
 find_package(OpenCASCADE REQUIRED
     PATHS "${OCCT_ROOT}/cmake"
     NO_DEFAULT_PATH
 )
-
-# find_package сам установит OpenCASCADE_INCLUDE_DIR и OpenCASCADE_LIBRARIES
 include_directories(${OpenCASCADE_INCLUDE_DIR})
 
-# --- Наш исполняемый файл ---
-add_executable(ordocad src/main.cpp)
+# --- Поиск GLFW ---
+find_package(glfw3 REQUIRED)
 
-# --- Какие модули OCCT линкуем ---
+# --- Настройка ImGui ---
+set(IMGUI_DIR "${CMAKE_SOURCE_DIR}/external/imgui")
+add_library(imgui STATIC
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_demo.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(imgui PUBLIC
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
+)
+target_link_libraries(imgui PUBLIC glfw)
+
+# --- Наш исполняемый файл ---
+add_executable(ordocad
+    src/main.cpp
+    src/app/Application.cpp
+    src/platform/glfw/GlfwWindow.cpp
+)
+
+# --- ВАЖНО: добавляем src/ в include-пути ---
+target_include_directories(ordocad PRIVATE src)
+
+# --- Линкуем всё вместе ---
 target_link_libraries(ordocad PRIVATE
     TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep
     TKPrim TKTopAlgo TKBO
     TKDESTEP
+    TKV3d TKOpenGl TKService
+    glfw
+    imgui
+    opengl32
 )
 
-# --- Чтобы Windows нашёл DLL при запуске ---
+# --- Копируем DLL OCCT после сборки ---
+add_custom_command(TARGET ordocad POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${OCCT_ROOT}/win64/gcc/bin"
+    "$<TARGET_FILE_DIR:ordocad>"
+)
+
 set_target_properties(ordocad PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
