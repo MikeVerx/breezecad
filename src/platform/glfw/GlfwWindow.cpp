@@ -1,7 +1,13 @@
-#include "GlfwWindow.h"
+#include "platform/glfw/GlfwWindow.h"
 #include <iostream>
 
 namespace OrdoCAD {
+
+namespace {
+GlfwWindow* Self(GLFWwindow* w) {
+    return static_cast<GlfwWindow*>(glfwGetWindowUserPointer(w));
+}
+}
 
 GlfwWindow::GlfwWindow(int width, int height, const std::string& title) {
     if (!glfwInit()) {
@@ -24,6 +30,20 @@ GlfwWindow::GlfwWindow(int width, int height, const std::string& title) {
     }
 
     glfwMakeContextCurrent(myWindow);
+    glfwSetWindowUserPointer(myWindow, this);
+
+    glfwSetMouseButtonCallback(myWindow, [](GLFWwindow* w, int b, int a, int m) {
+        if (auto s = Self(w); s && s->myMouseButtonCb) s->myMouseButtonCb(b, a, m);
+    });
+    glfwSetCursorPosCallback(myWindow, [](GLFWwindow* w, double x, double y) {
+        if (auto s = Self(w); s && s->myCursorPosCb) s->myCursorPosCb(x, y);
+    });
+    glfwSetScrollCallback(myWindow, [](GLFWwindow* w, double x, double y) {
+        if (auto s = Self(w); s && s->myScrollCb) s->myScrollCb(x, y);
+    });
+    glfwSetFramebufferSizeCallback(myWindow, [](GLFWwindow* w, int width, int height) {
+        if (auto s = Self(w); s && s->myResizeCb) s->myResizeCb(width, height);
+    });
 }
 
 GlfwWindow::~GlfwWindow() {
@@ -44,5 +64,10 @@ void GlfwWindow::PollEvents() {
 void GlfwWindow::SwapBuffers() {
     glfwSwapBuffers(myWindow);
 }
+
+void GlfwWindow::SetMouseButtonCallback(MouseButtonCallback cb) { myMouseButtonCb = std::move(cb); }
+void GlfwWindow::SetCursorPosCallback(CursorPosCallback cb)     { myCursorPosCb   = std::move(cb); }
+void GlfwWindow::SetScrollCallback(ScrollCallback cb)           { myScrollCb      = std::move(cb); }
+void GlfwWindow::SetResizeCallback(ResizeCallback cb)           { myResizeCb      = std::move(cb); }
 
 } // namespace OrdoCAD
