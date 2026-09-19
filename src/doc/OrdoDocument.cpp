@@ -9,10 +9,10 @@
 
 #include <TNaming_Builder.hxx>
 #include <TNaming_NamedShape.hxx>
-#include <TNaming_Tool.hxx>
 
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
+#include <gp_Pnt.hxx>
 
 #include <iostream>
 
@@ -38,13 +38,12 @@ TDF_Label OrdoDocument::AddFeature(const std::string& name, int type) {
     TDataStd_Name::Set(label, extName);
     TDataStd_Integer::Set(label, type);
 
-    std::cout << "OrdoDocument: added feature '" << name
-              << "' (type=" << type << ")\n";
     return label;
 }
 
 TDF_Label OrdoDocument::AddBoxFeature(const std::string& name,
-                                       double dx, double dy, double dz) {
+                                       double dx, double dy, double dz,
+                                       double px, double py, double pz) {
     if (myDoc.IsNull()) return TDF_Label();
 
     TDF_Label label = MainLabel().FindChild(myNextFeatureId++, true);
@@ -52,14 +51,15 @@ TDF_Label OrdoDocument::AddBoxFeature(const std::string& name,
     TDataStd_Name::Set(label, TCollection_ExtendedString(name.c_str()));
     TDataStd_Integer::Set(label, 2);  // type = 2 (Box)
 
-    // Создаём форму и привязываем её к метке через TNaming
-    TopoDS_Shape box = BRepPrimAPI_MakeBox(dx, dy, dz).Shape();
+    gp_Pnt corner(px, py, pz);
+    TopoDS_Shape box = BRepPrimAPI_MakeBox(corner, dx, dy, dz).Shape();
 
     TNaming_Builder builder(label);
-    builder.Generated(box);  // фиксируем форму как «порождённую» этой меткой
+    builder.Generated(box);
 
     std::cout << "OrdoDocument: added box '" << name << "' ("
-              << dx << "x" << dy << "x" << dz << ")\n";
+              << dx << "x" << dy << "x" << dz
+              << " at " << px << "," << py << "," << pz << ")\n";
     return label;
 }
 
@@ -70,15 +70,13 @@ TDF_Label OrdoDocument::AddCylinderFeature(const std::string& name,
     TDF_Label label = MainLabel().FindChild(myNextFeatureId++, true);
 
     TDataStd_Name::Set(label, TCollection_ExtendedString(name.c_str()));
-    TDataStd_Integer::Set(label, 3);  // type = 3 (Cylinder)
+    TDataStd_Integer::Set(label, 3);
 
     TopoDS_Shape cyl = BRepPrimAPI_MakeCylinder(radius, height).Shape();
 
     TNaming_Builder builder(label);
     builder.Generated(cyl);
 
-    std::cout << "OrdoDocument: added cylinder '" << name << "' (r="
-              << radius << ", h=" << height << ")\n";
     return label;
 }
 
@@ -111,7 +109,7 @@ std::vector<TopoDS_Shape> OrdoDocument::GetAllShapes() const {
 }
 
 void OrdoDocument::CreateTestTree() {
-    AddBoxFeature("Box", 100.0, 100.0, 100.0);
+    AddBoxFeature("Box", 100.0, 100.0, 100.0, 0.0, 0.0, 0.0);
     AddCylinderFeature("Cylinder", 30.0, 150.0);
 }
 

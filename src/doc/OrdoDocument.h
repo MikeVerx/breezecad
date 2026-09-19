@@ -17,22 +17,19 @@ public:
     Handle(TDocStd_Document) GetDoc() const { return myDoc; }
     TDF_Label MainLabel() const;
 
-    // Базовая фича: узел с именем и типом, без геометрии
     TDF_Label AddFeature(const std::string& name, int type);
 
-    // Фича с геометрией: куб
-    TDF_Label AddBoxFeature(const std::string& name, double dx, double dy, double dz);
+    // Куб с позицией и размерами
+    TDF_Label AddBoxFeature(const std::string& name,
+                            double dx, double dy, double dz,
+                            double px = 0.0, double py = 0.0, double pz = 0.0);
 
-    // Фича с геометрией: цилиндр
-    TDF_Label AddCylinderFeature(const std::string& name, double radius, double height);
+    TDF_Label AddCylinderFeature(const std::string& name,
+                                 double radius, double height);
 
-    // Прочитать форму из метки (если есть)
     TopoDS_Shape GetShape(const TDF_Label& label) const;
-
-    // Прочитать все формы из дерева (рекурсивно)
     std::vector<TopoDS_Shape> GetAllShapes() const;
 
-    // Тестовое дерево: куб и цилиндр
     void CreateTestTree();
 
     bool Save(const std::string& path);

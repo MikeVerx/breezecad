@@ -11,6 +11,7 @@
 #include <TDataStd_Integer.hxx>
 #include <TCollection_AsciiString.hxx>
 
+#include <cstring>
 #include <iostream>
 #include <string>
 
@@ -49,20 +50,11 @@ Application::Application() {
         return;
     }
 
-    // Создаём документ с тестовым деревом
     myDocument = std::make_unique<OrdoDocument>();
     myDocument->CreateTestTree();
 
-    // Отображаем все формы из документа
-    if (myOcctView) {
-        auto shapes = myDocument->GetAllShapes();
-        std::cout << "OrdoCAD: displaying " << shapes.size()
-                  << " shape(s) from document\n";
-        for (const auto& s : shapes) {
-            myOcctView->DisplayShape(s);
-        }
-        myOcctView->FitAll();
-    }
+    RefreshView();
+    if (myOcctView) myOcctView->FitAll();
 
     myWindow->SetMouseButtonCallback([this](int b, int a, int m) {
         if (ImGui::GetIO().WantCaptureMouse) return;
@@ -85,6 +77,17 @@ Application::~Application() {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+}
+
+void Application::RefreshView() {
+    if (!myOcctView || !myDocument) return;
+    myOcctView->ClearAllShapes();
+    auto shapes = myDocument->GetAllShapes();
+    std::cout << "RefreshView: displaying " << shapes.size() << " shape(s)\n";
+    for (const auto& s : shapes) {
+        myOcctView->DisplayShape(s);
+    }
+    myOcctView->Redraw();
 }
 
 static void DrawLabelTree(const TDF_Label& label) {
@@ -151,6 +154,15 @@ void Application::DrawDocumentTree() {
     ImGui::Text("OCAF Document Tree");
     ImGui::Separator();
 
+    // === Кнопка добавления куба ===
+    if (ImGui::Button("Add Box")) {
+        myShowAddBoxDialog = true;
+        std::strncpy(myNewBoxName, "Box", sizeof(myNewBoxName) - 1);
+        myNewBoxPos[0] = myNewBoxPos[1] = myNewBoxPos[2] = 0.0f;
+        myNewBoxSize[0] = myNewBoxSize[1] = myNewBoxSize[2] = 100.0f;
+    }
+    ImGui::Separator();
+
     if (!myDocument || myDocument->GetDoc().IsNull()) {
         ImGui::Text("Document: NULL");
         ImGui::End();
@@ -171,6 +183,46 @@ void Application::DrawDocumentTree() {
     ImGui::End();
 }
 
+void Application::DrawAddBoxDialog() {
+    if (myShowAddBoxDialog) {
+        ImGui::OpenPopup("Add Box");
+        myShowAddBoxDialog = false;
+    }
+
+    if (ImGui::BeginPopupModal("Add Box", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::InputText("Name", myNewBoxName, sizeof(myNewBoxName));
+
+        ImGui::Separator();
+        ImGui::Text("Position (corner):");
+        ImGui::InputFloat("X##pos", &myNewBoxPos[0]);
+        ImGui::InputFloat("Y##pos", &myNewBoxPos[1]);
+        ImGui::InputFloat("Z##pos", &myNewBoxPos[2]);
+
+        ImGui::Separator();
+        ImGui::Text("Size:");
+        ImGui::InputFloat("DX", &myNewBoxSize[0]);
+        ImGui::InputFloat("DY", &myNewBoxSize[1]);
+        ImGui::InputFloat("DZ", &myNewBoxSize[2]);
+
+        ImGui::Separator();
+
+        if (ImGui::Button("OK", ImVec2(120, 0))) {
+            if (myDocument) {
+                myDocument->AddBoxFeature(myNewBoxName,
+                                          myNewBoxSize[0], myNewBoxSize[1], myNewBoxSize[2],
+                                          myNewBoxPos[0],  myNewBoxPos[1],  myNewBoxPos[2]);
+                RefreshView();
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
 void Application::Run() {
     bool prevF11 = false;
 
@@ -188,6 +240,7 @@ void Application::Run() {
         ImGui::NewFrame();
 
         DrawDocumentTree();
+        DrawAddBoxDialog();
 
         ImGuiIO& io = ImGui::GetIO();
         ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 340, 10), ImGuiCond_Always);

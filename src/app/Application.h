@@ -20,7 +20,15 @@ private:
     std::unique_ptr<OcctView>     myOcctView;
     std::unique_ptr<OrdoDocument> myDocument;
 
+    // Состояние диалога «Add Box»
+    bool  myShowAddBoxDialog = false;
+    char  myNewBoxName[128]  = "Box";
+    float myNewBoxPos[3]     = { 0.0f, 0.0f, 0.0f };
+    float myNewBoxSize[3]    = { 100.0f, 100.0f, 100.0f };
+
     void DrawDocumentTree();
+    void DrawAddBoxDialog();
+    void RefreshView();
 };
 
 } // namespace OrdoCAD
