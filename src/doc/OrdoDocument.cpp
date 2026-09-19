@@ -12,7 +12,13 @@
 
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
+#include <BRepBuilderAPI_MakeVertex.hxx>
+#include <gp_Pln.hxx>
 #include <gp_Pnt.hxx>
+#include <gp_Dir.hxx>
+#include <gp_Lin.hxx>
 
 #include <iostream>
 
@@ -29,17 +35,102 @@ TDF_Label OrdoDocument::MainLabel() const {
     return myDoc->Main();
 }
 
-TDF_Label OrdoDocument::AddFeature(const std::string& name, int type) {
-    if (myDoc.IsNull()) return TDF_Label();
+// === Системная геометрия ===
 
-    TDF_Label label = MainLabel().FindChild(myNextFeatureId++, true);
+void OrdoDocument::CreateBaseGeometry() {
+    if (myDoc.IsNull()) return;
 
-    TCollection_ExtendedString extName(name.c_str());
-    TDataStd_Name::Set(label, extName);
-    TDataStd_Integer::Set(label, type);
+    // Создаём контейнер "Origin" с тегом 1
+    myBaseLabel = MainLabel().FindChild(1, true);
+    TDataStd_Name::Set(myBaseLabel, TCollection_ExtendedString("Origin"));
+    TDataStd_Integer::Set(myBaseLabel, FT_Origin);
 
-    return label;
+    const double planeSize = 100.0;   // полразмера плоскости
+    const double axisLen   = 100.0;   // полудлина оси
+
+    // 1. Origin — точка в (0,0,0)
+    {
+        TDF_Label l = myBaseLabel.FindChild(1, true);
+        TDataStd_Name::Set(l, TCollection_ExtendedString("Origin Point"));
+        TDataStd_Integer::Set(l, FT_Origin);
+        TopoDS_Shape v = BRepBuilderAPI_MakeVertex(gp_Pnt(0, 0, 0)).Shape();
+        TNaming_Builder(l).Generated(v);
+    }
+
+    // 2. XY Plane (Z = 0)
+    {
+        TDF_Label l = myBaseLabel.FindChild(2, true);
+        TDataStd_Name::Set(l, TCollection_ExtendedString("XY Plane"));
+        TDataStd_Integer::Set(l, FT_Plane);
+        gp_Pln pln(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1));
+        TopoDS_Shape f = BRepBuilderAPI_MakeFace(pln,
+            -planeSize, planeSize, -planeSize, planeSize).Shape();
+        TNaming_Builder(l).Generated(f);
+    }
+
+    // 3. YZ Plane (X = 0)
+    {
+        TDF_Label l = myBaseLabel.FindChild(3, true);
+        TDataStd_Name::Set(l, TCollection_ExtendedString("YZ Plane"));
+        TDataStd_Integer::Set(l, FT_Plane);
+        gp_Pln pln(gp_Pnt(0, 0, 0), gp_Dir(1, 0, 0));
+        TopoDS_Shape f = BRepBuilderAPI_MakeFace(pln,
+            -planeSize, planeSize, -planeSize, planeSize).Shape();
+        TNaming_Builder(l).Generated(f);
+    }
+
+    // 4. XZ Plane (Y = 0)
+    {
+        TDF_Label l = myBaseLabel.FindChild(4, true);
+        TDataStd_Name::Set(l, TCollection_ExtendedString("XZ Plane"));
+        TDataStd_Integer::Set(l, FT_Plane);
+        gp_Pln pln(gp_Pnt(0, 0, 0), gp_Dir(0, 1, 0));
+        TopoDS_Shape f = BRepBuilderAPI_MakeFace(pln,
+            -planeSize, planeSize, -planeSize, planeSize).Shape();
+        TNaming_Builder(l).Generated(f);
+    }
+
+    // 5. X Axis
+    {
+        TDF_Label l = myBaseLabel.FindChild(5, true);
+        TDataStd_Name::Set(l, TCollection_ExtendedString("X Axis"));
+        TDataStd_Integer::Set(l, FT_Axis);
+        gp_Lin lin(gp_Pnt(0, 0, 0), gp_Dir(1, 0, 0));
+        TopoDS_Shape e = BRepBuilderAPI_MakeEdge(lin, -axisLen, axisLen).Shape();
+        TNaming_Builder(l).Generated(e);
+    }
+
+    // 6. Y Axis
+    {
+        TDF_Label l = myBaseLabel.FindChild(6, true);
+        TDataStd_Name::Set(l, TCollection_ExtendedString("Y Axis"));
+        TDataStd_Integer::Set(l, FT_Axis);
+        gp_Lin lin(gp_Pnt(0, 0, 0), gp_Dir(0, 1, 0));
+        TopoDS_Shape e = BRepBuilderAPI_MakeEdge(lin, -axisLen, axisLen).Shape();
+        TNaming_Builder(l).Generated(e);
+    }
+
+    // 7. Z Axis
+    {
+        TDF_Label l = myBaseLabel.FindChild(7, true);
+        TDataStd_Name::Set(l, TCollection_ExtendedString("Z Axis"));
+        TDataStd_Integer::Set(l, FT_Axis);
+        gp_Lin lin(gp_Pnt(0, 0, 0), gp_Dir(0, 0, 1));
+        TopoDS_Shape e = BRepBuilderAPI_MakeEdge(lin, -axisLen, axisLen).Shape();
+        TNaming_Builder(l).Generated(e);
+    }
+
+    // Сдвигаем счётчик, чтобы пользовательские фичи не попали в диапазон 1..7
+    myNextFeatureId = 10;
+
+    std::cout << "OrdoDocument: base geometry created (Origin + 3 planes + 3 axes)\n";
 }
+
+TDF_Label OrdoDocument::GetBaseGeometryLabel() const {
+    return myBaseLabel;
+}
+
+// === Пользовательские фичи ===
 
 TDF_Label OrdoDocument::AddBoxFeature(const std::string& name,
                                        double dx, double dy, double dz,
@@ -49,17 +140,13 @@ TDF_Label OrdoDocument::AddBoxFeature(const std::string& name,
     TDF_Label label = MainLabel().FindChild(myNextFeatureId++, true);
 
     TDataStd_Name::Set(label, TCollection_ExtendedString(name.c_str()));
-    TDataStd_Integer::Set(label, 2);
+    TDataStd_Integer::Set(label, FT_Box);
 
     gp_Pnt corner(px, py, pz);
     TopoDS_Shape box = BRepPrimAPI_MakeBox(corner, dx, dy, dz).Shape();
+    TNaming_Builder(label).Generated(box);
 
-    TNaming_Builder builder(label);
-    builder.Generated(box);
-
-    std::cout << "OrdoDocument: added box '" << name << "' ("
-              << dx << "x" << dy << "x" << dz
-              << " at " << px << "," << py << "," << pz << ")\n";
+    std::cout << "OrdoDocument: added box '" << name << "'\n";
     return label;
 }
 
@@ -68,22 +155,39 @@ TDF_Label OrdoDocument::AddCylinderFeature(const std::string& name,
     if (myDoc.IsNull()) return TDF_Label();
 
     TDF_Label label = MainLabel().FindChild(myNextFeatureId++, true);
-
     TDataStd_Name::Set(label, TCollection_ExtendedString(name.c_str()));
-    TDataStd_Integer::Set(label, 3);
+    TDataStd_Integer::Set(label, FT_Cylinder);
 
     TopoDS_Shape cyl = BRepPrimAPI_MakeCylinder(radius, height).Shape();
-
-    TNaming_Builder builder(label);
-    builder.Generated(cyl);
+    TNaming_Builder(label).Generated(cyl);
 
     return label;
 }
 
+// === Проверки ===
+
+int OrdoDocument::GetType(const TDF_Label& label) {
+    Handle(TDataStd_Integer) attr;
+    if (label.FindAttribute(TDataStd_Integer::GetID(), attr)) {
+        return attr->Get();
+    }
+    return FT_Other;
+}
+
+bool OrdoDocument::IsSystem(const TDF_Label& label) {
+    return GetType(label) < 0;
+}
+
+// === Удаление ===
+
 void OrdoDocument::RemoveFeature(const TDF_Label& label) {
     if (label.IsNull()) return;
+    if (IsSystem(label)) {
+        std::cout << "OrdoDocument: refusing to delete system feature (tag="
+                  << label.Tag() << ")\n";
+        return;
+    }
 
-    // Имя для лога
     std::string name = "<unnamed>";
     Handle(TDataStd_Name) nameAttr;
     if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
@@ -91,12 +195,11 @@ void OrdoDocument::RemoveFeature(const TDF_Label& label) {
         name = ascii.ToCString();
     }
 
-    // ForgetAllAttributes(true) — удаляет все атрибуты метки
-    // и рекурсивно всех её детей. Метка становится "пустой".
     label.ForgetAllAttributes(true);
-
     std::cout << "OrdoDocument: removed feature '" << name << "'\n";
 }
+
+// === Чтение форм ===
 
 TopoDS_Shape OrdoDocument::GetShape(const TDF_Label& label) const {
     Handle(TNaming_NamedShape) ns;
@@ -109,9 +212,7 @@ TopoDS_Shape OrdoDocument::GetShape(const TDF_Label& label) const {
 void OrdoDocument::CollectShapes(const TDF_Label& label,
                                   std::vector<TopoDS_Shape>& out) const {
     TopoDS_Shape s = GetShape(label);
-    if (!s.IsNull()) {
-        out.push_back(s);
-    }
+    if (!s.IsNull()) out.push_back(s);
 
     TDF_ChildIterator it(label, false);
     for (; it.More(); it.Next()) {
@@ -127,16 +228,12 @@ std::vector<TopoDS_Shape> OrdoDocument::GetAllShapes() const {
 }
 
 void OrdoDocument::CreateTestTree() {
+    // Пользовательское дерево — пока только куб и цилиндр
     AddBoxFeature("Box", 100.0, 100.0, 100.0, 0.0, 0.0, 0.0);
     AddCylinderFeature("Cylinder", 30.0, 150.0);
 }
 
-bool OrdoDocument::Save(const std::string& /*path*/) {
-    return true;
-}
-
-bool OrdoDocument::Load(const std::string& /*path*/) {
-    return true;
-}
+bool OrdoDocument::Save(const std::string& /*path*/) { return true; }
+bool OrdoDocument::Load(const std::string& /*path*/) { return true; }
 
 } // namespace OrdoCAD

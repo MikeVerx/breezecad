@@ -30,12 +30,13 @@ public:
     void OnMouseMove(double x, double y);
     void OnMouseScroll(double xoffset, double yoffset);
 
-    // Отобразить форму и запомнить её связь с меткой OCAF
-    void DisplayShape(const TopoDS_Shape& shape, const TDF_Label& label);
+    // isSystem = true → серый цвет, полупрозрачность
+    void DisplayShape(const TopoDS_Shape& shape,
+                      const TDF_Label& label,
+                      bool isSystem = false);
     void ClearAllShapes();
     void FitAll();
 
-    // Получить метку выделенного объекта (или null, если ничего не выбрано)
     TDF_Label GetSelectedLabel() const;
     void ClearSelection();
 
@@ -43,6 +44,7 @@ private:
     struct ShapeEntry {
         TDF_Label         Label;
         Handle(AIS_Shape) Shape;
+        bool              IsSystem;
     };
 
     Handle(Aspect_DisplayConnection) myDisplayConnection;
@@ -56,7 +58,6 @@ private:
     int myWidth  = 0;
     int myHeight = 0;
 
-    // Состояние мыши
     bool   myRotating    = false;
     bool   myPanning     = false;
     bool   myLeftPressed = false;
