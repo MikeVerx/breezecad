@@ -2,37 +2,47 @@
 
 #include <TDocStd_Document.hxx>
 #include <TDF_Label.hxx>
+#include <TopoDS_Shape.hxx>
 
 #include <string>
+#include <vector>
 
 namespace OrdoCAD {
 
-// Обёртка над TDocStd_Document.
-// Хранит документ OCAF: дерево меток (TDF_Label) с атрибутами.
 class OrdoDocument {
 public:
     OrdoDocument();
     ~OrdoDocument();
 
     Handle(TDocStd_Document) GetDoc() const { return myDoc; }
-
-    // Корневая метка документа
     TDF_Label MainLabel() const;
 
-    // Добавить простой узел в дерево с именем и типом (пока без геометрии).
-    // Возвращает метку созданного узла.
+    // Базовая фича: узел с именем и типом, без геометрии
     TDF_Label AddFeature(const std::string& name, int type);
 
-    // Загрузить тестовые данные — куб и цилиндр как узлы дерева.
+    // Фича с геометрией: куб
+    TDF_Label AddBoxFeature(const std::string& name, double dx, double dy, double dz);
+
+    // Фича с геометрией: цилиндр
+    TDF_Label AddCylinderFeature(const std::string& name, double radius, double height);
+
+    // Прочитать форму из метки (если есть)
+    TopoDS_Shape GetShape(const TDF_Label& label) const;
+
+    // Прочитать все формы из дерева (рекурсивно)
+    std::vector<TopoDS_Shape> GetAllShapes() const;
+
+    // Тестовое дерево: куб и цилиндр
     void CreateTestTree();
 
-    // Сохранить/загрузить документ
     bool Save(const std::string& path);
     bool Load(const std::string& path);
 
 private:
     Handle(TDocStd_Document) myDoc;
     int myNextFeatureId = 1;
+
+    void CollectShapes(const TDF_Label& label, std::vector<TopoDS_Shape>& out) const;
 };
 
 } // namespace OrdoCAD

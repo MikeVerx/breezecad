@@ -1,7 +1,6 @@
 #include "occt/OcctView.h"
 
 #include <AIS_Shape.hxx>
-#include <BRepPrimAPI_MakeBox.hxx>
 #include <NCollection_Vec2.hxx>
 #include <Prs3d_Drawer.hxx>
 #include <Prs3d_LineAspect.hxx>
@@ -37,7 +36,7 @@ bool OcctView::Init(GLFWwindow* glfwWindow, int width, int height) {
 
     myDisplayConnection = new Aspect_DisplayConnection();
     myDriver = new OpenGl_GraphicDriver(myDisplayConnection);
-    myDriver->ChangeOptions().buffersNoSwap = true;  // GLFW сам делает SwapBuffers
+    myDriver->ChangeOptions().buffersNoSwap = true;
 
     myViewer = new V3d_Viewer(myDriver);
     myViewer->SetDefaultLights();
@@ -52,7 +51,7 @@ bool OcctView::Init(GLFWwindow* glfwWindow, int width, int height) {
         new Prs3d_LineAspect(Quantity_NOC_BLACK, Aspect_TOL_SOLID, 1.5));
 
     myView = myViewer->CreateView();
-    myView->SetImmediateUpdate(false);  // не даём OCCT самому делать swap/redraw
+    myView->SetImmediateUpdate(false);
 
     myWindow = new Aspect_NeutralWindow();
     myWindow->SetVirtual(true);
@@ -93,18 +92,27 @@ bool OcctView::Init(GLFWwindow* glfwWindow, int width, int height) {
     }
 
     myView->MustBeResized();
-    CreateTestShape();
-    myView->FitAll(0.01, false);
-    myView->ZFitAll();
     myView->Redraw();
 
     return true;
 }
 
-void OcctView::CreateTestShape() {
-    TopoDS_Shape box = BRepPrimAPI_MakeBox(100.0, 100.0, 100.0).Shape();
-    Handle(AIS_Shape) aisBox = new AIS_Shape(box);
-    myContext->Display(aisBox, AIS_Shaded, 0, false);
+void OcctView::DisplayShape(const TopoDS_Shape& shape) {
+    if (shape.IsNull()) return;
+    Handle(AIS_Shape) ais = new AIS_Shape(shape);
+    myContext->Display(ais, AIS_Shaded, 0, false);
+}
+
+void OcctView::ClearAllShapes() {
+    if (myContext.IsNull()) return;
+    myContext->RemoveAll(false);
+}
+
+void OcctView::FitAll() {
+    if (myView.IsNull()) return;
+    myView->FitAll(0.01, false);
+    myView->ZFitAll();
+    myView->Redraw();
 }
 
 void OcctView::Redraw() {

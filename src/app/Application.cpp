@@ -16,7 +16,6 @@
 
 namespace OrdoCAD {
 
-
 Application::Application() {
     myWindow = std::make_unique<GlfwWindow>(1280, 720, "OrdoCAD - Prototype");
     if (!myWindow->GetNativeWindow()) {
@@ -50,8 +49,20 @@ Application::Application() {
         return;
     }
 
+    // Создаём документ с тестовым деревом
     myDocument = std::make_unique<OrdoDocument>();
     myDocument->CreateTestTree();
+
+    // Отображаем все формы из документа
+    if (myOcctView) {
+        auto shapes = myDocument->GetAllShapes();
+        std::cout << "OrdoCAD: displaying " << shapes.size()
+                  << " shape(s) from document\n";
+        for (const auto& s : shapes) {
+            myOcctView->DisplayShape(s);
+        }
+        myOcctView->FitAll();
+    }
 
     myWindow->SetMouseButtonCallback([this](int b, int a, int m) {
         if (ImGui::GetIO().WantCaptureMouse) return;
@@ -76,9 +87,7 @@ Application::~Application() {
     ImGui::DestroyContext();
 }
 
-// Рекурсивная отрисовка метки OCAF и её детей
 static void DrawLabelTree(const TDF_Label& label) {
-    // Имя
     std::string labelName = "<unnamed>";
     Handle(TDataStd_Name) nameAttr;
     if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
@@ -86,14 +95,12 @@ static void DrawLabelTree(const TDF_Label& label) {
         labelName = ascii.ToCString();
     }
 
-    // Тип
     int type = -1;
     Handle(TDataStd_Integer) typeAttr;
     if (label.FindAttribute(TDataStd_Integer::GetID(), typeAttr)) {
         type = typeAttr->Get();
     }
 
-    // Есть ли дети?
     TDF_ChildIterator childIt(label, false);
     bool hasChildren = childIt.More();
 
@@ -106,14 +113,8 @@ static void DrawLabelTree(const TDF_Label& label) {
 
     bool opened = ImGui::TreeNodeEx(labelName.c_str(), flags);
 
-    // Правая подпись с типом и тегом
-    if (opened && hasChildren) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("[type=%d, tag=%d]", type, label.Tag());
-    } else if (!hasChildren) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("[type=%d, tag=%d]", type, label.Tag());
-    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("[type=%d, tag=%d]", type, label.Tag());
 
     if (opened && hasChildren) {
         TDF_ChildIterator it(label, false);
@@ -158,7 +159,6 @@ void Application::DrawDocumentTree() {
 
     TDF_Label root = myDocument->MainLabel();
 
-    // Сам корень тоже показываем как узел
     if (ImGui::TreeNodeEx("Document (BinOcaf)",
             ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
         TDF_ChildIterator it(root, false);
@@ -189,7 +189,6 @@ void Application::Run() {
 
         DrawDocumentTree();
 
-        // Debug-окно сдвигаем вправо, чтобы не перекрывать дерево
         ImGuiIO& io = ImGui::GetIO();
         ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 340, 10), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(330, 0), ImGuiCond_Always);

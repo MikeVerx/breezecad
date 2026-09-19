@@ -9,6 +9,8 @@
 #include <V3d_View.hxx>
 #include <V3d_Viewer.hxx>
 
+#include <TopoDS_Shape.hxx>
+
 #include <GLFW/glfw3.h>
 
 namespace OrdoCAD {
@@ -26,6 +28,11 @@ public:
     void OnMouseMove(double x, double y);
     void OnMouseScroll(double xoffset, double yoffset);
 
+    // === Работа с геометрией из документа ===
+    void DisplayShape(const TopoDS_Shape& shape);   // добавить форму в сцену
+    void ClearAllShapes();                          // убрать всё из сцены
+    void FitAll();                                  // вписать всё в вид
+
 private:
     Handle(Aspect_DisplayConnection) myDisplayConnection;
     Handle(OpenGl_GraphicDriver)     myDriver;
@@ -40,8 +47,6 @@ private:
 
     Aspect_VKeyMouse myMouseButtons = Aspect_VKeyMouse_NONE;
     Aspect_VKeyFlags myMouseFlags   = Aspect_VKeyFlags_NONE;
-
-    void CreateTestShape();
 };
 
 } // namespace OrdoCAD
