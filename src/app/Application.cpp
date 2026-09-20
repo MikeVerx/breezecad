@@ -324,7 +324,6 @@ static void SetupDarkTheme() {
 static void SetupLightTheme() {
     ImGuiStyle& s = ImGui::GetStyle();
 
-    // Скругления, отступы
     s.WindowRounding    = 8.0f;
     s.ChildRounding     = 6.0f;
     s.FrameRounding     = 6.0f;
@@ -345,51 +344,45 @@ static void SetupLightTheme() {
     s.FrameBorderSize   = 1.0f;
     s.PopupBorderSize   = 1.0f;
 
-    // ============================================================
-    // Пользовательская палитра (RGB из ТЗ)
-    // ============================================================
-    // C1 = (215, 218, 222) = 0.843, 0.855, 0.871 — светлое серебро
-    // C2 = (198, 202, 206) = 0.776, 0.792, 0.808 — на 8% темнее
-    // C3 = (178, 182, 188) = 0.698, 0.714, 0.737 — на 17% темнее (для активных)
-    // Text = (45, 50, 58) = 0.176, 0.196, 0.227
-    ImVec4 C1(0.843f, 0.855f, 0.871f, 1.00f);
-    ImVec4 C2(0.776f, 0.792f, 0.808f, 1.00f);
-    ImVec4 C3(0.698f, 0.714f, 0.737f, 1.00f);
-    ImVec4 TXT(0.176f, 0.196f, 0.227f, 1.00f);
-    ImVec4 TXT_DIS(0.45f, 0.48f, 0.52f, 1.00f);
+    // ==== Тёплая молочная палитра ====
+    ImVec4 BG_MILK(0.945f, 0.925f, 0.880f, 1.00f);  // #f1ece0 — фон окна
+    ImVec4 C1(0.845f, 0.820f, 0.770f, 1.00f);       // #d8d1c4 — кнопки
+    ImVec4 C2(0.770f, 0.740f, 0.685f, 1.00f);       // #c5bcae — hover / активная вкладка
+    ImVec4 C3(0.680f, 0.650f, 0.595f, 1.00f);       // #ada697 — нажатие
+    ImVec4 TXT(0.145f, 0.130f, 0.110f, 1.00f);      // тёмно-коричневый #25211c
+    ImVec4 TXT_DIS(0.44f, 0.41f, 0.36f, 1.00f);
 
-    // Акцент
-    ImVec4 accent       = ImVec4(0.20f, 0.55f, 0.95f, 1.00f);
-    ImVec4 accentHover  = ImVec4(0.30f, 0.65f, 1.00f, 1.00f);
-    ImVec4 accentActive = ImVec4(0.15f, 0.45f, 0.85f, 1.00f);
+    ImVec4 accent      = ImVec4(0.20f, 0.55f, 0.95f, 1.00f);
+    ImVec4 accentHover = ImVec4(0.30f, 0.65f, 1.00f, 1.00f);
+    ImVec4 accentActive= ImVec4(0.15f, 0.45f, 0.85f, 1.00f);
 
     ImVec4* c = s.Colors;
 
-    // --- Фон окон ---
-    c[ImGuiCol_WindowBg]             = ImVec4(0.97f, 0.98f, 0.99f, 1.00f);
-    c[ImGuiCol_ChildBg]              = ImVec4(0.97f, 0.98f, 0.99f, 0.00f);
-    c[ImGuiCol_PopupBg]              = ImVec4(0.99f, 0.99f, 1.00f, 0.98f);
-    c[ImGuiCol_MenuBarBg]            = C2;
+    // Фон
+    c[ImGuiCol_WindowBg]             = BG_MILK;
+    c[ImGuiCol_ChildBg]              = ImVec4(BG_MILK.x, BG_MILK.y, BG_MILK.z, 0.00f);
+    c[ImGuiCol_PopupBg]              = ImVec4(0.965f, 0.945f, 0.905f, 0.98f);
+    c[ImGuiCol_MenuBarBg]            = ImVec4(0.885f, 0.860f, 0.815f, 1.00f);
 
-    // --- Текст ---
+    // Текст
     c[ImGuiCol_Text]                 = TXT;
     c[ImGuiCol_TextDisabled]         = TXT_DIS;
 
-    // --- Рамки ---
-    c[ImGuiCol_Border]               = C3;
+    // Рамки
+    c[ImGuiCol_Border]               = ImVec4(0.750f, 0.720f, 0.665f, 1.00f);
     c[ImGuiCol_BorderShadow]         = ImVec4(0, 0, 0, 0);
 
-    // --- Кнопки (общие UI: диалоги, дерево) ---
+    // Кнопки
     c[ImGuiCol_Button]               = C1;
     c[ImGuiCol_ButtonHovered]        = C2;
     c[ImGuiCol_ButtonActive]         = C3;
 
-    // --- Заголовки дерева / сворачивающиеся ---
+    // Заголовки дерева
     c[ImGuiCol_Header]               = C1;
     c[ImGuiCol_HeaderHovered]        = C2;
     c[ImGuiCol_HeaderActive]         = C3;
 
-    // --- Вкладки ---
+    // Вкладки
     c[ImGuiCol_Tab]                  = C2;
     c[ImGuiCol_TabHovered]           = C1;
     c[ImGuiCol_TabSelected]          = C3;
@@ -397,32 +390,32 @@ static void SetupLightTheme() {
     c[ImGuiCol_TabDimmed]            = C2;
     c[ImGuiCol_TabDimmedSelected]    = C3;
 
-    // --- Чекбоксы, слайдеры ---
+    // Чекбоксы / слайдеры
     c[ImGuiCol_CheckMark]            = accent;
     c[ImGuiCol_SliderGrab]           = accent;
     c[ImGuiCol_SliderGrabActive]     = accentActive;
 
-    // --- Заголовок окна ---
+    // Заголовок окна
     c[ImGuiCol_TitleBg]              = C1;
     c[ImGuiCol_TitleBgActive]        = C2;
     c[ImGuiCol_TitleBgCollapsed]     = C1;
 
-    // --- Скроллбар ---
-    c[ImGuiCol_ScrollbarBg]          = ImVec4(0.90f, 0.92f, 0.94f, 0.00f);
+    // Скроллбар
+    c[ImGuiCol_ScrollbarBg]          = ImVec4(0.90f, 0.88f, 0.84f, 0.00f);
     c[ImGuiCol_ScrollbarGrab]        = C2;
     c[ImGuiCol_ScrollbarGrabHovered] = C3;
     c[ImGuiCol_ScrollbarGrabActive]  = accent;
 
-    // --- Разделители ---
-    c[ImGuiCol_Separator]            = C2;
+    // Разделители
+    c[ImGuiCol_Separator]            = ImVec4(0.700f, 0.670f, 0.615f, 1.00f);
     c[ImGuiCol_SeparatorHovered]     = accentHover;
     c[ImGuiCol_SeparatorActive]      = accent;
 
-    // --- Прочее ---
+    // Прочее
     c[ImGuiCol_ResizeGrip]           = ImVec4(0, 0, 0, 0.04f);
     c[ImGuiCol_ResizeGripHovered]    = accentHover;
     c[ImGuiCol_ResizeGripActive]     = accent;
-    c[ImGuiCol_ModalWindowDimBg]     = ImVec4(0.15f, 0.18f, 0.22f, 0.45f);
+    c[ImGuiCol_ModalWindowDimBg]     = ImVec4(0.15f, 0.13f, 0.10f, 0.45f);
 
     c[ImGuiCol_TableHeaderBg]        = C2;
     c[ImGuiCol_TableBorderStrong]    = C3;
@@ -1245,7 +1238,7 @@ int Application::RibbonButton(const char* id, const char* const* opts,
                               int optCount, int& idx, const char* icon,
                               bool enabled, bool big) {
     int result = 0;
-    const float bigW = 88.0f, bigH = 56.0f;
+    const float bigW = 100.0f, bigH = 56.0f;
     const float smallW = 42.0f, smallH = 42.0f;
     const float arrowH = 14.0f;
     float w = big ? bigW : smallW;
@@ -1301,14 +1294,20 @@ int Application::RibbonButton(const char* id, const char* const* opts,
                           IM_COL32(140, 140, 140, 180), 4.0f);
     }
 
-    // Текст подписи (для больших)
+    // Текст подписи (для больших) — обрезка по ширине кнопки
     if (big && optCount > 0) {
         std::string label = Tr(opts[idx]);
         float maxTextW = w - 4.0f;
-        while (ImGui::CalcTextSize(label.c_str()).x > maxTextW
-               && label.length() > 2) {
-            label.pop_back();
+
+        // Обрезка с ".." если не влезает
+        if (ImGui::CalcTextSize(label.c_str()).x > maxTextW) {
+            while (!label.empty() &&
+                   ImGui::CalcTextSize((label + "..").c_str()).x > maxTextW) {
+                label.pop_back();
+            }
+            label += "..";
         }
+
         ImVec2 txtSize = ImGui::CalcTextSize(label.c_str());
         ImVec2 txtPos(min.x + (w - txtSize.x) * 0.5f, max.y - 15.0f);
         ImU32 txtCol = ImGui::GetColorU32(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled);
@@ -1929,7 +1928,6 @@ void Application::DrawDocumentTree() {
         ImGuiWindowFlags_NoTitleBar);
 
     ImGui::Text("%s", Tr("panel.title").c_str());
-    ImGui::TextDisabled("%s", Tr("panel.hint.delete").c_str());
     ImGui::Separator();
 
     if (ImGui::Button(Tr("panel.addBox").c_str())) {
@@ -2715,7 +2713,7 @@ void Application::DrawStatusBar() {
                                 myPreviewLength, myPreviewAngle);
         }
     } else {
-        ImGui::Text("%s", Tr("panel.hint.delete").c_str());
+        ImGui::Text(" ");
     }
 
     ImGui::End();
@@ -4096,7 +4094,7 @@ void Application::DrawRightPanel() {
     const float toolW    = 40.0f;
     const float toolH    = 32.0f;
     const float arrowH   = 14.0f;
-    const float handleW  = 10.0f;
+    const float handleW  = 26.0f;   // заметный
     const float pad      = 2.0f;
     const float panelW   = toolW + pad * 2.0f;
     const float topY     = 385.0f;
@@ -4105,10 +4103,11 @@ void Application::DrawRightPanel() {
     const float rightEdge = io.DisplaySize.x;
 
     // === Хлястик (стрелка-таб) слева от панели ===
+    const float edgeMargin = 14.0f;  // отступ от правого края
     float handleX = myRightPanelExpanded
-                    ? (rightEdge - panelW - handleW)
-                    : (rightEdge - handleW);
-    float handleH = 60.0f;
+                    ? (rightEdge - panelW - handleW - edgeMargin)
+                    : (rightEdge - handleW - edgeMargin);
+    float handleH = 84.0f;
     float handleY = topY + (panelH - handleH) * 0.5f;
 
     ImGui::SetNextWindowPos(ImVec2(handleX, handleY), ImGuiCond_Always);
@@ -4119,17 +4118,46 @@ void Application::DrawRightPanel() {
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
         ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_Button));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+    // Кастомный хлястик — рисуем через GetWindowPos (надёжнее)
+    ImVec2 wpos = ImGui::GetWindowPos();
+    ImVec2 hMin = wpos;
+    ImVec2 hMax = ImVec2(wpos.x + handleW, wpos.y + handleH);
 
-    const char* handleIcon = myRightPanelExpanded ? "chevron-right" : "chevron-left";
-    if (SvgIconBtn(myIcons, "right_handle_btn", handleIcon, 12, handleW, handleH)) {
+    ImGui::SetCursorPos(ImVec2(0, 0));
+    ImGui::InvisibleButton("##right_handle_btn", ImVec2(handleW, handleH));
+    bool hClicked = ImGui::IsItemClicked();
+    bool hHovered = ImGui::IsItemHovered();
+
+    ImDrawList* hdl = ImGui::GetWindowDrawList();
+
+    // Фон хлястика — отчётливо видимый
+    ImU32 hBg;
+    bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
+    if (hHovered) {
+        hBg = IM_COL32(60, 120, 200, 255);
+    } else if (isLight) {
+        hBg = IM_COL32(140, 130, 110, 240);   // тёмно-бежевый в светлой
+    } else {
+        hBg = IM_COL32(90, 100, 120, 240);    // серо-синий в тёмной
+    }
+    hdl->AddRectFilled(hMin, hMax, hBg, 6.0f);
+
+    // Иконка шеврона
+    const char* hIcon = myRightPanelExpanded ? "chevron-right" : "chevron-left";
+    GLuint hTex = myIcons.Get(hIcon, 20);
+    if (hTex != 0) {
+        ImVec2 ip(hMin.x + (handleW - 20) * 0.5f,
+                  hMin.y + (handleH - 20) * 0.5f);
+        hdl->AddImage((ImTextureID)(intptr_t)hTex, ip,
+                      ImVec2(ip.x + 20, ip.y + 20),
+                      ImVec2(0, 0), ImVec2(1, 1),
+                      IM_COL32(255, 255, 255, 255));
+    }
+
+    if (hClicked) {
         myRightPanelExpanded = !myRightPanelExpanded;
     }
-    ImGui::PopStyleColor(3);
-
-    if (ImGui::IsItemHovered()) {
+    if (hHovered) {
         ImGui::SetTooltip(myRightPanelExpanded ? "Свернуть панель" : "Развернуть панель");
     }
     ImGui::End();
@@ -4137,7 +4165,7 @@ void Application::DrawRightPanel() {
     if (!myRightPanelExpanded) return;
 
     // === Тело панели ===
-    float panelX = rightEdge - panelW;
+    float panelX = rightEdge - panelW - edgeMargin;
     ImGui::SetNextWindowPos(ImVec2(panelX, topY), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(panelW, panelH), ImGuiCond_Always);
     ImGui::Begin("##right_panel", nullptr,
