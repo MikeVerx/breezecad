@@ -1,57 +1,170 @@
 #include "app/Localization.h"
-
 #include <unordered_map>
 
-namespace OrdoCAD {
+namespace BreezeCAD {
 
 namespace {
 
-// Ключ -> {EN, RU}
 const std::unordered_map<std::string, std::pair<std::string, std::string>> kDict = {
+    // Общие
+    { "btn.ok",              { "OK",                    "ОК" } },
+    { "btn.cancel",          { "Cancel",                "Отмена" } },
+    { "btn.delete",          { "Delete",                "Удалить" } },
+    { "btn.apply",           { "Apply",                 "Применить" } },
+    { "btn.createSketch",    { "Create Sketch",         "Создать эскиз" } },
+
+    // QAT
+    { "qat.new",             { "New",                   "Создать" } },
+    { "qat.open",            { "Open",                  "Открыть" } },
+    { "qat.save",            { "Save",                  "Сохранить" } },
+    { "qat.undo",            { "Undo",                  "Отменить" } },
+    { "qat.redo",            { "Redo",                  "Повторить" } },
+
+    // Вкладки
+    { "tab.sketch",          { "Sketch",                "Эскиз" } },
+    { "tab.model",           { "3D Model",              "3D Модель" } },
+    { "tab.annotate",        { "Annotate",              "Оформление" } },
+    { "tab.tools",           { "Tools",                 "Инструменты" } },
+    { "tab.manage",          { "Manage",                "Управление" } },
+    { "tab.view",            { "View",                  "Вид" } },
+
+    // Группы
+    { "grp.create",          { "Create",                "Создать" } },
+    { "grp.modify",          { "Modify",                "Изменить" } },
+    { "grp.constrain",       { "Constrain",             "Ограничения" } },
+    { "grp.exit",            { "Exit",                  "Выход" } },
+    { "grp.work",            { "Work Features",         "Рабочие элементы" } },
+
+    // Инструменты — Линия
+    { "tool.line",           { "Line",                  "Отрезок" } },
+    { "tool.curve",          { "Curve",                 "Кривая" } },
+    { "tool.spline",         { "Spline by points",      "Сплайн по точкам" } },
+    { "tool.bridge",         { "Bridge curve",          "Соединительная кривая" } },
+    { "tool.more",           { "More options",            "Дополнительные опции" } },
+
+    // Прямоугольник
+    { "tool.rect.2pt",       { "Two Point Rectangle",   "Прямоугольник по двум точкам" } },
+    { "tool.rect.center",    { "Center Rectangle",      "Прямоугольник по центру" } },
+    { "tool.rect.3pt",       { "Three Point Rectangle", "Прямоугольник по трём точкам" } },
+
+    // Окружность
+    { "tool.circle.center",  { "Center Point Circle",   "Окружность по центру" } },
+    { "tool.circle.2pt",     { "Two Point Circle",      "Окружность по двум точкам" } },
+    { "tool.circle.3pt",     { "Three Point Circle",    "Окружность по трём точкам" } },
+    { "tool.circle.tan",     { "Tangent Circle",        "Касательная окружность" } },
+
+    // Дуга
+    { "tool.arc.center",     { "Center Point Arc",      "Дуга по центру" } },
+    { "tool.arc.3pt",        { "Three Point Arc",       "Дуга по трём точкам" } },
+    { "tool.arc.tan",        { "Tangent Arc",           "Касательная дуга" } },
+
+    // Многоугольник
+    { "tool.poly.inscribed", { "Inscribed Polygon",     "Вписанный многоугольник" } },
+    { "tool.poly.circum",    { "Circumscribed Polygon", "Описанный многоугольник" } },
+
+    // Modify
+    { "tool.trim",           { "Trim",                  "Обрезать" } },
+    { "tool.extend",         { "Extend",                "Удлинить" } },
+    { "tool.offset",         { "Offset",                "Смещение" } },
+    { "tool.move",           { "Move",                  "Переместить" } },
+    { "tool.copy",           { "Copy",                  "Копировать" } },
+    { "tool.rotate",         { "Rotate",                "Повернуть" } },
+    { "tool.scale",          { "Scale",                 "Масштаб" } },
+    { "tool.mirror",         { "Mirror",                "Зеркало" } },
+
+    // Constrain
+    { "tool.coincident",     { "Coincident",            "Совпадение" } },
+    { "tool.parallel",       { "Parallel",              "Параллельность" } },
+    { "tool.perpendicular",  { "Perpendicular",         "Перпендикулярность" } },
+    { "tool.horizontal",     { "Horizontal",            "Горизонталь" } },
+    { "tool.vertical",       { "Vertical",              "Вертикаль" } },
+    { "tool.dimension",      { "Dimension",             "Размер" } },
+    { "tool.tangent",        { "Tangent",               "Касание" } },
+    { "tool.concentric",     { "Concentric",            "Концентричность" } },
+    { "tool.equal",          { "Equal",                 "Равенство" } },
+
+    // Exit
+    { "tool.finish",         { "Finish Sketch",         "Завершить эскиз" } },
+
+    // 3D Model
+    { "tool.extrude",        { "Extrude",               "Выдавливание" } },
+    { "tool.revolve",        { "Revolve",               "Вращение" } },
+    { "tool.sweep",          { "Sweep",                 "Сдвиг" } },
+    { "tool.loft",           { "Loft",                  "Лофт" } },
+    { "tool.hole",           { "Hole",                  "Отверстие" } },
+    { "tool.plane",          { "Plane",                 "Плоскость" } },
+    { "tool.axis",           { "Axis",                  "Ось" } },
+    { "tool.point",          { "Point",                 "Точка" } },
+    { "tool.fillet",         { "Fillet",                "Скругление" } },
+    { "tool.chamfer",        { "Chamfer",               "Фаска" } },
+    { "tool.shell",          { "Shell",                 "Оболочка" } },
+    { "tool.pattern",        { "Pattern",               "Массив" } },
+
     // Панель дерева
-    { "panel.title",           { "OCAF Document Tree",         "Дерево документа OCAF" } },
+    { "panel.title",           { "Document Tree",          "Дерево документа" } },
     { "panel.hint.delete",     { "RMB on node - delete, Delete key - remove selected",
                                  "ПКМ по узлу — удалить, Delete — удалить выбранное" } },
-    { "panel.document",        { "Document (BinOcaf)",         "Документ (BinOcaf)" } },
-    { "panel.document.null",   { "Document: NULL",             "Документ: NULL" } },
+    { "panel.document",        { "Document",               "Документ" } },
+    { "panel.document.null",   { "Document: NULL",         "Документ: NULL" } },
+    { "panel.addBox",          { "Add Box",                "Добавить куб" } },
 
-    // Кнопки
-    { "btn.addBox",            { "Add Box",                    "Добавить куб" } },
-    { "btn.fullscreen",        { "Fullscreen (F11)",           "На весь экран (F11)" } },
-    { "btn.exitFullscreen",    { "Exit Fullscreen (F11)",      "Выйти из полного экрана (F11)" } },
-    { "btn.maximize",          { "Maximize",                   "Развернуть" } },
-    { "btn.ok",                { "OK",                         "ОК" } },
-    { "btn.cancel",            { "Cancel",                     "Отмена" } },
+    // Диалоги
+    { "dlg.addBox.title",      { "Add Box",                "Добавить куб" } },
+    { "dlg.name",              { "Name",                   "Имя" } },
+    { "dlg.position",          { "Position (corner):",     "Позиция (угол):" } },
+    { "dlg.size",              { "Size:",                  "Размеры:" } },
 
-    // Диалог Add Box
-    { "dlg.addBox.title",      { "Add Box",                    "Добавить куб" } },
-    { "dlg.name",              { "Name",                       "Имя" } },
-    { "dlg.position",          { "Position (corner):",         "Позиция (угол):" } },
-    { "dlg.size",              { "Size:",                      "Размеры:" } },
-
-    // Debug-панель
-    { "debug.title",           { "OrdoCAD Debug",              "OrdoCAD — отладка" } },
-    { "debug.controls",        { "Controls:",                  "Управление:" } },
-    { "debug.lmb",             { "LMB - select",               "ЛКМ — выбрать" } },
-    { "debug.rmb",             { "RMB - rotate",               "ПКМ — вращение" } },
-    { "debug.mmb",             { "MMB - pan",                  "СКМ — панорама" } },
-    { "debug.wheel",           { "Wheel - zoom",               "Колесо — зум" } },
-    { "debug.delete",          { "Delete - remove selected",   "Delete — удалить выбранное" } },
-    { "debug.f11",             { "F11 - fullscreen",           "F11 — полный экран" } },
-    { "debug.view.active",     { "OCCT view: active",          "3D-вид: активен" } },
+    // Debug
+    { "debug.title",           { "BreezeCAD Debug",          "BreezeCAD — отладка" } },
+    { "debug.controls",        { "Controls:",              "Управление:" } },
+    { "debug.lmb",             { "LMB - select",           "ЛКМ — выбрать" } },
+    { "debug.rmb",             { "RMB - rotate",           "ПКМ — вращение" } },
+    { "debug.mmb",             { "MMB - pan",              "СКМ — панорама" } },
+    { "debug.wheel",           { "Wheel - zoom",           "Колесо — зум" } },
+    { "debug.delete",          { "Delete - remove selected", "Delete — удалить выбранное" } },
+    { "debug.f11",             { "F11 - fullscreen",       "F11 — полный экран" } },
+    { "debug.view.active",     { "OCCT view: active",      "3D-вид: активен" } },
     { "debug.view.inactive",   { "OCCT view: NOT initialized", "3D-вид: не инициализирован" } },
-    { "debug.selected.tag",    { "Selected: tag=%d",           "Выбрано: тег=%d" } },
-    { "debug.selected.none",   { "Selected: none",             "Выбрано: ничего" } },
+    { "debug.selected.tag",    { "Selected: tag=%d",       "Выбрано: тег=%d" } },
+    { "debug.selected.none",   { "Selected: none",         "Выбрано: ничего" } },
 
     // Язык
-    { "lang.label",            { "Language:",                  "Язык:" } },
-    { "lang.en",               { "English",                    "English" } },
-    { "lang.ru",               { "Русский",                    "Русский" } },
+    { "lang.label",            { "Language:",              "Язык:" } },
+    { "lang.en",               { "English",                "English" } },
+    { "lang.ru",               { "Русский",                "Русский" } },
 
     // Значения по умолчанию
-    { "default.boxName",       { "Box",                        "Куб" } },
-    { "default.cylinderName",  { "Cylinder",                   "Цилиндр" } },
-    { "default.holeName",      { "Hole",                       "Отверстие" } },
+    { "default.boxName",       { "Box",                    "Куб" } },
+    { "default.cylinderName",  { "Cylinder",               "Цилиндр" } },
+    { "default.holeName",      { "Hole",                   "Отверстие" } },
+
+    // Эскиз — overlay
+    { "sketch.mode",           { "SKETCH MODE",            "РЕЖИМ ЭСКИЗА" } },
+    { "sketch.finish",         { "Finish Sketch",          "Завершить эскиз" } },
+    { "sketch.clear",          { "Clear Sketch",           "Очистить эскиз" } },
+    { "sketch.showGrid",       { "Show Grid",              "Показать сетку" } },
+    { "sketch.snapping",       { "Snapping:",              "Привязки:" } },
+    { "sketch.snapGrid",       { "To Grid (10mm)",         "К сетке (10мм)" } },
+    { "sketch.snapPoints",     { "To Points",              "К точкам" } },
+    { "sketch.autoContinue",   { "Auto-Continue",          "Автопродолжение" } },
+    { "sketch.lineStyle",      { "Line Style:",            "Стиль линии:" } },
+    { "sketch.normal",         { "Normal",                 "Основная" } },
+    { "sketch.construction",   { "Construction",           "Вспомогательная" } },
+    { "sketch.centerline",     { "Centerline",             "Осевая" } },
+    { "sketch.hint.lmb",       { "LMB: click start, click end", "ЛКМ: клик начало, клик конец" } },
+    { "sketch.hint.shift",     { "Shift: ortho (0/90 deg)", "Shift: орто (0/90°)" } },
+    { "sketch.hint.esc",       { "Esc: cancel line / exit", "Esc: отмена линии / выход" } },
+    { "sketch.exact",          { "Exact input:",           "Точный ввод:" } },
+    { "sketch.length",         { "Length",                 "Длина" } },
+    { "sketch.angle",          { "Angle",                  "Угол" } },
+    { "sketch.options",        { "Options",                "Параметры" } },
+    { "sketch.only",           { "Sketch Only",            "Только в эскизе" } },
+    { "panel.dependencies",    { "Dependencies",           "Зависимости" } },
+    { "panel.deps.hint",       { "Select element to view constraints", "Выберите элемент для просмотра зависимостей" } },
+    { "panel.deps.empty",      { "(no constraints yet)",   "(ограничений пока нет)" } },
+    { "panel.deps.fully",      { "Fully Constrained",      "Полностью определено" } },
+    { "panel.deps.dof",        { "DOF remaining",          "Осталось степеней свободы" } },
+
 };
 
 } // namespace
@@ -67,4 +180,4 @@ std::string Localization::Tr(const std::string& key) const {
     return (myLang == Language::EN) ? it->second.first : it->second.second;
 }
 
-} // namespace OrdoCAD
+} // namespace BreezeCAD

@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace OrdoCAD {
+namespace BreezeCAD {
 
 // Открыть нативный диалог выбора файла.
 //   save = false → "Открыть файл"
@@ -14,4 +14,4 @@ bool ShowFileDialog(bool save, std::string& outPath,
                     const char* filter = "OCAF Binary (*.cbf)\0*.cbf\0All Files (*.*)\0*.*\0\0",
                     const char* defaultExt = "cbf");
 
-} // namespace OrdoCAD
+} // namespace BreezeCAD

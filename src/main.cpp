@@ -1,7 +1,7 @@
 #include "app/Application.h"
 
 int main() {
-    OrdoCAD::Application app;
+    BreezeCAD::Application app;
     app.Run();
     return 0;
 }

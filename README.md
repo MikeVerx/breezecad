@@ -1,4 +1,4 @@
-# OrdoCAD
+# BreezeCAD
 
 Кроссплатформенная САПР на базе OpenCASCADE.
 

@@ -4,7 +4,7 @@
 #include <string>
 #include <functional>
 
-namespace OrdoCAD {
+namespace BreezeCAD {
 
 class GlfwWindow {
 public:
@@ -44,4 +44,4 @@ private:
     ResizeCallback      myResizeCb;
 };
 
-} // namespace OrdoCAD
+} // namespace BreezeCAD

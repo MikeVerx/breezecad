@@ -1,6 +1,6 @@
 #include "app/Application.h"
 #include "app/Localization.h"
-#include "doc/OrdoApplication.h"
+#include "doc/BreezeApplication.h"
 #include "platform/FileDialog.h"
 
 #include "imgui.h"
@@ -31,6 +31,7 @@
 
 #define _USE_MATH_DEFINES
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <sstream>
 #include <filesystem>
@@ -38,7 +39,7 @@
 #include <string>
 #include <vector>
 
-namespace OrdoCAD {
+namespace BreezeCAD {
 
 static std::string LabelKey(const TDF_Label& label) {
     std::ostringstream oss;
@@ -62,13 +63,13 @@ static void LoadCyrillicFont() {
         ImFont* font = io.Fonts->AddFontFromFileTTF(
             path.c_str(), 18.0f, nullptr,
             io.Fonts->GetGlyphRangesCyrillic());
-        if (font) { std::cout << "OrdoCAD: font '" << path << "'\n"; return; }
+        if (font) { std::cout << "BreezeCAD: font '" << path << "'\n"; return; }
     }
     io.Fonts->AddFontDefault();
 }
 
 Application::Application() {
-    myWindow = std::make_unique<GlfwWindow>(1280, 720, "OrdoCAD - Prototype");
+    myWindow = std::make_unique<GlfwWindow>(1280, 720, "BreezeCAD - Prototype");
     if (!myWindow->GetNativeWindow()) return;
 
     IMGUI_CHECKVERSION();
@@ -88,7 +89,7 @@ Application::Application() {
         }
     } catch (...) { myOcctView.reset(); return; }
 
-    myDocument = std::make_unique<OrdoDocument>();
+    myDocument = std::make_unique<BreezeDocument>();
     myDocument->CreateBaseGeometry();
 
     RefreshView();
@@ -125,7 +126,7 @@ void Application::RefreshView() {
     std::function<void(const TDF_Label&)> walk = [&](const TDF_Label& l) {
         TopoDS_Shape s = myDocument->GetShape(l);
         if (!s.IsNull()) {
-            myOcctView->DisplayShape(s, l, OrdoDocument::IsSystem(l));
+            myOcctView->DisplayShape(s, l, BreezeDocument::IsSystem(l));
             // Применяем сохранённую видимость
             std::string key = LabelKey(l);
             auto it = myVisibility.find(key);
@@ -143,8 +144,8 @@ void Application::RefreshView() {
 
 void Application::OnNewDocument() {
     if (!myDocument) return;
-    OrdoApplication::Instance().CloseDocument(myDocument->GetDoc());
-    myDocument = std::make_unique<OrdoDocument>();
+    BreezeApplication::Instance().CloseDocument(myDocument->GetDoc());
+    myDocument = std::make_unique<BreezeDocument>();
     myDocument->CreateBaseGeometry();
     myCurrentPath.clear();
     myVisibility.clear();
@@ -158,7 +159,7 @@ void Application::OnSave() {
     if (path.empty()) {
         if (!ShowFileDialog(true, path, "Сохранить как")) return;
     }
-    if (OrdoApplication::Instance().SaveDocument(myDocument->GetDoc(), path)) {
+    if (BreezeApplication::Instance().SaveDocument(myDocument->GetDoc(), path)) {
         myCurrentPath = path;
         std::strncpy(myFilePathBuffer, path.c_str(), sizeof(myFilePathBuffer) - 1);
         myFilePathBuffer[sizeof(myFilePathBuffer) - 1] = '\0';
@@ -171,10 +172,10 @@ void Application::OnOpen() {
     if (!ShowFileDialog(false, path, "Открыть файл")) return;
 
     Handle(TDocStd_Document) loaded =
-        OrdoApplication::Instance().OpenDocument(path);
+        BreezeApplication::Instance().OpenDocument(path);
     if (loaded.IsNull()) { std::cerr << "Open failed\n"; return; }
 
-    myDocument = std::make_unique<OrdoDocument>();
+    myDocument = std::make_unique<BreezeDocument>();
     myDocument->SetDocument(loaded);
     myCurrentPath = path;
     myVisibility.clear();
@@ -195,7 +196,7 @@ bool Application::DrawLabelTree(const TDF_Label& label,
         labelName = ascii.ToCString();
     }
 
-    int type = OrdoDocument::GetType(label);
+    int type = BreezeDocument::GetType(label);
     bool isSystem = (type < 0);
 
     TDF_ChildIterator childIt(label, false);
@@ -270,44 +271,390 @@ bool Application::DrawLabelTree(const TDF_Label& label,
                      || !myPendingCreateSketchLabel.IsNull();
 }
 
-void Application::DrawMenuBar() {
-    if (ImGui::BeginMainMenuBar()) {
-        if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("New")) OnNewDocument();
-            if (ImGui::MenuItem("Open...  (Ctrl+O)")) OnOpen();
-            ImGui::Separator();
-            if (ImGui::MenuItem("Save  (Ctrl+S)")) OnSave();
-            if (ImGui::MenuItem("Save As...")) { myCurrentPath.clear(); OnSave(); }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Exit"))
-                glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE);
-            ImGui::EndMenu();
+void Application::OnUndo() {
+    if (!myDocument) return;
+    if (myDocument->Undo()) {
+        std::cout << "Undo OK\n";
+        RefreshView();
+        if (!myActiveSketchLabel.IsNull()) {
+            // Если в эскизе — перерисовать линии
+            if (myOcctView) myOcctView->ClearAllShapes();
+            RefreshSketchLines();
+            myOcctView->ShowGrid(myShowGrid);
         }
-        if (ImGui::BeginMenu("View")) {
-            if (ImGui::MenuItem("Fit All")) {
-                if (myOcctView) myOcctView->FitAll();
-            }
-            if (ImGui::MenuItem("Fullscreen (F11)")) myWindow->ToggleFullscreen();
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Language")) {
-            Language cur = Localization::Instance().GetLanguage();
-            if (ImGui::MenuItem("English", nullptr, cur == Language::EN))
-                Localization::Instance().SetLanguage(Language::EN);
-            if (ImGui::MenuItem("Русский", nullptr, cur == Language::RU))
-                Localization::Instance().SetLanguage(Language::RU);
-            ImGui::EndMenu();
-        }
-        ImGui::EndMainMenuBar();
+    } else {
+        std::cout << "Undo: nothing to undo\n";
     }
+}
+
+void Application::OnRedo() {
+    if (!myDocument) return;
+    if (myDocument->Redo()) {
+        std::cout << "Redo OK\n";
+        RefreshView();
+        if (!myActiveSketchLabel.IsNull()) {
+            if (myOcctView) myOcctView->ClearAllShapes();
+            RefreshSketchLines();
+            myOcctView->ShowGrid(myShowGrid);
+        }
+    } else {
+        std::cout << "Redo: nothing to redo\n";
+    }
+}
+
+void Application::DrawQuickAccessToolbar() {
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
+    if (ImGui::SmallButton(Tr("qat.new").c_str())) OnNewDocument();
+    ImGui::SameLine();
+    if (ImGui::SmallButton(Tr("qat.open").c_str())) OnOpen();
+    ImGui::SameLine();
+    if (ImGui::SmallButton(Tr("qat.save").c_str())) OnSave();
+    ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+    if (ImGui::SmallButton(Tr("qat.undo").c_str())) OnUndo();
+    ImGui::SameLine();
+    if (ImGui::SmallButton(Tr("qat.redo").c_str())) OnRedo();
+
+    // Язык — справа
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::SameLine(io.DisplaySize.x - 220);
+    ImGui::Text("%s", Tr("lang.label").c_str());
+    ImGui::SameLine();
+    Language cur = Localization::Instance().GetLanguage();
+    if (ImGui::SmallButton("EN")) Localization::Instance().SetLanguage(Language::EN);
+    ImGui::SameLine();
+    if (ImGui::SmallButton("RU")) Localization::Instance().SetLanguage(Language::RU);
+
+    ImGui::PopStyleVar();
+}
+
+void Application::DrawRibbonTabs() {
+    static const char* tabs[] = { "tab.sketch", "tab.model", "tab.annotate",
+                                   "tab.tools", "tab.manage", "tab.view" };
+    for (int i = 0; i < 6; i++) {
+        if (i > 0) ImGui::SameLine();
+        bool active = (myActiveRibbonTab == i);
+        if (active) ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(50, 90, 140, 255));
+        if (ImGui::Button(Tr(tabs[i]).c_str(), ImVec2(120, 0))) {
+            myActiveRibbonTab = i;
+        }
+        if (active) ImGui::PopStyleColor();
+    }
+}
+
+void Application::DrawRibbonPlaceholderTab(const char* name) {
+    ImGui::TextDisabled("Tab '%s' — not implemented yet", name);
+}
+
+// Рисует кнопку Ribbon. active=false → красная рамка, "disabled".
+static bool RibbonButton(const char* label, bool active, const char* tooltip = nullptr,
+                          float width = 90, float height = 0) {
+    if (active) {
+        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(50, 90, 140, 255));
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(120, 30, 30, 255));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(160, 40, 40, 255));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(180, 50, 50, 255));
+    }
+    bool clicked = active && ImGui::Button(label, ImVec2(width, height));
+    if (tooltip && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip);
+    if (active) ImGui::PopStyleColor();
+    else { ImGui::PopStyleColor(3); }
+    return clicked;
+}
+
+// Большая кнопка Ribbon: верх — название, низ — полоска с ▼ для меню
+// opts — массив указателей на ключи локализации (термины).
+// idx — индекс выбранного в данный момент.
+// Возвращает: 0 = не нажато, 1 = нажата основная, 2 = нажата стрелка ▼
+static int RibbonSplitButton(const char* id,
+                              const char* const* opts,
+                              int optCount,
+                              int& idx,
+                              bool enabled,
+                              float width,
+                              float height) {
+    int result = 0;
+    ImGui::PushID(id);
+    ImGui::BeginGroup();
+
+    ImVec4 colNormal = enabled ? ImVec4(0.24f, 0.39f, 0.59f, 1.0f)
+                                : ImVec4(0.51f, 0.16f, 0.16f, 1.0f);
+    ImVec4 colHover  = enabled ? ImVec4(0.31f, 0.51f, 0.71f, 1.0f)
+                                : ImVec4(0.51f, 0.16f, 0.16f, 1.0f);
+    ImVec4 colActive = enabled ? ImVec4(0.16f, 0.27f, 0.43f, 1.0f)
+                                : ImVec4(0.51f, 0.16f, 0.16f, 1.0f);
+
+    const float arrowW = 24.0f;
+    const float arrowH = 18.0f;
+    const float mainW  = width - arrowW - 2.0f;   // -2 на зазор
+    const float mainH  = height - arrowH - 2.0f;
+
+    // ===== Верхняя часть: основная кнопка =====
+    ImGui::PushStyleColor(ImGuiCol_Button, colNormal);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colHover);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, colActive);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
+
+    if (ImGui::Button(Tr(opts[idx]).c_str(), ImVec2(width, mainH))) {
+        if (enabled) result = 1;
+    }
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(3);
+
+    // ===== Нижняя часть: кнопка со стрелкой =====
+    ImGui::PushStyleColor(ImGuiCol_Button, colNormal);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colHover);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, colActive);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 1));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+
+    if (ImGui::Button("  v  ", ImVec2(width, arrowH))) {
+        if (enabled) result = 2;
+    }
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(3);
+
+    if (ImGui::IsItemHovered() && enabled && optCount > 1) {
+        ImGui::SetTooltip("%s", Tr("tool.more").c_str());
+    }
+
+    // Popup
+    std::string popupName = std::string("##popup_") + id;
+    if (result == 2) ImGui::OpenPopup(popupName.c_str());
+    if (ImGui::BeginPopup(popupName.c_str())) {
+        for (int i = 0; i < optCount; i++) {
+            bool selected = (i == idx);
+            if (ImGui::MenuItem(Tr(opts[i]).c_str(), nullptr, selected)) {
+                idx = i;
+                result = 3;
+            }
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::EndGroup();
+    ImGui::PopID();
+    return result;
+}
+
+void Application::DrawRibbonSketchTab() {
+    bool inSketch = !myActiveSketchLabel.IsNull();
+
+    // === Панель 1: Create ===
+    ImGui::BeginGroup();
+    ImGui::TextDisabled("%s", Tr("grp.create").c_str());
+
+    static const char* lineOpts[]   = { "tool.line", "tool.curve", "tool.spline", "tool.bridge" };
+    static const char* rectOpts[]   = { "tool.rect.2pt", "tool.rect.center", "tool.rect.3pt" };
+    static const char* circleOpts[] = { "tool.circle.center", "tool.circle.2pt",
+                                        "tool.circle.3pt", "tool.circle.tan" };
+    static const char* arcOpts[]    = { "tool.arc.center", "tool.arc.3pt", "tool.arc.tan" };
+    static const char* polyOpts[]   = { "tool.poly.inscribed", "tool.poly.circum" };
+
+    int r;
+    r = RibbonSplitButton("line", lineOpts, 4, myLineToolIndex, inSketch, 85, 46);
+    if (r == 1) {
+        myCurrentLineStyle = LS_Normal;
+        myHasSketchStart = false;
+        if (myOcctView) myOcctView->ClearPreviewLine();
+    }
+    ImGui::SameLine();
+    RibbonSplitButton("rect", rectOpts, 3, myRectToolIndex, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("circle", circleOpts, 4, myCircleToolIndex, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("arc", arcOpts, 3, myArcToolIndex, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("poly", polyOpts, 2, myPolyToolIndex, false, 85, 46);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 8);
+
+    // === Панель 2: Modify ===
+    ImGui::BeginGroup();
+    ImGui::TextDisabled("%s", Tr("grp.modify").c_str());
+
+    static const char* trimOpts[]   = { "tool.trim", "tool.extend" };
+    static const char* offsetOpts[] = { "tool.offset", "tool.scale" };
+    static const char* moveOpts[]   = { "tool.move", "tool.copy", "tool.rotate", "tool.mirror" };
+
+    RibbonSplitButton("trim", trimOpts, 2, myTrimToolIndex, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("offset", offsetOpts, 2, myOffsetToolIndex, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("move", moveOpts, 4, myMoveToolIndex, false, 85, 46);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 8);
+
+    // === Панель 3: Constrain ===
+    ImGui::BeginGroup();
+    ImGui::TextDisabled("%s", Tr("grp.constrain").c_str());
+
+    static const char* conOpts[] = { "tool.coincident", "tool.parallel", "tool.perpendicular",
+                                     "tool.horizontal", "tool.vertical", "tool.tangent",
+                                     "tool.concentric", "tool.equal" };
+    RibbonSplitButton("constrain", conOpts, 8, myConstrainToolIndex, false, 130, 46);
+    ImGui::SameLine();
+    static const char* dimOpts[] = { "tool.dimension", "tool.tangent", "tool.concentric" };
+    static int myDimToolIndex = 0;
+    RibbonSplitButton("dimension", dimOpts, 3, myDimToolIndex, false, 85, 46);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 8);
+
+    // === Панель 4: Line Style ===
+    ImGui::BeginGroup();
+    ImGui::TextDisabled("%s", Tr("sketch.lineStyle").c_str());
+
+    auto StyleBtn = [&](const char* label, LineStyle ls) {
+        bool active = (myCurrentLineStyle == ls);
+        if (active) ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(50, 90, 140, 255));
+        else        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(70, 70, 90, 255));
+        if (ImGui::Button(label, ImVec2(95, 44))) myCurrentLineStyle = ls;
+        ImGui::PopStyleColor();
+    };
+    StyleBtn(Tr("sketch.normal").c_str(), LS_Normal);             ImGui::SameLine();
+    StyleBtn(Tr("sketch.construction").c_str(), LS_Construction); ImGui::SameLine();
+    StyleBtn(Tr("sketch.centerline").c_str(), LS_Centerline);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 8);
+
+    // === Панель 5: Options ===
+    ImGui::BeginGroup();
+    ImGui::TextDisabled("%s", Tr("sketch.options").c_str());
+
+    ImGui::Checkbox(Tr("sketch.showGrid").c_str(), &myShowGrid);
+    if (ImGui::IsItemEdited() && myOcctView) myOcctView->ShowGrid(myShowGrid);
+    ImGui::Checkbox(Tr("sketch.snapGrid").c_str(), &mySnapToGrid);
+    ImGui::Checkbox(Tr("sketch.snapPoints").c_str(), &mySnapToPoints);
+    ImGui::Checkbox(Tr("sketch.autoContinue").c_str(), &myAutoContinue);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 8);
+
+    // === Панель 6: Exit ===
+    ImGui::BeginGroup();
+    ImGui::TextDisabled("%s", Tr("grp.exit").c_str());
+    static const char* finishOpts[] = { "tool.finish" };
+    int idx0 = 0;
+    int rf = RibbonSplitButton("finish", finishOpts, 1, idx0, inSketch, 130, 46);
+    if (rf == 1) ExitSketch();
+    ImGui::SameLine();
+    if (inSketch && ImGui::Button(Tr("sketch.clear").c_str(), ImVec2(110, 46))) {
+        if (myDocument && !myActiveSketchLabel.IsNull()) {
+            myDocument->ClearSketch(myActiveSketchLabel);
+            if (myOcctView) myOcctView->ClearAllShapes();
+            RefreshSketchLines();
+            if (myOcctView) myOcctView->ShowGrid(myShowGrid);
+        }
+    }
+    ImGui::EndGroup();
+}
+
+void Application::DrawRibbonModelTab() {
+    // === Create ===
+    ImGui::BeginGroup();
+    ImGui::TextDisabled("%s", Tr("grp.create").c_str());
+
+    static const char* extrudeOpts[] = { "tool.extrude" };
+    static const char* revolveOpts[] = { "tool.revolve" };
+    static const char* sweepOpts[]   = { "tool.sweep", "tool.loft" };
+    static const char* holeOpts[]    = { "tool.hole" };
+
+    int i0 = 0;
+    RibbonSplitButton("extrude", extrudeOpts, 1, i0, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("revolve", revolveOpts, 1, i0, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("sweep", sweepOpts, 2, i0, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("hole", holeOpts, 1, i0, false, 85, 46);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 8);
+
+    // === Work Features ===
+    ImGui::BeginGroup();
+    ImGui::TextDisabled("%s", Tr("grp.work").c_str());
+
+    static const char* planeOpts[] = { "tool.plane" };
+    static const char* axisOpts[]  = { "tool.axis" };
+    static const char* pointOpts[] = { "tool.point" };
+
+    RibbonSplitButton("plane", planeOpts, 1, i0, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("axis", axisOpts, 1, i0, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("point", pointOpts, 1, i0, false, 85, 46);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 8);
+
+    // === Modify ===
+    ImGui::BeginGroup();
+    ImGui::TextDisabled("%s", Tr("grp.modify").c_str());
+
+    static const char* filletOpts[] = { "tool.fillet" };
+    static const char* chamferOpts[] = { "tool.chamfer" };
+    static const char* shellOpts[]   = { "tool.shell" };
+    static const char* mirrorOpts[]  = { "tool.mirror" };
+    static const char* patternOpts[] = { "tool.pattern" };
+
+    RibbonSplitButton("fillet", filletOpts, 1, i0, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("chamfer", chamferOpts, 1, i0, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("shell", shellOpts, 1, i0, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("mirror", mirrorOpts, 1, i0, false, 85, 46);
+    ImGui::SameLine();
+    RibbonSplitButton("pattern", patternOpts, 1, i0, false, 85, 46);
+    ImGui::EndGroup();
+}
+
+void Application::DrawRibbon() {
+    ImGuiIO& io = ImGui::GetIO();
+
+    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, 155), ImGuiCond_Always);
+    ImGui::Begin("##ribbon", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
+
+    DrawQuickAccessToolbar();
+    ImGui::Separator();
+    DrawRibbonTabs();
+    ImGui::Separator();
+    if (ImGui::BeginChild("##ribbon_content", ImVec2(0, 0), false,
+                          ImGuiWindowFlags_HorizontalScrollbar)) {
+        switch (myActiveRibbonTab) {
+            case 0: DrawRibbonSketchTab(); break;
+            case 1: DrawRibbonModelTab();  break;
+            case 2: DrawRibbonPlaceholderTab("Annotate"); break;
+            case 3: DrawRibbonPlaceholderTab("Tools"); break;
+            case 4: DrawRibbonPlaceholderTab("Manage"); break;
+            case 5: DrawRibbonPlaceholderTab("View"); break;
+        }
+    }
+    ImGui::EndChild();
+    ImGui::End();
+}
+
+void Application::DrawMenuBar() {
+    // Оставлен для совместимости — но UI теперь полностью в DrawRibbon()
+    // Вызывается из Run()
 }
 
 void Application::DrawDocumentTree() {
     ImGuiIO& io = ImGui::GetIO();
     const float panelWidth = 340.0f;
 
-    ImGui::SetNextWindowPos(ImVec2(0, 20), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 20), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(0, 155), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 155), ImGuiCond_Always);
 
     ImGui::Begin("##ocaf_tree", nullptr,
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
@@ -318,7 +665,7 @@ void Application::DrawDocumentTree() {
     ImGui::TextDisabled("%s", Tr("panel.hint.delete").c_str());
     ImGui::Separator();
 
-    if (ImGui::Button(Tr("btn.addBox").c_str())) {
+    if (ImGui::Button(Tr("panel.addBox").c_str())) {
         myShowAddBoxDialog = true;
         std::strncpy(myNewBoxName, Tr("default.boxName").c_str(), sizeof(myNewBoxName) - 1);
         myNewBoxName[sizeof(myNewBoxName) - 1] = '\0';
@@ -396,7 +743,7 @@ void Application::RefreshSketchLines() {
         TDF_Label lineLabel = it.Value();
         TopoDS_Shape s = myDocument->GetShape(lineLabel);
         if (!s.IsNull()) {
-            LineStyle style = OrdoDocument::GetLineStyle(lineLabel);
+            LineStyle style = BreezeDocument::GetLineStyle(lineLabel);
             myOcctView->DisplaySketchLine(s, lineLabel, static_cast<int>(style));
         }
     }
@@ -586,6 +933,8 @@ void Application::OnSketchClick(int px, int py) {
     if (!myHasSketchStart) {
         mySketchStartPoint = p;
         myHasSketchStart = true;
+        std::strcpy(myLengthBuffer, "0");
+        std::strcpy(myAngleBuffer, "0");
         std::cout << "Sketch: start point set\n";
     } else {
         // Проверяем, что точки не совпадают
@@ -676,8 +1025,10 @@ void Application::EnterSketch(const TDF_Label& sketchLabel) {
     gp_Dir normal = du.Crossed(dv);
 
     myOcctView->EnterSketchMode(normal, p);
+    myOcctView->ShowGrid(myShowGrid);
     myActiveSketchLabel = sketchLabel;
     myHasSketchStart = false;
+    myActiveRibbonTab = 0;  // Sketch tab
 
     // Показать уже существующие линии эскиза
     RefreshSketchLines();
@@ -692,84 +1043,180 @@ void Application::ExitSketch() {
         myOcctView->ExitSketchMode();
     }
     myActiveSketchLabel = TDF_Label();
+    myActiveRibbonTab = 1;  // 3D Model tab
+
+    // Принудительно перерисовываем всё из документа —
+    // это гарантирует, что плоскости и другие системные объекты вернутся
+    RefreshView();
+    if (myOcctView) myOcctView->FitAll();
+
     std::cout << "Application: exited sketch mode\n";
 }
 
+static gp_Pnt PointFromLengthAngle(const gp_Pln& plane,
+                                    const gp_Pnt& from,
+                                    double length, double angleDeg) {
+    gp_Ax3 ax = plane.Position();
+    gp_Dir xDir = ax.XDirection();
+    gp_Dir yDir = ax.YDirection();
+
+    double rad = angleDeg * M_PI / 180.0;
+    double u = length * std::cos(rad);
+    double w = length * std::sin(rad);
+
+    gp_Pnt result = from;
+    result.Translate(gp_Vec(xDir) * u);
+    result.Translate(gp_Vec(yDir) * w);
+    return result;
+}
+
+void Application::ApplyExactLine() {
+    if (!myOcctView || !myDocument || myActiveSketchLabel.IsNull()) return;
+    if (!myHasSketchStart) return;
+
+    double length = std::atof(myLengthBuffer);
+    double angle  = std::atof(myAngleBuffer);
+
+    if (length < 1e-6) {
+        std::cout << "ApplyExactLine: length too small\n";
+        return;
+    }
+
+    gp_Pnt p = PointFromLengthAngle(myOcctView->GetSketchPlane(),
+                                     mySketchStartPoint,
+                                     length, angle);
+
+    try {
+        myDocument->AddSketchLine(myActiveSketchLabel, mySketchStartPoint, p, myCurrentLineStyle);
+        myOcctView->ClearPreviewLine();
+
+        TopoDS_Shape line = BRepBuilderAPI_MakeEdge(mySketchStartPoint, p).Shape();
+        int maxTag = 0;
+        TDF_ChildIterator it(myActiveSketchLabel, false);
+        for (; it.More(); it.Next()) {
+            if (it.Value().Tag() > maxTag) maxTag = it.Value().Tag();
+        }
+        TDF_Label lineLabel = myActiveSketchLabel.FindChild(maxTag, false);
+        myOcctView->DisplaySketchLine(line, lineLabel, static_cast<int>(myCurrentLineStyle));
+
+        bool loopClosed = IsPointOnExistingVertex(p, myActiveSketchLabel,
+                                                   mySketchStartPoint, 0.5);
+
+        if (myAutoContinue && !loopClosed) {
+            mySketchStartPoint = p;
+            myHasSketchStart = true;
+            myOcctView->ShowCursorMarker(p);
+            std::cout << "ApplyExactLine: line added, continuing\n";
+        } else {
+            myHasSketchStart = false;
+            if (loopClosed) std::cout << "ApplyExactLine: loop closed\n";
+        }
+
+        std::strcpy(myLengthBuffer, "0");
+        std::strcpy(myAngleBuffer, "0");
+        myInputActive = false;
+    } catch (...) {
+        std::cerr << "ApplyExactLine exception\n";
+    }
+}
+
 void Application::DrawPreviewInfo() {
-    if (!myHasPreview || myActiveSketchLabel.IsNull()) return;
+    if (myActiveSketchLabel.IsNull()) return;
+    if (!myHasSketchStart) return;
 
-    // Позиция — рядом с курсором
-    ImVec2 pos = ImVec2((float)myMouseX + 20, (float)myMouseY + 20);
+    ImGuiIO& io = ImGui::GetIO();
 
+    // Фиксированное положение — правый верхний угол, отступ 20 пикселей
+    ImVec2 pos = ImVec2(io.DisplaySize.x - 280, 60);
     ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-    ImGui::SetNextWindowBgAlpha(0.75f);
+    ImGui::SetNextWindowSize(ImVec2(260, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.9f);
+
     ImGui::Begin("##preview_info", nullptr,
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing |
-        ImGuiWindowFlags_NoNav);
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
 
-    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "%.2f mm", myPreviewLength);
-    ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%.1f°", myPreviewAngle);
+    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "Length: %.2f mm", myPreviewLength);
+    ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "Angle:  %.1f deg", myPreviewAngle);
+
+    ImGui::Separator();
+    ImGui::Text("Exact input:");
+
+    // Tab — фокус на Length
+    static bool focusLength = false;
+    if (ImGui::IsKeyPressed(ImGuiKey_Tab) && !ImGui::GetIO().WantTextInput) {
+        focusLength = true;
+    }
+
+    ImGui::SetNextItemWidth(120);
+    if (focusLength) {
+        ImGui::SetKeyboardFocusHere();
+        focusLength = false;
+    }
+    bool enterLength = ImGui::InputText("Length", myLengthBuffer, sizeof(myLengthBuffer),
+                                         ImGuiInputTextFlags_EnterReturnsTrue);
+
+    ImGui::SetNextItemWidth(120);
+    bool enterAngle = ImGui::InputText("Angle", myAngleBuffer, sizeof(myAngleBuffer),
+                                        ImGuiInputTextFlags_EnterReturnsTrue);
+
+    if (enterLength || enterAngle) {
+        ApplyExactLine();
+    }
+
+    ImGui::Separator();
+    if (ImGui::Button("Apply", ImVec2(120, 0))) {
+        ApplyExactLine();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+        // Отмена текущей цепочки
+        myHasSketchStart = false;
+        myOcctView->ClearPreviewLine();
+    }
+
+    ImGui::TextDisabled("Tab - focus Length");
+    ImGui::TextDisabled("Enter - apply");
 
     ImGui::End();
 }
 
 void Application::DrawSketchOverlay() {
-    if (myActiveSketchLabel.IsNull()) return;
+    // Пустая — весь UI перенесён в Ribbon и Status Bar
+}
 
+void Application::DrawStatusBar() {
     ImGuiIO& io = ImGui::GetIO();
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f - 100, 30), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(200, 0), ImGuiCond_Always);
-    ImGui::Begin("##sketch_overlay", nullptr,
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_AlwaysAutoResize);
+    const float h = 24.0f;
 
-    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "SKETCH MODE");
-    ImGui::Separator();
-    if (ImGui::Button("Finish Sketch", ImVec2(180, 30))) {
-        ExitSketch();
-    }
-    if (ImGui::Button("Undo Last Line", ImVec2(180, 25))) {
-        if (myDocument && !myActiveSketchLabel.IsNull()) {
-            myDocument->RemoveLastSketchLine(myActiveSketchLabel);
-            // Перерисовываем
-            if (myOcctView) myOcctView->ClearAllShapes();
-            RefreshView();
+    ImGui::SetNextWindowPos(ImVec2(0, io.DisplaySize.y - h), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, h), ImGuiCond_Always);
+    ImGui::Begin("##statusbar", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+    if (!myActiveSketchLabel.IsNull()) {
+        ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "%s",
+                            Tr("sketch.mode").c_str());
+        ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+        ImGui::Text("%s", Tr("sketch.hint.lmb").c_str());
+        ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+        ImGui::Text("%s", Tr("sketch.hint.shift").c_str());
+        ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+        ImGui::Text("%s", Tr("sketch.hint.esc").c_str());
+
+        if (myHasSketchStart) {
+            ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f),
+                                "L=%.2f mm, A=%.1f deg",
+                                myPreviewLength, myPreviewAngle);
         }
+    } else {
+        ImGui::Text("%s", Tr("panel.hint.delete").c_str());
     }
-    if (ImGui::Button("Clear Sketch", ImVec2(180, 25))) {
-        if (myDocument && !myActiveSketchLabel.IsNull()) {
-            myDocument->ClearSketch(myActiveSketchLabel);
-            if (myOcctView) myOcctView->ClearAllShapes();
-            RefreshView();
-        }
-    }
-    ImGui::Separator();
-    ImGui::Text("Line Style:");
 
-    // Normal — фиолетовая (основная геометрия)
-    if (ImGui::RadioButton("Normal (purple)", myCurrentLineStyle == LS_Normal))
-        myCurrentLineStyle = LS_Normal;
-
-    // Construction — серая пунктирная (вспомогательная)
-    if (ImGui::RadioButton("Construction (dashed)", myCurrentLineStyle == LS_Construction))
-        myCurrentLineStyle = LS_Construction;
-
-    // Centerline — коричневая штрих-пунктирная (осевая)
-    if (ImGui::RadioButton("Centerline (dot-dash)", myCurrentLineStyle == LS_Centerline))
-        myCurrentLineStyle = LS_Centerline;
-
-    ImGui::Separator();
-    ImGui::Text("Snapping:");
-    ImGui::Checkbox("To Grid (10mm)", &mySnapToGrid);
-    ImGui::Checkbox("To Points (Origin, Ends)", &mySnapToPoints);
-    ImGui::Checkbox("Auto-Continue", &myAutoContinue);
-    ImGui::Separator();
-    ImGui::TextDisabled("LMB: click start, click end");
-    ImGui::TextDisabled("Shift: ortho (0/90 deg)");
-    ImGui::TextDisabled("Esc: cancel line / exit sketch");
     ImGui::End();
 }
 
@@ -806,6 +1253,36 @@ void Application::DrawAddBoxDialog() {
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
+}
+
+void Application::DrawDependenciesPanel() {
+    ImGuiIO& io = ImGui::GetIO();
+
+    // Панель только когда в эскизе
+    if (myActiveSketchLabel.IsNull()) return;
+
+    const float panelW = 280.0f;
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - panelW - 10, 175), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelW, 0), ImGuiCond_Always);
+
+    ImGui::Begin(Tr("panel.dependencies").c_str(), nullptr,
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_AlwaysAutoResize);
+
+    ImGui::TextDisabled("%s", Tr("panel.deps.hint").c_str());
+
+    // === Здесь будут отображаться ограничения эскиза (Coincident, Parallel, и т.д.) ===
+    // Пока пусто — заполним, когда добавим solver.
+    if (ImGui::BeginListBox("##deps_list", ImVec2(-1, 120))) {
+        ImGui::TextDisabled("%s", Tr("panel.deps.empty").c_str());
+        ImGui::EndListBox();
+    }
+
+    ImGui::Separator();
+    ImGui::TextDisabled("Fully Constrained: NO");
+    ImGui::TextDisabled("DOF remaining: ?");
+
+    ImGui::End();
 }
 
 void Application::Run() {
@@ -910,7 +1387,7 @@ void Application::Run() {
         bool curDelete = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_DELETE) == GLFW_PRESS;
         if (curDelete && !prevDelete && myOcctView && myDocument) {
             TDF_Label sel = myOcctView->GetSelectedLabel();
-            if (!sel.IsNull() && !OrdoDocument::IsSystem(sel)) {
+            if (!sel.IsNull() && !BreezeDocument::IsSystem(sel)) {
                 myDocument->RemoveFeature(sel);
                 myOcctView->ClearSelection();
                 RefreshView();
@@ -928,6 +1405,18 @@ void Application::Run() {
         bool curCtrlO = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_O) == GLFW_PRESS;
         if (curCtrlO && !prevCtrlO) OnOpen();
         prevCtrlO = curCtrlO;
+
+        // Ctrl+Z — Undo
+        static bool prevCtrlZ = false;
+        bool curCtrlZ = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_Z) == GLFW_PRESS;
+        if (curCtrlZ && !prevCtrlZ) OnUndo();
+        prevCtrlZ = curCtrlZ;
+
+        // Ctrl+Y — Redo
+        static bool prevCtrlY = false;
+        bool curCtrlY = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_Y) == GLFW_PRESS;
+        if (curCtrlY && !prevCtrlY) OnRedo();
+        prevCtrlY = curCtrlY;
 
         // Esc — сначала прерывает текущую линию, потом выходит из эскиза
         static bool prevEsc = false;
@@ -958,10 +1447,9 @@ void Application::Run() {
             myMouseY = my;
         }
 
-        DrawMenuBar();
+        DrawRibbon();
         DrawDocumentTree();
         DrawAddBoxDialog();
-        DrawSketchOverlay();
         DrawPreviewInfo();
 
         ImGuiIO& io = ImGui::GetIO();
@@ -1008,4 +1496,4 @@ void Application::Run() {
     }
 }
 
-} // namespace OrdoCAD
+} // namespace BreezeCAD

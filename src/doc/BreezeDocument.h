@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace OrdoCAD {
+namespace BreezeCAD {
 
 enum FeatureType {
     FT_Origin     = -1,
@@ -29,10 +29,10 @@ enum LineStyle {
     LS_Centerline   = 2   // осевая — красно-коричневая штрих-пунктирная
 };
 
-class OrdoDocument {
+class BreezeDocument {
 public:
-    OrdoDocument();
-    ~OrdoDocument();
+    BreezeDocument();
+    ~BreezeDocument();
 
     Handle(TDocStd_Document) GetDoc() const { return myDoc; }
     void SetDocument(const Handle(TDocStd_Document)& doc);
@@ -63,6 +63,14 @@ public:
 
     void RemoveFeature(const TDF_Label& label);
 
+    // === Undo / Redo через OCAF-транзакции ===
+    void StartTransaction();
+    void CommitTransaction();
+    bool Undo();
+    bool Redo();
+    int  GetUndoLimit() const;
+    void SetUndoLimit(int n);
+
     static bool IsSystem(const TDF_Label& label);
     static int  GetType(const TDF_Label& label);
 
@@ -79,4 +87,4 @@ private:
     void CollectShapes(const TDF_Label& label, std::vector<TopoDS_Shape>& out) const;
 };
 
-} // namespace OrdoCAD
+} // namespace BreezeCAD

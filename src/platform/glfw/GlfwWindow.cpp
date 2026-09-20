@@ -1,7 +1,7 @@
 #include "platform/glfw/GlfwWindow.h"
 #include <iostream>
 
-namespace OrdoCAD {
+namespace BreezeCAD {
 
 namespace {
 GlfwWindow* Self(GLFWwindow* w) {
@@ -106,4 +106,4 @@ void GlfwWindow::Maximize() {
     }
 }
 
-} // namespace OrdoCAD
+} // namespace BreezeCAD

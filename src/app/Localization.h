@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace OrdoCAD {
+namespace BreezeCAD {
 
 enum class Language { EN, RU };
 
@@ -27,4 +27,4 @@ inline std::string Tr(const std::string& key) {
     return Localization::Instance().Tr(key);
 }
 
-} // namespace OrdoCAD
+} // namespace BreezeCAD

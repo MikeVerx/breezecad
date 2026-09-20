@@ -21,7 +21,7 @@
 
 #include <vector>
 
-namespace OrdoCAD {
+namespace BreezeCAD {
 
 class OcctView {
 public:
@@ -40,6 +40,8 @@ public:
                       const TDF_Label& label,
                       bool isSystem = false);
     void ClearAllShapes();
+    void ShowGrid(bool show);
+    void ClearGrid();
     void FitAll();
 
     void SetShapeVisible(const TDF_Label& label, bool visible);
@@ -99,8 +101,10 @@ private:
     Handle(AIS_Point) myEndMarker;
 
     std::vector<ShapeEntry> myShapeEntries;
+    std::vector<Handle(AIS_InteractiveObject)> myGridObjects;
+    bool myGridVisible = true;
 
     void BuildSketchGrid(const gp_Dir& normal, const gp_Pnt& origin);
 };
 
-} // namespace OrdoCAD
+} // namespace BreezeCAD

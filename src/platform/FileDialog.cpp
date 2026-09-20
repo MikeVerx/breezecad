@@ -9,7 +9,7 @@
 
 #include <cstring>
 
-namespace OrdoCAD {
+namespace BreezeCAD {
 
 #ifdef _WIN32
 
@@ -94,4 +94,4 @@ bool ShowFileDialog(bool /*save*/, std::string& /*outPath*/,
 
 #endif
 
-} // namespace OrdoCAD
+} // namespace BreezeCAD

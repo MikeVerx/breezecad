@@ -42,7 +42,7 @@
 #include <cmath>
 #include <iostream>
 
-namespace OrdoCAD {
+namespace BreezeCAD {
 
 OcctView::OcctView() = default;
 OcctView::~OcctView() = default;
@@ -199,8 +199,40 @@ void OcctView::DisplayShape(const TopoDS_Shape& shape,
 
 void OcctView::ClearAllShapes() {
     if (myContext.IsNull()) return;
-    myContext->RemoveAll(false);
+    for (auto& e : myShapeEntries) {
+        if (!e.Shape.IsNull()) {
+            myContext->Remove(e.Shape, false);
+        }
+    }
     myShapeEntries.clear();
+    myContext->UpdateCurrentViewer();
+}
+
+void OcctView::ShowGrid(bool show) {
+    myGridVisible = show;
+    if (myContext.IsNull()) return;
+    for (auto& obj : myGridObjects) {
+        if (obj.IsNull()) continue;
+        if (show) {
+            myContext->Display(obj, false);
+            myContext->Deactivate(obj);
+        } else {
+            myContext->Erase(obj, false);
+        }
+    }
+    myContext->UpdateCurrentViewer();
+    if (!myView.IsNull()) myView->Redraw();
+}
+
+void OcctView::ClearGrid() {
+    if (myContext.IsNull()) return;
+    for (auto& obj : myGridObjects) {
+        if (!obj.IsNull()) {
+            myContext->Remove(obj, false);
+        }
+    }
+    myGridObjects.clear();
+    myContext->UpdateCurrentViewer();
 }
 
 void OcctView::SetShapeVisible(const TDF_Label& label, bool visible) {
@@ -245,6 +277,7 @@ void OcctView::BuildSketchGrid(const gp_Dir& normal, const gp_Pnt& origin) {
         myContext->SetColor(a1, gridColor, false);
         myContext->SetWidth(a1, 1.0, false);
         myContext->Deactivate(a1);
+        myGridObjects.push_back(a1);
 
         gp_Pnt s2 = origin.Translated(gp_Vec(vDir) * -ext + gp_Vec(uDir) * (i * step));
         gp_Pnt e2 = origin.Translated(gp_Vec(vDir) *  ext + gp_Vec(uDir) * (i * step));
@@ -257,6 +290,7 @@ void OcctView::BuildSketchGrid(const gp_Dir& normal, const gp_Pnt& origin) {
         myContext->SetColor(a2, gridColor, false);
         myContext->SetWidth(a2, 1.0, false);
         myContext->Deactivate(a2);
+        myGridObjects.push_back(a2);
     }
 
     // Осевые X (красная) и Y (зелёная) — штрих-пунктирные, толстые
@@ -330,16 +364,26 @@ void OcctView::ExitSketchMode() {
     myInSketchMode = false;
 
     // 1. Возвращаем перспективу
-    myView->Camera()->SetProjectionType(Graphic3d_Camera::Projection_Perspective);
+    if (!myView.IsNull()) {
+        myView->Camera()->SetProjectionType(Graphic3d_Camera::Projection_Perspective);
+    }
 
-    // 2. Убираем сетку и осевые линии.
-    //    Просто очищаем весь контекст и заново показываем только те объекты,
-    //    что зарегистрированы в myShapeEntries.
-    myContext->RemoveAll(false);
+    // 2. Убираем сетку
+    ClearGrid();
+
+    // 3. Восстанавливаем ВСЕ объекты из myShapeEntries
+    //    (системные + пользовательские). Это гарантирует, что плоскости
+    //    и оси снова появляются в сцене после выхода из эскиза.
     for (auto& e : myShapeEntries) {
+        if (e.Shape.IsNull()) continue;
+
         myContext->Display(e.Shape, false);
+
         if (e.IsSystem) {
+            // Серые полупрозрачные плоскости/оси/точка
             myContext->SetTransparency(e.Shape, 0.95f, false);
+            myContext->SetColor(e.Shape, Quantity_Color(0.55, 0.55, 0.55, Quantity_TOC_RGB), false);
+
             if (e.TopoShape.ShapeType() == TopAbs_FACE) {
                 myContext->Activate(e.Shape, 4);
             } else {
@@ -351,20 +395,12 @@ void OcctView::ExitSketchMode() {
     }
     myContext->UpdateCurrentViewer();
 
-    // 3. Возвращаем камеру
-    myView->FitAll(0.01, false);
-    myView->ZFitAll();
-    myView->Redraw();
-
-    // 4. Возвращаем селекцию объектов
-    for (auto& e : myShapeEntries) {
-        if (e.IsSystem && e.TopoShape.ShapeType() == TopAbs_FACE) {
-            myContext->Activate(e.Shape, 4);
-        } else {
-            myContext->Activate(e.Shape, 0);
-        }
+    // 4. Возвращаем камеру
+    if (!myView.IsNull()) {
+        myView->FitAll(0.01, false);
+        myView->ZFitAll();
+        myView->Redraw();
     }
-    myContext->UpdateCurrentViewer();
 
     std::cout << "OcctView: exited sketch mode\n";
 }
@@ -707,4 +743,4 @@ void OcctView::OnMouseScroll(double /*xoffset*/, double yoffset) {
     myView->Redraw();
 }
 
-} // namespace OrdoCAD
+} // namespace BreezeCAD

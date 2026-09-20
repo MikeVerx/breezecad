@@ -1,5 +1,5 @@
-#include "doc/OrdoDocument.h"
-#include "doc/OrdoApplication.h"
+#include "doc/BreezeDocument.h"
+#include "doc/BreezeApplication.h"
 
 #include <TDataStd_Name.hxx>
 #include <TDataStd_Integer.hxx>
@@ -22,15 +22,18 @@
 
 #include <iostream>
 
-namespace OrdoCAD {
+namespace BreezeCAD {
 
-OrdoDocument::OrdoDocument() {
-    myDoc = OrdoApplication::Instance().CreateDocument();
+BreezeDocument::BreezeDocument() {
+    myDoc = BreezeApplication::Instance().CreateDocument();
+    if (!myDoc.IsNull()) {
+        myDoc->SetUndoLimit(20);
+    }
 }
 
-OrdoDocument::~OrdoDocument() = default;
+BreezeDocument::~BreezeDocument() = default;
 
-void OrdoDocument::SetDocument(const Handle(TDocStd_Document)& doc) {
+void BreezeDocument::SetDocument(const Handle(TDocStd_Document)& doc) {
     myDoc = doc;
     myBaseLabel = TDF_Label();
     RefreshNextFeatureId();
@@ -44,12 +47,12 @@ void OrdoDocument::SetDocument(const Handle(TDocStd_Document)& doc) {
     }
 }
 
-TDF_Label OrdoDocument::MainLabel() const {
+TDF_Label BreezeDocument::MainLabel() const {
     if (myDoc.IsNull()) return TDF_Label();
     return myDoc->Main();
 }
 
-void OrdoDocument::RefreshNextFeatureId() {
+void BreezeDocument::RefreshNextFeatureId() {
     if (myDoc.IsNull()) return;
     int maxTag = 0;
     TDF_ChildIterator it(myDoc->Main(), false);
@@ -57,12 +60,12 @@ void OrdoDocument::RefreshNextFeatureId() {
         if (it.Value().Tag() > maxTag) maxTag = it.Value().Tag();
     }
     myNextFeatureId = maxTag + 1;
-    std::cout << "OrdoDocument: next feature id = " << myNextFeatureId << "\n";
+    std::cout << "BreezeDocument: next feature id = " << myNextFeatureId << "\n";
 }
 
 // === Системная геометрия ===
 
-void OrdoDocument::CreateBaseGeometry() {
+void BreezeDocument::CreateBaseGeometry() {
     if (myDoc.IsNull()) return;
 
     myBaseLabel = MainLabel().FindChild(1, true);
@@ -139,19 +142,51 @@ void OrdoDocument::CreateBaseGeometry() {
     }
 
     myNextFeatureId = 10;
-    std::cout << "OrdoDocument: base geometry created\n";
+    std::cout << "BreezeDocument: base geometry created\n";
 }
 
-TDF_Label OrdoDocument::GetBaseGeometryLabel() const {
+TDF_Label BreezeDocument::GetBaseGeometryLabel() const {
     return myBaseLabel;
 }
 
 // === Пользовательские фичи ===
 
-TDF_Label OrdoDocument::AddBoxFeature(const std::string& name,
+void BreezeDocument::StartTransaction() {
+    if (myDoc.IsNull()) return;
+    myDoc->OpenCommand();
+}
+
+void BreezeDocument::CommitTransaction() {
+    if (myDoc.IsNull()) return;
+    myDoc->CommitCommand();
+}
+
+bool BreezeDocument::Undo() {
+    if (myDoc.IsNull()) return false;
+    return myDoc->Undo() == Standard_True;
+}
+
+bool BreezeDocument::Redo() {
+    if (myDoc.IsNull()) return false;
+    return myDoc->Redo() == Standard_True;
+}
+
+int BreezeDocument::GetUndoLimit() const {
+    if (myDoc.IsNull()) return 0;
+    return myDoc->GetUndoLimit();
+}
+
+void BreezeDocument::SetUndoLimit(int n) {
+    if (myDoc.IsNull()) return;
+    myDoc->SetUndoLimit(n);
+}
+
+TDF_Label BreezeDocument::AddBoxFeature(const std::string& name,
                                        double dx, double dy, double dz,
                                        double px, double py, double pz) {
     if (myDoc.IsNull()) return TDF_Label();
+
+    StartTransaction();
 
     TDF_Label label = MainLabel().FindChild(myNextFeatureId++, true);
     TDataStd_Name::Set(label, TCollection_ExtendedString(name.c_str()));
@@ -161,11 +196,13 @@ TDF_Label OrdoDocument::AddBoxFeature(const std::string& name,
     TopoDS_Shape box = BRepPrimAPI_MakeBox(corner, dx, dy, dz).Shape();
     TNaming_Builder(label).Generated(box);
 
-    std::cout << "OrdoDocument: added box '" << name << "'\n";
+    CommitTransaction();
+
+    std::cout << "BreezeDocument: added box '" << name << "'\n";
     return label;
 }
 
-TDF_Label OrdoDocument::AddCylinderFeature(const std::string& name,
+TDF_Label BreezeDocument::AddCylinderFeature(const std::string& name,
                                             double radius, double height) {
     if (myDoc.IsNull()) return TDF_Label();
 
@@ -179,7 +216,7 @@ TDF_Label OrdoDocument::AddCylinderFeature(const std::string& name,
     return label;
 }
 
-TDF_Label OrdoDocument::AddSketchFeature(const TDF_Label& parentPlane) {
+TDF_Label BreezeDocument::AddSketchFeature(const TDF_Label& parentPlane) {
     if (myDoc.IsNull() || parentPlane.IsNull()) return TDF_Label();
 
     // Находим свободный тег среди детей плоскости
@@ -196,13 +233,13 @@ TDF_Label OrdoDocument::AddSketchFeature(const TDF_Label& parentPlane) {
     TDataStd_Name::Set(label, TCollection_ExtendedString(name.c_str()));
     TDataStd_Integer::Set(label, FT_Sketch);
 
-    std::cout << "OrdoDocument: added sketch '" << name
+    std::cout << "BreezeDocument: added sketch '" << name
               << "' under plane tag=" << parentPlane.Tag() << "\n";
     return label;
 }
 
 
-int OrdoDocument::GetType(const TDF_Label& label) {
+int BreezeDocument::GetType(const TDF_Label& label) {
     Handle(TDataStd_Integer) attr;
     if (label.FindAttribute(TDataStd_Integer::GetID(), attr)) {
         return attr->Get();
@@ -210,33 +247,36 @@ int OrdoDocument::GetType(const TDF_Label& label) {
     return FT_Other;
 }
 
-bool OrdoDocument::IsSystem(const TDF_Label& label) {
+bool BreezeDocument::IsSystem(const TDF_Label& label) {
     return GetType(label) < 0;
 }
 
-TDF_Label OrdoDocument::AddSketchLine(const TDF_Label& sketchLabel,
+TDF_Label BreezeDocument::AddSketchLine(const TDF_Label& sketchLabel,
                                       const gp_Pnt& p1, const gp_Pnt& p2,
                                       LineStyle style) {
     if (myDoc.IsNull() || sketchLabel.IsNull()) return TDF_Label();
 
     try {
-        // Находим свободный тег
+        StartTransaction();
+
         int tag = 1;
         while (!sketchLabel.FindChild(tag, false).IsNull()) tag++;
 
         TDF_Label lineLabel = sketchLabel.FindChild(tag, true);
         TDataStd_Integer::Set(lineLabel, FT_SketchLine);
 
-        // Стиль линии — в дочерней метке с тегом 100
         TDF_Label styleLabel = lineLabel.FindChild(100, true);
         TDataStd_Integer::Set(styleLabel, static_cast<int>(style));
 
         TopoDS_Shape edge = BRepBuilderAPI_MakeEdge(p1, p2).Shape();
         if (edge.IsNull()) {
             std::cerr << "AddSketchLine: edge is null\n";
+            CommitTransaction();
             return TDF_Label();
         }
         TNaming_Builder(lineLabel).Generated(edge);
+
+        CommitTransaction();
         return lineLabel;
     } catch (const std::exception& e) {
         std::cerr << "AddSketchLine exception: " << e.what() << "\n";
@@ -247,7 +287,7 @@ TDF_Label OrdoDocument::AddSketchLine(const TDF_Label& sketchLabel,
     }
 }
 
-LineStyle OrdoDocument::GetLineStyle(const TDF_Label& lineLabel) {
+LineStyle BreezeDocument::GetLineStyle(const TDF_Label& lineLabel) {
     if (lineLabel.IsNull()) return LS_Normal;
     TDF_Label styleLabel = lineLabel.FindChild(100, false);
     if (styleLabel.IsNull()) return LS_Normal;
@@ -259,7 +299,7 @@ LineStyle OrdoDocument::GetLineStyle(const TDF_Label& lineLabel) {
     return LS_Normal;
 }
 
-void OrdoDocument::RemoveLastSketchLine(const TDF_Label& sketchLabel) {
+void BreezeDocument::RemoveLastSketchLine(const TDF_Label& sketchLabel) {
     if (myDoc.IsNull() || sketchLabel.IsNull()) return;
 
     int maxTag = 0;
@@ -272,11 +312,11 @@ void OrdoDocument::RemoveLastSketchLine(const TDF_Label& sketchLabel) {
     TDF_Label last = sketchLabel.FindChild(maxTag, false);
     if (!last.IsNull()) {
         last.ForgetAllAttributes(true);
-        std::cout << "OrdoDocument: removed last sketch line (tag=" << maxTag << ")\n";
+        std::cout << "BreezeDocument: removed last sketch line (tag=" << maxTag << ")\n";
     }
 }
 
-void OrdoDocument::ClearSketch(const TDF_Label& sketchLabel) {
+void BreezeDocument::ClearSketch(const TDF_Label& sketchLabel) {
     if (myDoc.IsNull() || sketchLabel.IsNull()) return;
 
     std::vector<TDF_Label> toRemove;
@@ -287,13 +327,13 @@ void OrdoDocument::ClearSketch(const TDF_Label& sketchLabel) {
     for (auto& l : toRemove) {
         l.ForgetAllAttributes(true);
     }
-    std::cout << "OrdoDocument: cleared sketch\n";
+    std::cout << "BreezeDocument: cleared sketch\n";
 }
 
-void OrdoDocument::RemoveFeature(const TDF_Label& label) {
+void BreezeDocument::RemoveFeature(const TDF_Label& label) {
     if (label.IsNull()) return;
     if (IsSystem(label)) {
-        std::cout << "OrdoDocument: refusing to delete system feature\n";
+        std::cout << "BreezeDocument: refusing to delete system feature\n";
         return;
     }
 
@@ -304,11 +344,14 @@ void OrdoDocument::RemoveFeature(const TDF_Label& label) {
         name = ascii.ToCString();
     }
 
+    StartTransaction();
     label.ForgetAllAttributes(true);
-    std::cout << "OrdoDocument: removed feature '" << name << "'\n";
+    CommitTransaction();
+
+    std::cout << "BreezeDocument: removed feature '" << name << "'\n";
 }
 
-TopoDS_Shape OrdoDocument::GetShape(const TDF_Label& label) const {
+TopoDS_Shape BreezeDocument::GetShape(const TDF_Label& label) const {
     Handle(TNaming_NamedShape) ns;
     if (label.FindAttribute(TNaming_NamedShape::GetID(), ns) && !ns.IsNull()) {
         return ns->Get();
@@ -316,7 +359,7 @@ TopoDS_Shape OrdoDocument::GetShape(const TDF_Label& label) const {
     return TopoDS_Shape();
 }
 
-void OrdoDocument::CollectShapes(const TDF_Label& label,
+void BreezeDocument::CollectShapes(const TDF_Label& label,
                                   std::vector<TopoDS_Shape>& out) const {
     TopoDS_Shape s = GetShape(label);
     if (!s.IsNull()) out.push_back(s);
@@ -327,11 +370,11 @@ void OrdoDocument::CollectShapes(const TDF_Label& label,
     }
 }
 
-std::vector<TopoDS_Shape> OrdoDocument::GetAllShapes() const {
+std::vector<TopoDS_Shape> BreezeDocument::GetAllShapes() const {
     std::vector<TopoDS_Shape> shapes;
     if (myDoc.IsNull()) return shapes;
     CollectShapes(MainLabel(), shapes);
     return shapes;
 }
 
-} // namespace OrdoCAD
+} // namespace BreezeCAD

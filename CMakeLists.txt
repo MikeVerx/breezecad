@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(OrdoCAD LANGUAGES CXX)
+project(BreezeCAD LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,21 +34,21 @@ target_include_directories(imgui PUBLIC
 target_link_libraries(imgui PUBLIC glfw)
 
 # --- Наш исполняемый файл ---
-add_executable(ordocad
+add_executable(breezecad
     src/main.cpp
     src/app/Application.cpp
     src/app/Localization.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp
-    src/doc/OrdoApplication.cpp
-    src/doc/OrdoDocument.cpp
+    src/doc/BreezeApplication.cpp
+    src/doc/BreezeDocument.cpp
 )
 
-target_include_directories(ordocad PRIVATE src)
+target_include_directories(breezecad PRIVATE src)
 
 # --- Линкуем всё вместе ---
-target_link_libraries(ordocad PRIVATE
+target_link_libraries(breezecad PRIVATE
     TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep
     TKPrim TKTopAlgo TKBO
     TKDESTEP
@@ -60,16 +60,16 @@ target_link_libraries(ordocad PRIVATE
 )
 
 if(WIN32)
-    target_link_libraries(ordocad PRIVATE comdlg32)
+    target_link_libraries(breezecad PRIVATE comdlg32)
 endif()
 
 # --- Копируем DLL OCCT после сборки ---
-add_custom_command(TARGET ordocad POST_BUILD
+add_custom_command(TARGET breezecad POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${OCCT_ROOT}/win64/gcc/bin"
-    "$<TARGET_FILE_DIR:ordocad>"
+    "$<TARGET_FILE_DIR:breezecad>"
 )
 
-set_target_properties(ordocad PROPERTIES
+set_target_properties(breezecad PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
