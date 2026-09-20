@@ -13,6 +13,10 @@ endif()
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG")
 
+# --- lunasvg ---
+set(LUNASVG_ROOT "$ENV{HOME}/lunasvg/install")
+include_directories(${LUNASVG_ROOT}/include)
+
 # --- Поиск OCCT ---
 set(OCCT_ROOT "$ENV{HOME}/occt/install")
 find_package(OpenCASCADE REQUIRED
@@ -45,6 +49,7 @@ target_link_libraries(imgui PUBLIC glfw)
 add_executable(breezecad
     src/main.cpp
     src/app/Application.cpp
+    src/app/IconManager.cpp
     src/app/Localization.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
@@ -67,6 +72,8 @@ target_link_libraries(breezecad PRIVATE
     glfw
     imgui
     opengl32
+    ${LUNASVG_ROOT}/lib/liblunasvg.a
+    ${LUNASVG_ROOT}/lib/libplutovg.a
 )
 
 if(WIN32)
@@ -78,6 +85,13 @@ add_custom_command(TARGET breezecad POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${OCCT_ROOT}/win64/gcc/bin"
     "$<TARGET_FILE_DIR:breezecad>"
+)
+
+# Копируем assets (иконки, шрифты) рядом с exe
+add_custom_command(TARGET breezecad POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/assets"
+    "$<TARGET_FILE_DIR:breezecad>/assets"
 )
 
 set_target_properties(breezecad PROPERTIES

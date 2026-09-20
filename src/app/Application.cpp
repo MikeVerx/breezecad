@@ -5,6 +5,7 @@
 #include "platform/FileDialog.h"
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 
@@ -56,6 +57,74 @@ extern "C" unsigned char* stbi_load(const char* filename, int* x, int* y,
 extern "C" void stbi_image_free(void* retval_from_stbi_load);
 
 namespace BreezeCAD {
+
+// Вспомогательная: получить tint-цвет иконки по текущей теме
+static ImVec4 IconTintColor(bool enabled) {
+    bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
+    ImVec4 tint = isLight ? ImVec4(0.176f, 0.196f, 0.227f, 1.0f)   // #2d323a
+                          : ImVec4(0.92f, 0.94f, 0.97f, 1.0f);
+    if (!enabled) tint.w *= 0.45f;
+    return tint;
+}
+
+// Хелпер: маленькая кнопка с SVG-иконкой
+static bool SvgIconBtn(IconManager& icons, const char* id,
+                       const char* name, int iconSize,
+                       float btnW, float btnH,
+                       const char* tooltip = nullptr,
+                       bool transparentBg = false) {
+    ImGui::PushID(id);
+
+    ImVec4 tint = IconTintColor(true);
+    GLuint tex = icons.Get(name, iconSize);
+    ImTextureID tid = (ImTextureID)(intptr_t)tex;
+
+    ImGui::InvisibleButton("##svgb", ImVec2(btnW, btnH));
+    bool clicked = ImGui::IsItemClicked();
+    bool hovered = ImGui::IsItemHovered();
+    ImVec2 min = ImGui::GetItemRectMin();
+    ImVec2 max = ImGui::GetItemRectMax();
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (!transparentBg) {
+        ImU32 bg = ImGui::GetColorU32(hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+        dl->AddRectFilled(min, max, bg, 4.0f);
+    } else if (hovered) {
+        dl->AddRectFilled(min, max,
+            ImGui::GetColorU32(ImGuiCol_ButtonHovered), 4.0f);
+    }
+
+    if (tid != 0) {
+        ImVec2 ip(min.x + (btnW - iconSize) * 0.5f,
+                  min.y + (btnH - iconSize) * 0.5f);
+        dl->AddImage(tid, ip,
+                     ImVec2(ip.x + iconSize, ip.y + iconSize),
+                     ImVec2(0, 0), ImVec2(1, 1),
+                     ImGui::GetColorU32(tint));
+    } else {
+        dl->AddRectFilled(ImVec2(min.x + 4, min.y + 4),
+                          ImVec2(max.x - 4, max.y - 4),
+                          IM_COL32(140, 140, 140, 180), 3.0f);
+    }
+
+    if (hovered && tooltip) ImGui::SetTooltip("%s", tooltip);
+
+    ImGui::PopID();
+    return clicked;
+}
+
+// Обёртка для QAT
+static bool QatIconButton(IconManager& icons, const char* id,
+                          const char* name, int size,
+                          const char* tooltip = nullptr) {
+    return SvgIconBtn(icons, id, name, size, 32, 28, tooltip, true);
+}
+
+
+
+
+
+
 
 // Чистый C++ конвертеры (см. BreezeDocument.cpp — там идентичные, но локальные)
 
@@ -132,16 +201,282 @@ static std::string LabelKey(const TDF_Label& label) {
 // Диапазоны глифов Font Awesome (Private Use Area)
 static const ImWchar kFontAwesomeRanges[] = { 0xf000, 0xf8ff, 0 };
 
+// Тёмная тема
+static void SetupDarkTheme() {
+    ImGuiStyle& s = ImGui::GetStyle();
+
+    // === Скругления — больше, чем по умолчанию ===
+    s.WindowRounding    = 8.0f;
+    s.ChildRounding     = 6.0f;
+    s.FrameRounding     = 6.0f;
+    s.PopupRounding     = 8.0f;
+    s.ScrollbarRounding = 8.0f;
+    s.GrabRounding      = 6.0f;
+    s.TabRounding       = 6.0f;
+
+    // === Отступы — просторнее ===
+    s.WindowPadding     = ImVec2(12, 12);
+    s.FramePadding      = ImVec2(10, 6);
+    s.CellPadding       = ImVec2(8, 4);
+    s.ItemSpacing       = ImVec2(8, 6);
+    s.ItemInnerSpacing  = ImVec2(6, 6);
+    s.IndentSpacing     = 18.0f;
+
+    // === Рамки — минимализм ===
+    s.WindowBorderSize  = 0.0f;
+    s.ChildBorderSize   = 0.0f;
+    s.FrameBorderSize   = 0.0f;
+    s.PopupBorderSize   = 1.0f;
+
+    // === Прозрачность — лёгкая, современно ===
+    s.Alpha             = 1.0f;
+    s.WindowRounding    = 8.0f;
+
+    // ============================================================
+    // ЦВЕТА — современная тёмная палитра
+    // ============================================================
+    ImVec4* c = s.Colors;
+
+    // Фон — глубокий тёмно-серый с лёгким синим оттенком
+    c[ImGuiCol_WindowBg]             = ImVec4(0.11f, 0.12f, 0.14f, 1.00f);
+    c[ImGuiCol_ChildBg]              = ImVec4(0.11f, 0.12f, 0.14f, 0.0f);
+    c[ImGuiCol_PopupBg]              = ImVec4(0.13f, 0.14f, 0.17f, 0.98f);
+    c[ImGuiCol_MenuBarBg]            = ImVec4(0.13f, 0.14f, 0.17f, 1.00f);
+
+    // Текст — мягкий белый
+    c[ImGuiCol_Text]                 = ImVec4(0.92f, 0.93f, 0.95f, 1.00f);
+    c[ImGuiCol_TextDisabled]         = ImVec4(0.50f, 0.52f, 0.56f, 1.00f);
+
+    // Рамки — почти невидимые, только разделители
+    c[ImGuiCol_Border]               = ImVec4(0.20f, 0.22f, 0.26f, 1.00f);
+    c[ImGuiCol_BorderShadow]         = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+
+    // Кнопки — прозрачные до наведения
+    c[ImGuiCol_Button]               = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
+    c[ImGuiCol_ButtonHovered]        = ImVec4(1.00f, 1.00f, 1.00f, 0.12f);
+    c[ImGuiCol_ButtonActive]         = ImVec4(1.00f, 1.00f, 1.00f, 0.18f);
+
+    // Заголовки (для дерева, коллапсирующихся заголовков)
+    c[ImGuiCol_Header]               = ImVec4(1.00f, 1.00f, 1.00f, 0.08f);
+    c[ImGuiCol_HeaderHovered]        = ImVec4(1.00f, 1.00f, 1.00f, 0.14f);
+    c[ImGuiCol_HeaderActive]         = ImVec4(1.00f, 1.00f, 1.00f, 0.20f);
+
+    // Акцент — синий, как в Fusion 360
+    ImVec4 accent        = ImVec4(0.20f, 0.55f, 0.95f, 1.00f);   // #338CF2
+    ImVec4 accentHover   = ImVec4(0.30f, 0.65f, 1.00f, 1.00f);
+    ImVec4 accentActive  = ImVec4(0.15f, 0.45f, 0.85f, 1.00f);
+
+    c[ImGuiCol_Tab]                  = ImVec4(0.15f, 0.16f, 0.20f, 1.00f);
+    c[ImGuiCol_TabHovered]           = accentHover;
+    c[ImGuiCol_TabSelected]          = accent;
+    c[ImGuiCol_TabSelectedOverline]  = accent;
+    c[ImGuiCol_TabDimmed]            = ImVec4(0.13f, 0.14f, 0.17f, 1.00f);
+    c[ImGuiCol_TabDimmedSelected]    = ImVec4(0.30f, 0.40f, 0.55f, 1.00f);
+
+    // Флажок, ползунки — с акцентом
+    c[ImGuiCol_CheckMark]            = accent;
+    c[ImGuiCol_SliderGrab]           = accent;
+    c[ImGuiCol_SliderGrabActive]     = accentActive;
+
+    // Заголовок окна
+    c[ImGuiCol_TitleBg]              = ImVec4(0.11f, 0.12f, 0.14f, 1.00f);
+    c[ImGuiCol_TitleBgActive]        = ImVec4(0.13f, 0.14f, 0.17f, 1.00f);
+    c[ImGuiCol_TitleBgCollapsed]     = ImVec4(0.11f, 0.12f, 0.14f, 0.75f);
+
+    // Скроллбар — тонкий, тёмный
+    c[ImGuiCol_ScrollbarBg]          = ImVec4(0.11f, 0.12f, 0.14f, 0.0f);
+    c[ImGuiCol_ScrollbarGrab]        = ImVec4(0.30f, 0.32f, 0.38f, 0.6f);
+    c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.40f, 0.42f, 0.48f, 0.8f);
+    c[ImGuiCol_ScrollbarGrabActive]  = accent;
+
+    // Разделители
+    c[ImGuiCol_Separator]            = ImVec4(0.20f, 0.22f, 0.26f, 1.00f);
+    c[ImGuiCol_SeparatorHovered]     = accentHover;
+    c[ImGuiCol_SeparatorActive]      = accent;
+
+    // Изменение размеров окна
+    c[ImGuiCol_ResizeGrip]           = ImVec4(1.00f, 1.00f, 1.00f, 0.04f);
+    c[ImGuiCol_ResizeGripHovered]    = accentHover;
+    c[ImGuiCol_ResizeGripActive]     = accent;
+
+    // Плавающие окна
+    c[ImGuiCol_ModalWindowDimBg]     = ImVec4(0.05f, 0.06f, 0.08f, 0.65f);
+
+    // Таблицы
+    c[ImGuiCol_TableHeaderBg]        = ImVec4(0.15f, 0.16f, 0.20f, 1.00f);
+    c[ImGuiCol_TableBorderStrong]    = ImVec4(0.20f, 0.22f, 0.26f, 1.00f);
+    c[ImGuiCol_TableBorderLight]     = ImVec4(0.16f, 0.17f, 0.20f, 1.00f);
+    c[ImGuiCol_TableRowBg]           = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    c[ImGuiCol_TableRowBgAlt]        = ImVec4(1.00f, 1.00f, 1.00f, 0.02f);
+
+    // Текст в выделении
+    c[ImGuiCol_TextSelectedBg]       = accent;
+    c[ImGuiCol_NavHighlight]         = accent;
+
+    // Plot
+    c[ImGuiCol_PlotLines]            = accent;
+    c[ImGuiCol_PlotLinesHovered]     = accentHover;
+    c[ImGuiCol_PlotHistogram]        = accent;
+    c[ImGuiCol_PlotHistogramHovered] = accentHover;
+}
+
+// Светлая тема — фон с оттенком RAL 5024, кнопки светло-серые
+static void SetupLightTheme() {
+    ImGuiStyle& s = ImGui::GetStyle();
+
+    // Скругления, отступы
+    s.WindowRounding    = 8.0f;
+    s.ChildRounding     = 6.0f;
+    s.FrameRounding     = 6.0f;
+    s.PopupRounding     = 8.0f;
+    s.ScrollbarRounding = 8.0f;
+    s.GrabRounding      = 6.0f;
+    s.TabRounding       = 6.0f;
+
+    s.WindowPadding     = ImVec2(12, 12);
+    s.FramePadding      = ImVec2(10, 6);
+    s.CellPadding       = ImVec2(8, 4);
+    s.ItemSpacing       = ImVec2(8, 6);
+    s.ItemInnerSpacing  = ImVec2(6, 6);
+    s.IndentSpacing     = 18.0f;
+
+    s.WindowBorderSize  = 0.0f;
+    s.ChildBorderSize   = 0.0f;
+    s.FrameBorderSize   = 1.0f;
+    s.PopupBorderSize   = 1.0f;
+
+    // ============================================================
+    // Пользовательская палитра (RGB из ТЗ)
+    // ============================================================
+    // C1 = (215, 218, 222) = 0.843, 0.855, 0.871 — светлое серебро
+    // C2 = (198, 202, 206) = 0.776, 0.792, 0.808 — на 8% темнее
+    // C3 = (178, 182, 188) = 0.698, 0.714, 0.737 — на 17% темнее (для активных)
+    // Text = (45, 50, 58) = 0.176, 0.196, 0.227
+    ImVec4 C1(0.843f, 0.855f, 0.871f, 1.00f);
+    ImVec4 C2(0.776f, 0.792f, 0.808f, 1.00f);
+    ImVec4 C3(0.698f, 0.714f, 0.737f, 1.00f);
+    ImVec4 TXT(0.176f, 0.196f, 0.227f, 1.00f);
+    ImVec4 TXT_DIS(0.45f, 0.48f, 0.52f, 1.00f);
+
+    // Акцент
+    ImVec4 accent       = ImVec4(0.20f, 0.55f, 0.95f, 1.00f);
+    ImVec4 accentHover  = ImVec4(0.30f, 0.65f, 1.00f, 1.00f);
+    ImVec4 accentActive = ImVec4(0.15f, 0.45f, 0.85f, 1.00f);
+
+    ImVec4* c = s.Colors;
+
+    // --- Фон окон ---
+    c[ImGuiCol_WindowBg]             = ImVec4(0.97f, 0.98f, 0.99f, 1.00f);
+    c[ImGuiCol_ChildBg]              = ImVec4(0.97f, 0.98f, 0.99f, 0.00f);
+    c[ImGuiCol_PopupBg]              = ImVec4(0.99f, 0.99f, 1.00f, 0.98f);
+    c[ImGuiCol_MenuBarBg]            = C2;
+
+    // --- Текст ---
+    c[ImGuiCol_Text]                 = TXT;
+    c[ImGuiCol_TextDisabled]         = TXT_DIS;
+
+    // --- Рамки ---
+    c[ImGuiCol_Border]               = C3;
+    c[ImGuiCol_BorderShadow]         = ImVec4(0, 0, 0, 0);
+
+    // --- Кнопки (общие UI: диалоги, дерево) ---
+    c[ImGuiCol_Button]               = C1;
+    c[ImGuiCol_ButtonHovered]        = C2;
+    c[ImGuiCol_ButtonActive]         = C3;
+
+    // --- Заголовки дерева / сворачивающиеся ---
+    c[ImGuiCol_Header]               = C1;
+    c[ImGuiCol_HeaderHovered]        = C2;
+    c[ImGuiCol_HeaderActive]         = C3;
+
+    // --- Вкладки ---
+    c[ImGuiCol_Tab]                  = C2;
+    c[ImGuiCol_TabHovered]           = C1;
+    c[ImGuiCol_TabSelected]          = C3;
+    c[ImGuiCol_TabSelectedOverline]  = accent;
+    c[ImGuiCol_TabDimmed]            = C2;
+    c[ImGuiCol_TabDimmedSelected]    = C3;
+
+    // --- Чекбоксы, слайдеры ---
+    c[ImGuiCol_CheckMark]            = accent;
+    c[ImGuiCol_SliderGrab]           = accent;
+    c[ImGuiCol_SliderGrabActive]     = accentActive;
+
+    // --- Заголовок окна ---
+    c[ImGuiCol_TitleBg]              = C1;
+    c[ImGuiCol_TitleBgActive]        = C2;
+    c[ImGuiCol_TitleBgCollapsed]     = C1;
+
+    // --- Скроллбар ---
+    c[ImGuiCol_ScrollbarBg]          = ImVec4(0.90f, 0.92f, 0.94f, 0.00f);
+    c[ImGuiCol_ScrollbarGrab]        = C2;
+    c[ImGuiCol_ScrollbarGrabHovered] = C3;
+    c[ImGuiCol_ScrollbarGrabActive]  = accent;
+
+    // --- Разделители ---
+    c[ImGuiCol_Separator]            = C2;
+    c[ImGuiCol_SeparatorHovered]     = accentHover;
+    c[ImGuiCol_SeparatorActive]      = accent;
+
+    // --- Прочее ---
+    c[ImGuiCol_ResizeGrip]           = ImVec4(0, 0, 0, 0.04f);
+    c[ImGuiCol_ResizeGripHovered]    = accentHover;
+    c[ImGuiCol_ResizeGripActive]     = accent;
+    c[ImGuiCol_ModalWindowDimBg]     = ImVec4(0.15f, 0.18f, 0.22f, 0.45f);
+
+    c[ImGuiCol_TableHeaderBg]        = C2;
+    c[ImGuiCol_TableBorderStrong]    = C3;
+    c[ImGuiCol_TableBorderLight]     = C2;
+    c[ImGuiCol_TableRowBg]           = ImVec4(0, 0, 0, 0);
+    c[ImGuiCol_TableRowBgAlt]        = ImVec4(0, 0, 0, 0.02f);
+
+    c[ImGuiCol_TextSelectedBg]       = accent;
+    c[ImGuiCol_NavHighlight]         = accent;
+    c[ImGuiCol_PlotLines]            = accent;
+    c[ImGuiCol_PlotLinesHovered]     = accentHover;
+    c[ImGuiCol_PlotHistogram]        = accent;
+    c[ImGuiCol_PlotHistogramHovered] = accentHover;
+}
+
+void Application::ApplyTheme(int theme) {
+    myCurrentTheme = theme;
+
+    if (theme == 0) {
+        // Светлая
+        ImGui::StyleColorsLight();
+        SetupLightTheme();
+
+        // 3D-фон: RAL 5024 → почти белый (градиент)
+        if (myOcctView) {
+            Quantity_Color top(0.43, 0.54, 0.62, Quantity_TOC_RGB);   // RAL 5024
+            Quantity_Color bottom(0.98, 0.99, 1.00, Quantity_TOC_RGB); // почти белый
+            myOcctView->SetBackgroundGradient(top, bottom);
+        }
+    } else {
+        // Тёмная (или системная — пока тоже тёмная)
+        ImGui::StyleColorsDark();
+        SetupDarkTheme();
+
+        // 3D-фон: тёмный градиент
+        if (myOcctView) {
+            Quantity_Color top(0.15, 0.17, 0.22, Quantity_TOC_RGB);
+            Quantity_Color bottom(0.06, 0.07, 0.10, Quantity_TOC_RGB);
+            myOcctView->SetBackgroundGradient(top, bottom);
+        }
+    }
+}
+
 static void LoadFonts() {
     ImGuiIO& io = ImGui::GetIO();
 
-    // 1) Основной шрифт (латиница + кириллица)
+    // 1) Основной шрифт — Inter (современный, как в Figma/Linear)
     const std::vector<std::string> mainCandidates = {
+        "assets/fonts/Inter-Regular.ttf",
+        "../assets/fonts/Inter-Regular.ttf",
+        "../../assets/fonts/Inter-Regular.ttf",
         "assets/fonts/Roboto-Regular.ttf",
         "../assets/fonts/Roboto-Regular.ttf",
-        "../../assets/fonts/Roboto-Regular.ttf",
         "C:/Windows/Fonts/segoeui.ttf",
-        "C:/Windows/Fonts/arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     };
 
@@ -170,8 +505,6 @@ static void LoadFonts() {
     ImFontConfig cfg;
     cfg.MergeMode = true;
     cfg.PixelSnapH = true;
-    cfg.GlyphMinAdvanceX = 18.0f;   // выравнивание иконок по ширине
-    cfg.GlyphOffset = ImVec2(0.0f, 2.0f);  // вертикальное выравнивание
 
     for (const auto& path : faCandidates) {
         std::error_code ec;
@@ -183,15 +516,23 @@ static void LoadFonts() {
             break;
         }
     }
+
+    // Явно собираем атлас — так поймаем проблемы здесь, а не в первом кадре
+    io.Fonts->Build();
+    std::cout << "BreezeCAD: font atlas built: " << (io.Fonts->IsBuilt() ? "yes" : "no") << "\n";
 }
 
 Application::Application() {
     myWindow = std::make_unique<GlfwWindow>(1280, 720, "BreezeCAD - Prototype");
     if (!myWindow->GetNativeWindow()) return;
 
+    // Загружаем SVG-иконки Lucide
+    myIcons.LoadAll("assets/icons");
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
+    ApplyTheme(myCurrentTheme);
     LoadFonts();
     ImGui_ImplGlfw_InitForOpenGL(myWindow->GetNativeWindow(), true);
     ImGui_ImplOpenGL3_Init("#version 330");
@@ -205,6 +546,8 @@ Application::Application() {
             myOcctView.reset(); return;
         }
     } catch (...) { myOcctView.reset(); return; }
+
+    ApplyTheme(myCurrentTheme);
 
     CreateNewDoc();
     InitCommands();
@@ -569,19 +912,22 @@ bool Application::DrawLabelTree(const TDF_Label& label,
             visible = !hasOps;
         }
 
-        const char* eyeIcon = visible ? ICON_EYE : ICON_EYE_SLASH;
-        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(0, 0, 0, 0));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(70, 80, 100, 120));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(90, 110, 140, 180));
-        if (ImGui::Button(eyeIcon, ImVec2(24, 0))) {
+                const char* eyeName = visible ? "eye" : "eye-off";
+        std::string eyeId = "eye_" + LabelKey(label);
+        if (SvgIconBtn(myIcons, eyeId.c_str(), eyeName, 14, 22, 18,
+                        visible ? "Скрыть" : "Показать", true)) {
             myVisibility[key] = !visible;
             if (myOcctView) myOcctView->SetShapeVisible(label, !visible);
         }
-        ImGui::PopStyleColor(3);
         ImGui::SameLine();
     }
 
-    if (isSystem) ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(160, 160, 160, 255));
+    if (isSystem) {
+        // Системные элементы — приглушённый цвет темы
+        ImVec4 txt = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+        txt.w *= 0.65f;  // чуть прозрачнее
+        ImGui::PushStyleColor(ImGuiCol_Text, txt);
+    }
     bool opened = ImGui::TreeNodeEx(labelName.c_str(), flags);
     if (isSystem) ImGui::PopStyleColor();
 
@@ -652,16 +998,15 @@ void Application::DrawQuickAccessToolbar() {
 
     // === 1. Логотип / Меню файл ===
     // Логотип/HOME — возврат на главную
-    if (ImGui::Button(ICON_HOME, ImVec2(32, 0))) {
-        CaptureCurrentThumbnail();  // сохраняем превью текущего
+    if (QatIconButton(myIcons, "qat_home", "house", 20, "Главная")) {
+        CaptureCurrentThumbnail();
         myShowHomeScreen = true;
     }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Главная");
 
     ImGui::SameLine();
 
     // Меню «Файл»
-    if (ImGui::Button(ICON_FILE, ImVec2(32, 0))) {
+    if (QatIconButton(myIcons, "qat_file", "file-text", 20, "Файл")) {
         ImGui::OpenPopup("##file_menu");
     }
     DrawAdvancedTooltip("qat.file",
@@ -725,16 +1070,16 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
 
     // === 2. Undo / Redo ===
-    if (ImGui::Button(ICON_UNDO, ImVec2(28, 0)) && ImGui::IsItemActivated()) OnUndo();
+    if (QatIconButton(myIcons, "qat_undo", "undo-2", 18, "Отменить (Ctrl+Z)")) OnUndo();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Отменить (Ctrl+Z)");
     ImGui::SameLine();
-    if (ImGui::Button(ICON_REDO, ImVec2(28, 0)) && ImGui::IsItemActivated()) OnRedo();
+    if (QatIconButton(myIcons, "qat_redo", "redo-2", 18, "Повторить (Ctrl+Y)")) OnRedo();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Повторить (Ctrl+Y)");
 
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
 
     // === 3. Save ===
-    if (ImGui::Button(ICON_SAVE, ImVec2(32, 0))) OnSave();
+    if (SvgIconBtn(myIcons, "qat_save", "save", 20, 32, 28, "Сохранить")) OnSave();
     DrawAdvancedTooltip("qat.save",
                         "Сохранить (Ctrl+S)",
                         "Сохранить текущий проект в файл",
@@ -744,8 +1089,7 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine();
 
     // === 4. Settings ===
-    if (ImGui::Button(ICON_SETTINGS, ImVec2(32, 0))) myShowSettingsDialog = true;
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Настройки");
+    if (QatIconButton(myIcons, "qat_settings", "settings", 20, "Настройки")) myShowSettingsDialog = true;
 
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
 
@@ -833,22 +1177,40 @@ void Application::DrawQuickAccessToolbar() {
 }
 
 void Application::DrawRibbonTabs() {
-    static const char* tabs[] = { "tab.sketch", "tab.model", "tab.annotate",
-                                   "tab.tools", "tab.manage", "tab.view" };
+    static const char* tabs[] = {
+        "tab.sketch", "tab.model", "tab.annotate",
+        "tab.tools", "tab.manage", "tab.view"
+    };
     for (int i = 0; i < 6; i++) {
         if (i > 0) ImGui::SameLine();
         bool active = (myActiveRibbonTab == i);
-        if (active) ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(50, 90, 140, 255));
-        if (ImGui::Button(Tr(tabs[i]).c_str(), ImVec2(120, 0))) {
+        bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
+        if (active) {
+            if (isLight) {
+                // Светлая — серебристый C3
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.698f, 0.714f, 0.737f, 1.0f));
+            } else {
+                // Тёмная — синий accent
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.55f, 0.95f, 1.0f));
+            }
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_Button));
+        }
+        if (ImGui::Button(Tr(tabs[i]).c_str(), ImVec2(120, 26))) {
             myActiveRibbonTab = i;
         }
-        if (active) ImGui::PopStyleColor();
+        ImGui::PopStyleColor();
     }
+    // Кнопка "+" для подключения модулей
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_Button));
+    if (SvgIconBtn(myIcons, "ribbon_plus", "plus", 16, 32, 26, "Подключить модуль")) {
+        // TODO: диалог подключения модуля
+    }
+    ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Подключить модуль");
 }
 
-void Application::DrawRibbonPlaceholderTab(const char* name) {
-    ImGui::TextDisabled("Tab '%s' — not implemented yet", name);
-}
 
 // Рисует кнопку Ribbon. active=false → красная рамка, "disabled".
 static bool RibbonButton(const char* label, bool active, const char* tooltip = nullptr,
@@ -871,62 +1233,117 @@ static bool RibbonButton(const char* label, bool active, const char* tooltip = n
 // opts — массив указателей на ключи локализации (термины).
 // idx — индекс выбранного в данный момент.
 // Возвращает: 0 = не нажато, 1 = нажата основная, 2 = нажата стрелка ▼
-static int RibbonSplitButton(const char* id,
-                              const char* const* opts,
-                              int optCount,
-                              int& idx,
-                              bool enabled,
-                              float width,
-                              float height) {
+
+
+// ============================================================
+//  Вкладка «Эскиз»
+// ============================================================
+
+
+// Универсальная кнопка Ribbon с SVG-иконкой Lucide.
+int Application::RibbonButton(const char* id, const char* const* opts,
+                              int optCount, int& idx, const char* icon,
+                              bool enabled, bool big) {
     int result = 0;
+    const float bigW = 88.0f, bigH = 56.0f;
+    const float smallW = 42.0f, smallH = 42.0f;
+    const float arrowH = 14.0f;
+    float w = big ? bigW : smallW;
+    float h = big ? bigH : smallH;
+    const int iconSize = big ? 26 : 24;
+
+    bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
+    ImVec4 bgNormal, bgHover, bgActive;
+    if (isLight) {
+        bgNormal = ImVec4(0.843f, 0.855f, 0.871f, 1.0f);
+        bgHover  = ImVec4(0.776f, 0.792f, 0.808f, 1.0f);
+        bgActive = ImVec4(0.698f, 0.714f, 0.737f, 1.0f);
+    } else {
+        bgNormal = ImVec4(1.0f, 1.0f, 1.0f, 0.06f);
+        bgHover  = ImVec4(1.0f, 1.0f, 1.0f, 0.12f);
+        bgActive = ImVec4(1.0f, 1.0f, 1.0f, 0.18f);
+    }
+    if (!enabled) {
+        bgNormal.w *= 0.55f; bgHover.w *= 0.55f; bgActive.w *= 0.55f;
+    }
+
+    ImVec4 tint = IconTintColor(enabled);
+    GLuint tex = myIcons.Get(icon, iconSize);
+    ImTextureID tid = (ImTextureID)(intptr_t)tex;
+
     ImGui::PushID(id);
     ImGui::BeginGroup();
 
-    ImVec4 colNormal = enabled ? ImVec4(0.24f, 0.39f, 0.59f, 1.0f)
-                                : ImVec4(0.51f, 0.16f, 0.16f, 1.0f);
-    ImVec4 colHover  = enabled ? ImVec4(0.31f, 0.51f, 0.71f, 1.0f)
-                                : ImVec4(0.51f, 0.16f, 0.16f, 1.0f);
-    ImVec4 colActive = enabled ? ImVec4(0.16f, 0.27f, 0.43f, 1.0f)
-                                : ImVec4(0.51f, 0.16f, 0.16f, 1.0f);
+    // Кликабельная область
+    ImVec2 startPos = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton("##click", ImVec2(w, h));
+    bool clicked = ImGui::IsItemClicked();
+    bool hovered = ImGui::IsItemHovered();
+    ImVec2 min = ImGui::GetItemRectMin();
+    ImVec2 max = ImGui::GetItemRectMax();
 
-    const float arrowW = 24.0f;
-    const float arrowH = 18.0f;
-    const float mainW  = width - arrowW - 2.0f;   // -2 на зазор
-    const float mainH  = height - arrowH - 2.0f;
+    // Фон кнопки
+    ImU32 bgCol = ImGui::GetColorU32(hovered ? bgHover : bgNormal);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(min, max, bgCol, 6.0f);
 
-    // ===== Верхняя часть: основная кнопка =====
-    ImGui::PushStyleColor(ImGuiCol_Button, colNormal);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colHover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, colActive);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
-
-    if (ImGui::Button(Tr(opts[idx]).c_str(), ImVec2(width, mainH))) {
-        if (enabled) result = 1;
-    }
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(3);
-
-    // ===== Нижняя часть: кнопка со стрелкой =====
-    ImGui::PushStyleColor(ImGuiCol_Button, colNormal);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colHover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, colActive);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 1));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-
-    if (ImGui::Button("  v  ", ImVec2(width, arrowH))) {
-        if (enabled) result = 2;
-    }
-    ImGui::PopStyleVar(2);
-    ImGui::PopStyleColor(3);
-
-    if (ImGui::IsItemHovered() && enabled && optCount > 1) {
-        ImGui::SetTooltip("%s", Tr("tool.more").c_str());
+    // Иконка
+    if (tid != 0) {
+        ImVec2 iconPos(min.x + (w - iconSize) * 0.5f, min.y + 5.0f);
+        dl->AddImage(tid, iconPos,
+                     ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
+                     ImVec2(0, 0), ImVec2(1, 1),
+                     ImGui::GetColorU32(tint));
+    } else {
+        // Placeholder — серый квадрат с ?
+        ImVec2 p1(min.x + (w - iconSize) * 0.5f, min.y + 5.0f);
+        dl->AddRectFilled(p1, ImVec2(p1.x + iconSize, p1.y + iconSize),
+                          IM_COL32(140, 140, 140, 180), 4.0f);
     }
 
-    // Popup
-    std::string popupName = std::string("##popup_") + id;
-    if (result == 2) ImGui::OpenPopup(popupName.c_str());
-    if (ImGui::BeginPopup(popupName.c_str())) {
+    // Текст подписи (для больших)
+    if (big && optCount > 0) {
+        std::string label = Tr(opts[idx]);
+        float maxTextW = w - 4.0f;
+        while (ImGui::CalcTextSize(label.c_str()).x > maxTextW
+               && label.length() > 2) {
+            label.pop_back();
+        }
+        ImVec2 txtSize = ImGui::CalcTextSize(label.c_str());
+        ImVec2 txtPos(min.x + (w - txtSize.x) * 0.5f, max.y - 15.0f);
+        ImU32 txtCol = ImGui::GetColorU32(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+        dl->AddText(txtPos, txtCol, label.c_str());
+    }
+
+    if (clicked && enabled) result = 1;
+
+    // Стрелка ▼ внизу
+    if (optCount > 1) {
+        ImVec2 aMin = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##arrow", ImVec2(w, arrowH));
+        bool arrowClick = ImGui::IsItemClicked();
+        bool arrowHover = ImGui::IsItemHovered();
+        ImVec2 aMax = ImGui::GetItemRectMax();
+
+        ImU32 arrowBg = ImGui::GetColorU32(arrowHover ? bgHover : bgNormal);
+        dl->AddRectFilled(aMin, aMax, arrowBg, 4.0f);
+
+        GLuint arrowTex = myIcons.Get("chevron-down", 12);
+        if (arrowTex != 0) {
+            ImVec2 ip(aMin.x + (w - 12) * 0.5f, aMin.y + (arrowH - 12) * 0.5f);
+            dl->AddImage((ImTextureID)(intptr_t)arrowTex, ip,
+                         ImVec2(ip.x + 12, ip.y + 12),
+                         ImVec2(0, 0), ImVec2(1, 1),
+                         ImGui::GetColorU32(tint));
+        }
+
+        if (arrowClick && enabled) result = 2;
+    }
+
+    ImGui::EndGroup();
+
+    if (result == 2) ImGui::OpenPopup("##popup");
+    if (ImGui::BeginPopup("##popup")) {
         for (int i = 0; i < optCount; i++) {
             bool selected = (i == idx);
             if (ImGui::MenuItem(Tr(opts[i]).c_str(), nullptr, selected)) {
@@ -937,17 +1354,23 @@ static int RibbonSplitButton(const char* id,
         ImGui::EndPopup();
     }
 
-    ImGui::EndGroup();
     ImGui::PopID();
     return result;
+}
+
+int Application::RibbonSingleButton(const char* id, const char* key,
+                                    const char* icon, bool enabled, bool big) {
+    static int dummy = 0;
+    const char* opts[] = { key };
+    return RibbonButton(id, opts, 1, dummy, icon, enabled, big);
 }
 
 void Application::DrawRibbonSketchTab() {
     bool inSketch = !myActiveSketchLabel.IsNull();
 
-    // === Панель 1: Create ===
+    // --- Группа: Создать ---
     ImGui::BeginGroup();
-    ImGui::TextDisabled("%s", Tr("grp.create").c_str());
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.create").c_str());
 
     static const char* lineOpts[]   = { "tool.line", "tool.curve", "tool.spline", "tool.bridge" };
     static const char* rectOpts[]   = { "tool.rect.2pt", "tool.rect.center", "tool.rect.3pt" };
@@ -955,102 +1378,175 @@ void Application::DrawRibbonSketchTab() {
                                         "tool.circle.3pt", "tool.circle.tan" };
     static const char* arcOpts[]    = { "tool.arc.center", "tool.arc.3pt", "tool.arc.tan" };
     static const char* polyOpts[]   = { "tool.poly.inscribed", "tool.poly.circum" };
+    static int dummy = 0;
 
     int r;
-    r = RibbonSplitButton("line", lineOpts, 4, myLineToolIndex, inSketch, 85, 46);
-    if (r == 1) {
+    r = RibbonButton("line", lineOpts, 4, myLineToolIndex, ICON_LINE, inSketch, true);
+    if (r == 1 || r == 3) {
         myCurrentLineStyle = LS_Normal;
         myHasSketchStart = false;
         if (myOcctView) myOcctView->ClearPreviewLine();
     }
     ImGui::SameLine();
-    RibbonSplitButton("rect", rectOpts, 3, myRectToolIndex, false, 85, 46);
+    RibbonButton("rect",   rectOpts,   3, myRectToolIndex,   ICON_RECT,    inSketch, true);
     ImGui::SameLine();
-    RibbonSplitButton("circle", circleOpts, 4, myCircleToolIndex, false, 85, 46);
+    RibbonButton("circle", circleOpts, 4, myCircleToolIndex, ICON_CIRCLE,  inSketch, true);
     ImGui::SameLine();
-    RibbonSplitButton("arc", arcOpts, 3, myArcToolIndex, false, 85, 46);
+    RibbonButton("arc",    arcOpts,    3, myArcToolIndex,    ICON_ARC,     inSketch, true);
     ImGui::SameLine();
-    RibbonSplitButton("poly", polyOpts, 2, myPolyToolIndex, false, 85, 46);
+    RibbonButton("poly",   polyOpts,   2, myPolyToolIndex,   ICON_POLYGON, inSketch, true);
+    ImGui::SameLine();
+    RibbonButton("point",  lineOpts,   1, dummy,             ICON_POINT,   inSketch, true);
+    ImGui::SameLine();
+    RibbonButton("text",   lineOpts,   1, dummy,             ICON_TEXT,    inSketch, true);
     ImGui::EndGroup();
 
-    ImGui::SameLine(0, 8);
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
 
-    // === Панель 2: Modify ===
+    // --- Группа: Проецировать ---
     ImGui::BeginGroup();
-    ImGui::TextDisabled("%s", Tr("grp.modify").c_str());
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.project").c_str());
+    RibbonButton("proj_geom", lineOpts, 1, dummy, ICON_PROJECT,      inSketch, true);
+    ImGui::SameLine();
+    RibbonButton("proj_loop", lineOpts, 1, dummy, ICON_PROJECT_LOOP, inSketch, true);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Группа: Изменить ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.modify").c_str());
 
     static const char* trimOpts[]   = { "tool.trim", "tool.extend" };
     static const char* offsetOpts[] = { "tool.offset", "tool.scale" };
     static const char* moveOpts[]   = { "tool.move", "tool.copy", "tool.rotate", "tool.mirror" };
 
-    RibbonSplitButton("trim", trimOpts, 2, myTrimToolIndex, false, 85, 46);
+    RibbonButton("trim",   trimOpts,   2, myTrimToolIndex,   ICON_TRIM,    inSketch, false);
     ImGui::SameLine();
-    RibbonSplitButton("offset", offsetOpts, 2, myOffsetToolIndex, false, 85, 46);
+    RibbonButton("offset", offsetOpts, 2, myOffsetToolIndex, ICON_OFFSET,  inSketch, false);
     ImGui::SameLine();
-    RibbonSplitButton("move", moveOpts, 4, myMoveToolIndex, false, 85, 46);
+    RibbonButton("move",   moveOpts,   4, myMoveToolIndex,   ICON_MOVE,    inSketch, false);
+    ImGui::SameLine();
+    RibbonButton("rotate", lineOpts,   1, dummy,             ICON_ROTATE,  inSketch, false);
+    ImGui::SameLine();
+    RibbonButton("mirror", lineOpts,   1, dummy,             ICON_MIRROR,  inSketch, false);
     ImGui::EndGroup();
 
-    ImGui::SameLine(0, 8);
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
 
-    // === Панель 3: Constrain ===
+    // --- Группа: Ограничения ---
     ImGui::BeginGroup();
-    ImGui::TextDisabled("%s", Tr("grp.constrain").c_str());
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.constrain").c_str());
 
     static const char* conOpts[] = { "tool.coincident", "tool.parallel", "tool.perpendicular",
                                      "tool.horizontal", "tool.vertical", "tool.tangent",
                                      "tool.concentric", "tool.equal" };
-    int conResult = RibbonSplitButton("constrain", conOpts, 8, myConstrainToolIndex, inSketch, 130, 46);
-    if (conResult == 1 || conResult == 3) {
-        OpenDependencyDialog(myConstrainToolIndex);
+
+    int conResult = RibbonButton("constrain", conOpts, 8, myConstrainToolIndex,
+                                  ICON_COINCIDENT, inSketch, false);
+    if (conResult == 1 || conResult == 3) OpenDependencyDialog(myConstrainToolIndex);
+
+    ImGui::SameLine();
+    RibbonButton("dim", lineOpts, 1, dummy, ICON_DIMENSION, inSketch, false);
+    ImGui::SameLine();
+    RibbonButton("collinear", lineOpts, 1, dummy, ICON_COLLINEAR,    inSketch, false);
+    ImGui::SameLine();
+    RibbonButton("concentric", lineOpts, 1, dummy, ICON_CONCENTRIC,  inSketch, false);
+    ImGui::SameLine();
+    RibbonButton("fix", lineOpts, 1, dummy, ICON_FIX,                inSketch, false);
+    ImGui::SameLine();
+    RibbonButton("symmetric", lineOpts, 1, dummy, ICON_SYMMETRIC,    inSketch, false);
+    ImGui::SameLine();
+    RibbonButton("smooth", lineOpts, 1, dummy, ICON_SMOOTH_G2,       inSketch, false);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Группа: Массив ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.pattern").c_str());
+    RibbonButton("sk_pattern_rect", lineOpts, 1, dummy, ICON_PATTERN_RECT, inSketch, false);
+    ImGui::SameLine();
+    RibbonButton("sk_pattern_circ", lineOpts, 1, dummy, ICON_PATTERN_CIRC, inSketch, false);
+    ImGui::SameLine();
+    RibbonButton("sk_mirror",       lineOpts, 1, dummy, ICON_MIRROR,       inSketch, false);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Группа: Формат (стили линий — столбик 3 кнопки) ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.format").c_str());
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 2));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 3));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+
+    // Основная — фиолетовая
+    {
+        bool active = (myCurrentLineStyle == LS_Normal);
+        ImVec4 bg = active ? ImVec4(0.55f, 0.20f, 0.75f, 1.0f)
+                           : ImVec4(0.22f, 0.24f, 0.30f, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, bg);
+        ImGui::PushStyleColor(ImGuiCol_Text,
+            active ? ImVec4(1, 1, 1, 1) : ImVec4(0.8f, 0.8f, 0.8f, 1));
+        if (ImGui::Button("Основная##ls_norm", ImVec2(110, 22)))
+            myCurrentLineStyle = LS_Normal;
+        ImGui::PopStyleColor(2);
+    }
+
+    // Вспомогательная — серая
+    {
+        bool active = (myCurrentLineStyle == LS_Construction);
+        ImVec4 bg = active ? ImVec4(0.45f, 0.50f, 0.65f, 1.0f)
+                           : ImVec4(0.22f, 0.24f, 0.30f, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, bg);
+        ImGui::PushStyleColor(ImGuiCol_Text,
+            active ? ImVec4(1, 1, 1, 1) : ImVec4(0.8f, 0.8f, 0.8f, 1));
+        if (ImGui::Button("Вспомогательная##ls_const", ImVec2(110, 22)))
+            myCurrentLineStyle = LS_Construction;
+        ImGui::PopStyleColor(2);
+    }
+
+    // Осевая — коричневая
+    {
+        bool active = (myCurrentLineStyle == LS_Centerline);
+        ImVec4 bg = active ? ImVec4(0.70f, 0.40f, 0.15f, 1.0f)
+                           : ImVec4(0.22f, 0.24f, 0.30f, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, bg);
+        ImGui::PushStyleColor(ImGuiCol_Text,
+            active ? ImVec4(1, 1, 1, 1) : ImVec4(0.8f, 0.8f, 0.8f, 1));
+        if (ImGui::Button("Осевая##ls_center", ImVec2(110, 22)))
+            myCurrentLineStyle = LS_Centerline;
+        ImGui::PopStyleColor(2);
+    }
+
+    ImGui::PopStyleVar(3);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Группа: Выход ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.exit").c_str());
+
+    if (RibbonButton("finish", lineOpts, 1, dummy, ICON_FINISH, inSketch, true)) {
+        ExitSketch();
     }
     ImGui::SameLine();
-    static const char* dimOpts[] = { "tool.dimension", "tool.tangent", "tool.concentric" };
-    static int myDimToolIndex = 0;
-    RibbonSplitButton("dimension", dimOpts, 3, myDimToolIndex, false, 85, 46);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 8);
-
-    // === Панель 4: Line Style ===
-    ImGui::BeginGroup();
-    ImGui::TextDisabled("%s", Tr("sketch.lineStyle").c_str());
-
-    auto StyleBtn = [&](const char* label, LineStyle ls) {
-        bool active = (myCurrentLineStyle == ls);
-        if (active) ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(50, 90, 140, 255));
-        else        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(70, 70, 90, 255));
-        if (ImGui::Button(label, ImVec2(95, 44))) myCurrentLineStyle = ls;
-        ImGui::PopStyleColor();
-    };
-    StyleBtn(Tr("sketch.normal").c_str(), LS_Normal);             ImGui::SameLine();
-    StyleBtn(Tr("sketch.construction").c_str(), LS_Construction); ImGui::SameLine();
-    StyleBtn(Tr("sketch.centerline").c_str(), LS_Centerline);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 8);
-
-    // === Панель 5: Options ===
-    ImGui::BeginGroup();
-    ImGui::TextDisabled("%s", Tr("sketch.options").c_str());
-
-    ImGui::Checkbox(Tr("sketch.showGrid").c_str(), &myShowGrid);
-    if (ImGui::IsItemEdited() && myOcctView) myOcctView->ShowGrid(myShowGrid);
-    ImGui::Checkbox(Tr("sketch.snapGrid").c_str(), &mySnapToGrid);
-    ImGui::Checkbox(Tr("sketch.snapPoints").c_str(), &mySnapToPoints);
-    ImGui::Checkbox(Tr("sketch.autoContinue").c_str(), &myAutoContinue);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 8);
-
-    // === Панель 6: Exit ===
-    ImGui::BeginGroup();
-    ImGui::TextDisabled("%s", Tr("grp.exit").c_str());
-    static const char* finishOpts[] = { "tool.finish" };
-    int idx0 = 0;
-    int rf = RibbonSplitButton("finish", finishOpts, 1, idx0, inSketch, 130, 46);
-    if (rf == 1) ExitSketch();
-    ImGui::SameLine();
-    if (inSketch && ImGui::Button(Tr("sketch.clear").c_str(), ImVec2(110, 46))) {
+    if (RibbonButton("clear", lineOpts, 1, dummy, ICON_TRASH, inSketch, false)) {
         if (myDocument && !myActiveSketchLabel.IsNull()) {
             myDocument->ClearSketch(myActiveSketchLabel);
             if (myOcctView) myOcctView->ClearAllShapes();
@@ -1061,64 +1557,325 @@ void Application::DrawRibbonSketchTab() {
     ImGui::EndGroup();
 }
 
+// ============================================================
+//  Вкладка «3D Модель»
+// ============================================================
 void Application::DrawRibbonModelTab() {
-    // === Create ===
+    static int dummy = 0;
+    static const char* oneOpt[] = { "tool.dummy" };
+
+    // --- Группа: Эскиз ---
     ImGui::BeginGroup();
-    ImGui::TextDisabled("%s", Tr("grp.create").c_str());
-
-    static const char* extrudeOpts[] = { "tool.extrude" };
-    static const char* revolveOpts[] = { "tool.revolve" };
-    static const char* sweepOpts[]   = { "tool.sweep", "tool.loft" };
-    static const char* holeOpts[]    = { "tool.hole" };
-
-    int i0 = 0;
-    RibbonSplitButton("extrude", extrudeOpts, 1, i0, false, 85, 46);
-    ImGui::SameLine();
-    RibbonSplitButton("revolve", revolveOpts, 1, i0, false, 85, 46);
-    ImGui::SameLine();
-    RibbonSplitButton("sweep", sweepOpts, 2, i0, false, 85, 46);
-    ImGui::SameLine();
-    RibbonSplitButton("hole", holeOpts, 1, i0, false, 85, 46);
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.sketch").c_str());
+    RibbonSingleButton("newsketch", "tool.newSketch", ICON_SKETCH, true, true);
     ImGui::EndGroup();
 
-    ImGui::SameLine(0, 8);
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
 
-    // === Work Features ===
+    // --- Группа: Создать ---
     ImGui::BeginGroup();
-    ImGui::TextDisabled("%s", Tr("grp.work").c_str());
-
-    static const char* planeOpts[] = { "tool.plane" };
-    static const char* axisOpts[]  = { "tool.axis" };
-    static const char* pointOpts[] = { "tool.point" };
-
-    RibbonSplitButton("plane", planeOpts, 1, i0, false, 85, 46);
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.create").c_str());
+    RibbonSingleButton("extrude", "tool.extrude", ICON_EXTRUDE, true, true);
     ImGui::SameLine();
-    RibbonSplitButton("axis", axisOpts, 1, i0, false, 85, 46);
+    RibbonSingleButton("revolve", "tool.revolve", ICON_REVOLVE, true, true);
     ImGui::SameLine();
-    RibbonSplitButton("point", pointOpts, 1, i0, false, 85, 46);
+    RibbonSingleButton("sweep",   "tool.sweep",   ICON_SWEEP,   true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("loft",    "tool.loft",    ICON_LOFT,    true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("hole",    "tool.hole",    ICON_HOLE,    true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("thread",  "tool.thread",  ICON_THREAD,  true, true);
     ImGui::EndGroup();
 
-    ImGui::SameLine(0, 8);
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
 
-    // === Modify ===
+    // --- Группа: Изменить ---
     ImGui::BeginGroup();
-    ImGui::TextDisabled("%s", Tr("grp.modify").c_str());
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.modify").c_str());
+    RibbonSingleButton("fillet",   "tool.fillet",   ICON_FILLET,  true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("chamfer",  "tool.chamfer",  ICON_CHAMFER, true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("shell",    "tool.shell",    ICON_SHELL,   true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("union",    "tool.union",    ICON_UNION,   true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("cut",      "tool.cut",      ICON_CUT,     true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("intersect","tool.intersect",ICON_INTERSECT,true, true);
+    ImGui::EndGroup();
 
-    static const char* filletOpts[] = { "tool.fillet" };
-    static const char* chamferOpts[] = { "tool.chamfer" };
-    static const char* shellOpts[]   = { "tool.shell" };
-    static const char* mirrorOpts[]  = { "tool.mirror" };
-    static const char* patternOpts[] = { "tool.pattern" };
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
 
-    RibbonSplitButton("fillet", filletOpts, 1, i0, false, 85, 46);
+    // --- Группа: Массив ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.pattern").c_str());
+    RibbonSingleButton("pattern_rect", "tool.pattern_rect", ICON_PATTERN_RECT, true, false);
     ImGui::SameLine();
-    RibbonSplitButton("chamfer", chamferOpts, 1, i0, false, 85, 46);
+    RibbonSingleButton("pattern_circ", "tool.pattern_circ", ICON_PATTERN_CIRC, true, false);
     ImGui::SameLine();
-    RibbonSplitButton("shell", shellOpts, 1, i0, false, 85, 46);
+    RibbonSingleButton("mirror3d",     "tool.mirror",       ICON_MIRROR,       true, false);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Группа: Рабочие элементы ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.work").c_str());
+    RibbonSingleButton("wplane", "tool.plane",    ICON_PLANE,    true, false);
     ImGui::SameLine();
-    RibbonSplitButton("mirror", mirrorOpts, 1, i0, false, 85, 46);
+    RibbonSingleButton("waxis",  "tool.axis",     ICON_AXIS,     true, false);
     ImGui::SameLine();
-    RibbonSplitButton("pattern", patternOpts, 1, i0, false, 85, 46);
+    RibbonSingleButton("wpoint", "tool.point",    ICON_POINT_3D, true, false);
+    ImGui::EndGroup();
+}
+
+// ============================================================
+//  Вкладка «Аннотация»
+// ============================================================
+void Application::DrawRibbonAnnotateTab() {
+    static int dummy = 0;
+    static const char* oneOpt[] = { "tool.dummy" };
+
+    // --- Размеры ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.dimensions").c_str());
+    RibbonSingleButton("dim_linear",   "tool.dim_linear",   ICON_DIM_LINEAR,   true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("dim_angle",    "tool.dim_angle",    ICON_DIM_ANGLE,    true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("dim_radius",   "tool.dim_radius",   ICON_DIM_RADIUS,   true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("dim_diameter", "tool.dim_diameter", ICON_DIM_DIAMETER, true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("dim_ordinate", "tool.dim_ordinate", ICON_DIM_ORDINATE, true, true);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Текст и символы ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.text").c_str());
+    RibbonSingleButton("leader",    "tool.leader",     ICON_LEADER,     true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("text_ann",  "tool.text",       ICON_TEXT,       true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("datum",     "tool.datum",      ICON_DATUM,      true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("tolerance", "tool.tolerance",  ICON_TOLERANCE,  true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("roughness", "tool.roughness",  ICON_ROUGHNESS,  true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("weld",      "tool.weld",       ICON_WELD,       true, false);
+    ImGui::EndGroup();
+}
+
+// ============================================================
+//  Вкладка «Инструменты»
+// ============================================================
+void Application::DrawRibbonToolsTab() {
+    static int dummy = 0;
+    static const char* oneOpt[] = { "tool.dummy" };
+
+    // --- Измерить ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.measure").c_str());
+    RibbonSingleButton("measure",  "tool.measure",  ICON_MEASURE,  true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("distance", "tool.distance", ICON_DISTANCE, true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("angle",    "tool.angle",    ICON_ANGLE,    true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("area",     "tool.area",     ICON_AREA,     true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("volume",   "tool.volume",   ICON_VOLUME,   true, false);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Анализ ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.analysis").c_str());
+    RibbonSingleButton("section",       "tool.section",       ICON_SECTION,       true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("draft_analysis","tool.draft_analysis",ICON_DRAFT_ANALYSIS,true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("thickness",     "tool.thickness",     ICON_THICKNESS,     true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("curvature",     "tool.curvature",     ICON_CURVATURE,     true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("zebra",         "tool.zebra",         ICON_ZEBRA,         true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("interference",  "tool.interference",  ICON_INTERFERENCE,  true, false);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Свойства ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.properties").c_str());
+    RibbonSingleButton("model_props", "tool.model_props", ICON_MODEL_PROPS, true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("mass",        "tool.mass",        ICON_MASS,        true, false);
+    ImGui::EndGroup();
+}
+
+// ============================================================
+//  Вкладка «Управление»
+// ============================================================
+void Application::DrawRibbonManageTab() {
+    static int dummy = 0;
+    static const char* oneOpt[] = { "tool.dummy" };
+
+    // --- Параметры ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.parameters").c_str());
+    RibbonSingleButton("parameters", "tool.parameters", ICON_PARAMETERS, true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("functions",  "tool.functions",  ICON_FUNCTION,   true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("texts",      "tool.texts",      ICON_TEXT,       true, true);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Материалы (будущее) ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.materials").c_str());
+    RibbonSingleButton("material",   "tool.material",   ICON_MATERIAL,   true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("texture",    "tool.texture",    ICON_TEXTURE,    true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("appearance", "tool.appearance", ICON_APPEARANCE, true, false);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Обновление ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.update").c_str());
+    RibbonSingleButton("update",    "tool.update",    ICON_UPDATE,    true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("recompute", "tool.recompute", ICON_RECOMPUTE, true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("report",    "tool.report",    ICON_REPORT,    true, false);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Вставка ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.insert").c_str());
+    RibbonSingleButton("insert_obj", "tool.insert_obj", ICON_INSERT_OBJ, true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("insert_img", "tool.insert_img", ICON_INSERT_IMG, true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("import",     "tool.import",     ICON_IMPORT,     true, false);
+    ImGui::EndGroup();
+}
+
+// ============================================================
+//  Вкладка «Вид»
+// ============================================================
+void Application::DrawRibbonViewTab() {
+    static int dummy = 0;
+    static const char* oneOpt[] = { "tool.dummy" };
+
+    // --- Навигация ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.navigation").c_str());
+    RibbonSingleButton("pan",    "tool.pan",    ICON_PAN,     true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("zoom",   "tool.zoom",   ICON_ZOOM,    true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("orbit",  "tool.orbit",  ICON_ORBIT,   true, true);
+    if (ImGui::IsItemHovered()) {}
+    if (RibbonSingleButton("home_v", "tool.home", ICON_HOME, true, true)) {
+        if (myOcctView) myOcctView->SetHomeView();
+    }
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Стандартные виды ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.views").c_str());
+    RibbonSingleButton("v_top",   "tool.view_top",   ICON_VIEW_TOP,    true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("v_front", "tool.view_front", ICON_VIEW_FRONT,  true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("v_right", "tool.view_right", ICON_VIEW_RIGHT,  true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("v_iso",   "tool.view_iso",   ICON_VIEW_ISO,    true, false);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Отображение ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.display").c_str());
+    RibbonSingleButton("shadows",     "tool.shadows",     ICON_SHADOWS,     true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("reflections", "tool.reflections", ICON_REFLECTIONS, true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("grid",        "tool.grid",        ICON_GRID,        true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("background",  "tool.background",  ICON_BACKGROUND,  true, false);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Видимость ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.visibility").c_str());
+    RibbonSingleButton("hide",        "tool.hide",        ICON_HIDE,        true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("show_all",    "tool.show_all",    ICON_SHOW_ALL,    true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("isolate",     "tool.isolate",     ICON_ISOLATE,     true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("show_hidden", "tool.show_hidden", ICON_SHOW_HIDDEN, true, false);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    // --- Окна ---
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.windows").c_str());
+    RibbonSingleButton("new_window", "tool.new_window", ICON_NEW_WINDOW, true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("tile",       "tool.tile",       ICON_TILE,       true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("cascade",    "tool.cascade",    ICON_CASCADE,    true, false);
     ImGui::EndGroup();
 }
 
@@ -1126,7 +1883,7 @@ void Application::DrawRibbon() {
     ImGuiIO& io = ImGui::GetIO();
 
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, 155), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, 195), ImGuiCond_Always);
     ImGui::Begin("##ribbon", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
@@ -1137,15 +1894,17 @@ void Application::DrawRibbon() {
     ImGui::Separator();
     DrawRibbonTabs();
     ImGui::Separator();
-    if (ImGui::BeginChild("##ribbon_content", ImVec2(0, 0), false,
+
+    // Высота содержимого — 90px
+    if (ImGui::BeginChild("##ribbon_content", ImVec2(0, 145), false,
                           ImGuiWindowFlags_HorizontalScrollbar)) {
         switch (myActiveRibbonTab) {
-            case 0: DrawRibbonSketchTab(); break;
-            case 1: DrawRibbonModelTab();  break;
-            case 2: DrawRibbonPlaceholderTab("Annotate"); break;
-            case 3: DrawRibbonPlaceholderTab("Tools"); break;
-            case 4: DrawRibbonPlaceholderTab("Manage"); break;
-            case 5: DrawRibbonPlaceholderTab("View"); break;
+            case 0: DrawRibbonSketchTab();   break;
+            case 1: DrawRibbonModelTab();    break;
+            case 2: DrawRibbonAnnotateTab(); break;
+            case 3: DrawRibbonToolsTab();    break;
+            case 4: DrawRibbonManageTab();   break;
+            case 5: DrawRibbonViewTab();     break;
         }
     }
     ImGui::EndChild();
@@ -1161,8 +1920,8 @@ void Application::DrawDocumentTree() {
     ImGuiIO& io = ImGui::GetIO();
     const float panelWidth = myTreeWidth;
 
-    ImGui::SetNextWindowPos(ImVec2(0, 155), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 155 - 56), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(0, 200), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 200 - 56), ImGuiCond_Always);
 
     ImGui::Begin("##tree_panel", nullptr,
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
@@ -1210,7 +1969,9 @@ void Application::DrawDocumentTree() {
             //  - пользователь развернул его вручную
             bool startOpen = !hasOps || myStartExpandedManually;
 
-            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(160, 160, 160, 255));
+            ImVec4 startTxt = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+            startTxt.w *= 0.65f;
+            ImGui::PushStyleColor(ImGuiCol_Text, startTxt);
             ImGui::SetNextItemOpen(startOpen, ImGuiCond_Always);
             bool opened = ImGui::TreeNodeEx("Start",
                 ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth);
@@ -1232,8 +1993,8 @@ void Application::DrawDocumentTree() {
                     // Origin Point — никогда не показываем
                     if (type == FT_OriginPoint) continue;
 
-                    // Оси — только если нет 3D-операций
-                    if (type == FT_Axis && hasOps) continue;
+                    // Оси не показываем вообще
+                    if (type == FT_Axis) continue;
 
                     // Плоскости и (при отсутствии операций) оси — показываем
                     DrawLabelTree(child, selectedLabel, hasOps);
@@ -1769,7 +2530,7 @@ void Application::DrawViewCube() {
     const float cubeSize   = 100.0f;
     const float cubeHalf   = 38.0f;
     const float margin     = 15.0f;
-    const float topOffset  = 170.0f;
+    const float topOffset  = 210.0f;
 
     ImVec2 center(io.DisplaySize.x - margin - cubeSize * 0.5f,
                   topOffset + cubeSize * 0.5f);
@@ -1986,8 +2747,8 @@ void Application::DrawAdvancedTooltip(const std::string& id,
     double elapsed = ImGui::GetTime() - myHoverStartTime;
 
     int level = 0;
-    if (elapsed >= 4.0)      level = 3;
-    else if (elapsed >= 2.0) level = 2;
+    if (elapsed >= 3.0)      level = 3;
+    else if (elapsed >= 1.5) level = 2;
     else if (elapsed >= 0.5) level = 1;
     else                     return;  // ещё рано
 
@@ -2212,7 +2973,7 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
 
     // === Сброс изоляции (если активна) ===
     if (myIsolationActive) {
-        if (ImGui::MenuItem(ICON_EYE "  Показать всё (снять изоляцию)")) {
+        if (ImGui::MenuItem("Показать всё (снять изоляцию)")) {
             ShowAllRespectingDefaults();
         }
         ImGui::Separator();
@@ -2220,7 +2981,7 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
 
     // === Плоскость ===
     if (type == FT_Plane) {
-        if (ImGui::MenuItem(ICON_SKETCH "  Создать эскиз")) {
+        if (ImGui::MenuItem("Создать эскиз")) {
             myPendingCreateSketchLabel = label;
         }
         ImGui::Separator();
@@ -2228,7 +2989,7 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
 
     // === Эскиз ===
     if (type == FT_Sketch) {
-        if (ImGui::MenuItem(ICON_PENCIL "  Редактировать эскиз")) {
+        if (ImGui::MenuItem("Редактировать эскиз")) {
             myPendingEnterSketchLabel = label;
         }
         ImGui::Separator();
@@ -2236,9 +2997,9 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
 
     // === 3D-операция ===
     if (type == FT_Box || type == FT_Cylinder || type == FT_Hole) {
-        if (ImGui::MenuItem(ICON_PENCIL "  Редактировать")) {}
-        if (ImGui::MenuItem(ICON_RULER "  Измерить")) {}
-        if (ImGui::MenuItem(ICON_SEARCH "  Изолировать")) {
+        if (ImGui::MenuItem("Редактировать")) {}
+        if (ImGui::MenuItem("Измерить")) {}
+        if (ImGui::MenuItem("Изолировать")) {
             if (myOcctView && myDocument) {
                 // 1. Копируем список меток ДО любых изменений
                 std::vector<TDF_Label> allLabels = myOcctView->GetAllLabels();
@@ -2263,7 +3024,7 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
 
     // === Start ===
     if (type == FT_Start) {
-        if (ImGui::MenuItem(ICON_EYE "  Показать все плоскости и оси")) {
+        if (ImGui::MenuItem("Показать все плоскости и оси")) {
             TDF_ChildIterator it(label, false);
             for (; it.More(); it.Next()) {
                 TDF_Label child = it.Value();
@@ -2275,7 +3036,7 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
                 }
             }
         }
-        if (ImGui::MenuItem(ICON_EYE_SLASH "  Скрыть все плоскости и оси")) {
+        if (ImGui::MenuItem("Скрыть все плоскости и оси")) {
             TDF_ChildIterator it(label, false);
             for (; it.More(); it.Next()) {
                 TDF_Label child = it.Value();
@@ -2304,7 +3065,7 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
 
     // === Копировать ===
     if (!isSystem) {
-        if (ImGui::MenuItem(ICON_FILE "  Копировать")) {
+        if (ImGui::MenuItem("Копировать")) {
             myClipboardLabel = label;
             std::cout << "Copied: " << labelName << "\n";
         }
@@ -2312,7 +3073,7 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
 
     // === Вставить ===
     if (!myClipboardLabel.IsNull()) {
-        if (ImGui::MenuItem(ICON_FILE "  Вставить")) {
+        if (ImGui::MenuItem("Вставить")) {
             std::cout << "Paste — TODO\n";
         }
     }
@@ -2323,7 +3084,7 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
 
     // === Переименовать ===
     if (!isSystem) {
-        if (ImGui::MenuItem(ICON_RENAME "  Переименовать")) {
+        if (ImGui::MenuItem("Переименовать")) {
             myPendingRenameLabel = label;
             std::strncpy(myRenameBuffer, labelName.c_str(), sizeof(myRenameBuffer) - 1);
             myRenameBuffer[sizeof(myRenameBuffer) - 1] = '\0';
@@ -2332,7 +3093,7 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
     }
 
     // === Свойства ===
-    if (ImGui::MenuItem(ICON_INFO "  Свойства...")) {
+    if (ImGui::MenuItem("Свойства...")) {
         myPendingPropertiesLabel = label;
         myShowPropertiesDialog = true;
     }
@@ -2340,7 +3101,7 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
     // === Удалить ===
     if (!isSystem) {
         ImGui::Separator();
-        if (ImGui::MenuItem(ICON_TRASH "  Удалить")) {
+        if (ImGui::MenuItem("Удалить")) {
             RequestDelete(label);
         }
     }
@@ -2410,7 +3171,7 @@ void Application::DrawTreeSplitter() {
     const float minTreeW    = 200.0f;
     const float maxTreeW    = 600.0f;
 
-    const float topY    = 155.0f;
+    const float topY    = 200.0f;
     const float bottomY = io.DisplaySize.y - 56.0f;
     const float xPos    = myTreeWidth;
 
@@ -2532,8 +3293,8 @@ void Application::DrawProjectTabs() {
     // === Вкладка "Главная" ===
     {
         bool isHome = (myActiveDocIndex < 0);
-        if (isHome) ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(60, 100, 150, 255));
-        if (ImGui::Button("⌂ Главная", ImVec2(120, 24))) {
+        if (isHome) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.55f, 0.95f, 1.0f));
+        if (SvgIconBtn(myIcons, "tab_home", "house", 14, 120, 24, "Главная")) {
             // Home — сбросить активный документ (но не закрыть)
             myActiveDocIndex = -1;
             myDocument = nullptr;
@@ -2558,12 +3319,17 @@ void Application::DrawProjectTabs() {
         ImGui::PushID(i);
 
         bool active = (i == myActiveDocIndex);
-        ImVec4 colNormal = active ? ImVec4(0.24f, 0.39f, 0.59f, 1.0f)
-                                   : ImVec4(0.20f, 0.20f, 0.24f, 1.0f);
-        ImVec4 colHover  = active ? ImVec4(0.31f, 0.51f, 0.71f, 1.0f)
-                                   : ImVec4(0.28f, 0.28f, 0.34f, 1.0f);
-        ImVec4 colActive = active ? ImVec4(0.16f, 0.27f, 0.43f, 1.0f)
-                                   : ImVec4(0.16f, 0.16f, 0.20f, 1.0f);
+        bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
+        ImVec4 accent(0.20f, 0.55f, 0.95f, 1.0f);
+        ImVec4 accentHover(0.30f, 0.65f, 1.00f, 1.0f);
+        ImVec4 accentActive(0.15f, 0.45f, 0.85f, 1.0f);
+
+        ImVec4 colNormal = active ? accent
+                                   : ImGui::GetStyleColorVec4(ImGuiCol_Button);
+        ImVec4 colHover  = active ? accentHover
+                                   : ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
+        ImVec4 colActive = active ? accentActive
+                                   : ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
 
         ImGui::PushStyleColor(ImGuiCol_Button, colNormal);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colHover);
@@ -2600,7 +3366,7 @@ void Application::DrawProjectTabs() {
         // Кнопка × закрытия — только если больше одного документа
         if (myDocuments.size() > 1) {
             ImGui::SameLine(0, 2);
-            if (ImGui::Button(ICON_CLOSE, ImVec2(20, 24))) {
+            if (SvgIconBtn(myIcons, "tab_close", "x", 12, 20, 24, "Закрыть")) {
                 pendingCloseIdx = i;
             }
         }
@@ -2610,7 +3376,7 @@ void Application::DrawProjectTabs() {
 
     // Кнопка "+" — создать новый проект
     ImGui::SameLine();
-    if (ImGui::Button(ICON_PLUS, ImVec2(28, 24))) {
+    if (SvgIconBtn(myIcons, "tab_plus", "plus", 14, 28, 24, "Новый проект")) {
         CreateNewDoc();
         RefreshView();
         if (myOcctView) myOcctView->FitAll();
@@ -2769,18 +3535,18 @@ void Application::DrawSettingsDialog() {
                 ImGui::Separator();
                 ImGui::Spacing();
 
-                static int theme = 1;
+                static int theme = myCurrentTheme;
                 if (ImGui::RadioButton("Светлая", &theme, 0)) {
-                    ImGui::StyleColorsLight();
+                    ApplyTheme(0);
                 }
                 ImGui::SameLine();
                 if (ImGui::RadioButton("Тёмная", &theme, 1)) {
-                    ImGui::StyleColorsDark();
+                    ApplyTheme(1);
                 }
                 ImGui::SameLine();
                 if (ImGui::RadioButton("Как в системе", &theme, 2)) {
-                    // По умолчанию используем тёмную
-                    ImGui::StyleColorsDark();
+                    // Пока используем тёмную по умолчанию
+                    ApplyTheme(2);
                 }
 
                 ImGui::Spacing();
@@ -2905,7 +3671,7 @@ void Application::DrawDependencyDialog() {
             ImGui::PushID((int)i);
             ImGui::Text("%s", name.c_str());
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20);
-            if (ImGui::SmallButton(ICON_CLOSE)) {
+            if (ImGui::SmallButton("x")) {
                 myDependencyBase.erase(myDependencyBase.begin() + i);
                 ImGui::PopID();
                 break;
@@ -2928,7 +3694,7 @@ void Application::DrawDependencyDialog() {
             ImGui::PushID((int)(1000 + i));
             ImGui::Text("%s", name.c_str());
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20);
-            if (ImGui::SmallButton(ICON_CLOSE)) {
+            if (ImGui::SmallButton("x")) {
                 myDependencyDependent.erase(myDependencyDependent.begin() + i);
                 ImGui::PopID();
                 break;
@@ -3276,30 +4042,6 @@ void Application::Run() {
         DrawSettingsDialog();
         UpdateTelemetry();
 
-        ImGuiIO& io = ImGui::GetIO();
-        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 360, 30), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_Always);
-        ImGui::Begin(Tr("debug.title").c_str(), nullptr,
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_AlwaysAutoResize);
-        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        if (myOcctView) {
-            TDF_Label sel = myOcctView->GetSelectedLabel();
-            if (!sel.IsNull()) {
-                char buf[128];
-                std::snprintf(buf, sizeof(buf), Tr("debug.selected.tag").c_str(), sel.Tag());
-                ImGui::Text("%s", buf);
-            } else {
-                ImGui::TextDisabled("%s", Tr("debug.selected.none").c_str());
-            }
-        }
-        if (!myCurrentPath.empty()) ImGui::Text("File: %s", myCurrentPath.c_str());
-        else ImGui::TextDisabled("File: <unsaved>");
-        ImGui::Separator();
-        ImGui::Text("Ctrl+S save, Ctrl+O open");
-        ImGui::Text("RMB on plane - create sketch");
-        ImGui::End();
-
         ImGui::Render();
 
         int fbW = 0, fbH = 0;
@@ -3357,7 +4099,7 @@ void Application::DrawRightPanel() {
     const float handleW  = 10.0f;
     const float pad      = 2.0f;
     const float panelW   = toolW + pad * 2.0f;
-    const float topY     = 340.0f;
+    const float topY     = 385.0f;
     const float bottomY  = io.DisplaySize.y - 56.0f;
     const float panelH   = bottomY - topY;
     const float rightEdge = io.DisplaySize.x;
@@ -3377,11 +4119,12 @@ void Application::DrawRightPanel() {
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
         ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(60, 70, 90, 220));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(90, 110, 140, 240));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(40, 50, 70, 240));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_Button));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
 
-    if (ImGui::Button(myRightPanelExpanded ? ICON_CHEVRON_RIGHT : ICON_CHEVRON_LEFT, ImVec2(handleW, handleH))) {
+    const char* handleIcon = myRightPanelExpanded ? "chevron-right" : "chevron-left";
+    if (SvgIconBtn(myIcons, "right_handle_btn", handleIcon, 12, handleW, handleH)) {
         myRightPanelExpanded = !myRightPanelExpanded;
     }
     ImGui::PopStyleColor(3);
@@ -3406,7 +4149,7 @@ void Application::DrawRightPanel() {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 2));
 
     // --- 1. Панорамировать ---
-    if (ImGui::Button(ICON_PAN "##pan", ImVec2(toolW, toolH))) {
+    if (SvgIconBtn(myIcons, "panel_pan", "hand", 20, toolW, toolH, "Панорамировать")) {
         // TODO: активировать режим панорамирования
     }
     DrawAdvancedTooltip("panel.pan", "Панорамировать",
@@ -3417,7 +4160,7 @@ void Application::DrawRightPanel() {
     ImGui::Separator();
 
     // --- 2. Показать рамкой (с выпадающим меню) ---
-    if (ImGui::Button(ICON_ZOOM "##zoom", ImVec2(toolW, toolH))) {
+    if (SvgIconBtn(myIcons, "panel_zoom", "search", 20, toolW, toolH, "Показать рамкой")) {
         // TODO: активировать режим "показать рамкой"
     }
     DrawAdvancedTooltip("panel.zoom", "Показать рамкой",
@@ -3446,7 +4189,7 @@ void Application::DrawRightPanel() {
     ImGui::Separator();
 
     // --- 3. Свободная орбита (с выпадающим меню) ---
-    if (ImGui::Button(ICON_ORBIT "##orbit", ImVec2(toolW, toolH))) {
+    if (SvgIconBtn(myIcons, "panel_orbit", "rotate-cw", 20, toolW, toolH, "Орбита")) {
         // TODO: активировать орбиту
     }
     DrawAdvancedTooltip("panel.orbit", "Свободная орбита",
@@ -3467,7 +4210,7 @@ void Application::DrawRightPanel() {
     ImGui::Separator();
 
     // --- 4. Вид на объект ---
-    if (ImGui::Button(ICON_VIEW_ON "##viewon", ImVec2(toolW, toolH))) {
+    if (SvgIconBtn(myIcons, "panel_viewon", "eye", 20, toolW, toolH, "Вид на объект")) {
         // TODO: активировать режим "вид на грань"
     }
     DrawAdvancedTooltip("panel.viewon", "Вид на объект",
@@ -3478,7 +4221,7 @@ void Application::DrawRightPanel() {
     ImGui::Separator();
 
     // --- 5. Стили отображения (с выпадающим меню) ---
-    if (ImGui::Button(ICON_STYLE "##style", ImVec2(toolW, toolH))) {
+    if (SvgIconBtn(myIcons, "panel_style", "palette", 20, toolW, toolH, "Стиль отображения")) {
         // TODO: циклить стиль
     }
     DrawAdvancedTooltip("panel.style", "Стили отображения",
@@ -3526,9 +4269,7 @@ void Application::DrawHomeScreen() {
 
     // === Заголовок ===
     ImGui::SetCursorPos(ImVec2(40, 40));
-    ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]);
     ImGui::TextColored(ImVec4(0.9f, 0.95f, 1.0f, 1.0f), "BreezeCAD");
-    ImGui::PopFont();
     ImGui::SetCursorPos(ImVec2(40, 70));
     ImGui::TextDisabled("Проекты");
 

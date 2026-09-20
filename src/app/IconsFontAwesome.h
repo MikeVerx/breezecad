@@ -1,43 +1,168 @@
 #pragma once
 
-// Font Awesome 6 Free — иконки для UI BreezeCAD
-// Коды в диапазоне 0xF000..0xF8FF (Private Use Area)
+// Иконки Lucide (SVG). Значение — имя файла без .svg.
+// IconManager подставит путь и растеризует в текстуру.
 
-// --- QAT (хотбар) ---
-#define ICON_FILE        "\uf15b"    // file
-#define ICON_HOME        "\uf015"    // home
-#define ICON_ARROW_LEFT  "\uf060"    // arrow-left
-#define ICON_ARROW_RIGHT "\uf061"    // arrow-right
-#define ICON_SAVE        "\uf0c7"    // save
-#define ICON_UNDO        "\uf0e2"    // rotate-left
-#define ICON_REDO        "\uf01e"    // rotate-right
-#define ICON_SETTINGS    "\uf013"    // cog
-#define ICON_SEARCH      "\uf002"    // search
+// QAT
+#define ICON_HOME          "house"
+#define ICON_FILE          "file-text"
+#define ICON_SAVE          "save"
+#define ICON_SETTINGS      "settings"
+#define ICON_UNDO          "undo-2"
+#define ICON_REDO          "redo-2"
+#define ICON_SEARCH        "search"
 
-// --- Правая панель ---
-#define ICON_PAN         "\uf256"    // hand
-#define ICON_ZOOM        "\uf00e"    // search-plus
-#define ICON_ORBIT       "\uf021"    // sync
-#define ICON_VIEW_ON     "\uf06e"    // eye
-#define ICON_STYLE       "\uf53f"    // palette
-#define ICON_CHEVRON_DOWN "\uf078"   // chevron-down
-#define ICON_CHEVRON_LEFT "\uf053"   // chevron-left
-#define ICON_CHEVRON_RIGHT "\uf054"  // chevron-right
+// Навигация
+#define ICON_PAN           "hand"
+#define ICON_ZOOM          "search"
+#define ICON_ORBIT         "rotate-3d"
+#define ICON_VIEW_ON       "eye"
+#define ICON_STYLE         "palette"
+#define ICON_CHEVRON_DOWN  "chevron-down"
+#define ICON_CHEVRON_LEFT  "chevron-left"
+#define ICON_CHEVRON_RIGHT "chevron-right"
+#define ICON_CHEVRON_UP    "chevron-up"
 
-// --- Дерево / контекстные меню ---
-#define ICON_CUBE        "\uf1b2"    // cube
-#define ICON_SKETCH      "\uf568"    // drafting-compass
-#define ICON_PLANE       "\uf5fd"    // layer-group
-#define ICON_AXIS        "\uf0b2"    // arrows-alt
-#define ICON_PENCIL      "\uf304"    // pen
-#define ICON_TRASH       "\uf1f8"    // trash
-#define ICON_INFO        "\uf05a"    // info-circle
-#define ICON_RENAME      "\uf246"    // i-cursor
-#define ICON_RULER       "\uf545"    // ruler
+// Создание геометрии
+#define ICON_LINE          "pen-line"
+#define ICON_RECT          "square"
+#define ICON_CIRCLE        "circle"
+#define ICON_ARC           "circle-dashed"
+#define ICON_POLYGON       "pentagon"
+#define ICON_POINT         "circle-dot"
+#define ICON_TEXT          "type"
 
-// --- Общие ---
-#define ICON_EYE         "\uf06e"    // eye
-#define ICON_EYE_SLASH   "\uf070"    // eye-slash
-#define ICON_PLUS        "\uf067"    // plus
-#define ICON_CLOSE       "\uf00d"    // xmark
-#define ICON_CHECK       "\uf00c"    // check
+// Проецирование
+#define ICON_PROJECT       "copy"
+#define ICON_PROJECT_LOOP  "copy-check"
+
+// Изменение
+#define ICON_TRIM          "scissors"
+#define ICON_EXTEND        "move-horizontal"
+#define ICON_OFFSET        "copy-plus"
+#define ICON_MOVE          "move"
+#define ICON_COPY          "copy"
+#define ICON_ROTATE        "rotate-cw"
+#define ICON_SCALE         "maximize-2"
+#define ICON_MIRROR        "flip-horizontal"
+#define ICON_CLONE         "copy"
+
+// Ограничения
+#define ICON_COINCIDENT    "circle-dot"
+#define ICON_COLLINEAR     "equal"
+#define ICON_CONCENTRIC    "target"
+#define ICON_PARALLEL      "align-justify"
+#define ICON_PERPENDICULAR "corner-down-right"
+#define ICON_HORIZONTAL    "move-horizontal"
+#define ICON_VERTICAL      "move-vertical"
+#define ICON_TANGENT       "circle-dot-dashed"
+#define ICON_SMOOTH_G2     "spline"
+#define ICON_SYMMETRIC     "flip-horizontal-2"
+#define ICON_EQUAL         "equal"
+#define ICON_FIX           "lock"
+#define ICON_DIMENSION     "ruler"
+
+// 3D-операции
+#define ICON_EXTRUDE       "arrow-up-from-line"
+#define ICON_REVOLVE       "rotate-3d"
+#define ICON_SWEEP         "arrow-right"
+#define ICON_LOFT          "layers"
+#define ICON_HOLE          "circle-dot"
+#define ICON_THREAD        "pencil-ruler"
+#define ICON_SHELL         "package"
+#define ICON_FILLET        "circle"
+#define ICON_CHAMFER       "square"
+#define ICON_DRAFT         "arrow-up"
+#define ICON_UNION         "plus"
+#define ICON_CUT           "minus"
+#define ICON_INTERSECT     "boxes"
+#define ICON_PATTERN_RECT  "grid-3x3"
+#define ICON_PATTERN_CIRC  "rotate-cw"
+
+// Рабочие элементы
+#define ICON_PLANE         "layers"
+#define ICON_AXIS          "move-3d"
+#define ICON_POINT_3D      "circle-dot"
+
+// Аннотации
+#define ICON_DIM_LINEAR    "ruler"
+#define ICON_DIM_ANGLE     "angle"
+#define ICON_DIM_RADIUS    "circle-dashed"
+#define ICON_DIM_DIAMETER  "circle"
+#define ICON_DIM_ORDINATE  "arrow-right-from-line"
+#define ICON_LEADER        "minus"
+#define ICON_DATUM         "flag"
+#define ICON_TOLERANCE     "square"
+#define ICON_ROUGHNESS     "waves"
+#define ICON_WELD          "zap"
+
+// Инструменты
+#define ICON_MEASURE       "ruler"
+#define ICON_DISTANCE      "move"
+#define ICON_ANGLE         "angle"
+#define ICON_AREA          "square"
+#define ICON_VOLUME        "box"
+#define ICON_SECTION       "scissors"
+#define ICON_DRAFT_ANALYSIS "arrow-up"
+#define ICON_THICKNESS     "equal"
+#define ICON_CURVATURE     "spline"
+#define ICON_ZEBRA         "waves"
+#define ICON_INTERFERENCE  "alert-triangle"
+#define ICON_MODEL_PROPS   "info"
+#define ICON_MASS          "scale"
+
+// Управление
+#define ICON_PARAMETERS    "list"
+#define ICON_FUNCTION      "calculator"
+#define ICON_MATERIAL      "palette"
+#define ICON_TEXTURE       "image"
+#define ICON_APPEARANCE    "brush"
+#define ICON_UPDATE        "refresh-cw"
+#define ICON_RECOMPUTE     "refresh-ccw"
+#define ICON_REPORT        "alert-circle"
+#define ICON_INSERT_OBJ    "copy-plus"
+#define ICON_INSERT_IMG    "image"
+#define ICON_IMPORT        "upload"
+
+// Вид
+#define ICON_VIEW_TOP      "arrow-up"
+#define ICON_VIEW_BOTTOM   "arrow-down"
+#define ICON_VIEW_FRONT    "arrow-left"
+#define ICON_VIEW_BACK     "arrow-right"
+#define ICON_VIEW_LEFT     "arrow-left"
+#define ICON_VIEW_RIGHT    "arrow-right"
+#define ICON_VIEW_ISO      "box"
+#define ICON_SHADOWS       "sun"
+#define ICON_REFLECTIONS   "sparkles"
+#define ICON_GRID          "grid-3x3"
+#define ICON_BACKGROUND    "image"
+#define ICON_HIDE          "eye-off"
+#define ICON_SHOW_ALL      "eye"
+#define ICON_ISOLATE       "focus"
+#define ICON_SHOW_HIDDEN   "eye"
+#define ICON_NEW_WINDOW    "plus"
+#define ICON_TILE          "layout-grid"
+#define ICON_CASCADE       "layers"
+
+// Формат линий
+#define ICON_LINE_NORMAL    "minus"
+#define ICON_LINE_CONSTRUCT "minus"
+#define ICON_LINE_CENTER    "minus"
+
+// Общие
+#define ICON_EYE           "eye"
+#define ICON_EYE_SLASH     "eye-off"
+#define ICON_PLUS          "plus"
+#define ICON_CLOSE         "x"
+#define ICON_CHECK         "check"
+#define ICON_CUBE          "box"
+#define ICON_SKETCH        "pencil-ruler"
+#define ICON_PENCIL        "pencil"
+#define ICON_TRASH         "trash"
+#define ICON_INFO          "info"
+#define ICON_RENAME        "pencil"
+#define ICON_RULER         "ruler"
+#define ICON_FINISH        "check"
+#define ICON_ELLIPSIS      "ellipsis"
+#define ICON_ARROW_LEFT    "arrow-left"
+#define ICON_ARROW_RIGHT   "arrow-right"

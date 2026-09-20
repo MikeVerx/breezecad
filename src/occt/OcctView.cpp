@@ -161,28 +161,51 @@ void OcctView::DisplayShape(const TopoDS_Shape& shape,
     ais->SetDisplayMode(AIS_Shaded);
 
     if (isSystem) {
-        Quantity_Color grey(0.35, 0.35, 0.4, Quantity_TOC_RGB);  // бледная сетка
+        // Различаем плоскости и оси по типу формы
+        bool isPlane = (shape.ShapeType() == TopAbs_FACE);
+        bool isAxis  = (shape.ShapeType() == TopAbs_EDGE);
+
+        // Янтарные цвета для плоскостей
+        Quantity_Color faceFill(0.761, 0.541, 0.137, Quantity_TOC_RGB);  // #c28a23
+        Quantity_Color faceEdge(0.588, 0.357, 0.125, Quantity_TOC_RGB);  // #965b20
+        // Серо-голубой для осей
+        Quantity_Color axisCol(0.55, 0.60, 0.68, Quantity_TOC_RGB);
 
         Handle(Prs3d_Drawer) drawer = new Prs3d_Drawer();
         drawer->SetFaceBoundaryDraw(true);
-        drawer->SetFaceBoundaryAspect(
-            new Prs3d_LineAspect(grey, Aspect_TOL_SOLID, 1.2));
-        drawer->SetLineAspect(
-            new Prs3d_LineAspect(grey, Aspect_TOL_SOLID, 1.2));
-        drawer->SetShadingAspect(new Prs3d_ShadingAspect());
-        drawer->ShadingAspect()->SetColor(grey);
-        // Прозрачность и на drawer, и на shape
-        drawer->ShadingAspect()->SetTransparency(0.95f);
-        drawer->SetTransparency(0.95f);
+
+        if (isPlane) {
+            drawer->SetFaceBoundaryAspect(
+                new Prs3d_LineAspect(faceEdge, Aspect_TOL_SOLID, 2.2));
+            drawer->SetShadingAspect(new Prs3d_ShadingAspect());
+            drawer->ShadingAspect()->SetColor(faceFill);
+            drawer->ShadingAspect()->SetTransparency(0.55f);   // 25% видимости
+            drawer->SetTransparency(0.55f);
+        } else if (isAxis) {
+            drawer->SetLineAspect(
+                new Prs3d_LineAspect(axisCol, Aspect_TOL_SOLID, 1.4));
+        }
+
         ais->SetAttributes(drawer);
-        ais->SetTransparency(0.95f);
+        ais->SetTransparency(0.55f);
     }
 
     myContext->Display(ais, false);
 
-    // Применяем transparency через контекст (более надёжно, чем через ais)
+    // Применяем цвет и прозрачность через контекст — самый надёжный способ
     if (isSystem) {
-        myContext->SetTransparency(ais, 0.95f, false);
+        bool isPlane2 = (shape.ShapeType() == TopAbs_FACE);
+        if (isPlane2) {
+            // Янтарная заливка, ~70% видимости
+            Quantity_Color faceFill(0.761, 0.541, 0.137, Quantity_TOC_RGB);  // #c28a23
+            myContext->SetColor(ais, faceFill, false);
+            myContext->SetTransparency(ais, 0.30f, false);  // 70% видимости
+
+            // Дополнительно — принудительный shading mode
+            myContext->SetDisplayMode(ais, AIS_Shaded, false);
+        } else {
+            myContext->SetTransparency(ais, 0.55f, false);
+        }
     }
 
     // Активируем режимы выделения
@@ -683,6 +706,19 @@ bool OcctView::CaptureToPixmap(int /*width*/, int /*height*/, const std::string&
         std::cerr << "CaptureToPixmap unknown exception\n";
         return false;
     }
+}
+
+void OcctView::SetBackgroundGradient(const Quantity_Color& top,
+                                     const Quantity_Color& bottom) {
+    if (myView.IsNull()) return;
+    myView->SetBgGradientColors(top, bottom, Aspect_GFM_VER, false);
+    myView->Redraw();
+}
+
+void OcctView::SetBackgroundSolid(const Quantity_Color& color) {
+    if (myView.IsNull()) return;
+    myView->SetBackgroundColor(color);
+    myView->Redraw();
 }
 
 void OcctView::SetDisplayModeAll(int mode, bool edges) {

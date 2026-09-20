@@ -3,6 +3,7 @@
 #include "platform/glfw/GlfwWindow.h"
 #include "occt/OcctView.h"
 #include "doc/BreezeDocument.h"
+#include "app/IconManager.h"
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -27,6 +28,7 @@ public:
 private:
     std::unique_ptr<GlfwWindow>   myWindow;
     std::unique_ptr<OcctView>     myOcctView;
+    IconManager                   myIcons;
     // === Диалог зависимостей ===
     bool myDependencyDialogOpen = false;
     int  myCurrentDependencyType = 0;  // 0=Coincident, 1=Parallel, ...
@@ -93,6 +95,7 @@ private:
     bool myStartExpandedManually = false;  // пользователь развернул Start вручную
     bool myShowSettingsDialog = false;
     int  myActiveSettingsTab  = 0;
+    int  myCurrentTheme       = 1;   // 0=light, 1=dark, 2=system
     std::vector<std::string> myPinnedCommands;
 
     // === Телеметрия ===
@@ -225,12 +228,22 @@ private:
     void DrawQuickAccessToolbar();
     void DrawFileMenu();
     void DrawSettingsDialog();
+    void ApplyTheme(int theme);
     void InitCommands();
     void UpdateTelemetry();
     void DrawRibbonTabs();
+    // Ribbon кнопки (используют SVG через myIcons)
+    int RibbonButton(const char* id, const char* const* opts, int optCount,
+                     int& idx, const char* icon, bool enabled, bool big = true);
+    int RibbonSingleButton(const char* id, const char* key, const char* icon,
+                           bool enabled, bool big = true);
+
     void DrawRibbonSketchTab();
     void DrawRibbonModelTab();
-    void DrawRibbonPlaceholderTab(const char* name);
+    void DrawRibbonAnnotateTab();
+    void DrawRibbonToolsTab();
+    void DrawRibbonManageTab();
+    void DrawRibbonViewTab();
     void EnterSketch(const TDF_Label& sketchLabel);
     void ExitSketch();
     void OnSketchClick(int px, int py);

@@ -13,6 +13,7 @@
 #include <V3d_Viewer.hxx>
 #include <TDF_Label.hxx>
 #include <TopoDS_Shape.hxx>
+#include <Quantity_Color.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pln.hxx>
 #include <gp_Pnt.hxx>
@@ -50,6 +51,10 @@ public:
     // Сохранить текущий вид в файл PNG (для превью проектов).
     // Возвращает true при успехе.
     bool CaptureToPixmap(int width, int height, const std::string& outPath);
+
+    // Фон 3D-сцены
+    void SetBackgroundGradient(const Quantity_Color& top, const Quantity_Color& bottom);
+    void SetBackgroundSolid(const Quantity_Color& color);
 
     TDF_Label GetSelectedLabel() const;
     bool SelectAtPixel(int px, int py);
