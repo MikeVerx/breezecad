@@ -37,6 +37,11 @@ private:
 
     // === QAT (Quick Access Toolbar) ===
     char mySearchBuffer[128] = "";
+    // === Tooltips (3 уровня задержки) ===
+    std::string myHoveredItemId;
+    double      myHoverStartTime = 0.0;
+    int         myLastTooltipLevel = 0;  // 0=нет, 1=название, 2=краткое, 3=подробное+картинка
+
     // === Splitter (регулировка ширины дерева) ===
     float myTreeWidth = 340.0f;      // текущая ширина
     bool  myIsResizingTree = false;  // идёт перетаскивание
@@ -125,6 +130,11 @@ private:
 
     void DrawDocumentTree();
     void DrawTreeSplitter();
+    void DrawAdvancedTooltip(const std::string& id,
+                             const std::string& name,
+                             const std::string& shortDesc,
+                             const std::string& longDesc,
+                             const std::string& imagePath = "");
     void DrawAddBoxDialog();
     void DrawMenuBar();
     void DrawSketchOverlay();
