@@ -45,9 +45,15 @@
 #include <cstring>
 #include <sstream>
 #include <filesystem>
+#include <chrono>
 #include <iostream>
 #include <string>
 #include <vector>
+
+// stb_image extern declarations (глобальные, до namespace)
+extern "C" unsigned char* stbi_load(const char* filename, int* x, int* y,
+                                    int* channels_in_file, int desired_channels);
+extern "C" void stbi_image_free(void* retval_from_stbi_load);
 
 namespace BreezeCAD {
 
@@ -270,6 +276,33 @@ void Application::RefreshView() {
     myOcctView->Redraw();
 }
 
+void Application::CaptureCurrentThumbnail() {
+    if (!myOcctView || myActiveDocIndex < 0) return;
+
+    // Папка для превью
+    std::string dir = "D:/test_breezecad/thumbs/";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+
+    char filename[64];
+    std::snprintf(filename, sizeof(filename), "thumb_%d.bmp", myActiveDocIndex);
+    std::string path = dir + filename;
+
+    if (myOcctView->CaptureToPixmap(320, 240, path)) {
+        // Расширяем вектор до нужного размера
+        if ((int)myThumbnailPaths.size() <= myActiveDocIndex) {
+            myThumbnailPaths.resize(myActiveDocIndex + 1);
+        }
+        myThumbnailPaths[myActiveDocIndex] = path;
+        std::cout << "Thumbnail saved: " << path << "\n";
+    }
+}
+
+std::string Application::GetThumbnailPath(int docIndex) const {
+    if (docIndex < 0 || docIndex >= (int)myThumbnailPaths.size()) return "";
+    return myThumbnailPaths[docIndex];
+}
+
 void Application::AddRecentFile(const std::string& path) {
     if (path.empty()) return;
 
@@ -335,6 +368,9 @@ int Application::AddDocFromFile(const std::string& path,
 void Application::SwitchToDoc(int index) {
     if (index < 0 || index >= (int)myDocuments.size()) return;
     if (index == myActiveDocIndex) return;
+
+    // Сохраняем превью текущего документа перед уходом
+    CaptureCurrentThumbnail();
 
     myActiveDocIndex = index;
     myDocument = myDocuments[index].get();
@@ -617,6 +653,7 @@ void Application::DrawQuickAccessToolbar() {
     // === 1. Логотип / Меню файл ===
     // Логотип/HOME — возврат на главную
     if (ImGui::Button(ICON_HOME, ImVec2(32, 0))) {
+        CaptureCurrentThumbnail();  // сохраняем превью текущего
         myShowHomeScreen = true;
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Главная");
@@ -3557,17 +3594,72 @@ void Application::DrawHomeScreen() {
                            ImVec2(tileW, tileH), true,
                            ImGuiWindowFlags_NoScrollbar);
 
-        // Миниатюра (пока placeholder — просто тёмный прямоугольник)
+        // Миниатюра: пробуем загрузить PNG превью
         ImVec2 thumbPos = ImGui::GetCursorScreenPos();
         ImVec2 thumbSize(tileW - 20, 140);
-        ImGui::GetWindowDrawList()->AddRectFilled(
-            thumbPos,
-            ImVec2(thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y),
-            IM_COL32(25, 28, 35, 255), 6.0f);
+        bool thumbLoaded = false;
 
-        // Иконка куба в центре превью
-        ImGui::SetCursorPos(ImVec2(tileW * 0.5f - 15, 60));
-        ImGui::TextColored(ImVec4(0.5f, 0.55f, 0.7f, 0.6f), ICON_CUBE);
+        std::string thumbPath = GetThumbnailPath(i);
+        if (!thumbPath.empty() && std::filesystem::exists(thumbPath)) {
+            // Кешированные текстуры: ключ — путь, значение — GLuint
+            static std::map<std::string, ImTextureID> s_thumbs;
+            static std::map<std::string, std::time_t> s_thumbTimes;
+
+            // Проверяем, надо ли перезагрузить (файл новее кеша)
+            std::error_code ec;
+            auto writeTime = std::filesystem::last_write_time(thumbPath, ec);
+            std::time_t wt = 0;
+            if (!ec) {
+                wt = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                        writeTime - std::filesystem::file_time_type::clock::now()
+                        + std::chrono::system_clock::now()));
+            }
+
+            auto cacheIt = s_thumbs.find(thumbPath);
+            bool needLoad = (cacheIt == s_thumbs.end()) ||
+                            (s_thumbTimes[thumbPath] != wt);
+
+            if (needLoad) {
+                // Загружаем PNG через stb_image или ImGui
+                // Простой путь: используем ImGui::GetIO().Fonts->... — нет, надо самим.
+                // Используем stb_image из imgui (extern в глобальном namespace)
+                int w = 0, h = 0, channels = 0;
+                unsigned char* data = ::stbi_load(thumbPath.c_str(), &w, &h, &channels, 4);
+                if (data) {
+                    GLuint texId = 0;
+                    glGenTextures(1, &texId);
+                    glBindTexture(GL_TEXTURE_2D, texId);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+                    ::stbi_image_free(data);
+
+                    s_thumbs[thumbPath] = (ImTextureID)(intptr_t)texId;
+                    s_thumbTimes[thumbPath] = wt;
+                    cacheIt = s_thumbs.find(thumbPath);
+                }
+            }
+
+            if (cacheIt != s_thumbs.end()) {
+                ImGui::GetWindowDrawList()->AddImage(
+                    cacheIt->second,
+                    thumbPos,
+                    ImVec2(thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y));
+                thumbLoaded = true;
+            }
+        }
+
+        if (!thumbLoaded) {
+            // Заглушка — тёмный прямоугольник с иконкой куба
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                thumbPos,
+                ImVec2(thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y),
+                IM_COL32(25, 28, 35, 255), 6.0f);
+
+            ImGui::SetCursorPos(ImVec2(tileW * 0.5f - 15, 60));
+            ImGui::TextColored(ImVec4(0.5f, 0.55f, 0.7f, 0.6f), ICON_CUBE);
+        }
 
         ImGui::SetCursorPosY(150);
 

@@ -41,6 +41,15 @@ private:
     std::vector<std::string> myRecentFiles;
     void AddRecentFile(const std::string& path);
 
+    // === Превью проектов ===
+    // Для каждого документа — путь к файлу-превью (PNG)
+    std::vector<std::string> myThumbnailPaths;
+
+    // Сохранить превью текущего активного документа в PNG
+    void CaptureCurrentThumbnail();
+    // Возвращает путь к превью для документа (пустой, если нет)
+    std::string GetThumbnailPath(int docIndex) const;
+
     // === Буфер обмена (для копирования объектов) ===
     TDF_Label myClipboardLabel;
 

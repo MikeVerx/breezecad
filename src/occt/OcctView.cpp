@@ -666,6 +666,25 @@ void OcctView::ClearSelection() {
     if (!myView.IsNull()) myView->Redraw();
 }
 
+bool OcctView::CaptureToPixmap(int /*width*/, int /*height*/, const std::string& outPath) {
+    if (myView.IsNull()) return false;
+
+    try {
+        // Без FreeImage поддерживается только BMP (через Wincodec на Windows)
+        if (!myView->Dump(outPath.c_str())) {
+            std::cerr << "CaptureToPixmap: Dump failed for " << outPath << "\n";
+            return false;
+        }
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "CaptureToPixmap exception: " << e.what() << "\n";
+        return false;
+    } catch (...) {
+        std::cerr << "CaptureToPixmap unknown exception\n";
+        return false;
+    }
+}
+
 void OcctView::SetDisplayModeAll(int mode, bool edges) {
     if (myContext.IsNull()) return;
     myContext->SetDisplayMode(mode, false);

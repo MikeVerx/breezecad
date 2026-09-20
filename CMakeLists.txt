@@ -51,9 +51,10 @@ add_executable(breezecad
     src/occt/OcctView.cpp
     src/doc/BreezeApplication.cpp
     src/doc/BreezeDocument.cpp
+    external/stb_image_impl.cpp
 )
 
-target_include_directories(breezecad PRIVATE src)
+target_include_directories(breezecad PRIVATE src external)
 
 # --- Линкуем всё вместе ---
 target_link_libraries(breezecad PRIVATE

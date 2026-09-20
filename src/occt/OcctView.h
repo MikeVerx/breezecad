@@ -47,6 +47,10 @@ public:
     void SetShapeVisible(const TDF_Label& label, bool visible);
     void SetDisplayModeAll(int mode, bool edges);
 
+    // Сохранить текущий вид в файл PNG (для превью проектов).
+    // Возвращает true при успехе.
+    bool CaptureToPixmap(int width, int height, const std::string& outPath);
+
     TDF_Label GetSelectedLabel() const;
     bool SelectAtPixel(int px, int py);
 
