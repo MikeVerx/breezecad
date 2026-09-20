@@ -17,3 +17,6 @@ build/
 .DS_Store
 Thumbs.db
 external/
+
+# ImGui state (позиции окон — не коммитим)
+imgui.ini
