@@ -37,6 +37,10 @@ private:
 
     // === QAT (Quick Access Toolbar) ===
     char mySearchBuffer[128] = "";
+    // === Splitter (регулировка ширины дерева) ===
+    float myTreeWidth = 340.0f;      // текущая ширина
+    bool  myIsResizingTree = false;  // идёт перетаскивание
+
     bool myStartExpandedManually = false;  // пользователь развернул Start вручную
     bool myShowSettingsDialog = false;
     int  myActiveSettingsTab  = 0;
@@ -120,6 +124,7 @@ private:
     double myMouseY = 0.0;
 
     void DrawDocumentTree();
+    void DrawTreeSplitter();
     void DrawAddBoxDialog();
     void DrawMenuBar();
     void DrawSketchOverlay();
