@@ -2067,6 +2067,31 @@ void Application::DrawContextMenu3D() {
 
             int type = BreezeDocument::GetType(sel);
 
+            // === Плоскость ===
+            if (type == FT_Plane) {
+                if (ImGui::MenuItem("Создать эскиз")) {
+                    myPendingCreateSketchLabel = sel;
+                }
+                ImGui::Separator();
+            }
+
+            // === Ось ===
+            if (type == FT_Axis) {
+                if (ImGui::MenuItem("Создать эскиз на перпендикулярной плоскости")) {
+                    // TODO
+                }
+                ImGui::Separator();
+            }
+
+            // === Точка Origin ===
+            if (type == FT_OriginPoint) {
+                if (ImGui::MenuItem("Создать эскиз на XY")) {
+                    // TODO
+                }
+                ImGui::Separator();
+            }
+
+            // === Эскиз ===
             if (type == FT_Sketch) {
                 if (ImGui::MenuItem("Редактировать эскиз")) {
                     myPendingEnterSketchLabel = sel;
@@ -2074,9 +2099,23 @@ void Application::DrawContextMenu3D() {
                 ImGui::Separator();
             }
 
+            // === 3D-операция ===
             if (type == FT_Box || type == FT_Cylinder || type == FT_Hole) {
                 if (ImGui::MenuItem("Редактировать")) {}
                 if (ImGui::MenuItem("Измерить")) {}
+                ImGui::Separator();
+            }
+
+            // === Скрыть/Показать для системных ===
+            if (BreezeDocument::IsSystem(sel) && (type == FT_Plane || type == FT_Axis)) {
+                std::string key = LabelKey(sel);
+                auto it = myVisibility.find(key);
+                bool curVisible = (it != myVisibility.end()) ? it->second : true;
+
+                if (ImGui::MenuItem(curVisible ? "Скрыть" : "Показать")) {
+                    myVisibility[key] = !curVisible;
+                    if (myOcctView) myOcctView->SetShapeVisible(sel, !curVisible);
+                }
                 ImGui::Separator();
             }
 
@@ -2864,6 +2903,7 @@ void Application::Run() {
         DrawPropertiesDialog();
         DrawContextMenu3D();
         DrawSelectionRect();
+        DrawRightPanel();
         UpdateTelemetry();
 
         ImGuiIO& io = ImGui::GetIO();
@@ -2936,6 +2976,163 @@ void Application::DrawSelectionRect() {
 
     draw->AddRectFilled(tl, br, IM_COL32(80, 130, 180, 60));
     draw->AddRect(tl, br, IM_COL32(80, 130, 180, 255), 0.0f, 0, 1.5f);
+}
+
+void Application::DrawRightPanel() {
+    ImGuiIO& io = ImGui::GetIO();
+
+    const float toolW    = 40.0f;
+    const float toolH    = 32.0f;
+    const float arrowH   = 14.0f;
+    const float handleW  = 10.0f;
+    const float pad      = 2.0f;
+    const float panelW   = toolW + pad * 2.0f;
+    const float topY     = 340.0f;
+    const float bottomY  = io.DisplaySize.y - 56.0f;
+    const float panelH   = bottomY - topY;
+    const float rightEdge = io.DisplaySize.x;
+
+    // === Хлястик (стрелка-таб) слева от панели ===
+    float handleX = myRightPanelExpanded
+                    ? (rightEdge - panelW - handleW)
+                    : (rightEdge - handleW);
+    float handleH = 60.0f;
+    float handleY = topY + (panelH - handleH) * 0.5f;
+
+    ImGui::SetNextWindowPos(ImVec2(handleX, handleY), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(handleW, handleH), ImGuiCond_Always);
+    ImGui::Begin("##right_handle", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
+        ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+    ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(60, 70, 90, 220));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(90, 110, 140, 240));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(40, 50, 70, 240));
+
+    if (ImGui::Button(myRightPanelExpanded ? ">" : "<", ImVec2(handleW, handleH))) {
+        myRightPanelExpanded = !myRightPanelExpanded;
+    }
+    ImGui::PopStyleColor(3);
+
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip(myRightPanelExpanded ? "Свернуть панель" : "Развернуть панель");
+    }
+    ImGui::End();
+
+    if (!myRightPanelExpanded) return;
+
+    // === Тело панели ===
+    float panelX = rightEdge - panelW;
+    ImGui::SetNextWindowPos(ImVec2(panelX, topY), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelW, panelH), ImGuiCond_Always);
+    ImGui::Begin("##right_panel", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 6));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 2));
+
+    // --- 1. Панорамировать ---
+    if (ImGui::Button("P##pan", ImVec2(toolW, toolH))) {
+        // TODO: активировать режим панорамирования
+    }
+    DrawAdvancedTooltip("panel.pan", "Панорамировать",
+        "Сдвинуть вид мышью",
+        "Активирует инструмент панорамирования. После активации зажмите ЛКМ "
+        "в 3D-сцене и перемещайте мышь, чтобы сдвинуть вид.");
+
+    ImGui::Separator();
+
+    // --- 2. Показать рамкой (с выпадающим меню) ---
+    if (ImGui::Button("Z##zoom", ImVec2(toolW, toolH))) {
+        // TODO: активировать режим "показать рамкой"
+    }
+    DrawAdvancedTooltip("panel.zoom", "Показать рамкой",
+        "Зуммирование выделенной области",
+        "Основное действие — приблизить область, выделенную рамкой. "
+        "Стрелка вниз открывает дополнительные режимы зуммирования.");
+
+    if (ImGui::Button("v##zoom_dd", ImVec2(toolW, arrowH))) {
+        ImGui::OpenPopup("##zoom_menu");
+    }
+    if (ImGui::BeginPopup("##zoom_menu")) {
+        if (ImGui::MenuItem("Зуммировать")) {}
+        if (ImGui::MenuItem("Показать всё")) {
+            if (myOcctView) myOcctView->FitAll();
+        }
+        if (ImGui::MenuItem("Показать рамкой")) {}
+        if (ImGui::MenuItem("Показать выбранное")) {}
+        ImGui::EndPopup();
+    }
+
+    ImGui::Separator();
+
+    // --- 3. Свободная орбита (с выпадающим меню) ---
+    if (ImGui::Button("O##orbit", ImVec2(toolW, toolH))) {
+        // TODO: активировать орбиту
+    }
+    DrawAdvancedTooltip("panel.orbit", "Свободная орбита",
+        "Вращение модели вокруг центра",
+        "Основное действие — свободное вращение вида. Стрелка вниз открывает "
+        "различные режимы вращения (с зависимостями, поворот под углом).");
+
+    if (ImGui::Button("v##orbit_dd", ImVec2(toolW, arrowH))) {
+        ImGui::OpenPopup("##orbit_menu");
+    }
+    if (ImGui::BeginPopup("##orbit_menu")) {
+        if (ImGui::MenuItem("Орбита")) {}
+        if (ImGui::MenuItem("Орбита с зависимостями")) {}
+        if (ImGui::MenuItem("Повернуть под углом")) {}
+        ImGui::EndPopup();
+    }
+
+    ImGui::Separator();
+
+    // --- 4. Вид на объект ---
+    if (ImGui::Button("V##viewon", ImVec2(toolW, toolH))) {
+        // TODO: активировать режим "вид на грань"
+    }
+    DrawAdvancedTooltip("panel.viewon", "Вид на объект",
+        "Ориентировать вид по выбранной грани",
+        "После активации кликните по любой грани модели — камера развернётся "
+        "так, чтобы вы смотрели на эту грань перпендикулярно.");
+
+    ImGui::Separator();
+
+    // --- 5. Стили отображения (с выпадающим меню) ---
+    if (ImGui::Button("S##style", ImVec2(toolW, toolH))) {
+        // TODO: циклить стиль
+    }
+    DrawAdvancedTooltip("panel.style", "Стили отображения",
+        "Тонированный, каркасный и другие режимы",
+        "Основное действие — переключение стиля отображения модели. "
+        "Стрелка вниз открывает полный список стилей.");
+
+    if (ImGui::Button("v##style_dd", ImVec2(toolW, arrowH))) {
+        ImGui::OpenPopup("##style_menu");
+    }
+    if (ImGui::BeginPopup("##style_menu")) {
+        if (ImGui::MenuItem("Тонированный с рёбрами")) {
+            if (myOcctView) myOcctView->SetDisplayModeAll(1, true);   // AIS_Shaded = 1
+        }
+        if (ImGui::MenuItem("Тонированный")) {
+            if (myOcctView) myOcctView->SetDisplayModeAll(1, false);
+        }
+        if (ImGui::MenuItem("Каркасный")) {
+            if (myOcctView) myOcctView->SetDisplayModeAll(0, false);  // AIS_WireFrame = 0
+        }
+        ImGui::Separator();
+        ImGui::MenuItem("Реалистичный (скоро)", nullptr, false, false);
+        ImGui::MenuItem("Скрытые линии (скоро)", nullptr, false, false);
+        ImGui::MenuItem("Прозрачный (скоро)", nullptr, false, false);
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar(2);
+    ImGui::End();
 }
 
 } // namespace BreezeCAD

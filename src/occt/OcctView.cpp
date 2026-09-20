@@ -666,6 +666,15 @@ void OcctView::ClearSelection() {
     if (!myView.IsNull()) myView->Redraw();
 }
 
+void OcctView::SetDisplayModeAll(int mode, bool edges) {
+    if (myContext.IsNull()) return;
+    myContext->SetDisplayMode(mode, false);
+    Handle(Prs3d_Drawer) dr = myContext->DefaultDrawer();
+    dr->SetFaceBoundaryDraw(edges);
+    myContext->UpdateCurrentViewer();
+    if (!myView.IsNull()) myView->Redraw();
+}
+
 void OcctView::FitAll() {
     if (myView.IsNull()) return;
     myView->FitAll(0.01, false);

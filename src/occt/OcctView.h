@@ -45,6 +45,7 @@ public:
     void FitAll();
 
     void SetShapeVisible(const TDF_Label& label, bool visible);
+    void SetDisplayModeAll(int mode, bool edges);
 
     TDF_Label GetSelectedLabel() const;
     bool SelectAtPixel(int px, int py);

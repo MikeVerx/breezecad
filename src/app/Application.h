@@ -37,6 +37,9 @@ private:
 
     // === QAT (Quick Access Toolbar) ===
     char mySearchBuffer[128] = "";
+    // === Правая панель навигации ===
+    bool myRightPanelExpanded = true;
+
     // === ПКМ-меню в 3D-сцене ===
     bool   myPendingContextMenu = false;
     ImVec2 myContextMenuPos = ImVec2(0, 0);
@@ -150,6 +153,7 @@ private:
     void DrawTreeSplitter();
     void DrawContextMenu3D();
     void DrawSelectionRect();
+    void DrawRightPanel();
     void DrawRenameDialog();
     void DrawDeleteConfirmDialog();
     void DrawPropertiesDialog();
