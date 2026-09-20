@@ -52,6 +52,18 @@ TDF_Label BreezeDocument::MainLabel() const {
     return myDoc->Main();
 }
 
+bool BreezeDocument::Has3DOperations() const {
+    if (myDoc.IsNull()) return false;
+    TDF_ChildIterator it(MainLabel(), false);
+    for (; it.More(); it.Next()) {
+        int type = GetType(it.Value());
+        if (type == FT_Box || type == FT_Cylinder || type == FT_Hole) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void BreezeDocument::RefreshNextFeatureId() {
     if (myDoc.IsNull()) return;
     int maxTag = 0;
@@ -69,8 +81,8 @@ void BreezeDocument::CreateBaseGeometry() {
     if (myDoc.IsNull()) return;
 
     myBaseLabel = MainLabel().FindChild(1, true);
-    TDataStd_Name::Set(myBaseLabel, TCollection_ExtendedString("Origin"));
-    TDataStd_Integer::Set(myBaseLabel, FT_Origin);
+    TDataStd_Name::Set(myBaseLabel, TCollection_ExtendedString("Start"));
+    TDataStd_Integer::Set(myBaseLabel, FT_Start);
 
     const double planeSize = 100.0;
     const double axisLen   = 100.0;
@@ -79,7 +91,7 @@ void BreezeDocument::CreateBaseGeometry() {
     {
         TDF_Label l = myBaseLabel.FindChild(1, true);
         TDataStd_Name::Set(l, TCollection_ExtendedString("Origin Point"));
-        TDataStd_Integer::Set(l, FT_Origin);
+        TDataStd_Integer::Set(l, FT_OriginPoint);
         TopoDS_Shape v = BRepBuilderAPI_MakeVertex(gp_Pnt(0, 0, 0)).Shape();
         TNaming_Builder(l).Generated(v);
     }

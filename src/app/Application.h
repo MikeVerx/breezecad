@@ -37,6 +37,7 @@ private:
 
     // === QAT (Quick Access Toolbar) ===
     char mySearchBuffer[128] = "";
+    bool myStartExpandedManually = false;  // пользователь развернул Start вручную
     bool myShowSettingsDialog = false;
     int  myActiveSettingsTab  = 0;
     std::vector<std::string> myPinnedCommands;
@@ -161,7 +162,8 @@ private:
     void ApplyExactLine();     // создать линию по введённым Length/Angle
 
     bool DrawLabelTree(const TDF_Label& label,
-                       const TDF_Label& selectedLabel);
+                       const TDF_Label& selectedLabel,
+                       bool hasOps);
 };
 
 } // namespace BreezeCAD

@@ -11,15 +11,16 @@
 namespace BreezeCAD {
 
 enum FeatureType {
-    FT_Origin     = -1,
-    FT_Plane      = -2,
-    FT_Axis       = -3,
-    FT_Box        = 10,
-    FT_Cylinder   = 11,
-    FT_Hole       = 12,
-    FT_Sketch     = 20,
-    FT_SketchLine = 21,
-    FT_Other      = 99
+    FT_Start       = -1,   // папка Start (корневой контейнер базовой геометрии)
+    FT_Plane       = -2,
+    FT_Axis        = -3,
+    FT_OriginPoint = -4,   // точка (0,0,0) — не показывается в дереве
+    FT_Box         = 10,
+    FT_Cylinder    = 11,
+    FT_Hole        = 12,
+    FT_Sketch      = 20,
+    FT_SketchLine  = 21,
+    FT_Other       = 99
 };
 
 // Стиль линии эскиза (как в Inventor)
@@ -78,6 +79,9 @@ public:
     std::vector<TopoDS_Shape> GetAllShapes() const;
 
     void RefreshNextFeatureId();
+
+    // Есть ли среди прямых детей Main хотя бы одна 3D-операция?
+    bool Has3DOperations() const;
 
 private:
     Handle(TDocStd_Document) myDoc;

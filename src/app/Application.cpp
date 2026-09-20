@@ -125,18 +125,35 @@ void Application::RefreshView() {
     if (!myOcctView || !myDocument) return;
     myOcctView->ClearAllShapes();
 
+    bool hasOps = myDocument->Has3DOperations();
+
     // Рекурсивный обход всего дерева
     std::function<void(const TDF_Label&)> walk = [&](const TDF_Label& l) {
+        int type = BreezeDocument::GetType(l);
+
         TopoDS_Shape s = myDocument->GetShape(l);
         if (!s.IsNull()) {
             myOcctView->DisplayShape(s, l, BreezeDocument::IsSystem(l));
-            // Применяем сохранённую видимость
+
+            // Определяем видимость
             std::string key = LabelKey(l);
             auto it = myVisibility.find(key);
-            if (it != myVisibility.end() && !it->second) {
+
+            bool visible;
+            if (it != myVisibility.end()) {
+                // Пользователь явно указал
+                visible = it->second;
+            } else {
+                // По умолчанию: оси и плоскости скрыты, если есть 3D-операции
+                bool isSystemHideable = (type == FT_Axis || type == FT_Plane);
+                visible = !(hasOps && isSystemHideable);
+            }
+
+            if (!visible) {
                 myOcctView->SetShapeVisible(l, false);
             }
         }
+
         TDF_ChildIterator it(l, false);
         for (; it.More(); it.Next()) walk(it.Value());
     };
@@ -278,7 +295,8 @@ void Application::OnOpen() {
 // === Дерево ===
 
 bool Application::DrawLabelTree(const TDF_Label& label,
-                                 const TDF_Label& selectedLabel) {
+                                 const TDF_Label& selectedLabel,
+                                 bool hasOps) {
     std::string labelName = "<unnamed>";
     Handle(TDataStd_Name) nameAttr;
     if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
@@ -305,9 +323,14 @@ bool Application::DrawLabelTree(const TDF_Label& label,
     // Чекбокс видимости для системных элементов с геометрией
     if (isSystem && (type == FT_Plane || type == FT_Axis)) {
         std::string key = LabelKey(label);
-        bool visible = true;
         auto it = myVisibility.find(key);
-        if (it != myVisibility.end()) visible = it->second;
+        bool visible;
+        if (it != myVisibility.end()) {
+            visible = it->second;
+        } else {
+            // По умолчанию: скрыто, если есть 3D-операции
+            visible = !hasOps;
+        }
 
         if (ImGui::Checkbox("##vis", &visible)) {
             myVisibility[key] = visible;
@@ -351,7 +374,7 @@ bool Application::DrawLabelTree(const TDF_Label& label,
     if (opened && hasChildren) {
         TDF_ChildIterator it(label, false);
         for (; it.More(); it.Next()) {
-            if (DrawLabelTree(it.Value(), selectedLabel)) requested = true;
+            if (DrawLabelTree(it.Value(), selectedLabel, hasOps)) requested = true;
         }
         ImGui::TreePop();
     }
@@ -866,7 +889,7 @@ void Application::DrawDocumentTree() {
     ImGui::SetNextWindowPos(ImVec2(0, 155), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 155 - 56), ImGuiCond_Always);
 
-    ImGui::Begin("##ocaf_tree", nullptr,
+    ImGui::Begin("##tree_panel", nullptr,
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus |
         ImGuiWindowFlags_NoTitleBar);
@@ -878,7 +901,7 @@ void Application::DrawDocumentTree() {
     if (ImGui::Button(Tr("panel.addBox").c_str())) {
         myShowAddBoxDialog = true;
         std::strncpy(myNewBoxName, Tr("default.boxName").c_str(), sizeof(myNewBoxName) - 1);
-        myNewBoxName[sizeof(myNewBoxName) - 1] = '\0';
+        myNewBoxName[sizeof(myNewBoxName) - 1] = ' ';
         myNewBoxPos[0] = myNewBoxPos[1] = myNewBoxPos[2] = 0.0f;
         myNewBoxSize[0] = myNewBoxSize[1] = myNewBoxSize[2] = 100.0f;
     }
@@ -894,6 +917,8 @@ void Application::DrawDocumentTree() {
         return;
     }
 
+    bool hasOps = myDocument->Has3DOperations();
+
     TDF_Label selectedLabel;
     if (myOcctView) selectedLabel = myOcctView->GetSelectedLabel();
 
@@ -901,27 +926,55 @@ void Application::DrawDocumentTree() {
 
     if (ImGui::TreeNodeEx(Tr("panel.document").c_str(),
             ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
-        TDF_Label baseLabel = myDocument->GetBaseGeometryLabel();
 
+        // === Папка Start ===
+        TDF_Label baseLabel = myDocument->GetBaseGeometryLabel();
         if (!baseLabel.IsNull()) {
+            // Start открыт, если:
+            //  - нет 3D-операций, ИЛИ
+            //  - пользователь развернул его вручную
+            bool startOpen = !hasOps || myStartExpandedManually;
+
             ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(160, 160, 160, 255));
-            bool opened = ImGui::TreeNodeEx("Origin",
-                ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth);
+            ImGui::SetNextItemOpen(startOpen, ImGuiCond_Always);
+            bool opened = ImGui::TreeNodeEx("Start",
+                ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth);
             ImGui::PopStyleColor();
+
+            // Пользователь кликнул — запоминаем его выбор
+            if (ImGui::IsItemToggledOpen()) {
+                myStartExpandedManually = opened;
+            }
+
             if (opened) {
+                // Внутри Start: только плоскости.
+                // Origin Point — скрыт. Оси — скрыты, если есть 3D-операции.
                 TDF_ChildIterator it(baseLabel, false);
-                for (; it.More(); it.Next())
-                    DrawLabelTree(it.Value(), selectedLabel);
+                for (; it.More(); it.Next()) {
+                    TDF_Label child = it.Value();
+                    int type = BreezeDocument::GetType(child);
+
+                    // Origin Point — никогда не показываем
+                    if (type == FT_OriginPoint) continue;
+
+                    // Оси — только если нет 3D-операций
+                    if (type == FT_Axis && hasOps) continue;
+
+                    // Плоскости и (при отсутствии операций) оси — показываем
+                    DrawLabelTree(child, selectedLabel, hasOps);
+                }
                 ImGui::TreePop();
             }
         }
 
+        // === Пользовательские фичи (прямые дети Main, кроме Start) ===
         TDF_ChildIterator it(root, false);
         for (; it.More(); it.Next()) {
             TDF_Label child = it.Value();
             if (child.IsEqual(baseLabel)) continue;
-            DrawLabelTree(child, selectedLabel);
+            DrawLabelTree(child, selectedLabel, hasOps);
         }
+
         ImGui::TreePop();
     }
 
