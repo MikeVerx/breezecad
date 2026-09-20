@@ -37,6 +37,10 @@ private:
 
     // === QAT (Quick Access Toolbar) ===
     char mySearchBuffer[128] = "";
+    // === Недавние файлы ===
+    std::vector<std::string> myRecentFiles;
+    void AddRecentFile(const std::string& path);
+
     // === Буфер обмена (для копирования объектов) ===
     TDF_Label myClipboardLabel;
 
@@ -163,6 +167,12 @@ private:
     void DrawTreeSplitter();
     void DrawContextMenu3D();
     void DrawContextMenuItems(const TDF_Label& label, bool hasOps);
+
+    // Логика видимости по умолчанию (учитывает hasOps и myVisibility)
+    bool IsLabelVisibleByDefault(const TDF_Label& label, bool hasOps) const;
+
+    // Показать все объекты, уважая правила видимости (для снятия изоляции)
+    void ShowAllRespectingDefaults();
     void DrawSelectionRect();
     void DrawRightPanel();
     void DrawHomeScreen();
@@ -188,6 +198,8 @@ private:
     void RefreshView();
     void RefreshSketchLines();
     void OnSave();
+    void OnExportSTEP();
+    void OnExportSTL();
     void OnOpen();
     void OnNewDocument();
 

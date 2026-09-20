@@ -11,6 +11,12 @@
 #include <GLFW/glfw3.h>
 
 #include <TDF_ChildIterator.hxx>
+#include <STEPControl_Writer.hxx>
+#include <Interface_Static.hxx>
+#include <StlAPI_Writer.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
+#include <BRep_Builder.hxx>
+#include <TopoDS_Compound.hxx>
 #include <OSD_MemInfo.hxx>
 #include <TDataStd_Name.hxx>
 #include <TDataStd_Integer.hxx>
@@ -264,6 +270,21 @@ void Application::RefreshView() {
     myOcctView->Redraw();
 }
 
+void Application::AddRecentFile(const std::string& path) {
+    if (path.empty()) return;
+
+    // Убираем дубликат, если был
+    myRecentFiles.erase(
+        std::remove(myRecentFiles.begin(), myRecentFiles.end(), path),
+        myRecentFiles.end());
+
+    // Вставляем в начало
+    myRecentFiles.insert(myRecentFiles.begin(), path);
+
+    // Ограничиваем 10 записями
+    if (myRecentFiles.size() > 10) myRecentFiles.resize(10);
+}
+
 void Application::OnNewDocument() {
     CreateNewDoc();
     RefreshView();
@@ -376,7 +397,81 @@ void Application::OnSave() {
         myCurrentPath = path;
         std::strncpy(myFilePathBuffer, path.c_str(), sizeof(myFilePathBuffer) - 1);
         myFilePathBuffer[sizeof(myFilePathBuffer) - 1] = '\0';
+        AddRecentFile(path);
         std::cout << "Saved to: " << myCurrentPath << "\n";
+    }
+}
+
+void Application::OnExportSTEP() {
+    if (!myDocument || myDocument->GetDoc().IsNull()) return;
+
+    std::string path;
+    if (!ShowFileDialog(true, path, "Экспорт в STEP",
+                         "STEP (*.step)\0*.step\0STEP (*.stp)\0*.stp\0All (*.*)\0*.*\0\0",
+                         "step")) return;
+
+    try {
+        // Собираем все TopoDS_Shape из документа
+        std::vector<TopoDS_Shape> shapes = myDocument->GetAllShapes();
+        if (shapes.empty()) {
+            std::cerr << "Export STEP: no shapes\n";
+            return;
+        }
+
+        STEPControl_Writer writer;
+        Interface_Static::SetCVal("write.step.unit", "MM");
+        Interface_Static::SetCVal("write.step.schema", "AP214");
+
+        for (const auto& s : shapes) {
+            if (writer.Transfer(s, STEPControl_AsIs) != IFSelect_RetDone) {
+                std::cerr << "Export STEP: transfer failed\n";
+                return;
+            }
+        }
+
+        if (writer.Write(path.c_str()) != IFSelect_RetDone) {
+            std::cerr << "Export STEP: write failed\n";
+            return;
+        }
+        std::cout << "Exported to STEP: " << path << "\n";
+    } catch (const std::exception& e) {
+        std::cerr << "Export STEP exception: " << e.what() << "\n";
+    }
+}
+
+void Application::OnExportSTL() {
+    if (!myDocument || myDocument->GetDoc().IsNull()) return;
+
+    std::string path;
+    if (!ShowFileDialog(true, path, "Экспорт в STL",
+                         "STL (*.stl)\0*.stl\0All (*.*)\0*.*\0\0",
+                         "stl")) return;
+
+    try {
+        std::vector<TopoDS_Shape> shapes = myDocument->GetAllShapes();
+        if (shapes.empty()) {
+            std::cerr << "Export STL: no shapes\n";
+            return;
+        }
+
+        // Объединяем всё в один compound и пишем
+        BRep_Builder bb;
+        TopoDS_Compound comp;
+        bb.MakeCompound(comp);
+        for (const auto& s : shapes) bb.Add(comp, s);
+
+        // Тесселяция
+        BRepMesh_IncrementalMesh mesh(comp, 0.1);
+
+        StlAPI_Writer writer;
+        writer.ASCIIMode() = Standard_False;
+        if (!writer.Write(comp, path.c_str())) {
+            std::cerr << "Export STL: write failed\n";
+            return;
+        }
+        std::cout << "Exported to STL: " << path << "\n";
+    } catch (const std::exception& e) {
+        std::cerr << "Export STL exception: " << e.what() << "\n";
     }
 }
 
@@ -389,6 +484,7 @@ void Application::OnOpen() {
     if (loaded.IsNull()) { std::cerr << "Open failed\n"; return; }
 
     AddDocFromFile(path, loaded);
+    AddRecentFile(path);
     myVisibility.clear();
     RefreshView();
     if (myOcctView) myOcctView->FitAll();
@@ -546,12 +642,35 @@ void Application::DrawQuickAccessToolbar() {
         if (ImGui::MenuItem("Сохранить", "Ctrl+S")) OnSave();
         if (ImGui::MenuItem("Сохранить как...")) { myCurrentPath.clear(); OnSave(); }
         ImGui::Separator();
-        if (ImGui::MenuItem("Экспорт в STEP", "", false, false)) {}
-        if (ImGui::MenuItem("Экспорт в STL", "", false, false)) {}
+        if (ImGui::MenuItem("Экспорт в STEP...")) OnExportSTEP();
+        if (ImGui::MenuItem("Экспорт в STL...")) OnExportSTL();
         if (ImGui::MenuItem("Экспорт в OBJ", "", false, false)) {}
         ImGui::Separator();
         if (ImGui::BeginMenu("Последние файлы")) {
-            ImGui::MenuItem("(пока пусто)", "", false, false);
+            if (myRecentFiles.empty()) {
+                ImGui::MenuItem("(пусто)", "", false, false);
+            } else {
+                for (size_t i = 0; i < myRecentFiles.size(); i++) {
+                    std::string label = myRecentFiles[i];
+                    // Обрезаем длинный путь
+                    if (label.length() > 60) {
+                        label = "..." + label.substr(label.length() - 57);
+                    }
+                    label += "##recent" + std::to_string(i);
+                    if (ImGui::MenuItem(label.c_str())) {
+                        Handle(TDocStd_Document) loaded =
+                            BreezeApplication::Instance().OpenDocument(myRecentFiles[i]);
+                        if (!loaded.IsNull()) {
+                            AddDocFromFile(myRecentFiles[i], loaded);
+                            RefreshView();
+                            if (myOcctView) myOcctView->FitAll();
+                            myShowHomeScreen = false;
+                        }
+                    }
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Очистить список")) myRecentFiles.clear();
+            }
             ImGui::EndMenu();
         }
         ImGui::Separator();
@@ -569,10 +688,10 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
 
     // === 2. Undo / Redo ===
-    if (ImGui::Button(ICON_UNDO, ImVec2(28, 0))) OnUndo();
+    if (ImGui::Button(ICON_UNDO, ImVec2(28, 0)) && ImGui::IsItemActivated()) OnUndo();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Отменить (Ctrl+Z)");
     ImGui::SameLine();
-    if (ImGui::Button(ICON_REDO, ImVec2(28, 0))) OnRedo();
+    if (ImGui::Button(ICON_REDO, ImVec2(28, 0)) && ImGui::IsItemActivated()) OnRedo();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Повторить (Ctrl+Y)");
 
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
@@ -2009,6 +2128,38 @@ void Application::DrawPropertiesDialog() {
     ImGui::End();
 }
 
+bool Application::IsLabelVisibleByDefault(const TDF_Label& label, bool hasOps) const {
+    if (label.IsNull()) return false;
+
+    int type = BreezeDocument::GetType(label);
+
+    // Скрываемые системные элементы
+    bool isSystemHideable = (type == FT_Axis || type == FT_Plane);
+    if (isSystemHideable && hasOps) return false;
+
+    return true;
+}
+
+void Application::ShowAllRespectingDefaults() {
+    if (!myOcctView || !myDocument) return;
+
+    // Сбрасываем карту видимости полностью — она была навязана изоляцией
+    myVisibility.clear();
+    myIsolationBackup.clear();
+    myIsolationActive = false;
+
+    bool hasOps = myDocument->Has3DOperations();
+
+    // Проходим по всем объектам и применяем правила видимости
+    auto allLabels = myOcctView->GetAllLabels();
+    for (const auto& lbl : allLabels) {
+        bool visible = IsLabelVisibleByDefault(lbl, hasOps);
+        myOcctView->SetShapeVisible(lbl, visible);
+    }
+
+    std::cout << "ShowAllRespectingDefaults: restored\n";
+}
+
 void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
     if (label.IsNull()) return;
 
@@ -2021,6 +2172,14 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
     int type = BreezeDocument::GetType(label);
     bool isSystem = (type < 0);
     std::string key = LabelKey(label);
+
+    // === Сброс изоляции (если активна) ===
+    if (myIsolationActive) {
+        if (ImGui::MenuItem(ICON_EYE "  Показать всё (снять изоляцию)")) {
+            ShowAllRespectingDefaults();
+        }
+        ImGui::Separator();
+    }
 
     // === Плоскость ===
     if (type == FT_Plane) {
@@ -2043,7 +2202,24 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
         if (ImGui::MenuItem(ICON_PENCIL "  Редактировать")) {}
         if (ImGui::MenuItem(ICON_RULER "  Измерить")) {}
         if (ImGui::MenuItem(ICON_SEARCH "  Изолировать")) {
-            std::cout << "Isolate — TODO (отключено для отладки)\n";
+            if (myOcctView && myDocument) {
+                // 1. Копируем список меток ДО любых изменений
+                std::vector<TDF_Label> allLabels = myOcctView->GetAllLabels();
+
+                // 2. Сохраняем текущую видимость для последующего "Показать всё"
+                myIsolationBackup = myVisibility;
+                myIsolationActive = true;
+
+                // 3. Скрываем всё, кроме выделенного
+                for (const auto& entry : allLabels) {
+                    if (entry.IsEqual(label)) continue;
+                    if (BreezeDocument::IsSystem(entry)) continue;  // системные не трогаем
+
+                    std::string k = LabelKey(entry);
+                    myVisibility[k] = false;
+                    myOcctView->SetShapeVisible(entry, false);
+                }
+            }
         }
         ImGui::Separator();
     }
@@ -2514,15 +2690,24 @@ void Application::DrawSettingsDialog() {
             case 0: {
                 ImGui::Text("Основные настройки");
                 ImGui::Separator();
-                ImGui::TextDisabled("(будет заполнено позже)");
                 ImGui::Spacing();
+
                 static int units = 0;
                 ImGui::Text("Единицы измерения:");
                 ImGui::RadioButton("Миллиметры (мм)", &units, 0); ImGui::SameLine();
                 ImGui::RadioButton("Дюймы (in)",      &units, 1);
+
                 ImGui::Spacing();
                 static int precision = 2;
                 ImGui::SliderInt("Знаков после запятой", &precision, 0, 6);
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Text("Автосохранение:");
+                static bool autosave = true;
+                ImGui::Checkbox("Включить автосохранение", &autosave);
+                static int autosaveInterval = 5;
+                ImGui::SliderInt("Интервал (мин)", &autosaveInterval, 1, 30);
                 break;
             }
             case 1: {
@@ -2545,12 +2730,37 @@ void Application::DrawSettingsDialog() {
             case 2: {
                 ImGui::Text("Тема оформления");
                 ImGui::Separator();
-                ImGui::TextDisabled("(будет заполнено позже)");
                 ImGui::Spacing();
-                static int theme = 2;
-                ImGui::RadioButton("Светлая",            &theme, 0); ImGui::SameLine();
-                ImGui::RadioButton("Тёмная",             &theme, 1); ImGui::SameLine();
-                ImGui::RadioButton("Как в системе",      &theme, 2);
+
+                static int theme = 1;
+                if (ImGui::RadioButton("Светлая", &theme, 0)) {
+                    ImGui::StyleColorsLight();
+                }
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Тёмная", &theme, 1)) {
+                    ImGui::StyleColorsDark();
+                }
+                ImGui::SameLine();
+                if (ImGui::RadioButton("Как в системе", &theme, 2)) {
+                    // По умолчанию используем тёмную
+                    ImGui::StyleColorsDark();
+                }
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Text("Цвета линий эскиза:");
+
+                static ImVec4 colNormal(0.75f, 0.2f, 1.0f, 1.0f);
+                ImGui::ColorEdit3("Основная (недоопределённая)", (float*)&colNormal);
+
+                static ImVec4 colConstruction(0.55f, 0.55f, 0.75f, 1.0f);
+                ImGui::ColorEdit3("Вспомогательная", (float*)&colConstruction);
+
+                static ImVec4 colCenterline(0.9f, 0.45f, 0.15f, 1.0f);
+                ImGui::ColorEdit3("Осевая", (float*)&colCenterline);
+
+                ImGui::Spacing();
+                ImGui::TextDisabled("(применение цветов — позже)");
                 break;
             }
             case 3: {
@@ -2912,6 +3122,29 @@ void Application::Run() {
             prevCtrlV = curCtrlV;
         }
 
+        // Ctrl+C — копировать выделенное
+        {
+            bool ctrl = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS
+                     || glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
+            static bool prevCtrlC = false;
+            bool curCtrlC = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_C) == GLFW_PRESS;
+            if (curCtrlC && !prevCtrlC && myOcctView) {
+                TDF_Label sel = myOcctView->GetSelectedLabel();
+                if (!sel.IsNull() && !BreezeDocument::IsSystem(sel)) {
+                    myClipboardLabel = sel;
+                    std::cout << "Copied: tag=" << sel.Tag() << "\n";
+                }
+            }
+            prevCtrlC = curCtrlC;
+
+            static bool prevCtrlV = false;
+            bool curCtrlV = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_V) == GLFW_PRESS;
+            if (curCtrlV && !prevCtrlV && !myClipboardLabel.IsNull()) {
+                std::cout << "Paste — TODO\n";
+            }
+            prevCtrlV = curCtrlV;
+        }
+
         // Alt+V — переключить видимость выделенного объекта
         {
             bool altHeld = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_ALT) == GLFW_PRESS
@@ -2933,10 +3166,15 @@ void Application::Run() {
             prevAltV = curAltV;
         }
 
-        // F6 — Home view
+        // F6 — Home view + сброс изоляции
         static bool prevF6 = false;
         bool curF6 = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_F6) == GLFW_PRESS;
-        if (curF6 && !prevF6 && myOcctView) myOcctView->SetHomeView();
+        if (curF6 && !prevF6 && myOcctView) {
+            myOcctView->SetHomeView();
+            if (myIsolationActive) {
+                ShowAllRespectingDefaults();
+            }
+        }
         prevF6 = curF6;
 
         // Ctrl+Z — Undo
@@ -3156,7 +3394,12 @@ void Application::DrawRightPanel() {
     if (ImGui::BeginPopup("##zoom_menu")) {
         if (ImGui::MenuItem("Зуммировать")) {}
         if (ImGui::MenuItem("Показать всё")) {
-            if (myOcctView) myOcctView->FitAll();
+            if (myOcctView) {
+                if (myIsolationActive) {
+                    ShowAllRespectingDefaults();
+                }
+                myOcctView->FitAll();
+            }
         }
         if (ImGui::MenuItem("Показать рамкой")) {}
         if (ImGui::MenuItem("Показать выбранное")) {}

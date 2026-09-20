@@ -60,6 +60,7 @@ target_link_libraries(breezecad PRIVATE
     TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep
     TKPrim TKTopAlgo TKBO
     TKDESTEP
+    TKDESTL
     TKV3d TKOpenGl TKService TKMesh
     TKCAF TKLCAF TKBin
     glfw
