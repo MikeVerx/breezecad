@@ -10,6 +10,7 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 #include <string>
 
 namespace BreezeCAD {
@@ -24,7 +25,17 @@ public:
 private:
     std::unique_ptr<GlfwWindow>   myWindow;
     std::unique_ptr<OcctView>     myOcctView;
-    std::unique_ptr<BreezeDocument> myDocument;
+    // Активный документ (сырой указатель на один из myDocuments)
+    BreezeDocument* myDocument = nullptr;
+
+    // Все открытые документы (владеют)
+    std::vector<std::unique_ptr<BreezeDocument>> myDocuments;
+    int myActiveDocIndex = -1;
+
+    // Имя для новой вкладки (Project1, Project2, ...)
+    int myNextProjectNumber = 1;
+    std::vector<std::string> myProjectNames;   // параллельно с myDocuments
+    std::vector<std::string> myProjectPaths;   // путь файла (пусто, если не сохранён)
 
     bool  myShowAddBoxDialog = false;
     char  myNewBoxName[128]  = "Box";
@@ -90,6 +101,14 @@ private:
     void OnSave();
     void OnOpen();
     void OnNewDocument();
+
+    // === Multi-Document ===
+    void CreateNewDoc();                                          // создать пустой + сделать активным
+    int  AddDocFromFile(const std::string& path,
+                        const Handle(TDocStd_Document)& loaded);  // открыть из файла
+    void SwitchToDoc(int index);                                  // переключиться
+    void CloseDoc(int index);                                     // закрыть (с подтверждением)
+    void DrawProjectTabs();                                       // нижний таб-бар
     void OnUndo();
     void OnRedo();
     void DrawRibbon();

@@ -89,8 +89,7 @@ Application::Application() {
         }
     } catch (...) { myOcctView.reset(); return; }
 
-    myDocument = std::make_unique<BreezeDocument>();
-    myDocument->CreateBaseGeometry();
+    CreateNewDoc();
 
     RefreshView();
     if (myOcctView) myOcctView->FitAll();
@@ -143,14 +142,105 @@ void Application::RefreshView() {
 }
 
 void Application::OnNewDocument() {
-    if (!myDocument) return;
-    BreezeApplication::Instance().CloseDocument(myDocument->GetDoc());
-    myDocument = std::make_unique<BreezeDocument>();
-    myDocument->CreateBaseGeometry();
-    myCurrentPath.clear();
+    CreateNewDoc();
+    RefreshView();
+    if (myOcctView) myOcctView->FitAll();
+}
+
+// ============================================================
+//  Multi-Document Interface
+// ============================================================
+
+void Application::CreateNewDoc() {
+    auto doc = std::make_unique<BreezeDocument>();
+    doc->CreateBaseGeometry();
+
+    std::string name = "Project" + std::to_string(myNextProjectNumber++);
+
+    myDocuments.push_back(std::move(doc));
+    myProjectNames.push_back(name);
+    myProjectPaths.push_back("");
+    myActiveDocIndex = (int)myDocuments.size() - 1;
+    myDocument = myDocuments.back().get();
+
+    std::cout << "CreateNewDoc: '" << name << "' (index " << myActiveDocIndex << ")";
+}
+
+int Application::AddDocFromFile(const std::string& path,
+                                 const Handle(TDocStd_Document)& loaded) {
+    auto doc = std::make_unique<BreezeDocument>();
+    doc->SetDocument(loaded);
+
+    // Извлекаем имя файла из пути
+    std::string name = path;
+    size_t slash = name.find_last_of("/\\");
+    if (slash != std::string::npos) name = name.substr(slash + 1);
+    size_t dot = name.find_last_of('.');
+    if (dot != std::string::npos) name = name.substr(0, dot);
+
+    myDocuments.push_back(std::move(doc));
+    myProjectNames.push_back(name);
+    myProjectPaths.push_back(path);
+    myActiveDocIndex = (int)myDocuments.size() - 1;
+    myDocument = myDocuments.back().get();
+
+    std::cout << "AddDocFromFile: '" << name << "' from " << path << "\n";
+    return myActiveDocIndex;
+}
+
+void Application::SwitchToDoc(int index) {
+    if (index < 0 || index >= (int)myDocuments.size()) return;
+    if (index == myActiveDocIndex) return;
+
+    myActiveDocIndex = index;
+    myDocument = myDocuments[index].get();
+
+    // Сброс состояния эскиза — эскиз принадлежал другому документу
+    myActiveSketchLabel = TDF_Label();
+    myHasSketchStart = false;
+    if (myOcctView) {
+        myOcctView->ClearPreviewLine();
+        myOcctView->ClearAllShapes();
+        myOcctView->ClearGrid();
+        myOcctView->ExitSketchMode();
+    }
+
     myVisibility.clear();
     RefreshView();
     if (myOcctView) myOcctView->FitAll();
+
+    std::cout << "SwitchToDoc: index " << index << "\n";
+}
+
+void Application::CloseDoc(int index) {
+    if (index < 0 || index >= (int)myDocuments.size()) return;
+    if (myDocuments.size() <= 1) return;  // не закрываем последний
+
+    // Освободить OCAF-документ
+    BreezeApplication::Instance().CloseDocument(myDocuments[index]->GetDoc());
+
+    myDocuments.erase(myDocuments.begin() + index);
+    myProjectNames.erase(myProjectNames.begin() + index);
+    myProjectPaths.erase(myProjectPaths.begin() + index);
+
+    if (myActiveDocIndex >= (int)myDocuments.size()) {
+        myActiveDocIndex = (int)myDocuments.size() - 1;
+    }
+    myDocument = (myActiveDocIndex >= 0) ? myDocuments[myActiveDocIndex].get() : nullptr;
+
+    myActiveSketchLabel = TDF_Label();
+    myHasSketchStart = false;
+    if (myOcctView) {
+        myOcctView->ClearPreviewLine();
+        myOcctView->ClearAllShapes();
+        myOcctView->ClearGrid();
+        myOcctView->ExitSketchMode();
+    }
+    myVisibility.clear();
+    RefreshView();
+    if (myOcctView) myOcctView->FitAll();
+
+    std::cout << "CloseDoc: index " << index << "\n";
 }
 
 void Application::OnSave() {
@@ -168,19 +258,15 @@ void Application::OnSave() {
 }
 
 void Application::OnOpen() {
-    std::string path = myCurrentPath;
+    std::string path;
     if (!ShowFileDialog(false, path, "Открыть файл")) return;
 
     Handle(TDocStd_Document) loaded =
         BreezeApplication::Instance().OpenDocument(path);
     if (loaded.IsNull()) { std::cerr << "Open failed\n"; return; }
 
-    myDocument = std::make_unique<BreezeDocument>();
-    myDocument->SetDocument(loaded);
-    myCurrentPath = path;
+    AddDocFromFile(path, loaded);
     myVisibility.clear();
-    std::strncpy(myFilePathBuffer, path.c_str(), sizeof(myFilePathBuffer) - 1);
-    myFilePathBuffer[sizeof(myFilePathBuffer) - 1] = '\0';
     RefreshView();
     if (myOcctView) myOcctView->FitAll();
 }
@@ -654,7 +740,7 @@ void Application::DrawDocumentTree() {
     const float panelWidth = 340.0f;
 
     ImGui::SetNextWindowPos(ImVec2(0, 155), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 155), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 155 - 56), ImGuiCond_Always);
 
     ImGui::Begin("##ocaf_tree", nullptr,
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
@@ -1285,6 +1371,129 @@ void Application::DrawDependenciesPanel() {
     ImGui::End();
 }
 
+void Application::DrawProjectTabs() {
+    ImGuiIO& io = ImGui::GetIO();
+
+    const float statusH = 24.0f;
+    const float tabsH   = 32.0f;
+    const float yPos    = io.DisplaySize.y - statusH - tabsH;
+
+    ImGui::SetNextWindowPos(ImVec2(0, yPos), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, tabsH), ImGuiCond_Always);
+    ImGui::Begin("##project_tabs", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+    // === Вкладка "Главная" ===
+    {
+        bool isHome = (myActiveDocIndex < 0);
+        if (isHome) ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(60, 100, 150, 255));
+        if (ImGui::Button("⌂ Главная", ImVec2(120, 24))) {
+            // Home — сбросить активный документ (но не закрыть)
+            myActiveDocIndex = -1;
+            myDocument = nullptr;
+            myActiveSketchLabel = TDF_Label();
+            myHasSketchStart = false;
+            if (myOcctView) {
+                myOcctView->ClearAllShapes();
+                myOcctView->ClearGrid();
+                myOcctView->ExitSketchMode();
+            }
+        }
+        if (isHome) ImGui::PopStyleColor();
+    }
+
+    // === Вкладки проектов ===
+    static int pendingCloseIdx = -1;
+    static int switchToIdx    = -2;  // -2 = no change
+
+    for (int i = 0; i < (int)myDocuments.size(); i++) {
+        ImGui::SameLine();
+
+        ImGui::PushID(i);
+
+        bool active = (i == myActiveDocIndex);
+        ImVec4 colNormal = active ? ImVec4(0.24f, 0.39f, 0.59f, 1.0f)
+                                   : ImVec4(0.20f, 0.20f, 0.24f, 1.0f);
+        ImVec4 colHover  = active ? ImVec4(0.31f, 0.51f, 0.71f, 1.0f)
+                                   : ImVec4(0.28f, 0.28f, 0.34f, 1.0f);
+        ImVec4 colActive = active ? ImVec4(0.16f, 0.27f, 0.43f, 1.0f)
+                                   : ImVec4(0.16f, 0.16f, 0.20f, 1.0f);
+
+        ImGui::PushStyleColor(ImGuiCol_Button, colNormal);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colHover);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, colActive);
+
+        // Имя вкладки + " *" если не сохранён
+        std::string label = myProjectNames[i];
+        if (myProjectPaths[i].empty()) label += " *";
+
+        if (ImGui::Button((label + "##tab").c_str(), ImVec2(140, 24))) {
+            switchToIdx = i;
+        }
+
+        // ПКМ — контекстное меню
+        if (ImGui::BeginPopupContextItem("##tab_ctx")) {
+            if (ImGui::MenuItem("Сохранить")) {
+                // TODO: save this doc
+            }
+            if (ImGui::MenuItem("Сохранить как...")) {
+                // TODO: save as
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Закрыть")) {
+                pendingCloseIdx = i;
+            }
+            if (ImGui::MenuItem("Закрыть другие")) {
+                // TODO: close others
+            }
+            ImGui::EndPopup();
+        }
+
+        ImGui::PopStyleColor(3);
+
+        // Кнопка × закрытия — только если больше одного документа
+        if (myDocuments.size() > 1) {
+            ImGui::SameLine(0, 2);
+            if (ImGui::Button("x", ImVec2(20, 24))) {
+                pendingCloseIdx = i;
+            }
+        }
+
+        ImGui::PopID();
+    }
+
+    // Кнопка "+" — создать новый проект
+    ImGui::SameLine();
+    if (ImGui::Button("+", ImVec2(28, 24))) {
+        CreateNewDoc();
+        RefreshView();
+        if (myOcctView) myOcctView->FitAll();
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Новый проект");
+
+    // === Прогресс-бар справа (placeholder) ===
+    {
+        float panelW = 200.0f;
+        ImGui::SameLine(io.DisplaySize.x - panelW - 10);
+        ImGui::TextDisabled("Готово");
+    }
+
+    ImGui::End();
+
+    // === Отложенные операции (после закрытия окна — иначе ломаем итерацию) ===
+    if (pendingCloseIdx >= 0) {
+        CloseDoc(pendingCloseIdx);
+        pendingCloseIdx = -1;
+    }
+    if (switchToIdx != -2) {
+        if (switchToIdx >= 0) SwitchToDoc(switchToIdx);
+        switchToIdx = -2;
+    }
+}
+
 void Application::Run() {
     bool prevF11 = false;
     bool prevDelete = false;
@@ -1451,6 +1660,9 @@ void Application::Run() {
         DrawDocumentTree();
         DrawAddBoxDialog();
         DrawPreviewInfo();
+        DrawDependenciesPanel();
+        DrawProjectTabs();
+        DrawStatusBar();
 
         ImGuiIO& io = ImGui::GetIO();
         ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 360, 30), ImGuiCond_Always);
