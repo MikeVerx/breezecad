@@ -628,6 +628,14 @@ void OcctView::DisplaySketchLine(const TopoDS_Shape& line, const TDF_Label& labe
     myContext->UpdateCurrentViewer();
 }
 
+bool OcctView::ConsumeContextMenuRequest(int& outX, int& outY) {
+    if (!myContextMenuPending) return false;
+    outX = myContextMenuX;
+    outY = myContextMenuY;
+    myContextMenuPending = false;
+    return true;
+}
+
 bool OcctView::SelectAtPixel(int px, int py) {
     if (myContext.IsNull() || myView.IsNull()) return false;
     myContext->ClearSelected(false);
@@ -754,24 +762,46 @@ void OcctView::OnMouseButton(int button, int action, int /*mods*/) {
     CursorToFb(myGlfwWindow, xpos, ypos, px, py);
 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        // В режиме эскиза ЛКМ обрабатывается Application'ом (рисование)
+        if (myInSketchMode) return;
+
         if (action == GLFW_PRESS) {
             myLeftPressed = true;
-            myPressX = xpos; myPressY = ypos;
+            myLeftDragging = false;
+            myRectActive = false;
+            myLeftPressX = xpos;
+            myLeftPressY = ypos;
+            myRectX1 = px; myRectY1 = py;
+            myRectX2 = px; myRectY2 = py;
         } else if (action == GLFW_RELEASE) {
-            if (myLeftPressed) {
-                double dx = xpos - myPressX;
-                double dy = ypos - myPressY;
-                if (dx*dx + dy*dy < 25.0) {
-                    // Атомарный Select — внутри OCCT делает MoveTo + Detected + Select
-                    myContext->MoveTo(px, py, myView, false);
-                    myContext->SelectDetected(AIS_SelectionScheme_Replace);
+            if (myLeftPressed && !myLeftDragging) {
+                // Короткий клик — выделение объекта под курсором
+                myContext->ClearSelected(false);
+                myContext->MoveTo(px, py, myView, false);
+                myContext->SelectDetected(AIS_SelectionScheme_Replace);
+                myContext->UpdateCurrentViewer();
+                myView->Redraw();
+            } else if (myLeftDragging) {
+                // Рамка — выделение по прямоугольнику
+                int xMin = std::min(myRectX1, myRectX2);
+                int yMin = std::min(myRectY1, myRectY2);
+                int xMax = std::max(myRectX1, myRectX2);
+                int yMax = std::max(myRectY1, myRectY2);
+
+                if (xMax - xMin > 5 && yMax - yMin > 5) {
+                    myContext->ClearSelected(false);
+                    myContext->Select(xMin, yMin, xMax, yMax, myView,
+                                       AIS_SelectionScheme_Add);
+                    myContext->UpdateCurrentViewer();
                     myView->Redraw();
                 }
-                myLeftPressed = false;
             }
+            myLeftPressed = false;
+            myLeftDragging = false;
+            myRectActive = false;
         }
     } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-        if (myInSketchMode) return;  // в режиме эскиза вращение отключено
+        if (myInSketchMode) return;
         if (action == GLFW_PRESS) {
             myRotating = true;
             myLastX = xpos; myLastY = ypos;
@@ -793,10 +823,35 @@ void OcctView::OnMouseMove(double x, double y) {
     int px, py;
     CursorToFb(myGlfwWindow, x, y, px, py);
 
+    // === ПКМ drag = вращение ===
     if (myRotating) {
         myView->Rotation(px, py);
         myView->Redraw();
-    } else if (myPanning) {
+        myLastX = x; myLastY = y;
+        return;
+    }
+
+    // === ЛКМ drag = рамка выделения ===
+    if (myLeftPressed && !myInSketchMode) {
+        if (!myLeftDragging) {
+            double dx = x - myLeftPressX;
+            double dy = y - myLeftPressY;
+            if (dx*dx + dy*dy > 25.0) {  // > 5 пикселей
+                myLeftDragging = true;
+                myRectActive = true;
+            }
+        }
+        if (myLeftDragging) {
+            myRectX2 = px;
+            myRectY2 = py;
+            if (!myView.IsNull()) myView->Redraw();
+        }
+        myLastX = x; myLastY = y;
+        return;
+    }
+
+    // === СКМ = панорамирование ===
+    if (myPanning) {
         int lpx, lpy;
         CursorToFb(myGlfwWindow, myLastX, myLastY, lpx, lpy);
         myView->Pan(px - lpx, -(py - lpy));

@@ -48,6 +48,17 @@ public:
 
     TDF_Label GetSelectedLabel() const;
     bool SelectAtPixel(int px, int py);
+
+    // === Рамка выделения ===
+    bool IsSelectionRectActive() const { return myRectActive; }
+    void GetSelectionRect(int& x1, int& y1, int& x2, int& y2) const {
+        x1 = myRectX1; y1 = myRectY1; x2 = myRectX2; y2 = myRectY2;
+    }
+
+    // === ПКМ-контекстное меню в 3D-сцене ===
+    // Возвращает true один раз, если был клик ПКМ (без движения).
+    bool ConsumeContextMenuRequest(int& outX, int& outY);
+    bool IsSketchMode() const { return !myInSketchMode ? false : true; }
     int GetShapeCount() const { return (int)myShapeEntries.size(); }
     void ClearSelection();
 
@@ -102,12 +113,25 @@ private:
     double myLastY  = 0.0;
     double myPressX = 0.0;
     double myPressY = 0.0;
+    double myLeftPressX = 0.0;
+    double myLeftPressY = 0.0;
+    bool   myLeftDragging = false;
+    int    myRectX1 = 0, myRectY1 = 0, myRectX2 = 0, myRectY2 = 0;
+    bool   myRectActive = false;
 
     bool              myInSketchMode = false;
     gp_Pln            mySketchPlane;
     Handle(AIS_Line) myPreviewLine;
     Handle(AIS_Point) myStartMarker;
     Handle(AIS_Point) myEndMarker;
+
+    // Состояние ПКМ
+    bool   myContextMenuPending = false;
+    int    myContextMenuX = 0;
+    int    myContextMenuY = 0;
+    double myRightPressX = 0;
+    double myRightPressY = 0;
+    bool   myRightPressed = false;
 
     std::vector<ShapeEntry> myShapeEntries;
     std::vector<Handle(AIS_InteractiveObject)> myGridObjects;

@@ -37,6 +37,24 @@ private:
 
     // === QAT (Quick Access Toolbar) ===
     char mySearchBuffer[128] = "";
+    // === ПКМ-меню в 3D-сцене ===
+    bool   myPendingContextMenu = false;
+    ImVec2 myContextMenuPos = ImVec2(0, 0);
+
+    // === Диалог переименования ===
+    TDF_Label myPendingRenameLabel;
+    char      myRenameBuffer[128] = "";
+    bool      myShowRenameDialog = false;
+
+    // === Диалог подтверждения удаления ===
+    bool myShowDeleteConfirm = false;
+    char myDeleteConfirmInfo[256] = "";
+    bool mySkipDeleteConfirm = false;   // «не спрашивать снова» (на сеанс)
+
+    // === Диалог свойств ===
+    TDF_Label myPendingPropertiesLabel;
+    bool      myShowPropertiesDialog = false;
+
     // === Tooltips (3 уровня задержки) ===
     std::string myHoveredItemId;
     double      myHoverStartTime = 0.0;
@@ -130,6 +148,12 @@ private:
 
     void DrawDocumentTree();
     void DrawTreeSplitter();
+    void DrawContextMenu3D();
+    void DrawSelectionRect();
+    void DrawRenameDialog();
+    void DrawDeleteConfirmDialog();
+    void DrawPropertiesDialog();
+    void RequestDelete(const TDF_Label& label);
     void DrawAdvancedTooltip(const std::string& id,
                              const std::string& name,
                              const std::string& shortDesc,

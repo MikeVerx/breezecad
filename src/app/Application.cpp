@@ -44,6 +44,72 @@
 
 namespace BreezeCAD {
 
+// Чистый C++ конвертеры (см. BreezeDocument.cpp — там идентичные, но локальные)
+
+static TCollection_ExtendedString Utf8ToExt(const std::string& s) {
+    if (s.empty()) return TCollection_ExtendedString();
+    std::wstring ws;
+    ws.reserve(s.size());
+    size_t i = 0;
+    while (i < s.size()) {
+        unsigned char c = (unsigned char)s[i];
+        uint32_t cp = 0;
+        int extra = 0;
+        if      (c < 0x80) { cp = c;          extra = 0; }
+        else if ((c & 0xE0) == 0xC0) { cp = c & 0x1F; extra = 1; }
+        else if ((c & 0xF0) == 0xE0) { cp = c & 0x0F; extra = 2; }
+        else if ((c & 0xF8) == 0xF0) { cp = c & 0x07; extra = 3; }
+        else { i++; continue; }
+        if (i + extra >= s.size()) break;
+        for (int k = 1; k <= extra; k++) {
+            unsigned char cc = (unsigned char)s[i + k];
+            if ((cc & 0xC0) != 0x80) { cp = 0; break; }
+            cp = (cp << 6) | (cc & 0x3F);
+        }
+        i += extra + 1;
+        if (cp < 0x10000) {
+            ws.push_back((wchar_t)cp);
+        } else if (cp <= 0x10FFFF) {
+            cp -= 0x10000;
+            ws.push_back((wchar_t)(0xD800 + (cp >> 10)));
+            ws.push_back((wchar_t)(0xDC00 + (cp & 0x3FF)));
+        }
+    }
+    ws.push_back(0);
+    return TCollection_ExtendedString(ws.c_str());
+}
+
+static std::string ExtToUtf8(const TCollection_ExtendedString& es) {
+    const uint16_t* ws = (const uint16_t*)es.ToExtString();
+    if (!ws) return "";
+    std::string out;
+    for (size_t i = 0; ws[i] != 0; i++) {
+        uint32_t cp = ws[i];
+        if (cp >= 0xD800 && cp <= 0xDBFF && ws[i+1] != 0) {
+            uint32_t lo = ws[i+1];
+            if (lo >= 0xDC00 && lo <= 0xDFFF) {
+                cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                i++;
+            }
+        }
+        if (cp < 0x80) {
+            out.push_back((char)cp);
+        } else if (cp < 0x800) {
+            out.push_back((char)(0xC0 | (cp >> 6)));
+            out.push_back((char)(0x80 | (cp & 0x3F)));
+        } else if (cp < 0x10000) {
+            out.push_back((char)(0xE0 | (cp >> 12)));
+            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
+            out.push_back((char)(0x80 | (cp & 0x3F)));
+        } else {
+            out.push_back((char)(0xF0 | (cp >> 18)));
+            out.push_back((char)(0x80 | ((cp >> 12) & 0x3F)));
+            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
+            out.push_back((char)(0x80 | (cp & 0x3F)));
+        }
+    }
+    return out;
+}
 static std::string LabelKey(const TDF_Label& label) {
     std::ostringstream oss;
     label.EntryDump(oss);
@@ -297,11 +363,14 @@ void Application::OnOpen() {
 bool Application::DrawLabelTree(const TDF_Label& label,
                                  const TDF_Label& selectedLabel,
                                  bool hasOps) {
+    // Линии эскиза не показываем в дереве
+    int _earlyType = BreezeDocument::GetType(label);
+    if (_earlyType == FT_SketchLine) return false;
+
     std::string labelName = "<unnamed>";
     Handle(TDataStd_Name) nameAttr;
     if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
-        TCollection_AsciiString ascii(nameAttr->Get());
-        labelName = ascii.ToCString();
+        labelName = ExtToUtf8(nameAttr->Get());
     }
 
     int type = BreezeDocument::GetType(label);
@@ -349,21 +418,75 @@ bool Application::DrawLabelTree(const TDF_Label& label,
         myPendingEnterSketchLabel = label;
     }
 
-    // Контекстное меню
+    // === Контекстное меню (ПКМ) ===
     if (ImGui::BeginPopupContextItem("##ctx")) {
         ImGui::TextDisabled("%s", labelName.c_str());
         ImGui::Separator();
 
+        // --- Для плоскости ---
         if (type == FT_Plane) {
-            if (ImGui::MenuItem(Tr("btn.createSketch").c_str())) {
+            if (ImGui::MenuItem("Создать эскиз")) {
                 myPendingCreateSketchLabel = label;
             }
+            ImGui::Separator();
         }
+
+        // --- Для эскиза ---
+        if (type == FT_Sketch) {
+            if (ImGui::MenuItem("Редактировать эскиз")) {
+                myPendingEnterSketchLabel = label;
+            }
+            ImGui::Separator();
+        }
+
+        // --- Для операции (Box, Cylinder, Hole) ---
+        if (type == FT_Box || type == FT_Cylinder || type == FT_Hole) {
+            if (ImGui::MenuItem("Редактировать")) {
+                // TODO: диалог редактирования параметров
+            }
+            if (ImGui::MenuItem("Измерить")) {
+                // TODO: инструмент измерения
+            }
+            ImGui::Separator();
+        }
+
+        // --- Показать/Скрыть (только для системных с геометрией) ---
+        if (isSystem && (type == FT_Plane || type == FT_Axis)) {
+            std::string key = LabelKey(label);
+            auto it = myVisibility.find(key);
+            bool curVisible = (it != myVisibility.end()) ? it->second : !hasOps;
+
+            if (ImGui::MenuItem(curVisible ? "Скрыть" : "Показать")) {
+                myVisibility[key] = !curVisible;
+                if (myOcctView) myOcctView->SetShapeVisible(label, !curVisible);
+            }
+            ImGui::Separator();
+        }
+
+        // --- Переименовать (для не-системных) ---
         if (!isSystem) {
-            if (ImGui::MenuItem(Tr("btn.delete").c_str())) {
-                myPendingDeleteLabel = label;
+            if (ImGui::MenuItem("Переименовать")) {
+                myPendingRenameLabel = label;
+                std::strncpy(myRenameBuffer, labelName.c_str(), sizeof(myRenameBuffer) - 1);
+                myRenameBuffer[sizeof(myRenameBuffer) - 1] = '\0';
+                myShowRenameDialog = true;
             }
         }
+
+        // --- Свойства (для всех) ---
+        if (ImGui::MenuItem("Свойства...")) {
+            myPendingPropertiesLabel = label;
+            myShowPropertiesDialog = true;
+        }
+
+        // --- Удалить (для не-системных) ---
+        if (!isSystem) {
+            ImGui::Separator();
+            if (ImGui::MenuItem("Удалить")) {
+                RequestDelete(label);
+            }
+        }
+
         ImGui::EndPopup();
     }
 
@@ -999,12 +1122,7 @@ void Application::DrawDocumentTree() {
         EnterSketch(myPendingEnterSketchLabel);
         myPendingEnterSketchLabel = TDF_Label();
     }
-    if (!myPendingDeleteLabel.IsNull() && myDocument) {
-        myDocument->RemoveFeature(myPendingDeleteLabel);
-        myPendingDeleteLabel = TDF_Label();
-        RefreshView();
-        if (myOcctView) myOcctView->FitAll();
-    }
+    // myPendingDeleteLabel теперь обрабатывается через диалог подтверждения
 }
 
 void Application::RefreshSketchLines() {
@@ -1755,6 +1873,238 @@ void Application::DrawAdvancedTooltip(const std::string& id,
     ImGui::EndTooltip();
 }
 
+void Application::RequestDelete(const TDF_Label& label) {
+    if (label.IsNull()) return;
+
+    if (mySkipDeleteConfirm) {
+        // Удаляем сразу
+        if (myDocument) myDocument->RemoveFeature(label);
+        RefreshView();
+        if (myOcctView) myOcctView->FitAll();
+        return;
+    }
+
+    myPendingDeleteLabel = label;
+
+    // Собираем информацию: имя + сколько детей удалится
+    std::string name = "<unnamed>";
+    Handle(TDataStd_Name) nameAttr;
+    if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
+        name = ExtToUtf8(nameAttr->Get());
+    }
+
+    int childCount = 0;
+    TDF_ChildIterator it(label, false);
+    for (; it.More(); it.Next()) childCount++;
+
+    if (childCount > 0) {
+        std::snprintf(myDeleteConfirmInfo, sizeof(myDeleteConfirmInfo),
+                      "Удалить «%s»?\n\nВместе с ним будут удалены %d вложенных элементов.",
+                      name.c_str(), childCount);
+    } else {
+        std::snprintf(myDeleteConfirmInfo, sizeof(myDeleteConfirmInfo),
+                      "Удалить «%s»?", name.c_str());
+    }
+
+    myShowDeleteConfirm = true;
+}
+
+void Application::DrawRenameDialog() {
+    if (!myShowRenameDialog) return;
+
+    ImGui::OpenPopup("Переименовать");
+
+    if (ImGui::BeginPopupModal("Переименовать", nullptr,
+                                ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Новое имя:");
+        ImGui::SetNextItemWidth(280);
+        ImGui::InputText("##rename_buf", myRenameBuffer, sizeof(myRenameBuffer),
+                         ImGuiInputTextFlags_EnterReturnsTrue);
+
+        ImGui::Separator();
+
+        if (ImGui::Button("OK", ImVec2(120, 0))) {
+            if (myDocument && !myPendingRenameLabel.IsNull() && myRenameBuffer[0] != '\0') {
+                myDocument->RenameFeature(myPendingRenameLabel, myRenameBuffer);
+                myPendingRenameLabel = TDF_Label();
+            }
+            myShowRenameDialog = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Отмена", ImVec2(120, 0))) {
+            myPendingRenameLabel = TDF_Label();
+            myShowRenameDialog = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+void Application::DrawDeleteConfirmDialog() {
+    if (!myShowDeleteConfirm) return;
+
+    ImGui::OpenPopup("Подтверждение удаления");
+
+    if (ImGui::BeginPopupModal("Подтверждение удаления", nullptr,
+                                ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextWrapped("%s", myDeleteConfirmInfo);
+        ImGui::Separator();
+        ImGui::Checkbox("Не спрашивать снова (до перезапуска)", &mySkipDeleteConfirm);
+        ImGui::Separator();
+
+        if (ImGui::Button("Удалить", ImVec2(120, 0))) {
+            if (myDocument && !myPendingDeleteLabel.IsNull()) {
+                myDocument->RemoveFeature(myPendingDeleteLabel);
+                myPendingDeleteLabel = TDF_Label();
+                RefreshView();
+                if (myOcctView) myOcctView->FitAll();
+            }
+            myShowDeleteConfirm = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Отмена", ImVec2(120, 0))) {
+            myPendingDeleteLabel = TDF_Label();
+            myShowDeleteConfirm = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+void Application::DrawPropertiesDialog() {
+    if (!myShowPropertiesDialog) return;
+
+    ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+
+    if (ImGui::Begin("Свойства", &myShowPropertiesDialog)) {
+        if (myPendingPropertiesLabel.IsNull() || !myDocument) {
+            ImGui::TextDisabled("Объект не выбран");
+        } else {
+            std::string name = "<unnamed>";
+            Handle(TDataStd_Name) nameAttr;
+            if (myPendingPropertiesLabel.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
+                name = ExtToUtf8(nameAttr->Get());
+            }
+
+            int type = BreezeDocument::GetType(myPendingPropertiesLabel);
+
+            ImGui::Text("Имя: %s", name.c_str());
+            ImGui::Text("Тип: %d", type);
+            ImGui::Text("Тег: %d", myPendingPropertiesLabel.Tag());
+
+            const char* typeName = "Неизвестно";
+            switch (type) {
+                case FT_Start:       typeName = "Папка Start"; break;
+                case FT_Plane:       typeName = "Плоскость"; break;
+                case FT_Axis:        typeName = "Ось"; break;
+                case FT_OriginPoint: typeName = "Точка Origin"; break;
+                case FT_Box:         typeName = "Куб"; break;
+                case FT_Cylinder:    typeName = "Цилиндр"; break;
+                case FT_Hole:        typeName = "Отверстие"; break;
+                case FT_Sketch:      typeName = "Эскиз"; break;
+                case FT_SketchLine:  typeName = "Линия эскиза"; break;
+            }
+            ImGui::Text("Описание: %s", typeName);
+
+            ImGui::Separator();
+            ImGui::TextDisabled("(расширенные свойства — позже)");
+        }
+    }
+    ImGui::End();
+}
+
+void Application::DrawContextMenu3D() {
+    if (myPendingContextMenu) {
+        ImGui::SetNextWindowPos(myContextMenuPos, ImGuiCond_Always);
+        ImGui::OpenPopup("##ctx_3d");
+        myPendingContextMenu = false;
+    }
+
+    if (ImGui::BeginPopup("##ctx_3d")) {
+        TDF_Label sel;
+        if (myOcctView) sel = myOcctView->GetSelectedLabel();
+
+        if (sel.IsNull()) {
+            // === ПКМ по пустому месту ===
+            if (ImGui::MenuItem("Домой (F6)")) {
+                if (myOcctView) myOcctView->SetHomeView();
+            }
+            if (ImGui::MenuItem("Изометрия")) {
+                if (myOcctView) myOcctView->SetHomeView();
+            }
+            ImGui::Separator();
+            if (ImGui::BeginMenu("Вид")) {
+                if (ImGui::MenuItem("Сверху"))
+                    myOcctView->SetCameraDirectionAndUp(gp_Dir(0, 0, -1), gp_Dir(0, 1, 0));
+                if (ImGui::MenuItem("Снизу"))
+                    myOcctView->SetCameraDirectionAndUp(gp_Dir(0, 0, 1), gp_Dir(0, 1, 0));
+                if (ImGui::MenuItem("Спереди"))
+                    myOcctView->SetCameraDirectionAndUp(gp_Dir(0, -1, 0), gp_Dir(0, 0, 1));
+                if (ImGui::MenuItem("Сзади"))
+                    myOcctView->SetCameraDirectionAndUp(gp_Dir(0, 1, 0), gp_Dir(0, 0, 1));
+                if (ImGui::MenuItem("Справа"))
+                    myOcctView->SetCameraDirectionAndUp(gp_Dir(-1, 0, 0), gp_Dir(0, 0, 1));
+                if (ImGui::MenuItem("Слева"))
+                    myOcctView->SetCameraDirectionAndUp(gp_Dir(1, 0, 0), gp_Dir(0, 0, 1));
+                ImGui::EndMenu();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Показать всё")) {
+                if (myOcctView) myOcctView->FitAll();
+            }
+        } else {
+            // === ПКМ по объекту ===
+            std::string name = "<unnamed>";
+            Handle(TDataStd_Name) nameAttr;
+            if (sel.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
+                name = ExtToUtf8(nameAttr->Get());
+            }
+
+            ImGui::TextDisabled("%s", name.c_str());
+            ImGui::Separator();
+
+            int type = BreezeDocument::GetType(sel);
+
+            if (type == FT_Sketch) {
+                if (ImGui::MenuItem("Редактировать эскиз")) {
+                    myPendingEnterSketchLabel = sel;
+                }
+                ImGui::Separator();
+            }
+
+            if (type == FT_Box || type == FT_Cylinder || type == FT_Hole) {
+                if (ImGui::MenuItem("Редактировать")) {}
+                if (ImGui::MenuItem("Измерить")) {}
+                ImGui::Separator();
+            }
+
+            if (!BreezeDocument::IsSystem(sel)) {
+                if (ImGui::MenuItem("Переименовать")) {
+                    myPendingRenameLabel = sel;
+                    std::strncpy(myRenameBuffer, name.c_str(), sizeof(myRenameBuffer) - 1);
+                    myRenameBuffer[sizeof(myRenameBuffer) - 1] = ' ';
+                    myShowRenameDialog = true;
+                }
+            }
+
+            if (ImGui::MenuItem("Свойства...")) {
+                myPendingPropertiesLabel = sel;
+                myShowPropertiesDialog = true;
+            }
+
+            if (!BreezeDocument::IsSystem(sel)) {
+                ImGui::Separator();
+                if (ImGui::MenuItem("Удалить")) {
+                    RequestDelete(sel);
+                }
+            }
+        }
+        ImGui::EndPopup();
+    }
+}
+
 void Application::DrawTreeSplitter() {
     ImGuiIO& io = ImGui::GetIO();
 
@@ -2303,6 +2653,49 @@ void Application::Run() {
         if (curF11 && !prevF11) myWindow->ToggleFullscreen();
         prevF11 = curF11;
 
+        // === Polling ПКМ через GLFW напрямую (ImGui колбэки перезаписаны нашими) ===
+        if (!myDependencyDialogOpen && !myShowRenameDialog &&
+            !myShowDeleteConfirm && !myShowPropertiesDialog) {
+            ImGuiIO& io = ImGui::GetIO();
+
+            // Мышь в области 3D-сцены?
+            bool inScene = io.MousePos.x > myTreeWidth + 10
+                        && io.MousePos.y > 165
+                        && io.MousePos.x < io.DisplaySize.x - 320
+                        && io.MousePos.y < io.DisplaySize.y - 70;
+
+            static bool  prevRMB = false;
+            static ImVec2 rmbStartPos(0, 0);
+
+            bool curRMB = glfwGetMouseButton(myWindow->GetNativeWindow(),
+                                              GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+
+            if (curRMB && !prevRMB && inScene) {
+                rmbStartPos = io.MousePos;
+            }
+            if (!curRMB && prevRMB && inScene) {
+                float dx = io.MousePos.x - rmbStartPos.x;
+                float dy = io.MousePos.y - rmbStartPos.y;
+                if (dx*dx + dy*dy < 25.0f) {
+                    // ПКМ-клик без движения → меню
+                    myPendingContextMenu = true;
+                    myContextMenuPos = rmbStartPos;
+
+                    // Выделяем объект под курсором
+                    if (myOcctView) {
+                        int winW = 1, winH = 1, fbW = 1, fbH = 1;
+                        glfwGetWindowSize(myWindow->GetNativeWindow(), &winW, &winH);
+                        glfwGetFramebufferSize(myWindow->GetNativeWindow(), &fbW, &fbH);
+                        int px = (int)(rmbStartPos.x * fbW / winW);
+                        int py = (int)(rmbStartPos.y * fbH / winH);
+                        myOcctView->SelectAtPixel(px, py);
+                    }
+                }
+                // Если было движение — вращение уже отработало в OcctView, ничего не делаем
+            }
+            prevRMB = curRMB;
+        }
+
         // В режиме эскиза: всегда показываем маркер под курсором,
         // а если есть старт — ещё и линию-превью
         if (!myActiveSketchLabel.IsNull() && myOcctView) {
@@ -2392,10 +2785,9 @@ void Application::Run() {
         if (curDelete && !prevDelete && myOcctView && myDocument) {
             TDF_Label sel = myOcctView->GetSelectedLabel();
             if (!sel.IsNull() && !BreezeDocument::IsSystem(sel)) {
-                myDocument->RemoveFeature(sel);
+                // Через диалог подтверждения
+                RequestDelete(sel);
                 myOcctView->ClearSelection();
-                RefreshView();
-                myOcctView->FitAll();
             }
         }
         prevDelete = curDelete;
@@ -2467,6 +2859,11 @@ void Application::Run() {
         DrawSettingsDialog();
         DrawViewCube();
         DrawDependencyDialog();
+        DrawRenameDialog();
+        DrawDeleteConfirmDialog();
+        DrawPropertiesDialog();
+        DrawContextMenu3D();
+        DrawSelectionRect();
         UpdateTelemetry();
 
         ImGuiIO& io = ImGui::GetIO();
@@ -2511,6 +2908,34 @@ void Application::Run() {
         std::cerr << "Unknown exception in main loop (ignored)\n";
       }
     }
+}
+
+void Application::DrawSelectionRect() {
+    if (!myOcctView) return;
+    if (!myOcctView->IsSelectionRectActive()) return;
+    if (ImGui::GetIO().WantCaptureMouse) return;
+
+    int x1, y1, x2, y2;
+    myOcctView->GetSelectionRect(x1, y1, x2, y2);
+
+    // Координаты в framebuffer'е — переводим в логические (ImGui)
+    int winW = 1, winH = 1, fbW = 1, fbH = 1;
+    glfwGetWindowSize(myWindow->GetNativeWindow(), &winW, &winH);
+    glfwGetFramebufferSize(myWindow->GetNativeWindow(), &fbW, &fbH);
+
+    float sx = (fbW > 0) ? (float)winW / fbW : 1.0f;
+    float sy = (fbH > 0) ? (float)winH / fbH : 1.0f;
+
+    ImVec2 p1(x1 * sx, y1 * sy);
+    ImVec2 p2(x2 * sx, y2 * sy);
+
+    ImVec2 tl(std::min(p1.x, p2.x), std::min(p1.y, p2.y));
+    ImVec2 br(std::max(p1.x, p2.x), std::max(p1.y, p2.y));
+
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+
+    draw->AddRectFilled(tl, br, IM_COL32(80, 130, 180, 60));
+    draw->AddRect(tl, br, IM_COL32(80, 130, 180, 255), 0.0f, 0, 1.5f);
 }
 
 } // namespace BreezeCAD

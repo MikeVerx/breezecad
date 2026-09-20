@@ -63,6 +63,7 @@ public:
     void ClearSketch(const TDF_Label& sketchLabel);
 
     void RemoveFeature(const TDF_Label& label);
+    void RenameFeature(const TDF_Label& label, const std::string& newName);
 
     // === Undo / Redo через OCAF-транзакции ===
     void StartTransaction();
