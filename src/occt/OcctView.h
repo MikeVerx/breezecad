@@ -47,6 +47,7 @@ public:
     void SetShapeVisible(const TDF_Label& label, bool visible);
 
     TDF_Label GetSelectedLabel() const;
+    int GetShapeCount() const { return (int)myShapeEntries.size(); }
     void ClearSelection();
 
     // === Режим эскиза ===

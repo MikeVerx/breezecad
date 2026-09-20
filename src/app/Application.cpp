@@ -10,6 +10,7 @@
 #include <GLFW/glfw3.h>
 
 #include <TDF_ChildIterator.hxx>
+#include <OSD_MemInfo.hxx>
 #include <TDataStd_Name.hxx>
 #include <TDataStd_Integer.hxx>
 #include <TCollection_AsciiString.hxx>
@@ -32,6 +33,8 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <cstdlib>
+#include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <sstream>
 #include <filesystem>
@@ -90,6 +93,7 @@ Application::Application() {
     } catch (...) { myOcctView.reset(); return; }
 
     CreateNewDoc();
+    InitCommands();
 
     RefreshView();
     if (myOcctView) myOcctView->FitAll();
@@ -390,25 +394,142 @@ void Application::OnRedo() {
 
 void Application::DrawQuickAccessToolbar() {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
-    if (ImGui::SmallButton(Tr("qat.new").c_str())) OnNewDocument();
-    ImGui::SameLine();
-    if (ImGui::SmallButton(Tr("qat.open").c_str())) OnOpen();
-    ImGui::SameLine();
-    if (ImGui::SmallButton(Tr("qat.save").c_str())) OnSave();
-    ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
-    if (ImGui::SmallButton(Tr("qat.undo").c_str())) OnUndo();
-    ImGui::SameLine();
-    if (ImGui::SmallButton(Tr("qat.redo").c_str())) OnRedo();
 
-    // Язык — справа
+    // === 1. Логотип / Меню файл ===
+    if (ImGui::Button("H", ImVec2(32, 0))) {
+        ImGui::OpenPopup("##file_menu");
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Файл (Alt+F)");
+
+    if (ImGui::BeginPopup("##file_menu")) {
+        if (ImGui::MenuItem("Главная", "Ctrl+H", false, false)) {}
+        ImGui::Separator();
+        if (ImGui::MenuItem("Создать", "Ctrl+N")) OnNewDocument();
+        if (ImGui::MenuItem("Открыть...", "Ctrl+O")) OnOpen();
+        if (ImGui::MenuItem("Сохранить", "Ctrl+S")) OnSave();
+        if (ImGui::MenuItem("Сохранить как...")) { myCurrentPath.clear(); OnSave(); }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Экспорт в STEP", "", false, false)) {}
+        if (ImGui::MenuItem("Экспорт в STL", "", false, false)) {}
+        if (ImGui::MenuItem("Экспорт в OBJ", "", false, false)) {}
+        ImGui::Separator();
+        if (ImGui::BeginMenu("Последние файлы")) {
+            ImGui::MenuItem("(пока пусто)", "", false, false);
+            ImGui::EndMenu();
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Настройки")) myShowSettingsDialog = true;
+        ImGui::Separator();
+        if (ImGui::MenuItem("Закрыть проект")) {
+            if (myActiveDocIndex >= 0) CloseDoc(myActiveDocIndex);
+        }
+        if (ImGui::MenuItem("Выход", "Alt+F4")) {
+            glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE);
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+
+    // === 2. Undo / Redo ===
+    if (ImGui::Button("<", ImVec2(28, 0))) OnUndo();
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Отменить (Ctrl+Z)");
+    ImGui::SameLine();
+    if (ImGui::Button(">", ImVec2(28, 0))) OnRedo();
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Повторить (Ctrl+Y)");
+
+    ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+
+    // === 3. Save ===
+    if (ImGui::Button("S", ImVec2(32, 0))) OnSave();
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Сохранить (Ctrl+S)");
+    ImGui::SameLine();
+
+    // === 4. Settings ===
+    if (ImGui::Button("G", ImVec2(32, 0))) myShowSettingsDialog = true;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Настройки");
+
+    ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+
+    // === 5. Закреплённые команды ===
+    for (size_t i = 0; i < myPinnedCommands.size(); i++) {
+        ImGui::SameLine();
+        ImGui::PushID((int)i);
+        if (ImGui::Button(myPinnedCommands[i].c_str(), ImVec2(32, 0))) {}
+        if (ImGui::BeginPopupContextItem("##pin_ctx")) {
+            if (ImGui::MenuItem("Открепить от панели")) {
+                myPinnedCommands.erase(myPinnedCommands.begin() + i);
+                ImGui::EndPopup();
+                ImGui::PopID();
+                break;
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
+    }
+
+    // === 6. Поиск команд (справа) ===
     ImGuiIO& io = ImGui::GetIO();
-    ImGui::SameLine(io.DisplaySize.x - 220);
-    ImGui::Text("%s", Tr("lang.label").c_str());
-    ImGui::SameLine();
-    Language cur = Localization::Instance().GetLanguage();
-    if (ImGui::SmallButton("EN")) Localization::Instance().SetLanguage(Language::EN);
-    ImGui::SameLine();
-    if (ImGui::SmallButton("RU")) Localization::Instance().SetLanguage(Language::RU);
+    float searchW     = 220.0f;
+    float rightPanelW = 260.0f;
+    float searchX     = io.DisplaySize.x - searchW - rightPanelW - 20.0f;
+
+    ImGui::SameLine(searchX);
+    ImGui::SetNextItemWidth(searchW);
+    ImGui::InputTextWithHint("##cmd_search", "Поиск команд...",
+                             mySearchBuffer, sizeof(mySearchBuffer));
+    ImVec2 searchMin = ImGui::GetItemRectMin();
+    ImVec2 searchMax = ImGui::GetItemRectMax();
+    bool searchActive = ImGui::IsItemActive();
+
+    // Результаты — плавающее окно (НЕ popup, чтобы не перехватывать клики)
+    if (mySearchBuffer[0] != 0 && searchActive) {
+        std::string query = mySearchBuffer;
+        std::transform(query.begin(), query.end(), query.begin(),
+                       [](unsigned char c){ return (char)std::tolower(c); });
+
+        std::vector<CommandEntry*> matches;
+        for (auto& cmd : myCommands) {
+            std::string lower = cmd.name;
+            std::transform(lower.begin(), lower.end(), lower.begin(),
+                           [](unsigned char c){ return (char)std::tolower(c); });
+            if (lower.find(query) != std::string::npos) matches.push_back(&cmd);
+        }
+
+        ImGui::SetNextWindowPos(ImVec2(searchMin.x, searchMax.y + 2));
+        ImGui::SetNextWindowSize(ImVec2(searchW, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(0.95f);
+        ImGui::Begin("##cmd_results_float", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_AlwaysAutoResize |
+            ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+            ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+        if (matches.empty()) {
+            ImGui::TextDisabled("Ничего не найдено");
+        } else {
+            for (auto* cmd : matches) {
+                ImGui::PushID(cmd->id.c_str());
+                std::string label = cmd->name;
+                if (!cmd->shortcut.empty()) label += "     " + cmd->shortcut;
+                if (ImGui::Selectable(label.c_str())) {
+                    if (cmd->action) cmd->action();
+                    mySearchBuffer[0] = 0;
+                }
+                ImGui::PopID();
+            }
+        }
+        ImGui::End();
+    }
+
+    // === 7. Телеметрия ===
+    ImGui::SameLine(io.DisplaySize.x - rightPanelW);
+    ImGui::Text("FPS: %.0f", io.Framerate);
+    ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+    ImGui::Text("RAM: %.0f MB", myLastRAMMB);
+    ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+    ImGui::Text("Obj: %d", myLastShapeCount);
 
     ImGui::PopStyleVar();
 }
@@ -1494,6 +1615,181 @@ void Application::DrawProjectTabs() {
     }
 }
 
+void Application::InitCommands() {
+    myCommands.clear();
+
+    auto add = [&](const std::string& id, const std::string& name,
+                    const std::string& shortcut, std::function<void()> action) {
+        myCommands.push_back({ id, name, shortcut, std::move(action) });
+    };
+
+    // Файл
+    add("file.new",   "Создать",   "Ctrl+N",  [this]{ OnNewDocument(); });
+    add("file.open",  "Открыть",   "Ctrl+O",  [this]{ OnOpen(); });
+    add("file.save",  "Сохранить", "Ctrl+S",  [this]{ OnSave(); });
+
+    // Правка
+    add("edit.undo",  "Отменить",  "Ctrl+Z",  [this]{ OnUndo(); });
+    add("edit.redo",  "Повторить", "Ctrl+Y",  [this]{ OnRedo(); });
+
+    // Эскиз — инструменты
+    add("sketch.line",   "Отрезок",         "L", [this]{
+        myCurrentLineStyle = LS_Normal;
+        myHasSketchStart = false;
+        if (myOcctView) myOcctView->ClearPreviewLine();
+    });
+    add("sketch.rect",   "Прямоугольник",   "R", []{});
+    add("sketch.circle", "Окружность",      "C", []{});
+    add("sketch.arc",    "Дуга",            "A", []{});
+    add("sketch.poly",   "Многоугольник",   "",  []{});
+    add("sketch.finish", "Завершить эскиз", "Esc", [this]{ ExitSketch(); });
+
+    // 3D
+    add("model.extrude", "Выдавливание",   "E", []{});
+    add("model.revolve", "Вращение",       "",  []{});
+    add("model.hole",    "Отверстие",      "",  []{});
+
+    // Настройки
+    add("view.settings", "Настройки", "", [this]{ myShowSettingsDialog = true; });
+
+    std::cout << "InitCommands: " << myCommands.size() << " commands loaded\n";
+}
+
+void Application::UpdateTelemetry() {
+    // RAM через OCCT OSD_MemInfo — правильное имя: MemWorkingSet
+    OSD_MemInfo memInfo;
+    size_t ws = memInfo.Value(OSD_MemInfo::MemWorkingSet);
+    if (ws != Standard_Size(-1)) {
+        myLastRAMMB = (double)ws / (1024.0 * 1024.0);
+    } else {
+        myLastRAMMB = 0.0;
+    }
+
+    // Количество отображаемых объектов
+    if (myOcctView) {
+        myLastShapeCount = myOcctView->GetShapeCount();
+    } else {
+        myLastShapeCount = 0;
+    }
+}
+
+void Application::DrawSettingsDialog() {
+    if (!myShowSettingsDialog) return;
+
+    ImGui::SetNextWindowSize(ImVec2(720, 480), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f,
+                                    ImGui::GetIO().DisplaySize.y * 0.5f),
+                             ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::Begin("Настройки", &myShowSettingsDialog,
+                      ImGuiWindowFlags_NoCollapse)) {
+
+        // Левая панель — вкладки
+        ImGui::BeginChild("##settings_tabs", ImVec2(180, 0), true);
+        const char* tabs[] = {
+            "Основные", "Графика", "Тема", "Язык", "Хоткеи", "О программе"
+        };
+        for (int i = 0; i < 6; i++) {
+            if (ImGui::Selectable(tabs[i], myActiveSettingsTab == i)) {
+                myActiveSettingsTab = i;
+            }
+        }
+        ImGui::EndChild();
+
+        ImGui::SameLine();
+
+        // Правая панель — контент
+        ImGui::BeginChild("##settings_content", ImVec2(0, 0), true);
+
+        switch (myActiveSettingsTab) {
+            case 0: {
+                ImGui::Text("Основные настройки");
+                ImGui::Separator();
+                ImGui::TextDisabled("(будет заполнено позже)");
+                ImGui::Spacing();
+                static int units = 0;
+                ImGui::Text("Единицы измерения:");
+                ImGui::RadioButton("Миллиметры (мм)", &units, 0); ImGui::SameLine();
+                ImGui::RadioButton("Дюймы (in)",      &units, 1);
+                ImGui::Spacing();
+                static int precision = 2;
+                ImGui::SliderInt("Знаков после запятой", &precision, 0, 6);
+                break;
+            }
+            case 1: {
+                ImGui::Text("Графика");
+                ImGui::Separator();
+                ImGui::TextDisabled("(будет заполнено позже)");
+                ImGui::Spacing();
+                static int quality = 1;
+                ImGui::Text("Качество рендеринга:");
+                ImGui::RadioButton("Низкое",  &quality, 0); ImGui::SameLine();
+                ImGui::RadioButton("Среднее", &quality, 1); ImGui::SameLine();
+                ImGui::RadioButton("Высокое", &quality, 2);
+                ImGui::Spacing();
+                static bool aa = true;
+                ImGui::Checkbox("Сглаживание (antialiasing)", &aa);
+                static bool shadows = false;
+                ImGui::Checkbox("Тени", &shadows);
+                break;
+            }
+            case 2: {
+                ImGui::Text("Тема оформления");
+                ImGui::Separator();
+                ImGui::TextDisabled("(будет заполнено позже)");
+                ImGui::Spacing();
+                static int theme = 2;
+                ImGui::RadioButton("Светлая",            &theme, 0); ImGui::SameLine();
+                ImGui::RadioButton("Тёмная",             &theme, 1); ImGui::SameLine();
+                ImGui::RadioButton("Как в системе",      &theme, 2);
+                break;
+            }
+            case 3: {
+                ImGui::Text("Язык интерфейса");
+                ImGui::Separator();
+                Language cur = Localization::Instance().GetLanguage();
+                if (ImGui::RadioButton("English", cur == Language::EN))
+                    Localization::Instance().SetLanguage(Language::EN);
+                if (ImGui::RadioButton("Русский", cur == Language::RU))
+                    Localization::Instance().SetLanguage(Language::RU);
+                break;
+            }
+            case 4: {
+                ImGui::Text("Горячие клавиши");
+                ImGui::Separator();
+                ImGui::TextDisabled("(редактор хоткеев — позже)");
+                ImGui::Spacing();
+                ImGui::Text("Ctrl+N  — Новый проект");
+                ImGui::Text("Ctrl+O  — Открыть");
+                ImGui::Text("Ctrl+S  — Сохранить");
+                ImGui::Text("Ctrl+Z  — Отменить");
+                ImGui::Text("Ctrl+Y  — Повторить");
+                ImGui::Text("F11     — Полный экран");
+                ImGui::Text("F6      — Изометрия (домашний вид)");
+                ImGui::Text("Esc     — Прервать линию / выйти из эскиза");
+                break;
+            }
+            case 5: {
+                ImGui::Text("О программе BreezeCAD");
+                ImGui::Separator();
+                ImGui::Text("Версия: 0.1.0 (prototype)");
+                ImGui::Text("Сборка: %s %s", __DATE__, __TIME__);
+                ImGui::Spacing();
+                ImGui::TextWrapped(
+                    "BreezeCAD — лёгкая кроссплатформенная САПР на базе "
+                    "OpenCASCADE и Dear ImGui.");
+                ImGui::Spacing();
+                ImGui::Text("Ядро: OpenCASCADE 8.0");
+                ImGui::Text("UI: Dear ImGui + GLFW");
+                break;
+            }
+        }
+
+        ImGui::EndChild();
+    }
+    ImGui::End();
+}
+
 void Application::Run() {
     bool prevF11 = false;
     bool prevDelete = false;
@@ -1663,6 +1959,8 @@ void Application::Run() {
         DrawDependenciesPanel();
         DrawProjectTabs();
         DrawStatusBar();
+        DrawSettingsDialog();
+        UpdateTelemetry();
 
         ImGuiIO& io = ImGui::GetIO();
         ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 360, 30), ImGuiCond_Always);

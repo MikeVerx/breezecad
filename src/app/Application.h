@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <vector>
+#include <functional>
 #include <string>
 
 namespace BreezeCAD {
@@ -25,6 +26,25 @@ public:
 private:
     std::unique_ptr<GlfwWindow>   myWindow;
     std::unique_ptr<OcctView>     myOcctView;
+    // === QAT (Quick Access Toolbar) ===
+    char mySearchBuffer[128] = "";
+    bool myShowSettingsDialog = false;
+    int  myActiveSettingsTab  = 0;
+    std::vector<std::string> myPinnedCommands;
+
+    // === Телеметрия ===
+    double myLastRAMMB      = 0.0;
+    int    myLastShapeCount = 0;
+
+    // === Команды (для поиска) ===
+    struct CommandEntry {
+        std::string id;
+        std::string name;
+        std::string shortcut;
+        std::function<void()> action;
+    };
+    std::vector<CommandEntry> myCommands;
+
     // Активный документ (сырой указатель на один из myDocuments)
     BreezeDocument* myDocument = nullptr;
 
@@ -113,6 +133,10 @@ private:
     void OnRedo();
     void DrawRibbon();
     void DrawQuickAccessToolbar();
+    void DrawFileMenu();
+    void DrawSettingsDialog();
+    void InitCommands();
+    void UpdateTelemetry();
     void DrawRibbonTabs();
     void DrawRibbonSketchTab();
     void DrawRibbonModelTab();
