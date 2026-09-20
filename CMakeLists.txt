@@ -3,7 +3,15 @@ project(BreezeCAD LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_BUILD_TYPE Release)
+
+# По умолчанию — Release
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# Принудительно -O2 для Release (избегаем UB, который проявляется на -O3)
+set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG")
 
 # --- Поиск OCCT ---
 set(OCCT_ROOT "$ENV{HOME}/occt/install")

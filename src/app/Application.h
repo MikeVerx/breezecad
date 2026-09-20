@@ -7,6 +7,7 @@
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Pln.hxx>
+#include "imgui.h"
 
 #include <map>
 #include <memory>
@@ -26,6 +27,14 @@ public:
 private:
     std::unique_ptr<GlfwWindow>   myWindow;
     std::unique_ptr<OcctView>     myOcctView;
+    // === Диалог зависимостей ===
+    bool myDependencyDialogOpen = false;
+    int  myCurrentDependencyType = 0;  // 0=Coincident, 1=Parallel, ...
+    std::vector<TDF_Label> myDependencyBase;       // базовые объекты
+    std::vector<TDF_Label> myDependencyDependent;  // зависимые объекты
+    ImVec2 myDependencyDialogPos = ImVec2(0, 0);   // позиция (запоминается)
+    bool   myDependencyDialogPosSet = false;
+
     // === QAT (Quick Access Toolbar) ===
     char mySearchBuffer[128] = "";
     bool myShowSettingsDialog = false;
@@ -114,6 +123,10 @@ private:
     void DrawMenuBar();
     void DrawSketchOverlay();
     void DrawStatusBar();
+    void DrawViewCube();
+    void DrawDependencyDialog();
+    void OpenDependencyDialog(int type);
+    std::string GetLabelName(const TDF_Label& label) const;
     void DrawDependenciesPanel();
     void DrawPreviewInfo();
     void RefreshView();

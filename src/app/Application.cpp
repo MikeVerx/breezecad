@@ -701,7 +701,10 @@ void Application::DrawRibbonSketchTab() {
     static const char* conOpts[] = { "tool.coincident", "tool.parallel", "tool.perpendicular",
                                      "tool.horizontal", "tool.vertical", "tool.tangent",
                                      "tool.concentric", "tool.equal" };
-    RibbonSplitButton("constrain", conOpts, 8, myConstrainToolIndex, false, 130, 46);
+    int conResult = RibbonSplitButton("constrain", conOpts, 8, myConstrainToolIndex, inSketch, 130, 46);
+    if (conResult == 1 || conResult == 3) {
+        OpenDependencyDialog(myConstrainToolIndex);
+    }
     ImGui::SameLine();
     static const char* dimOpts[] = { "tool.dimension", "tool.tangent", "tool.concentric" };
     static int myDimToolIndex = 0;
@@ -1111,6 +1114,40 @@ static bool SnapToKnownPoint(const gp_Pnt& p, const TDF_Label& sketchLabel,
 void Application::OnSketchClick(int px, int py) {
     if (!myOcctView || !myDocument || myActiveSketchLabel.IsNull()) return;
 
+    // Если открыт диалог зависимостей — клик добавляет объекты в списки
+    if (myDependencyDialogOpen) {
+        if (!myOcctView->SelectAtPixel(px, py)) return;
+
+        TDF_Label sel = myOcctView->GetSelectedLabel();
+        if (sel.IsNull()) return;
+
+        // Проверяем, что это линия эскиза
+        if (BreezeDocument::GetType(sel) != FT_SketchLine) {
+            myOcctView->ClearSelection();
+            return;
+        }
+
+        // Проверяем, нет ли уже этой метки в списках
+        auto inList = [&](const std::vector<TDF_Label>& lst) {
+            for (const auto& l : lst) if (l.IsEqual(sel)) return true;
+            return false;
+        };
+
+        if (!inList(myDependencyBase) && !inList(myDependencyDependent)) {
+            // Первый клик — базовый, остальные — зависимые
+            if (myDependencyBase.empty()) {
+                myDependencyBase.push_back(sel);
+                std::cout << "Dependency: base = " << GetLabelName(sel) << "\n";
+            } else {
+                myDependencyDependent.push_back(sel);
+                std::cout << "Dependency: dependent = " << GetLabelName(sel) << "\n";
+            }
+        }
+
+        myOcctView->ClearSelection();
+        return;
+    }
+
     gp_Pnt p;
     if (!myOcctView->ScreenToPlane(px, py, p)) return;
 
@@ -1393,6 +1430,171 @@ void Application::DrawSketchOverlay() {
     // Пустая — весь UI перенесён в Ribbon и Status Bar
 }
 
+void Application::DrawViewCube() {
+    if (!myOcctView) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+
+    const float cubeSize   = 100.0f;
+    const float cubeHalf   = 38.0f;
+    const float margin     = 15.0f;
+    const float topOffset  = 170.0f;
+
+    ImVec2 center(io.DisplaySize.x - margin - cubeSize * 0.5f,
+                  topOffset + cubeSize * 0.5f);
+
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+
+    // Фон
+    draw->AddCircleFilled(center, cubeSize * 0.55f, IM_COL32(40, 45, 55, 180));
+
+    // Ориентация камеры
+    gp_Dir camDir   = myOcctView->GetCameraDirection();
+    gp_Dir camUp    = myOcctView->GetCameraUp();
+
+    // Защита: cross-product нулевой, если dir и up параллельны.
+    // В этом случае подставляем правый вектор по эвристике.
+    gp_Vec crossVec = camDir.Crossed(camUp);
+    gp_Dir camRight;
+    if (crossVec.SquareMagnitude() < 1e-9) {
+        // Выбираем "right" так, чтобы он был не параллелен camDir
+        gp_Dir fallback(1, 0, 0);
+        if (std::abs(camDir.Dot(fallback)) > 0.9) fallback = gp_Dir(0, 1, 0);
+        camRight = camDir.Crossed(fallback);
+    } else {
+        camRight = gp_Dir(crossVec);
+    }
+
+    // 8 вершин куба ±1
+    gp_Pnt C[8] = {
+        {-1,-1,-1}, { 1,-1,-1}, { 1, 1,-1}, {-1, 1,-1},
+        {-1,-1, 1}, { 1,-1, 1}, { 1, 1, 1}, {-1, 1, 1}
+    };
+
+    auto project = [&](const gp_Pnt& p) -> ImVec2 {
+        double x = p.X()*camRight.X() + p.Y()*camRight.Y() + p.Z()*camRight.Z();
+        double y = p.X()*camUp.X()    + p.Y()*camUp.Y()    + p.Z()*camUp.Z();
+        return ImVec2(center.x + (float)x * cubeHalf,
+                      center.y - (float)y * cubeHalf);
+    };
+    auto depthOf = [&](const gp_Pnt& p) -> double {
+        return p.X()*camDir.X() + p.Y()*camDir.Y() + p.Z()*camDir.Z();
+    };
+
+    struct Face { int v[4]; gp_Dir n; const char* label; };
+    Face faces[6] = {
+        {{4,5,6,7}, {0,0, 1}, "TOP"},
+        {{0,3,2,1}, {0,0,-1}, "BOT"},
+        {{0,1,5,4}, {0,-1,0}, "FRONT"},
+        {{2,3,7,6}, {0, 1,0}, "BACK"},
+        {{1,2,6,5}, { 1,0,0}, "RIGHT"},
+        {{3,0,4,7}, {-1,0,0}, "LEFT"},
+    };
+
+    struct Visible { int idx; double depth; ImVec2 pts[4]; };
+    std::vector<Visible> vis;
+
+    for (int fi = 0; fi < 6; fi++) {
+        if (faces[fi].n.Dot(camDir) >= -0.01) continue;  // back-facing
+        Visible v;
+        v.idx = fi;
+        double d = 0;
+        for (int i = 0; i < 4; i++) {
+            v.pts[i] = project(C[faces[fi].v[i]]);
+            d += depthOf(C[faces[fi].v[i]]);
+        }
+        v.depth = d / 4.0;
+        vis.push_back(v);
+    }
+
+    std::sort(vis.begin(), vis.end(),
+              [](const Visible& a, const Visible& b){ return a.depth < b.depth; });
+
+    auto faceColor = [](const gp_Dir& n) -> ImU32 {
+        if (n.Z() > 0.5)  return IM_COL32(180, 195, 210, 255);
+        if (n.Z() < -0.5) return IM_COL32(120, 130, 145, 255);
+        if (n.Y() < -0.5) return IM_COL32(160, 175, 195, 255);
+        if (n.Y() > 0.5)  return IM_COL32(140, 155, 175, 255);
+        if (n.X() > 0.5)  return IM_COL32(150, 165, 185, 255);
+        return IM_COL32(130, 145, 165, 255);
+    };
+
+    // Mouse hover detection
+    ImVec2 mouse = io.MousePos;
+    int hoveredFace = -1;
+    if (!io.WantCaptureMouse) {
+        for (int i = (int)vis.size() - 1; i >= 0; i--) {
+            auto& v = vis[i];
+            int sign = 0; bool inside = true;
+            for (int e = 0; e < 4; e++) {
+                ImVec2 a = v.pts[e], b = v.pts[(e+1)%4];
+                float cr = (b.x-a.x)*(mouse.y-a.y) - (b.y-a.y)*(mouse.x-a.x);
+                int s = (cr > 0) ? 1 : -1;
+                if (sign == 0) sign = s;
+                else if (sign != s) { inside = false; break; }
+            }
+            if (inside) { hoveredFace = i; break; }
+        }
+    }
+
+    // Draw faces
+    for (int i = 0; i < (int)vis.size(); i++) {
+        auto& v = vis[i];
+        ImU32 col     = faceColor(faces[v.idx].n);
+        ImU32 outline = IM_COL32(30, 35, 45, 255);
+        if (i == hoveredFace) col = IM_COL32(255, 220, 120, 255);
+        draw->AddConvexPolyFilled(v.pts, 4, col);
+        draw->AddPolyline(v.pts, 4, outline, ImDrawFlags_Closed, 1.5f);
+    }
+
+    // Labels
+    for (auto& v : vis) {
+        ImVec2 c2(0, 0);
+        for (int i = 0; i < 4; i++) { c2.x += v.pts[i].x; c2.y += v.pts[i].y; }
+        c2.x *= 0.25f; c2.y *= 0.25f;
+        ImVec2 ts = ImGui::CalcTextSize(faces[v.idx].label);
+        draw->AddText(ImVec2(c2.x - ts.x*0.5f, c2.y - ts.y*0.5f),
+                      IM_COL32(25, 30, 40, 255), faces[v.idx].label);
+    }
+
+    // Click handling — защита от выхода за границы
+    if (hoveredFace >= 0 && hoveredFace < (int)vis.size()) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            gp_Dir n = faces[vis[hoveredFace].idx].n;
+            gp_Dir newDir = n.Reversed();
+            gp_Dir newUp(0, 0, 1);
+            if (std::abs(newDir.Z()) > 0.5) {
+                newUp = gp_Dir(0, 1, 0);  // top/bottom view: Y up
+            }
+            myOcctView->SetCameraDirectionAndUp(newDir, newUp);
+        }
+    }
+
+    // Rotation arrows below cube
+    float arrowY = center.y + cubeSize * 0.5f + 10.0f;
+    ImGui::SetNextWindowPos(ImVec2(center.x - 55, arrowY), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(110, 28), ImGuiCond_Always);
+    ImGui::Begin("##viewcube_arrows", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+    ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(60, 70, 90, 220));
+    if (ImGui::Button("<<", ImVec2(50, 24))) {
+        myOcctView->RotateAroundUp(90.0);
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Повернуть влево на 90°");
+    ImGui::SameLine();
+    if (ImGui::Button(">>", ImVec2(50, 24))) {
+        myOcctView->RotateAroundUp(-90.0);
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Повернуть вправо на 90°");
+    ImGui::PopStyleColor();
+
+    ImGui::End();
+}
+
 void Application::DrawStatusBar() {
     ImGuiIO& io = ImGui::GetIO();
     const float h = 24.0f;
@@ -1469,7 +1671,8 @@ void Application::DrawDependenciesPanel() {
     if (myActiveSketchLabel.IsNull()) return;
 
     const float panelW = 280.0f;
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - panelW - 10, 175), ImGuiCond_Always);
+    const float panelTop = 340.0f;   // под ViewCube + стрелками
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - panelW - 15, panelTop), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(panelW, 0), ImGuiCond_Always);
 
     ImGui::Begin(Tr("panel.dependencies").c_str(), nullptr,
@@ -1790,6 +1993,131 @@ void Application::DrawSettingsDialog() {
     ImGui::End();
 }
 
+std::string Application::GetLabelName(const TDF_Label& label) const {
+    Handle(TDataStd_Name) nameAttr;
+    if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
+        TCollection_AsciiString ascii(nameAttr->Get());
+        return ascii.ToCString();
+    }
+    // Если имени нет — генерируем "Line <tag>"
+    return "Line" + std::to_string(label.Tag());
+}
+
+void Application::OpenDependencyDialog(int type) {
+    myDependencyDialogOpen = true;
+    myCurrentDependencyType = type;
+    myDependencyBase.clear();
+    myDependencyDependent.clear();
+    // Позиция сохранится (myDependencyDialogPosSet)
+}
+
+void Application::DrawDependencyDialog() {
+    if (!myDependencyDialogOpen) return;
+
+    // Названия зависимостей по индексу
+    static const char* depNames[] = {
+        "Совпадение", "Параллельность", "Перпендикулярность",
+        "Горизонталь", "Вертикаль", "Касание",
+        "Концентричность", "Равенство"
+    };
+    const char* title = depNames[myCurrentDependencyType % 8];
+
+    // Позиция — по умолчанию по центру, но запоминается после первого перетаскивания
+    ImGuiIO& io = ImGui::GetIO();
+    if (!myDependencyDialogPosSet) {
+        myDependencyDialogPos = ImVec2(io.DisplaySize.x * 0.5f - 150,
+                                        io.DisplaySize.y * 0.5f - 150);
+        myDependencyDialogPosSet = true;
+    }
+
+    // Первая установка позиции — только один раз
+    ImGui::SetNextWindowPos(myDependencyDialogPos, ImGuiCond_Once);
+    ImGui::SetNextWindowSize(ImVec2(320, 0), ImGuiCond_Once);
+
+    std::string winTitle = std::string(title) + "##dep_dialog";
+    ImGui::Begin(winTitle.c_str(), nullptr,
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize);
+
+    // Запоминаем позицию — она сохранится до конца сеанса
+    myDependencyDialogPos = ImGui::GetWindowPos();
+
+    // === Базовый объект ===
+    ImGui::Text("Базовый объект:");
+    ImGui::BeginChild("##base_list", ImVec2(0, 80), true);
+    if (myDependencyBase.empty()) {
+        ImGui::TextDisabled("(кликните по линии в сцене)");
+    } else {
+        for (size_t i = 0; i < myDependencyBase.size(); i++) {
+            std::string name = GetLabelName(myDependencyBase[i]);
+            ImGui::PushID((int)i);
+            ImGui::Text("%s", name.c_str());
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20);
+            if (ImGui::SmallButton("x")) {
+                myDependencyBase.erase(myDependencyBase.begin() + i);
+                ImGui::PopID();
+                break;
+            }
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+
+    ImGui::Spacing();
+
+    // === Зависимые объекты ===
+    ImGui::Text("Зависимые объекты:");
+    ImGui::BeginChild("##dep_list", ImVec2(0, 80), true);
+    if (myDependencyDependent.empty()) {
+        ImGui::TextDisabled("(кликните по линиям в сцене)");
+    } else {
+        for (size_t i = 0; i < myDependencyDependent.size(); i++) {
+            std::string name = GetLabelName(myDependencyDependent[i]);
+            ImGui::PushID((int)(1000 + i));
+            ImGui::Text("%s", name.c_str());
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20);
+            if (ImGui::SmallButton("x")) {
+                myDependencyDependent.erase(myDependencyDependent.begin() + i);
+                ImGui::PopID();
+                break;
+            }
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+
+    ImGui::Spacing();
+    ImGui::Separator();
+
+    // === Кнопки ===
+    float btnW = 95.0f;
+    if (ImGui::Button("Отмена", ImVec2(btnW, 0))) {
+        myDependencyDialogOpen = false;
+        myDependencyBase.clear();
+        myDependencyDependent.clear();
+        if (myOcctView) myOcctView->ClearSelection();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Применить", ImVec2(btnW, 0))) {
+        // TODO: сохранить зависимость в OCAF
+        std::cout << "Dependency '" << title << "' applied with "
+                  << myDependencyBase.size() << " base and "
+                  << myDependencyDependent.size() << " dependent objects\n";
+        // Очищаем поля, но окно оставляем открытым
+        myDependencyBase.clear();
+        myDependencyDependent.clear();
+        if (myOcctView) myOcctView->ClearSelection();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Готово", ImVec2(btnW, 0))) {
+        myDependencyDialogOpen = false;
+        myDependencyBase.clear();
+        myDependencyDependent.clear();
+        if (myOcctView) myOcctView->ClearSelection();
+    }
+
+    ImGui::End();
+}
+
 void Application::Run() {
     bool prevF11 = false;
     bool prevDelete = false;
@@ -1911,6 +2239,12 @@ void Application::Run() {
         if (curCtrlO && !prevCtrlO) OnOpen();
         prevCtrlO = curCtrlO;
 
+        // F6 — Home view
+        static bool prevF6 = false;
+        bool curF6 = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_F6) == GLFW_PRESS;
+        if (curF6 && !prevF6 && myOcctView) myOcctView->SetHomeView();
+        prevF6 = curF6;
+
         // Ctrl+Z — Undo
         static bool prevCtrlZ = false;
         bool curCtrlZ = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_Z) == GLFW_PRESS;
@@ -1956,10 +2290,11 @@ void Application::Run() {
         DrawDocumentTree();
         DrawAddBoxDialog();
         DrawPreviewInfo();
-        DrawDependenciesPanel();
         DrawProjectTabs();
         DrawStatusBar();
         DrawSettingsDialog();
+        DrawViewCube();
+        DrawDependencyDialog();
         UpdateTelemetry();
 
         ImGuiIO& io = ImGui::GetIO();

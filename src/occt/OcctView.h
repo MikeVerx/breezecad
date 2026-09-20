@@ -47,6 +47,7 @@ public:
     void SetShapeVisible(const TDF_Label& label, bool visible);
 
     TDF_Label GetSelectedLabel() const;
+    bool SelectAtPixel(int px, int py);
     int GetShapeCount() const { return (int)myShapeEntries.size(); }
     void ClearSelection();
 
@@ -55,6 +56,13 @@ public:
     void ExitSketchMode();
     bool IsInSketchMode() const { return myInSketchMode; }
     const gp_Pln& GetSketchPlane() const { return mySketchPlane; }
+
+    // === Управление камерой (для ViewCube) ===
+    gp_Dir GetCameraDirection() const;
+    gp_Dir GetCameraUp() const;
+    void   SetCameraDirectionAndUp(const gp_Dir& dir, const gp_Dir& up);
+    void   RotateAroundUp(double angleDeg);
+    void   SetHomeView();
 
     // Конвертация экранных координат в точку на плоскости эскиза
     bool ScreenToPlane(int px, int py, gp_Pnt& out) const;

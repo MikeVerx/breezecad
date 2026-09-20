@@ -21,6 +21,8 @@
 #include <Geom_Plane.hxx>
 #include <gp_Ax3.hxx>
 #include <gp_Pln.hxx>
+#include <gp_Ax1.hxx>
+#include <gp_Trsf.hxx>
 #include <gp_Lin.hxx>
 #include <gp_Lin.hxx>
 #include <Aspect_TypeOfLine.hxx>
@@ -626,6 +628,16 @@ void OcctView::DisplaySketchLine(const TopoDS_Shape& line, const TDF_Label& labe
     myContext->UpdateCurrentViewer();
 }
 
+bool OcctView::SelectAtPixel(int px, int py) {
+    if (myContext.IsNull() || myView.IsNull()) return false;
+    myContext->ClearSelected(false);
+    myContext->MoveTo(px, py, myView, false);
+    myContext->SelectDetected(AIS_SelectionScheme_Replace);
+    myContext->UpdateCurrentViewer();
+    myView->Redraw();
+    return myContext->NbSelected() > 0;
+}
+
 TDF_Label OcctView::GetSelectedLabel() const {
     if (myContext.IsNull()) return TDF_Label();
     if (myContext->NbSelected() == 0) return TDF_Label();
@@ -648,6 +660,66 @@ void OcctView::ClearSelection() {
 
 void OcctView::FitAll() {
     if (myView.IsNull()) return;
+    myView->FitAll(0.01, false);
+    myView->ZFitAll();
+    myView->Redraw();
+}
+
+gp_Dir OcctView::GetCameraDirection() const {
+    if (myView.IsNull()) return gp_Dir(0, 0, -1);
+    Handle(Graphic3d_Camera) cam = myView->Camera();
+    if (cam.IsNull()) return gp_Dir(0, 0, -1);
+    return cam->Direction();
+}
+
+gp_Dir OcctView::GetCameraUp() const {
+    if (myView.IsNull()) return gp_Dir(0, 1, 0);
+    Handle(Graphic3d_Camera) cam = myView->Camera();
+    if (cam.IsNull()) return gp_Dir(0, 1, 0);
+    return cam->Up();
+}
+
+void OcctView::SetCameraDirectionAndUp(const gp_Dir& dir, const gp_Dir& up) {
+    if (myView.IsNull()) return;
+    Handle(Graphic3d_Camera) cam = myView->Camera();
+    if (cam.IsNull()) return;
+
+    // Защита: если dir и up параллельны — подставляем дефолтный up
+    gp_Dir safeUp = up;
+    if (std::abs(dir.Dot(up)) > 0.99) {
+        gp_Dir fallback(0, 0, 1);
+        if (std::abs(dir.Dot(fallback)) > 0.9) fallback = gp_Dir(0, 1, 0);
+        safeUp = fallback;
+    }
+
+    cam->SetDirection(dir);
+    cam->SetUp(safeUp);
+    myView->Redraw();
+}
+
+void OcctView::RotateAroundUp(double angleDeg) {
+    if (myView.IsNull()) return;
+    Handle(Graphic3d_Camera) cam = myView->Camera();
+    if (cam.IsNull()) return;
+
+    gp_Dir dir = cam->Direction();
+    gp_Dir up  = cam->Up();
+
+    // Защита: если up и dir коллинеарны, поворот вокруг up бессмыслен
+    if (std::abs(dir.Dot(up)) > 0.99) return;
+
+    gp_Trsf rot;
+    rot.SetRotation(gp_Ax1(gp_Pnt(0, 0, 0), up), angleDeg * M_PI / 180.0);
+    gp_Dir newDir = dir.Transformed(rot);
+    cam->SetDirection(newDir);
+    myView->Redraw();
+}
+
+void OcctView::SetHomeView() {
+    if (myView.IsNull()) return;
+    Handle(Graphic3d_Camera) cam = myView->Camera();
+    cam->SetDirection(gp_Dir(-1, -1, -1));
+    cam->SetUp(gp_Dir(0, 0, 1));
     myView->FitAll(0.01, false);
     myView->ZFitAll();
     myView->Redraw();
