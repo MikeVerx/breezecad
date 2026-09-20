@@ -36,6 +36,8 @@
 #define ICON_RULER       "\uf545"    // ruler
 
 // --- Общие ---
+#define ICON_EYE         "\uf06e"    // eye
+#define ICON_EYE_SLASH   "\uf070"    // eye-slash
 #define ICON_PLUS        "\uf067"    // plus
 #define ICON_CLOSE       "\uf00d"    // xmark
 #define ICON_CHECK       "\uf00c"    // check

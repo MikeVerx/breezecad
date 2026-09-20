@@ -437,10 +437,15 @@ bool Application::DrawLabelTree(const TDF_Label& label,
             visible = !hasOps;
         }
 
-        if (ImGui::Checkbox("##vis", &visible)) {
-            myVisibility[key] = visible;
-            if (myOcctView) myOcctView->SetShapeVisible(label, visible);
+        const char* eyeIcon = visible ? ICON_EYE : ICON_EYE_SLASH;
+        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(70, 80, 100, 120));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(90, 110, 140, 180));
+        if (ImGui::Button(eyeIcon, ImVec2(24, 0))) {
+            myVisibility[key] = !visible;
+            if (myOcctView) myOcctView->SetShapeVisible(label, !visible);
         }
+        ImGui::PopStyleColor(3);
         ImGui::SameLine();
     }
 
@@ -578,6 +583,15 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
 
     // === 1. Логотип / Меню файл ===
+    // Логотип/HOME — возврат на главную
+    if (ImGui::Button(ICON_HOME, ImVec2(32, 0))) {
+        myShowHomeScreen = true;
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Главная");
+
+    ImGui::SameLine();
+
+    // Меню «Файл»
     if (ImGui::Button(ICON_FILE, ImVec2(32, 0))) {
         ImGui::OpenPopup("##file_menu");
     }
@@ -1151,8 +1165,16 @@ void Application::DrawDocumentTree() {
 
     // Обработка отложенных операций
     if (!myPendingCreateSketchLabel.IsNull() && myDocument) {
-        myDocument->AddSketchFeature(myPendingCreateSketchLabel);
+        // Создаём эскиз и сразу запоминаем, куда войти
+        TDF_Label parentPlane = myPendingCreateSketchLabel;
+        TDF_Label newSketch = myDocument->AddSketchFeature(parentPlane);
         myPendingCreateSketchLabel = TDF_Label();
+
+        // Автоматически входим в созданный эскиз
+        if (!newSketch.IsNull()) {
+            myPendingEnterSketchLabel = newSketch;
+            std::cout << "Auto-enter sketch: tag=" << newSketch.Tag() << "\n";
+        }
     }
     if (!myPendingEnterSketchLabel.IsNull() && myDocument) {
         EnterSketch(myPendingEnterSketchLabel);
@@ -2877,6 +2899,27 @@ void Application::Run() {
         if (curCtrlO && !prevCtrlO) OnOpen();
         prevCtrlO = curCtrlO;
 
+        // Alt+V — переключить видимость выделенного объекта
+        {
+            bool altHeld = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_ALT) == GLFW_PRESS
+                        || glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_RIGHT_ALT) == GLFW_PRESS;
+            static bool prevAltV = false;
+            bool curAltV = altHeld && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_V) == GLFW_PRESS;
+            if (curAltV && !prevAltV && myOcctView && myDocument) {
+                TDF_Label sel = myOcctView->GetSelectedLabel();
+                if (!sel.IsNull()) {
+                    std::string key = LabelKey(sel);
+                    auto it = myVisibility.find(key);
+                    bool curVis = (it != myVisibility.end()) ? it->second : true;
+                    myVisibility[key] = !curVis;
+                    myOcctView->SetShapeVisible(sel, !curVis);
+                    std::cout << "Alt+V: visibility toggled for tag=" << sel.Tag()
+                              << " -> " << (!curVis ? "visible" : "hidden") << "\n";
+                }
+            }
+            prevAltV = curAltV;
+        }
+
         // F6 — Home view
         static bool prevF6 = false;
         bool curF6 = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_F6) == GLFW_PRESS;
@@ -2924,22 +2967,25 @@ void Application::Run() {
             myMouseY = my;
         }
 
-        DrawRibbon();
-        DrawDocumentTree();
-        DrawTreeSplitter();
-        DrawAddBoxDialog();
-        DrawPreviewInfo();
-        DrawProjectTabs();
-        DrawStatusBar();
+        if (!myShowHomeScreen) {
+            DrawRibbon();
+            DrawDocumentTree();
+            DrawTreeSplitter();
+            DrawAddBoxDialog();
+            DrawPreviewInfo();
+            DrawProjectTabs();
+            DrawStatusBar();
+            DrawViewCube();
+            DrawDependencyDialog();
+            DrawRenameDialog();
+            DrawDeleteConfirmDialog();
+            DrawPropertiesDialog();
+            DrawContextMenu3D();
+            DrawSelectionRect();
+            DrawRightPanel();
+        }
+        DrawHomeScreen();
         DrawSettingsDialog();
-        DrawViewCube();
-        DrawDependencyDialog();
-        DrawRenameDialog();
-        DrawDeleteConfirmDialog();
-        DrawPropertiesDialog();
-        DrawContextMenu3D();
-        DrawSelectionRect();
-        DrawRightPanel();
         UpdateTelemetry();
 
         ImGuiIO& io = ImGui::GetIO();
@@ -3169,6 +3215,143 @@ void Application::DrawRightPanel() {
 
     ImGui::PopStyleVar(2);
     ImGui::End();
+}
+
+void Application::DrawHomeScreen() {
+    if (!myShowHomeScreen) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+
+    // === Фоновое затемнение 3D-сцены ===
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(io.DisplaySize);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(20, 22, 28, 240));
+    ImGui::Begin("##home_bg", nullptr,
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+    // === Заголовок ===
+    ImGui::SetCursorPos(ImVec2(40, 40));
+    ImGui::PushFont(ImGui::GetIO().Fonts->Fonts[0]);
+    ImGui::TextColored(ImVec4(0.9f, 0.95f, 1.0f, 1.0f), "BreezeCAD");
+    ImGui::PopFont();
+    ImGui::SetCursorPos(ImVec2(40, 70));
+    ImGui::TextDisabled("Проекты");
+
+    // === Кнопки управления (сверху справа) ===
+    // Общая ширина: 180 + 10 + 180 + 10 + 50 = 430. Отступ от правого края — 40.
+    const float totalBtnW = 430.0f;
+    float btnX = io.DisplaySize.x - totalBtnW - 40.0f;
+    if (btnX < 40.0f) btnX = 40.0f;  // защита от узкого окна
+
+    ImGui::SetCursorPos(ImVec2(btnX, 40));
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(20, 12));
+
+    if (ImGui::Button(ICON_PLUS "  Создать", ImVec2(180, 0))) {
+        CreateNewDoc();
+        myShowHomeScreen = false;
+        RefreshView();
+        if (myOcctView) myOcctView->FitAll();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(ICON_FILE "  Открыть", ImVec2(180, 0))) {
+        OnOpen();
+        if (myActiveDocIndex >= 0) myShowHomeScreen = false;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(ICON_SETTINGS, ImVec2(50, 0))) {
+        myShowSettingsDialog = true;
+    }
+
+    ImGui::PopStyleVar();
+
+    // === Разделитель ===
+    ImGui::SetCursorPos(ImVec2(40, 120));
+    ImGui::Separator();
+    ImGui::SetCursorPos(ImVec2(40, 140));
+
+    // === Плитки проектов ===
+    const float tileW = 240.0f;
+    const float tileH = 220.0f;
+    const float spacing = 20.0f;
+    int col = 0;
+    float x = 40.0f;
+    float y = 180.0f;
+
+    ImGui::BeginChild("##home_tiles", ImVec2(0, 0), false);
+
+    for (int i = 0; i < (int)myDocuments.size(); i++) {
+        ImGui::PushID(i);
+
+        ImVec2 pos(x + col * (tileW + spacing), y);
+
+        // Плитка — это группа кнопок, стилизованная под карточку
+        ImGui::SetCursorPos(pos);
+
+        // Фон плитки
+        ImGui::BeginGroup();
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(35, 40, 50, 255));
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32(60, 70, 90, 255));
+
+        ImGui::BeginChild(("##tile_" + std::to_string(i)).c_str(),
+                           ImVec2(tileW, tileH), true,
+                           ImGuiWindowFlags_NoScrollbar);
+
+        // Миниатюра (пока placeholder — просто тёмный прямоугольник)
+        ImVec2 thumbPos = ImGui::GetCursorScreenPos();
+        ImVec2 thumbSize(tileW - 20, 140);
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            thumbPos,
+            ImVec2(thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y),
+            IM_COL32(25, 28, 35, 255), 6.0f);
+
+        // Иконка куба в центре превью
+        ImGui::SetCursorPos(ImVec2(tileW * 0.5f - 15, 60));
+        ImGui::TextColored(ImVec4(0.5f, 0.55f, 0.7f, 0.6f), ICON_CUBE);
+
+        ImGui::SetCursorPosY(150);
+
+        // Имя проекта
+        ImGui::Text("%s", myProjectNames[i].c_str());
+
+        // Путь (или «не сохранён»)
+        ImGui::TextDisabled("%s", myProjectPaths[i].empty()
+                                     ? "<не сохранён>"
+                                     : myProjectPaths[i].c_str());
+
+        // Кнопки на плитке
+        ImGui::SetCursorPosY(180);
+        if (ImGui::Button("Открыть", ImVec2(100, 30))) {
+            SwitchToDoc(i);
+            myShowHomeScreen = false;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(ICON_CLOSE " Удалить", ImVec2(100, 30))) {
+            // TODO: подтверждение + удаление
+        }
+
+        ImGui::EndChild();
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar(2);
+        ImGui::EndGroup();
+
+        ImGui::PopID();
+
+        col++;
+        if (col >= 4) {  // 4 плитки в строке
+            col = 0;
+            y += tileH + spacing;
+        }
+    }
+
+    ImGui::EndChild();
+
+    ImGui::End();
+    ImGui::PopStyleColor();
 }
 
 } // namespace BreezeCAD

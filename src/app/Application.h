@@ -37,6 +37,9 @@ private:
 
     // === QAT (Quick Access Toolbar) ===
     char mySearchBuffer[128] = "";
+    // === Главная (Home) ===
+    bool myShowHomeScreen = false;
+
     // === Правая панель навигации ===
     bool myRightPanelExpanded = true;
 
@@ -154,6 +157,7 @@ private:
     void DrawContextMenu3D();
     void DrawSelectionRect();
     void DrawRightPanel();
+    void DrawHomeScreen();
     void DrawRenameDialog();
     void DrawDeleteConfirmDialog();
     void DrawPropertiesDialog();
