@@ -61,6 +61,14 @@ public:
     bool ConsumeContextMenuRequest(int& outX, int& outY);
     bool IsSketchMode() const { return !myInSketchMode ? false : true; }
     int GetShapeCount() const { return (int)myShapeEntries.size(); }
+
+    // Все метки отображаемых объектов (для изоляции)
+    std::vector<TDF_Label> GetAllLabels() const {
+        std::vector<TDF_Label> out;
+        out.reserve(myShapeEntries.size());
+        for (const auto& e : myShapeEntries) out.push_back(e.Label);
+        return out;
+    }
     void ClearSelection();
 
     // === Режим эскиза ===

@@ -37,6 +37,13 @@ private:
 
     // === QAT (Quick Access Toolbar) ===
     char mySearchBuffer[128] = "";
+    // === Буфер обмена (для копирования объектов) ===
+    TDF_Label myClipboardLabel;
+
+    // === Изоляция ===
+    bool myIsolationActive = false;
+    std::map<std::string, bool> myIsolationBackup;   // что было скрыто до изоляции
+
     // === Главная (Home) ===
     bool myShowHomeScreen = false;
 
@@ -155,6 +162,7 @@ private:
     void DrawDocumentTree();
     void DrawTreeSplitter();
     void DrawContextMenu3D();
+    void DrawContextMenuItems(const TDF_Label& label, bool hasOps);
     void DrawSelectionRect();
     void DrawRightPanel();
     void DrawHomeScreen();

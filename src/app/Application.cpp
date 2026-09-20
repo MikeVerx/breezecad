@@ -463,71 +463,7 @@ bool Application::DrawLabelTree(const TDF_Label& label,
     if (ImGui::BeginPopupContextItem("##ctx")) {
         ImGui::TextDisabled("%s", labelName.c_str());
         ImGui::Separator();
-
-        // --- Для плоскости ---
-        if (type == FT_Plane) {
-            if (ImGui::MenuItem("Создать эскиз")) {
-                myPendingCreateSketchLabel = label;
-            }
-            ImGui::Separator();
-        }
-
-        // --- Для эскиза ---
-        if (type == FT_Sketch) {
-            if (ImGui::MenuItem("Редактировать эскиз")) {
-                myPendingEnterSketchLabel = label;
-            }
-            ImGui::Separator();
-        }
-
-        // --- Для операции (Box, Cylinder, Hole) ---
-        if (type == FT_Box || type == FT_Cylinder || type == FT_Hole) {
-            if (ImGui::MenuItem("Редактировать")) {
-                // TODO: диалог редактирования параметров
-            }
-            if (ImGui::MenuItem("Измерить")) {
-                // TODO: инструмент измерения
-            }
-            ImGui::Separator();
-        }
-
-        // --- Показать/Скрыть (только для системных с геометрией) ---
-        if (isSystem && (type == FT_Plane || type == FT_Axis)) {
-            std::string key = LabelKey(label);
-            auto it = myVisibility.find(key);
-            bool curVisible = (it != myVisibility.end()) ? it->second : !hasOps;
-
-            if (ImGui::MenuItem(curVisible ? "Скрыть" : "Показать")) {
-                myVisibility[key] = !curVisible;
-                if (myOcctView) myOcctView->SetShapeVisible(label, !curVisible);
-            }
-            ImGui::Separator();
-        }
-
-        // --- Переименовать (для не-системных) ---
-        if (!isSystem) {
-            if (ImGui::MenuItem("Переименовать")) {
-                myPendingRenameLabel = label;
-                std::strncpy(myRenameBuffer, labelName.c_str(), sizeof(myRenameBuffer) - 1);
-                myRenameBuffer[sizeof(myRenameBuffer) - 1] = '\0';
-                myShowRenameDialog = true;
-            }
-        }
-
-        // --- Свойства (для всех) ---
-        if (ImGui::MenuItem("Свойства...")) {
-            myPendingPropertiesLabel = label;
-            myShowPropertiesDialog = true;
-        }
-
-        // --- Удалить (для не-системных) ---
-        if (!isSystem) {
-            ImGui::Separator();
-            if (ImGui::MenuItem("Удалить")) {
-                RequestDelete(label);
-            }
-        }
-
+        DrawContextMenuItems(label, hasOps);
         ImGui::EndPopup();
     }
 
@@ -2073,6 +2009,130 @@ void Application::DrawPropertiesDialog() {
     ImGui::End();
 }
 
+void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
+    if (label.IsNull()) return;
+
+    std::string labelName = "<unnamed>";
+    Handle(TDataStd_Name) nameAttr;
+    if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
+        labelName = ExtToUtf8(nameAttr->Get());
+    }
+
+    int type = BreezeDocument::GetType(label);
+    bool isSystem = (type < 0);
+    std::string key = LabelKey(label);
+
+    // === Плоскость ===
+    if (type == FT_Plane) {
+        if (ImGui::MenuItem(ICON_SKETCH "  Создать эскиз")) {
+            myPendingCreateSketchLabel = label;
+        }
+        ImGui::Separator();
+    }
+
+    // === Эскиз ===
+    if (type == FT_Sketch) {
+        if (ImGui::MenuItem(ICON_PENCIL "  Редактировать эскиз")) {
+            myPendingEnterSketchLabel = label;
+        }
+        ImGui::Separator();
+    }
+
+    // === 3D-операция ===
+    if (type == FT_Box || type == FT_Cylinder || type == FT_Hole) {
+        if (ImGui::MenuItem(ICON_PENCIL "  Редактировать")) {}
+        if (ImGui::MenuItem(ICON_RULER "  Измерить")) {}
+        if (ImGui::MenuItem(ICON_SEARCH "  Изолировать")) {
+            std::cout << "Isolate — TODO (отключено для отладки)\n";
+        }
+        ImGui::Separator();
+    }
+
+    // === Start ===
+    if (type == FT_Start) {
+        if (ImGui::MenuItem(ICON_EYE "  Показать все плоскости и оси")) {
+            TDF_ChildIterator it(label, false);
+            for (; it.More(); it.Next()) {
+                TDF_Label child = it.Value();
+                int ct = BreezeDocument::GetType(child);
+                if (ct == FT_Plane || ct == FT_Axis) {
+                    std::string k = LabelKey(child);
+                    myVisibility[k] = true;
+                    if (myOcctView) myOcctView->SetShapeVisible(child, true);
+                }
+            }
+        }
+        if (ImGui::MenuItem(ICON_EYE_SLASH "  Скрыть все плоскости и оси")) {
+            TDF_ChildIterator it(label, false);
+            for (; it.More(); it.Next()) {
+                TDF_Label child = it.Value();
+                int ct = BreezeDocument::GetType(child);
+                if (ct == FT_Plane || ct == FT_Axis) {
+                    std::string k = LabelKey(child);
+                    myVisibility[k] = false;
+                    if (myOcctView) myOcctView->SetShapeVisible(child, false);
+                }
+            }
+        }
+        ImGui::Separator();
+    }
+
+    // === Скрыть / Показать ===
+    if (isSystem && (type == FT_Plane || type == FT_Axis)) {
+        auto it = myVisibility.find(key);
+        bool curVisible = (it != myVisibility.end()) ? it->second : !hasOps;
+
+        if (ImGui::MenuItem(curVisible ? ICON_EYE_SLASH "  Скрыть" : ICON_EYE "  Показать")) {
+            myVisibility[key] = !curVisible;
+            if (myOcctView) myOcctView->SetShapeVisible(label, !curVisible);
+        }
+        ImGui::Separator();
+    }
+
+    // === Копировать ===
+    if (!isSystem) {
+        if (ImGui::MenuItem(ICON_FILE "  Копировать")) {
+            myClipboardLabel = label;
+            std::cout << "Copied: " << labelName << "\n";
+        }
+    }
+
+    // === Вставить ===
+    if (!myClipboardLabel.IsNull()) {
+        if (ImGui::MenuItem(ICON_FILE "  Вставить")) {
+            std::cout << "Paste — TODO\n";
+        }
+    }
+
+    if (!isSystem) {
+        ImGui::Separator();
+    }
+
+    // === Переименовать ===
+    if (!isSystem) {
+        if (ImGui::MenuItem(ICON_RENAME "  Переименовать")) {
+            myPendingRenameLabel = label;
+            std::strncpy(myRenameBuffer, labelName.c_str(), sizeof(myRenameBuffer) - 1);
+            myRenameBuffer[sizeof(myRenameBuffer) - 1] = '\0';
+            myShowRenameDialog = true;
+        }
+    }
+
+    // === Свойства ===
+    if (ImGui::MenuItem(ICON_INFO "  Свойства...")) {
+        myPendingPropertiesLabel = label;
+        myShowPropertiesDialog = true;
+    }
+
+    // === Удалить ===
+    if (!isSystem) {
+        ImGui::Separator();
+        if (ImGui::MenuItem(ICON_TRASH "  Удалить")) {
+            RequestDelete(label);
+        }
+    }
+}
+
 void Application::DrawContextMenu3D() {
     if (myPendingContextMenu) {
         ImGui::SetNextWindowPos(myContextMenuPos, ImGuiCond_Always);
@@ -2113,7 +2173,7 @@ void Application::DrawContextMenu3D() {
                 if (myOcctView) myOcctView->FitAll();
             }
         } else {
-            // === ПКМ по объекту ===
+            // === ПКМ по объекту — то же меню, что и в дереве ===
             std::string name = "<unnamed>";
             Handle(TDataStd_Name) nameAttr;
             if (sel.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
@@ -2123,80 +2183,8 @@ void Application::DrawContextMenu3D() {
             ImGui::TextDisabled("%s", name.c_str());
             ImGui::Separator();
 
-            int type = BreezeDocument::GetType(sel);
-
-            // === Плоскость ===
-            if (type == FT_Plane) {
-                if (ImGui::MenuItem("Создать эскиз")) {
-                    myPendingCreateSketchLabel = sel;
-                }
-                ImGui::Separator();
-            }
-
-            // === Ось ===
-            if (type == FT_Axis) {
-                if (ImGui::MenuItem("Создать эскиз на перпендикулярной плоскости")) {
-                    // TODO
-                }
-                ImGui::Separator();
-            }
-
-            // === Точка Origin ===
-            if (type == FT_OriginPoint) {
-                if (ImGui::MenuItem("Создать эскиз на XY")) {
-                    // TODO
-                }
-                ImGui::Separator();
-            }
-
-            // === Эскиз ===
-            if (type == FT_Sketch) {
-                if (ImGui::MenuItem("Редактировать эскиз")) {
-                    myPendingEnterSketchLabel = sel;
-                }
-                ImGui::Separator();
-            }
-
-            // === 3D-операция ===
-            if (type == FT_Box || type == FT_Cylinder || type == FT_Hole) {
-                if (ImGui::MenuItem("Редактировать")) {}
-                if (ImGui::MenuItem("Измерить")) {}
-                ImGui::Separator();
-            }
-
-            // === Скрыть/Показать для системных ===
-            if (BreezeDocument::IsSystem(sel) && (type == FT_Plane || type == FT_Axis)) {
-                std::string key = LabelKey(sel);
-                auto it = myVisibility.find(key);
-                bool curVisible = (it != myVisibility.end()) ? it->second : true;
-
-                if (ImGui::MenuItem(curVisible ? "Скрыть" : "Показать")) {
-                    myVisibility[key] = !curVisible;
-                    if (myOcctView) myOcctView->SetShapeVisible(sel, !curVisible);
-                }
-                ImGui::Separator();
-            }
-
-            if (!BreezeDocument::IsSystem(sel)) {
-                if (ImGui::MenuItem("Переименовать")) {
-                    myPendingRenameLabel = sel;
-                    std::strncpy(myRenameBuffer, name.c_str(), sizeof(myRenameBuffer) - 1);
-                    myRenameBuffer[sizeof(myRenameBuffer) - 1] = ' ';
-                    myShowRenameDialog = true;
-                }
-            }
-
-            if (ImGui::MenuItem("Свойства...")) {
-                myPendingPropertiesLabel = sel;
-                myShowPropertiesDialog = true;
-            }
-
-            if (!BreezeDocument::IsSystem(sel)) {
-                ImGui::Separator();
-                if (ImGui::MenuItem("Удалить")) {
-                    RequestDelete(sel);
-                }
-            }
+            bool hasOps = myDocument ? myDocument->Has3DOperations() : false;
+            DrawContextMenuItems(sel, hasOps);
         }
         ImGui::EndPopup();
     }
@@ -2898,6 +2886,31 @@ void Application::Run() {
         bool curCtrlO = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_O) == GLFW_PRESS;
         if (curCtrlO && !prevCtrlO) OnOpen();
         prevCtrlO = curCtrlO;
+
+        // Ctrl+C — копировать выделенное
+        {
+            bool ctrl = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS
+                     || glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
+            static bool prevCtrlC = false;
+            bool curCtrlC = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_C) == GLFW_PRESS;
+            if (curCtrlC && !prevCtrlC && myOcctView) {
+                TDF_Label sel = myOcctView->GetSelectedLabel();
+                if (!sel.IsNull() && !BreezeDocument::IsSystem(sel)) {
+                    myClipboardLabel = sel;
+                    std::cout << "Copied: tag=" << sel.Tag() << "\n";
+                }
+            }
+            prevCtrlC = curCtrlC;
+
+            // Ctrl+V — вставить
+            static bool prevCtrlV = false;
+            bool curCtrlV = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_V) == GLFW_PRESS;
+            if (curCtrlV && !prevCtrlV && !myClipboardLabel.IsNull()) {
+                // TODO: клонирование
+                std::cout << "Paste — TODO\n";
+            }
+            prevCtrlV = curCtrlV;
+        }
 
         // Alt+V — переключить видимость выделенного объекта
         {
