@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <unordered_map>
 
 #ifdef _WIN32
@@ -13,6 +14,11 @@ namespace BreezeCAD {
 class IconManager {
 public:
     void LoadAll(const std::string& dir);
+
+    // Предзагрузка всех иконок при старте (чтобы не тормозить первый кадр)
+    void PreloadAll(const std::vector<std::string>& names);
+    // Предзагрузка дефолтного списка иконок проекта
+    void PreloadDefaults();
     GLuint Get(const std::string& name, int size);
     void Clear();
 

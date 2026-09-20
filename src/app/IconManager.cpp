@@ -142,8 +142,10 @@ void IconManager::LoadAll(const std::string& dir) {
     std::cout << "IconManager: icons dir = " << dir << "\n";
 }
 
-GLuint IconManager::Get(const std::string& name, int size) {
-    std::string key = name + "_" + std::to_string(size);
+GLuint IconManager::Get(const std::string& name, int /*size*/) {
+    // Всегда рендерим в 32px — ImGui масштабирует при отрисовке.
+    // Это позволяет кешировать одну текстуру для всех размеров.
+    std::string key = name;
     auto it = myCache.find(key);
     if (it != myCache.end()) return it->second;
 
@@ -177,9 +179,61 @@ GLuint IconManager::Get(const std::string& name, int size) {
         return 0;
     }
 
-    GLuint tex = RasterizeToTexture(foundPath, size);
+    GLuint tex = RasterizeToTexture(foundPath, 32);
     myCache[key] = tex;
     return tex;
+}
+
+void IconManager::PreloadAll(const std::vector<std::string>& names) {
+    int count = 0;
+    for (const auto& name : names) {
+        GLuint tex = Get(name, 32);
+        if (tex != 0) count++;
+    }
+    std::cout << "IconManager: preloaded " << count << "/" << names.size()
+              << " icons\n";
+}
+
+void IconManager::PreloadDefaults() {
+    // Список всех иконок, используемых в UI
+    static const std::vector<std::string> kDefaultIcons = {
+        // QAT
+        "house", "file-text", "save", "settings", "undo-2", "redo-2",
+        // Навигация
+        "search", "hand", "rotate-3d", "eye", "palette",
+        "chevron-down", "chevron-left", "chevron-right", "chevron-up",
+        // Создание
+        "pen-line", "square", "circle", "circle-dashed", "pentagon",
+        "circle-dot", "type",
+        // Проецирование
+        "copy", "copy-check",
+        // Изменение
+        "scissors", "move-horizontal", "copy-plus", "move",
+        "rotate-cw", "maximize-2", "flip-horizontal",
+        // Ограничения
+        "equal", "target", "align-justify", "corner-down-right",
+        "move-vertical", "circle-dot-dashed", "spline",
+        "flip-horizontal-2", "lock", "ruler",
+        // 3D операции
+        "arrow-up-from-line", "arrow-right", "layers",
+        "pencil-ruler", "package", "arrow-up", "plus", "minus", "boxes",
+        "grid-3x3",
+        // Рабочие элементы
+        "move-3d",
+        // Аннотации
+        "angle", "arrow-right-from-line", "flag", "waves", "zap",
+        // Инструменты
+        "distance", "box", "alert-triangle", "info", "scale",
+        // Управление
+        "list", "calculator", "image", "brush",
+        "refresh-cw", "refresh-ccw", "alert-circle", "upload",
+        // Вид
+        "arrow-down", "arrow-left", "sun", "sparkles",
+        "eye-off", "focus", "layout-grid",
+        // Общие
+        "x", "check", "pencil", "trash", "ellipsis",
+    };
+    PreloadAll(kDefaultIcons);
 }
 
 void IconManager::Clear() {
