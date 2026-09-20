@@ -1,5 +1,6 @@
 #include "app/Application.h"
 #include "app/Localization.h"
+#include "app/IconsFontAwesome.h"
 #include "doc/BreezeApplication.h"
 #include "platform/FileDialog.h"
 
@@ -116,9 +117,14 @@ static std::string LabelKey(const TDF_Label& label) {
     return oss.str();
 }
 
-static void LoadCyrillicFont() {
+// Диапазоны глифов Font Awesome (Private Use Area)
+static const ImWchar kFontAwesomeRanges[] = { 0xf000, 0xf8ff, 0 };
+
+static void LoadFonts() {
     ImGuiIO& io = ImGui::GetIO();
-    const std::vector<std::string> candidates = {
+
+    // 1) Основной шрифт (латиница + кириллица)
+    const std::vector<std::string> mainCandidates = {
         "assets/fonts/Roboto-Regular.ttf",
         "../assets/fonts/Roboto-Regular.ttf",
         "../../assets/fonts/Roboto-Regular.ttf",
@@ -126,15 +132,45 @@ static void LoadCyrillicFont() {
         "C:/Windows/Fonts/arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     };
-    for (const auto& path : candidates) {
+
+    bool mainLoaded = false;
+    for (const auto& path : mainCandidates) {
         std::error_code ec;
         if (!std::filesystem::exists(path, ec)) continue;
         ImFont* font = io.Fonts->AddFontFromFileTTF(
             path.c_str(), 18.0f, nullptr,
             io.Fonts->GetGlyphRangesCyrillic());
-        if (font) { std::cout << "BreezeCAD: font '" << path << "'\n"; return; }
+        if (font) {
+            std::cout << "BreezeCAD: font '" << path << "'\n";
+            mainLoaded = true;
+            break;
+        }
     }
-    io.Fonts->AddFontDefault();
+    if (!mainLoaded) io.Fonts->AddFontDefault();
+
+    // 2) Font Awesome — в режиме MergeMode поверх основного
+    const std::vector<std::string> faCandidates = {
+        "assets/fonts/fa-solid-900.ttf",
+        "../assets/fonts/fa-solid-900.ttf",
+        "../../assets/fonts/fa-solid-900.ttf",
+    };
+
+    ImFontConfig cfg;
+    cfg.MergeMode = true;
+    cfg.PixelSnapH = true;
+    cfg.GlyphMinAdvanceX = 18.0f;   // выравнивание иконок по ширине
+    cfg.GlyphOffset = ImVec2(0.0f, 2.0f);  // вертикальное выравнивание
+
+    for (const auto& path : faCandidates) {
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec)) continue;
+        ImFont* fa = io.Fonts->AddFontFromFileTTF(
+            path.c_str(), 18.0f, &cfg, kFontAwesomeRanges);
+        if (fa) {
+            std::cout << "BreezeCAD: Font Awesome loaded from '" << path << "'\n";
+            break;
+        }
+    }
 }
 
 Application::Application() {
@@ -144,7 +180,7 @@ Application::Application() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
-    LoadCyrillicFont();
+    LoadFonts();
     ImGui_ImplGlfw_InitForOpenGL(myWindow->GetNativeWindow(), true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
@@ -542,7 +578,7 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
 
     // === 1. Логотип / Меню файл ===
-    if (ImGui::Button("H", ImVec2(32, 0))) {
+    if (ImGui::Button(ICON_FILE, ImVec2(32, 0))) {
         ImGui::OpenPopup("##file_menu");
     }
     DrawAdvancedTooltip("qat.file",
@@ -583,16 +619,16 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
 
     // === 2. Undo / Redo ===
-    if (ImGui::Button("<", ImVec2(28, 0))) OnUndo();
+    if (ImGui::Button(ICON_UNDO, ImVec2(28, 0))) OnUndo();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Отменить (Ctrl+Z)");
     ImGui::SameLine();
-    if (ImGui::Button(">", ImVec2(28, 0))) OnRedo();
+    if (ImGui::Button(ICON_REDO, ImVec2(28, 0))) OnRedo();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Повторить (Ctrl+Y)");
 
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
 
     // === 3. Save ===
-    if (ImGui::Button("S", ImVec2(32, 0))) OnSave();
+    if (ImGui::Button(ICON_SAVE, ImVec2(32, 0))) OnSave();
     DrawAdvancedTooltip("qat.save",
                         "Сохранить (Ctrl+S)",
                         "Сохранить текущий проект в файл",
@@ -602,7 +638,7 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine();
 
     // === 4. Settings ===
-    if (ImGui::Button("G", ImVec2(32, 0))) myShowSettingsDialog = true;
+    if (ImGui::Button(ICON_SETTINGS, ImVec2(32, 0))) myShowSettingsDialog = true;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Настройки");
 
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
@@ -2341,7 +2377,7 @@ void Application::DrawProjectTabs() {
         // Кнопка × закрытия — только если больше одного документа
         if (myDocuments.size() > 1) {
             ImGui::SameLine(0, 2);
-            if (ImGui::Button("x", ImVec2(20, 24))) {
+            if (ImGui::Button(ICON_CLOSE, ImVec2(20, 24))) {
                 pendingCloseIdx = i;
             }
         }
@@ -2351,7 +2387,7 @@ void Application::DrawProjectTabs() {
 
     // Кнопка "+" — создать новый проект
     ImGui::SameLine();
-    if (ImGui::Button("+", ImVec2(28, 24))) {
+    if (ImGui::Button(ICON_PLUS, ImVec2(28, 24))) {
         CreateNewDoc();
         RefreshView();
         if (myOcctView) myOcctView->FitAll();
@@ -2612,7 +2648,7 @@ void Application::DrawDependencyDialog() {
             ImGui::PushID((int)i);
             ImGui::Text("%s", name.c_str());
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20);
-            if (ImGui::SmallButton("x")) {
+            if (ImGui::SmallButton(ICON_CLOSE)) {
                 myDependencyBase.erase(myDependencyBase.begin() + i);
                 ImGui::PopID();
                 break;
@@ -2635,7 +2671,7 @@ void Application::DrawDependencyDialog() {
             ImGui::PushID((int)(1000 + i));
             ImGui::Text("%s", name.c_str());
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20);
-            if (ImGui::SmallButton("x")) {
+            if (ImGui::SmallButton(ICON_CLOSE)) {
                 myDependencyDependent.erase(myDependencyDependent.begin() + i);
                 ImGui::PopID();
                 break;
@@ -3011,7 +3047,7 @@ void Application::DrawRightPanel() {
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(90, 110, 140, 240));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(40, 50, 70, 240));
 
-    if (ImGui::Button(myRightPanelExpanded ? ">" : "<", ImVec2(handleW, handleH))) {
+    if (ImGui::Button(myRightPanelExpanded ? ICON_CHEVRON_RIGHT : ICON_CHEVRON_LEFT, ImVec2(handleW, handleH))) {
         myRightPanelExpanded = !myRightPanelExpanded;
     }
     ImGui::PopStyleColor(3);
@@ -3036,7 +3072,7 @@ void Application::DrawRightPanel() {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 2));
 
     // --- 1. Панорамировать ---
-    if (ImGui::Button("P##pan", ImVec2(toolW, toolH))) {
+    if (ImGui::Button(ICON_PAN "##pan", ImVec2(toolW, toolH))) {
         // TODO: активировать режим панорамирования
     }
     DrawAdvancedTooltip("panel.pan", "Панорамировать",
@@ -3047,7 +3083,7 @@ void Application::DrawRightPanel() {
     ImGui::Separator();
 
     // --- 2. Показать рамкой (с выпадающим меню) ---
-    if (ImGui::Button("Z##zoom", ImVec2(toolW, toolH))) {
+    if (ImGui::Button(ICON_ZOOM "##zoom", ImVec2(toolW, toolH))) {
         // TODO: активировать режим "показать рамкой"
     }
     DrawAdvancedTooltip("panel.zoom", "Показать рамкой",
@@ -3055,7 +3091,7 @@ void Application::DrawRightPanel() {
         "Основное действие — приблизить область, выделенную рамкой. "
         "Стрелка вниз открывает дополнительные режимы зуммирования.");
 
-    if (ImGui::Button("v##zoom_dd", ImVec2(toolW, arrowH))) {
+    if (ImGui::Button(ICON_CHEVRON_DOWN "##zoom_dd", ImVec2(toolW, arrowH))) {
         ImGui::OpenPopup("##zoom_menu");
     }
     if (ImGui::BeginPopup("##zoom_menu")) {
@@ -3071,7 +3107,7 @@ void Application::DrawRightPanel() {
     ImGui::Separator();
 
     // --- 3. Свободная орбита (с выпадающим меню) ---
-    if (ImGui::Button("O##orbit", ImVec2(toolW, toolH))) {
+    if (ImGui::Button(ICON_ORBIT "##orbit", ImVec2(toolW, toolH))) {
         // TODO: активировать орбиту
     }
     DrawAdvancedTooltip("panel.orbit", "Свободная орбита",
@@ -3079,7 +3115,7 @@ void Application::DrawRightPanel() {
         "Основное действие — свободное вращение вида. Стрелка вниз открывает "
         "различные режимы вращения (с зависимостями, поворот под углом).");
 
-    if (ImGui::Button("v##orbit_dd", ImVec2(toolW, arrowH))) {
+    if (ImGui::Button(ICON_CHEVRON_DOWN "##orbit_dd", ImVec2(toolW, arrowH))) {
         ImGui::OpenPopup("##orbit_menu");
     }
     if (ImGui::BeginPopup("##orbit_menu")) {
@@ -3092,7 +3128,7 @@ void Application::DrawRightPanel() {
     ImGui::Separator();
 
     // --- 4. Вид на объект ---
-    if (ImGui::Button("V##viewon", ImVec2(toolW, toolH))) {
+    if (ImGui::Button(ICON_VIEW_ON "##viewon", ImVec2(toolW, toolH))) {
         // TODO: активировать режим "вид на грань"
     }
     DrawAdvancedTooltip("panel.viewon", "Вид на объект",
@@ -3103,7 +3139,7 @@ void Application::DrawRightPanel() {
     ImGui::Separator();
 
     // --- 5. Стили отображения (с выпадающим меню) ---
-    if (ImGui::Button("S##style", ImVec2(toolW, toolH))) {
+    if (ImGui::Button(ICON_STYLE "##style", ImVec2(toolW, toolH))) {
         // TODO: циклить стиль
     }
     DrawAdvancedTooltip("panel.style", "Стили отображения",
@@ -3111,7 +3147,7 @@ void Application::DrawRightPanel() {
         "Основное действие — переключение стиля отображения модели. "
         "Стрелка вниз открывает полный список стилей.");
 
-    if (ImGui::Button("v##style_dd", ImVec2(toolW, arrowH))) {
+    if (ImGui::Button(ICON_CHEVRON_DOWN "##style_dd", ImVec2(toolW, arrowH))) {
         ImGui::OpenPopup("##style_menu");
     }
     if (ImGui::BeginPopup("##style_menu")) {
