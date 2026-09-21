@@ -542,6 +542,13 @@ static void SetupDeepSTheme() {
 }
 
 void Application::ApplyTheme(int theme) {
+    // По ТЗ три темы:
+    //   0 = Светлая (нейтральный серо-белый, оранжевый акцент)
+    //   1 = Тёмная  (бирюзовый акцент, бывшая DeepSColor)
+    //   2 = Авто    (по системе; пока используем Тёмную)
+    // Старое значение 3 (DeepSColor) маппится на 1.
+    if (theme == 3) theme = 1;
+
     myCurrentTheme = theme;
 
     if (theme == 0) {
@@ -549,27 +556,18 @@ void Application::ApplyTheme(int theme) {
         SetupLightTheme();
 
         if (myOcctView) {
-            // Холодный серо-голубой градиент (Inventor-стиль)
             Quantity_Color top(0.66, 0.72, 0.78, Quantity_TOC_RGB);      // #A8B8C7
             Quantity_Color bottom(0.85, 0.88, 0.91, Quantity_TOC_RGB);   // #D9E0E8
             myOcctView->SetBackgroundGradient(top, bottom);
         }
-    } else if (theme == 3) {
+    } else {
+        // 1 = Тёмная, 2 = Авто (пока тоже тёмная)
         ImGui::StyleColorsDark();
         SetupDeepSTheme();
 
         if (myOcctView) {
             Quantity_Color top(0.040, 0.075, 0.130, Quantity_TOC_RGB);
             Quantity_Color bottom(0.010, 0.025, 0.050, Quantity_TOC_RGB);
-            myOcctView->SetBackgroundGradient(top, bottom);
-        }
-    } else {
-        ImGui::StyleColorsDark();
-        SetupDarkTheme();
-
-        if (myOcctView) {
-            Quantity_Color top(0.15, 0.17, 0.22, Quantity_TOC_RGB);
-            Quantity_Color bottom(0.06, 0.07, 0.10, Quantity_TOC_RGB);
             myOcctView->SetBackgroundGradient(top, bottom);
         }
     }
@@ -3833,13 +3831,8 @@ void Application::DrawSettingsDialog() {
                     ApplyTheme(1);
                 }
                 ImGui::SameLine();
-                if (ImGui::RadioButton("Как в системе", &theme, 2)) {
-                    // Пока используем тёмную по умолчанию
+                if (ImGui::RadioButton("Авто", &theme, 2)) {
                     ApplyTheme(2);
-                }
-                ImGui::SameLine();
-                if (ImGui::RadioButton("DeepSColor", &theme, 3)) {
-                    ApplyTheme(3);
                 }
 
                 ImGui::Spacing();
