@@ -2040,7 +2040,7 @@ void Application::DrawDocumentTree() {
     if (ImGui::Button(Tr("panel.addBox").c_str())) {
         myShowAddBoxDialog = true;
         std::strncpy(myNewBoxName, Tr("default.boxName").c_str(), sizeof(myNewBoxName) - 1);
-        myNewBoxName[sizeof(myNewBoxName) - 1] = ' ';
+        myNewBoxName[sizeof(myNewBoxName) - 1] = '\0';
         myNewBoxPos[0] = myNewBoxPos[1] = myNewBoxPos[2] = 0.0f;
         myNewBoxSize[0] = myNewBoxSize[1] = myNewBoxSize[2] = 100.0f;
     }
