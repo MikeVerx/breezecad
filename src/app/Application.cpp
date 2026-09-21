@@ -845,7 +845,7 @@ void Application::CloseDoc(int index) {
         myPendingCloseDocIndex = index;
         myPendingWindowClose = false;
         std::snprintf(myUnsavedDialogInfo, sizeof(myUnsavedDialogInfo),
-            "Проект Â«%sÂ» содержит "
+            "Проект «%s» содержит "
             "несохранённые изменения.\n"
             "Сохранить перед закрытием?",
             myProjectNames[index].c_str());
@@ -3950,7 +3950,7 @@ void Application::Run() {
                 myPendingWindowClose = true;
                 myPendingCloseDocIndex = modIdx;
                 std::snprintf(myUnsavedDialogInfo, sizeof(myUnsavedDialogInfo),
-                    "Проект Â«%sÂ» содержит "
+                    "Проект «%s» содержит "
                     "несохранённые изменения.\n"
                     "Сохранить перед выходом?",
                     myProjectNames[modIdx].c_str());
@@ -4220,6 +4220,7 @@ void Application::Run() {
         }
         prevEsc = curEsc;
 
+        glfwMakeContextCurrent(myWindow->GetNativeWindow());
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
@@ -4264,6 +4265,8 @@ void Application::Run() {
 
         if (myOcctView) myOcctView->Redraw();
 
+        glViewport(0, 0, fbW, fbH);
+        glfwMakeContextCurrent(myWindow->GetNativeWindow());
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         myWindow->SwapBuffers();
       } catch (const std::exception& e) {
