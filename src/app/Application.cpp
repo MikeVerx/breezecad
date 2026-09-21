@@ -18,7 +18,10 @@
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Builder.hxx>
 #include <TopoDS_Compound.hxx>
-#include <OSD_MemInfo.hxx>
+#ifdef _WIN32
+  #include <windows.h>
+  #include <psapi.h>
+#endif
 #include <TDataStd_Name.hxx>
 #include <TDataStd_Integer.hxx>
 #include <TCollection_AsciiString.hxx>
@@ -3645,14 +3648,18 @@ void Application::InitCommands() {
 }
 
 void Application::UpdateTelemetry() {
-    // RAM через OCCT OSD_MemInfo — правильное имя: MemWorkingSet
-    OSD_MemInfo memInfo;
-    size_t ws = memInfo.Value(OSD_MemInfo::MemWorkingSet);
-    if (ws != Standard_Size(-1)) {
-        myLastRAMMB = (double)ws / (1024.0 * 1024.0);
+    // RAM через WinAPI (OCCT OSD_MemInfo под MinGW вызывает wmic,
+    // которого нет в Windows 11 начиная с 24H2 — exit code 127).
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        myLastRAMMB = (double)pmc.WorkingSetSize / (1024.0 * 1024.0);
     } else {
         myLastRAMMB = 0.0;
     }
+#else
+    myLastRAMMB = 0.0;
+#endif
 
     // Количество отображаемых объектов
     if (myOcctView) {

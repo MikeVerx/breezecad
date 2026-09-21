@@ -77,7 +77,7 @@ target_link_libraries(breezecad PRIVATE
 )
 
 if(WIN32)
-    target_link_libraries(breezecad PRIVATE comdlg32)
+    target_link_libraries(breezecad PRIVATE comdlg32 psapi)
 endif()
 
 # --- Копируем DLL OCCT после сборки ---
