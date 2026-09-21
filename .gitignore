@@ -20,3 +20,5 @@ external/
 
 # ImGui state (позиции окон — не коммитим)
 imgui.ini
+docs/UI_LAYOUT.md.bak*
+*.bak
