@@ -22,3 +22,7 @@ external/
 imgui.ini
 docs/UI_LAYOUT.md.bak*
 *.bak
+
+# Build helpers
+tools/svg2ico.exe
+tools/*.o

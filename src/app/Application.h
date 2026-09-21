@@ -151,7 +151,7 @@ private:
     bool myAutoContinue = true;
     bool myOrthoMode    = false;  // Shift — угол кратен 45°
     bool myShowGrid     = true;   // показывать ли сетку в эскизе
-    int  myActiveRibbonTab = 1;
+    int  myActiveRibbonTab = 0;
 
     // Индекс выбранного инструмента в каждой группе (для Ribbon-split)
     int myLineToolIndex   = 0;
@@ -251,6 +251,7 @@ private:
     void DrawRibbonToolsTab();
     void DrawRibbonManageTab();
     void DrawRibbonViewTab();
+    void DrawRibbonAssemblyTab();  // заглушка
     void EnterSketch(const TDF_Label& sketchLabel);
     void ExitSketch();
     void OnSketchClick(int px, int py);

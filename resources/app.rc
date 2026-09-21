@@ -1,0 +1,4 @@
+// Ресурсы приложения BreezeCAD (Windows)
+// Иконка приложения — в заголовке окна и в exe.
+
+IDI_APPICON ICON "app.ico"

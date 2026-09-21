@@ -23,6 +23,7 @@ const std::unordered_map<std::string, std::pair<std::string, std::string>> kDict
     // Вкладки
     { "tab.sketch",          { "Sketch",                "Эскиз" } },
     { "tab.model",           { "3D Model",              "3D Модель" } },
+    { "tab.assembly",        { "Assembly",              "Сборка" } },
     { "tab.annotate",        { "Annotate",              "Оформление" } },
     { "tab.tools",           { "Tools",                 "Инструменты" } },
     { "tab.manage",          { "Manage",                "Управление" } },

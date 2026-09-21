@@ -59,6 +59,13 @@ add_executable(breezecad
     external/stb_image_impl.cpp
 )
 
+# Иконка .exe (только Windows)
+if(WIN32)
+    target_sources(breezecad PRIVATE resources/app.rc)
+    set_source_files_properties(resources/app.rc PROPERTIES
+        LANGUAGE RC)
+endif()
+
 target_include_directories(breezecad PRIVATE src external)
 
 # --- Линкуем всё вместе ---
@@ -92,6 +99,13 @@ add_custom_command(TARGET breezecad POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_SOURCE_DIR}/assets"
     "$<TARGET_FILE_DIR:breezecad>/assets"
+)
+
+# Копируем resources (иконка приложения) рядом с exe
+add_custom_command(TARGET breezecad POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/resources"
+    "$<TARGET_FILE_DIR:breezecad>/resources"
 )
 
 set_target_properties(breezecad PROPERTIES

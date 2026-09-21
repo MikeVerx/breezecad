@@ -1127,48 +1127,20 @@ void Application::OnRedo() {
 void Application::DrawQuickAccessToolbar() {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
 
-    // === 1. Логотип / Меню файл ===
-    // Логотип/HOME — возврат на главную
-    if (QatIconButton(myIcons, "qat_home", "house", 20, "Главная")) {
-        CaptureCurrentThumbnail();
-        myShowHomeScreen = true;
+    // === 1. Логотип BreezeCAD — микро-меню ===
+    if (QatIconButton(myIcons, "qat_logo", "breeze-logo", 24, "BreezeCAD")) {
+        ImGui::OpenPopup("##logo_menu");
     }
-
-    ImGui::SameLine();
-
-    // Меню «Файл»
-    if (QatIconButton(myIcons, "qat_file", "file-text", 20, "Файл")) {
-        ImGui::OpenPopup("##file_menu");
-    }
-    DrawAdvancedTooltip("qat.file",
-                        "Меню «Файл»",
-                        "Создать, открыть, сохранить, экспортировать",
-                        "Здесь собраны все операции с файлами проекта: создание нового документа, "
-                        "открытие существующего, сохранение, экспорт в STEP/STL/OBJ, а также доступ к "
-                        "списку недавних файлов и настройкам программы.");
-
-    if (ImGui::BeginPopup("##file_menu")) {
-        if (ImGui::MenuItem("Главная", "Ctrl+H", false, false)) {}
-        ImGui::Separator();
+    if (ImGui::BeginPopup("##logo_menu")) {
         if (ImGui::MenuItem("Создать", "Ctrl+N")) OnNewDocument();
         if (ImGui::MenuItem("Открыть...", "Ctrl+O")) OnOpen();
-        if (ImGui::MenuItem("Сохранить", "Ctrl+S")) OnSave();
-        if (ImGui::MenuItem("Сохранить как...")) { myCurrentPath.clear(); OnSave(); }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Экспорт в STEP...")) OnExportSTEP();
-        if (ImGui::MenuItem("Экспорт в STL...")) OnExportSTL();
-        if (ImGui::MenuItem("Экспорт в OBJ", "", false, false)) {}
-        ImGui::Separator();
         if (ImGui::BeginMenu("Последние файлы")) {
             if (myRecentFiles.empty()) {
                 ImGui::MenuItem("(пусто)", "", false, false);
             } else {
                 for (size_t i = 0; i < myRecentFiles.size(); i++) {
                     std::string label = myRecentFiles[i];
-                    // Обрезаем длинный путь
-                    if (label.length() > 60) {
-                        label = "..." + label.substr(label.length() - 57);
-                    }
+                    if (label.length() > 60) label = "..." + label.substr(label.length() - 57);
                     label += "##recent" + std::to_string(i);
                     if (ImGui::MenuItem(label.c_str())) {
                         Handle(TDocStd_Document) loaded =
@@ -1189,63 +1161,102 @@ void Application::DrawQuickAccessToolbar() {
         ImGui::Separator();
         if (ImGui::MenuItem("Настройки")) myShowSettingsDialog = true;
         ImGui::Separator();
-        if (ImGui::MenuItem("Закрыть проект")) {
-            if (myActiveDocIndex >= 0) CloseDoc(myActiveDocIndex);
-        }
+        if (ImGui::MenuItem("О программе")) {}
+        if (ImGui::MenuItem("Справка", "F1")) {}
+        ImGui::Separator();
         if (ImGui::MenuItem("Выход", "Alt+F4")) {
             glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE);
         }
         ImGui::EndPopup();
     }
 
-    ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
-
-    // === 2. Undo / Redo ===
-    if (QatIconButton(myIcons, "qat_undo", "undo-2", 18, "Отменить (Ctrl+Z)")) OnUndo();
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Отменить (Ctrl+Z)");
     ImGui::SameLine();
-    if (QatIconButton(myIcons, "qat_redo", "redo-2", 18, "Повторить (Ctrl+Y)")) OnRedo();
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Повторить (Ctrl+Y)");
+
+    // === 2. Документ (Backstage) ===
+    if (QatIconButton(myIcons, "qat_doc", "file-text", 20, "Документ")) {
+        CaptureCurrentThumbnail();
+        myShowHomeScreen = true;
+    }
+    DrawAdvancedTooltip("qat.doc",
+                        "Документ",
+                        "Backstage — все операции с файлами",
+                        "Открывает экран Backstage: создание, открытие, сохранение, "
+                        "экспорт, последние файлы, настройки.");
 
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
 
-    // === 3. Save ===
-    if (SvgIconBtn(myIcons, "qat_save", "save", 20, 32, 28, "Сохранить")) OnSave();
+    // === 3. Сохранить ===
+    if (QatIconButton(myIcons, "qat_save", "save", 20, "Сохранить (Ctrl+S)")) OnSave();
     DrawAdvancedTooltip("qat.save",
                         "Сохранить (Ctrl+S)",
                         "Сохранить текущий проект в файл",
-                        "Записывает все изменения текущего проекта в файл .cbf. Если проект "
-                        "ещё не имеет имени файла — откроется диалог выбора пути. "
-                        "Горячая клавиша — Ctrl+S.");
-    ImGui::SameLine();
-
-    // === 4. Settings ===
-    if (QatIconButton(myIcons, "qat_settings", "settings", 20, "Настройки")) myShowSettingsDialog = true;
+                        "Записывает все изменения текущего проекта в файл .cbf. "
+                        "Если проект ещё не имеет имени — откроется диалог выбора пути.");
 
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
 
-    // === 5. Закреплённые команды ===
-    for (size_t i = 0; i < myPinnedCommands.size(); i++) {
-        ImGui::SameLine();
-        ImGui::PushID((int)i);
-        if (ImGui::Button(myPinnedCommands[i].c_str(), ImVec2(32, 0))) {}
-        if (ImGui::BeginPopupContextItem("##pin_ctx")) {
-            if (ImGui::MenuItem("Открепить от панели")) {
-                myPinnedCommands.erase(myPinnedCommands.begin() + i);
-                ImGui::EndPopup();
-                ImGui::PopID();
-                break;
-            }
-            ImGui::EndPopup();
-        }
-        ImGui::PopID();
+    // === 4. Undo / Redo ===
+    if (QatIconButton(myIcons, "qat_undo", "undo-2", 18, "Отменить (Ctrl+Z)")) OnUndo();
+    ImGui::SameLine();
+    if (QatIconButton(myIcons, "qat_redo", "redo-2", 18, "Повторить (Ctrl+Y)")) OnRedo();
+
+    ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+
+    // === 5. Home ===
+    if (QatIconButton(myIcons, "qat_home", "house", 20, "Главная")) {
+        CaptureCurrentThumbnail();
+        myShowHomeScreen = true;
     }
 
-    // === 6. Поиск команд (справа) ===
+    ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
+
+    // === 6. Модули ===
+    if (QatIconButton(myIcons, "qat_modules", "puzzle", 20, "Модули")) {
+        // TODO: диалог управления модулями
+    }
+    DrawAdvancedTooltip("qat.modules",
+                        "Модули",
+                        "Установка и удаление модулей BreezeCAD",
+                        "Управление модулями: Сборка, Черчение, Стандартные изделия, "
+                        "Листовой металл. Установленные модули добавляют вкладки в ribbon.");
+
+    ImGui::SameLine();
+
+    // === 7. Показать формат ===
+    if (QatIconButton(myIcons, "qat_format", "layout-grid", 20, "Показать формат")) {
+        // TODO: чекбоксы линии / размеры / ограничения
+    }
+
+    ImGui::SameLine();
+
+    // === 8. Текстуры ===
+    if (QatIconButton(myIcons, "qat_textures", "palette", 20, "Текстуры")) {
+        // TODO: палитра материалов + импорт текстуры
+    }
+
+    ImGui::SameLine();
+
+    // === 9. Параметры (fx) ===
+    if (QatIconButton(myIcons, "qat_params", "square-function", 20, "Параметры")) {
+        // TODO: таблица параметров
+    }
+
+    ImGui::SameLine();
+
+    // === 10. Измерение ===
+    if (QatIconButton(myIcons, "qat_measure", "ruler", 20, "Измерение")) {
+        // TODO: инструмент измерения
+    }
+
+    // === 11. Правая зона: Поиск + Телеметрия ===
     ImGuiIO& io = ImGui::GetIO();
-    float searchW     = 220.0f;
-    float rightPanelW = 260.0f;
-    float searchX     = io.DisplaySize.x - searchW - rightPanelW - 20.0f;
+    const float searchW    = 220.0f;
+    const float telemetryW = 180.0f;
+    const float margin     = 12.0f;
+    float rightPanelW = myRightPanelExpanded ? 280.0f : 40.0f;
+
+    float telemetryX = io.DisplaySize.x - margin - rightPanelW - telemetryW;
+    float searchX    = telemetryX - searchW - 12.0f;
 
     ImGui::SameLine(searchX);
     ImGui::SetNextItemWidth(searchW);
@@ -1255,64 +1266,51 @@ void Application::DrawQuickAccessToolbar() {
     ImVec2 searchMax = ImGui::GetItemRectMax();
     bool searchActive = ImGui::IsItemActive();
 
-    // Результаты — плавающее окно (НЕ popup, чтобы не перехватывать клики)
+    // Результаты — плавающее окно
     if (mySearchBuffer[0] != 0 && searchActive) {
         std::string query = mySearchBuffer;
-        std::transform(query.begin(), query.end(), query.begin(),
-                       [](unsigned char c){ return (char)std::tolower(c); });
-
-        std::vector<CommandEntry*> matches;
+        std::vector<std::pair<std::string, std::function<void()>>> results;
         for (auto& cmd : myCommands) {
-            std::string lower = cmd.name;
-            std::transform(lower.begin(), lower.end(), lower.begin(),
-                           [](unsigned char c){ return (char)std::tolower(c); });
-            if (lower.find(query) != std::string::npos) matches.push_back(&cmd);
+            std::string lname = cmd.name;
+            std::string lquery = query;
+            for (auto& c : lname) c = (char)std::tolower((unsigned char)c);
+            for (auto& c : lquery) c = (char)std::tolower((unsigned char)c);
+            if (lname.find(lquery) != std::string::npos) {
+                results.push_back({cmd.name + "  (" + cmd.shortcut + ")", cmd.action});
+            }
         }
-
-        ImGui::SetNextWindowPos(ImVec2(searchMin.x, searchMax.y + 2));
-        ImGui::SetNextWindowSize(ImVec2(searchW, 0), ImGuiCond_Always);
-        ImGui::SetNextWindowBgAlpha(0.95f);
-        ImGui::Begin("##cmd_results_float", nullptr,
+        ImGui::SetNextWindowPos(ImVec2(searchMin.x, searchMax.y + 4));
+        ImGui::SetNextWindowSize(ImVec2(searchW + 80, 0));
+        ImGui::Begin("##search_results", nullptr,
             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-            ImGuiWindowFlags_AlwaysAutoResize |
-            ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
-            ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-        if (matches.empty()) {
+            ImGuiWindowFlags_AlwaysAutoResize);
+        if (results.empty()) {
             ImGui::TextDisabled("Ничего не найдено");
         } else {
-            for (auto* cmd : matches) {
-                ImGui::PushID(cmd->id.c_str());
-                std::string label = cmd->name;
-                if (!cmd->shortcut.empty()) label += "     " + cmd->shortcut;
-                if (ImGui::Selectable(label.c_str())) {
-                    if (cmd->action) cmd->action();
+            for (auto& r : results) {
+                if (ImGui::Selectable(r.first.c_str())) {
+                    r.second();
                     mySearchBuffer[0] = 0;
                 }
-                ImGui::PopID();
             }
         }
         ImGui::End();
     }
 
-    // === 7. Телеметрия ===
-    ImGui::SameLine(io.DisplaySize.x - rightPanelW);
-    ImGui::Text("FPS: %.0f", io.Framerate);
-    ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
-    ImGui::Text("RAM: %.0f MB", myLastRAMMB);
-    ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
-    ImGui::Text("Obj: %d", myLastShapeCount);
+    // Телеметрия
+    ImGui::SameLine(telemetryX);
+    ImGui::TextDisabled("FPS: %.0f | RAM: %.0f MB | Obj: %d",
+                        io.Framerate, myLastRAMMB, myLastShapeCount);
 
     ImGui::PopStyleVar();
 }
 
 void Application::DrawRibbonTabs() {
     static const char* tabs[] = {
-        "tab.sketch", "tab.model", "tab.annotate",
-        "tab.tools", "tab.manage", "tab.view"
+        "tab.model", "tab.sketch", "tab.assembly", "tab.view"
     };
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 4; i++) {
         if (i > 0) ImGui::SameLine();
         bool active = (myActiveRibbonTab == i);
         bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
@@ -1957,6 +1955,50 @@ void Application::DrawRibbonManageTab() {
 // ============================================================
 //  Вкладка «Вид»
 // ============================================================
+void Application::DrawRibbonAssemblyTab() {
+    // === Сборка (заглушка до реализации модуля) ===
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.component").c_str());
+    RibbonSingleButton("asm_place",   "tool.asm.place",   ICON_PLANE,    false, true);
+    ImGui::SameLine();
+    RibbonSingleButton("asm_create",  "tool.asm.create",  ICON_MOVE,     false, true);
+    ImGui::SameLine();
+    RibbonSingleButton("asm_replace", "tool.asm.replace", ICON_MOVE,     false, true);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.position").c_str());
+    RibbonSingleButton("asm_joint",   "tool.asm.joint",   ICON_MOVE,     false, true);
+    RibbonSingleButton("asm_dof",     "tool.asm.dof",     ICON_SHOW_ALL, false, true);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.pattern").c_str());
+    RibbonSingleButton("asm_pat_rect", "tool.pattern.rect", ICON_PATTERN_RECT, false, true);
+    ImGui::SameLine();
+    RibbonSingleButton("asm_pat_circ", "tool.pattern.circ", ICON_PATTERN_CIRC, false, true);
+    ImGui::SameLine();
+    RibbonSingleButton("asm_mirror",   "tool.mirror",       ICON_MIRROR,       false, true);
+    ImGui::EndGroup();
+
+    ImGui::SameLine(0, 10);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0, 10);
+
+    ImGui::BeginGroup();
+    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.standards").c_str());
+    RibbonSingleButton("asm_library", "tool.library", ICON_CASCADE, false, true);
+    ImGui::EndGroup();
+}
+
 void Application::DrawRibbonViewTab() {
     static int dummy = 0;
     static const char* oneOpt[] = { "tool.dummy" };
@@ -2042,7 +2084,7 @@ void Application::DrawRibbon() {
     ImGuiIO& io = ImGui::GetIO();
 
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, 195), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, 175), ImGuiCond_Always);
     ImGui::Begin("##ribbon", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
@@ -2055,15 +2097,13 @@ void Application::DrawRibbon() {
     ImGui::Separator();
 
     // Высота содержимого — 90px
-    if (ImGui::BeginChild("##ribbon_content", ImVec2(0, 145), false,
+    if (ImGui::BeginChild("##ribbon_content", ImVec2(0, 105), false,
                           ImGuiWindowFlags_HorizontalScrollbar)) {
         switch (myActiveRibbonTab) {
-            case 0: DrawRibbonSketchTab();   break;
-            case 1: DrawRibbonModelTab();    break;
-            case 2: DrawRibbonAnnotateTab(); break;
-            case 3: DrawRibbonToolsTab();    break;
-            case 4: DrawRibbonManageTab();   break;
-            case 5: DrawRibbonViewTab();     break;
+            case 0: DrawRibbonModelTab();      break;
+            case 1: DrawRibbonSketchTab();     break;
+            case 2: DrawRibbonAssemblyTab();   break;
+            case 3: DrawRibbonViewTab();       break;
         }
     }
     ImGui::EndChild();
@@ -2079,8 +2119,8 @@ void Application::DrawDocumentTree() {
     ImGuiIO& io = ImGui::GetIO();
     const float panelWidth = myTreeWidth;
 
-    ImGui::SetNextWindowPos(ImVec2(0, 200), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 200 - 56), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(0, 180), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 180 - 56), ImGuiCond_Always);
 
     ImGui::Begin("##tree_panel", nullptr,
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
@@ -2522,7 +2562,7 @@ void Application::EnterSketch(const TDF_Label& sketchLabel) {
     myOcctView->ShowGrid(myShowGrid);
     myActiveSketchLabel = sketchLabel;
     myHasSketchStart = false;
-    myActiveRibbonTab = 0;  // Sketch tab
+    myActiveRibbonTab = 1;  // Sketch tab
 
     // Показать уже существующие линии эскиза
     RefreshSketchLines();
@@ -2537,7 +2577,7 @@ void Application::ExitSketch() {
         myOcctView->ExitSketchMode();
     }
     myActiveSketchLabel = TDF_Label();
-    myActiveRibbonTab = 1;  // 3D Model tab
+    myActiveRibbonTab = 0;  // 3D Model tab
 
     // Принудительно перерисовываем всё из документа —
     // это гарантирует, что плоскости и другие системные объекты вернутся
@@ -2856,28 +2896,47 @@ void Application::DrawStatusBar() {
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    if (!myActiveSketchLabel.IsNull()) {
-        ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "%s",
-                            Tr("sketch.mode").c_str());
-        ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
-        ImGui::Text("%s", Tr("sketch.hint.lmb").c_str());
-        ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
-        ImGui::Text("%s", Tr("sketch.hint.shift").c_str());
-        ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
-        ImGui::Text("%s", Tr("sketch.hint.esc").c_str());
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 2));
 
-        if (myHasSketchStart) {
-            ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f),
-                                "L=%.2f mm, A=%.1f deg",
-                                myPreviewLength, myPreviewAngle);
-        }
+    // === Слева: режим / активный инструмент ===
+    if (!myActiveSketchLabel.IsNull()) {
+        ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "Эскиз");
     } else {
-        ImGui::Text(" ");
+        ImGui::Text("Режим ожидания");
     }
 
+    ImGui::SameLine(0, 20);
+    ImGui::TextDisabled("|");
+    ImGui::SameLine(0, 20);
+
+    // === Координаты мыши ===
+    ImGui::TextDisabled("X: %.2f  Y: %.2f  Z: %.2f",
+                        myMouseX, myMouseY, 0.0);
+
+    ImGui::SameLine(0, 20);
+    ImGui::TextDisabled("|");
+    ImGui::SameLine(0, 20);
+
+    // === Снап ===
+    if (!myActiveSketchLabel.IsNull()) {
+        if (mySnapToGrid && mySnapToPoints) ImGui::TextDisabled("Снап: сетка + точки");
+        else if (mySnapToGrid)                ImGui::TextDisabled("Снап: сетка 10 мм");
+        else if (mySnapToPoints)              ImGui::TextDisabled("Снап: точки");
+        else                                   ImGui::TextDisabled("Снап: выкл");
+    } else {
+        ImGui::TextDisabled("Снап: н/д");
+    }
+
+    // === Справа: телеметрия и ОС ===
+    const char* right = "Готово";
+    float rightW = ImGui::CalcTextSize(right).x;
+    ImGui::SameLine(io.DisplaySize.x - rightW - 12);
+    ImGui::TextDisabled("%s", right);
+
+    ImGui::PopStyleVar();
     ImGui::End();
 }
+
 
 void Application::DrawAdvancedTooltip(const std::string& id,
                                        const std::string& name,
