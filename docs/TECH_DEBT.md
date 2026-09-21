@@ -183,28 +183,6 @@ GUI не рисуется.
 
 ---
 
-## TECH-DEBT-006: Application.cpp — god-object
-
-**Статус:** OPEN
-**Приоритет:** MEDIUM
-
-`src/app/Application.cpp` — ~2500 строк, один класс. Разбить на подсистемы:
-
-- `Application.cpp` — только инициализация + Run
-- `RibbonUI` — отрисовка лент
-- `DocumentTreeUI` — дерево, контекстные меню
-- `SketchUI` — эскиз, превью, точный ввод
-- `HomeScreen` — стартовый экран
-- `DialogsUI` — все диалоги
-- `CommandRegistry` — реестр команд
-- `Themes` — темы оформления
-- `IconHelpers` — SvgIconBtn, QatIconButton и т.п.
-
-Рефакторинг делать не сразу, а при следующей крупной фиче (когда
-добавление кода в Application.cpp станет неудобным).
-
----
-
 ## TECH-DEBT-007: Двойное кодирование UTF-8 в guillemets
 
 **Статус:** FIXED (2026-09-21)

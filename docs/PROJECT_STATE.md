@@ -42,8 +42,28 @@ BreezeCAD — кросс-платформенный САПР. Цель: полн
 
 ## Структура репозитория
 
-
-
+```
+BreezeCAD/
+  assets/                 # иконки (600+ SVG), шрифты
+  build/                  # out-of-source сборка (git-ignored)
+  docs/                   # проектная документация
+    ADR/                  # Architecture Decision Records
+    PROJECT_STATE.md      # этот файл
+    TECH_DEBT.md          # известные баги
+  external/               # ImGui, stb (git-ignored)
+  portable/               # готовая portable-сборка
+  scripts/
+    deploy-runtime.sh     # BFS-анализ DLL через objdump
+  src/
+    app/                  # Application, IconManager, Localization
+    doc/                  # BreezeApplication (OCAF), BreezeDocument
+    occt/                 # OcctView (рендер через OCCT V3d)
+    platform/             # GlfwWindow, FileDialog
+    main.cpp
+  CMakeLists.txt
+  run.sh
+  README.md
+```
 
 ---
 
