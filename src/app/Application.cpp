@@ -1376,7 +1376,7 @@ int Application::RibbonButton(const char* id, const char* const* opts,
                               int optCount, int& idx, const char* icon,
                               bool enabled, bool big) {
     int result = 0;
-    const float bigW = 100.0f, bigH = 56.0f;
+    const float bigW = 108.0f, bigH = 56.0f;
     const float smallW = 42.0f, smallH = 42.0f;
     const float arrowH = 14.0f;
     float w = big ? bigW : smallW;
@@ -1405,7 +1405,6 @@ int Application::RibbonButton(const char* id, const char* const* opts,
     ImGui::PushID(id);
     ImGui::BeginGroup();
 
-    // Кликабельная область
     ImVec2 startPos = ImGui::GetCursorScreenPos();
     ImGui::InvisibleButton("##click", ImVec2(w, h));
     bool clicked = ImGui::IsItemClicked();
@@ -1413,12 +1412,10 @@ int Application::RibbonButton(const char* id, const char* const* opts,
     ImVec2 min = ImGui::GetItemRectMin();
     ImVec2 max = ImGui::GetItemRectMax();
 
-    // Фон кнопки
     ImU32 bgCol = ImGui::GetColorU32(hovered ? bgHover : bgNormal);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddRectFilled(min, max, bgCol, 6.0f);
 
-    // Иконка
     if (tid != 0) {
         ImVec2 iconPos(min.x + (w - iconSize) * 0.5f, min.y + 5.0f);
         dl->AddImage(tid, iconPos,
@@ -1426,35 +1423,60 @@ int Application::RibbonButton(const char* id, const char* const* opts,
                      ImVec2(0, 0), ImVec2(1, 1),
                      ImGui::GetColorU32(tint));
     } else {
-        // Placeholder — серый квадрат с ?
         ImVec2 p1(min.x + (w - iconSize) * 0.5f, min.y + 5.0f);
         dl->AddRectFilled(p1, ImVec2(p1.x + iconSize, p1.y + iconSize),
                           IM_COL32(140, 140, 140, 180), 4.0f);
     }
 
-    // Текст подписи (для больших) — обрезка по ширине кнопки
+    // Подпись — БЕЗ обрезания с "..". Алгоритм:
+    //   1) обычный шрифт, 2) уменьшенный (0.82), 3) 2 строки по пробелу.
     if (big && optCount > 0) {
         std::string label = Tr(opts[idx]);
         float maxTextW = w - 4.0f;
+        ImFont* font = ImGui::GetFont();
+        float baseSize = ImGui::GetFontSize();
+        ImU32 txtCol = ImGui::GetColorU32(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled);
 
-        // Обрезка с ".." если не влезает
-        if (ImGui::CalcTextSize(label.c_str()).x > maxTextW) {
-            while (!label.empty() &&
-                   ImGui::CalcTextSize((label + "..").c_str()).x > maxTextW) {
-                label.pop_back();
-            }
-            label += "..";
+        ImVec2 sz = font->CalcTextSizeA(baseSize, FLT_MAX, 0.0f, label.c_str());
+        float fontSize = baseSize;
+
+        if (sz.x > maxTextW) {
+            fontSize = baseSize * 0.82f;
+            sz = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, label.c_str());
         }
 
-        ImVec2 txtSize = ImGui::CalcTextSize(label.c_str());
-        ImVec2 txtPos(min.x + (w - txtSize.x) * 0.5f, max.y - 15.0f);
-        ImU32 txtCol = ImGui::GetColorU32(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled);
-        dl->AddText(txtPos, txtCol, label.c_str());
+        if (sz.x <= maxTextW) {
+            ImVec2 txtPos(min.x + (w - sz.x) * 0.5f, max.y - fontSize - 4.0f);
+            dl->AddText(font, fontSize, txtPos, txtCol, label.c_str());
+        } else {
+            size_t sp = label.find(' ');
+            bool drawn = false;
+            if (sp != std::string::npos) {
+                std::string l1 = label.substr(0, sp);
+                std::string l2 = label.substr(sp + 1);
+                ImVec2 s1 = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, l1.c_str());
+                ImVec2 s2 = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, l2.c_str());
+                if (s1.x <= maxTextW && s2.x <= maxTextW) {
+                    float lineH = fontSize + 1.0f;
+                    float y0 = max.y - lineH * 2 - 2.0f;
+                    dl->AddText(font, fontSize,
+                                ImVec2(min.x + (w - s1.x) * 0.5f, y0),
+                                txtCol, l1.c_str());
+                    dl->AddText(font, fontSize,
+                                ImVec2(min.x + (w - s2.x) * 0.5f, y0 + lineH),
+                                txtCol, l2.c_str());
+                    drawn = true;
+                }
+            }
+            if (!drawn) {
+                ImVec2 txtPos(min.x + (w - sz.x) * 0.5f, max.y - fontSize - 4.0f);
+                dl->AddText(font, fontSize, txtPos, txtCol, label.c_str());
+            }
+        }
     }
 
     if (clicked && enabled) result = 1;
 
-    // Стрелка ▼ внизу
     if (optCount > 1) {
         ImVec2 aMin = ImGui::GetCursorScreenPos();
         ImGui::InvisibleButton("##arrow", ImVec2(w, arrowH));
