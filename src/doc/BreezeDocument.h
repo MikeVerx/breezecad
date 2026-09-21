@@ -36,6 +36,10 @@ public:
     ~BreezeDocument();
 
     Handle(TDocStd_Document) GetDoc() const { return myDoc; }
+
+    // Есть ли несохранённые изменения
+    bool IsModified() const { return myModified; }
+    void SetModified(bool m) { myModified = m; }
     void SetDocument(const Handle(TDocStd_Document)& doc);
 
     TDF_Label MainLabel() const;
@@ -86,6 +90,7 @@ public:
 
 private:
     Handle(TDocStd_Document) myDoc;
+    bool myModified = false;   // есть ли несохранённые изменения
     int myNextFeatureId = 1;
     TDF_Label myBaseLabel;
 

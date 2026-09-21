@@ -76,6 +76,12 @@ private:
 
     // === Диалог подтверждения удаления ===
     bool myShowDeleteConfirm = false;
+
+    // === Диалог несохранённых изменений ===
+    bool myShowUnsavedDialog = false;
+    int  myPendingCloseDocIndex = -1;   // какой документ закрываем (-1 = не закрывать)
+    bool myPendingWindowClose = false;  // закрытие всего окна
+    char myUnsavedDialogInfo[256] = "";
     char myDeleteConfirmInfo[256] = "";
     bool mySkipDeleteConfirm = false;   // «не спрашивать снова» (на сеанс)
 
@@ -190,6 +196,7 @@ private:
     void DrawHomeScreen();
     void DrawRenameDialog();
     void DrawDeleteConfirmDialog();
+    void DrawUnsavedChangesDialog();
     void DrawPropertiesDialog();
     void RequestDelete(const TDF_Label& label);
     void DrawAdvancedTooltip(const std::string& id,

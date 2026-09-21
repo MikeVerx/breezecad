@@ -839,6 +839,20 @@ void Application::CloseDoc(int index) {
     if (index < 0 || index >= (int)myDocuments.size()) return;
     if (myDocuments.size() <= 1) return;  // не закрываем последний
 
+    // Проверка на несохранённые изменения
+    BreezeDocument* checkDoc = myDocuments[index].get();
+    if (checkDoc && checkDoc->IsModified()) {
+        myPendingCloseDocIndex = index;
+        myPendingWindowClose = false;
+        std::snprintf(myUnsavedDialogInfo, sizeof(myUnsavedDialogInfo),
+            "Проект Â«%sÂ» содержит "
+            "несохранённые изменения.\n"
+            "Сохранить перед закрытием?",
+            myProjectNames[index].c_str());
+        myShowUnsavedDialog = true;
+        return;
+    }
+
     // Освободить OCAF-документ
     BreezeApplication::Instance().CloseDocument(myDocuments[index]->GetDoc());
 
@@ -877,6 +891,7 @@ void Application::OnSave() {
         std::strncpy(myFilePathBuffer, path.c_str(), sizeof(myFilePathBuffer) - 1);
         myFilePathBuffer[sizeof(myFilePathBuffer) - 1] = '\0';
         AddRecentFile(path);
+        myDocument->SetModified(false);
         std::cout << "Saved to: " << myCurrentPath << "\n";
     }
 }
@@ -2989,6 +3004,74 @@ void Application::DrawDeleteConfirmDialog() {
     }
 }
 
+void Application::DrawUnsavedChangesDialog() {
+    if (!myShowUnsavedDialog) return;
+
+    ImGui::OpenPopup("Несохранённые изменения");
+
+    if (ImGui::BeginPopupModal("Несохранённые изменения", nullptr,
+                                ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextWrapped("%s", myUnsavedDialogInfo);
+        ImGui::Separator();
+
+        if (ImGui::Button("Сохранить", ImVec2(120, 0))) {
+            int idx = myPendingCloseDocIndex;
+            bool wasWindow = myPendingWindowClose;
+
+            if (idx >= 0 && idx < (int)myDocuments.size()) {
+                BreezeDocument* prevDoc = myDocument;
+                int prevIdx = myActiveDocIndex;
+                myDocument = myDocuments[idx].get();
+                myActiveDocIndex = idx;
+                OnSave();
+                bool saved = !myDocument->IsModified();
+                if (!saved) {
+                    myDocument = prevDoc;
+                    myActiveDocIndex = prevIdx;
+                    return;
+                }
+            }
+
+            myPendingCloseDocIndex = -1;
+            myPendingWindowClose = false;
+            myShowUnsavedDialog = false;
+            ImGui::CloseCurrentPopup();
+
+            if (wasWindow) {
+                glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE);
+            } else if (idx >= 0) {
+                CloseDoc(idx);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Не сохранять", ImVec2(120, 0))) {
+            int idx = myPendingCloseDocIndex;
+            bool wasWindow = myPendingWindowClose;
+            myPendingCloseDocIndex = -1;
+            myPendingWindowClose = false;
+            myShowUnsavedDialog = false;
+            ImGui::CloseCurrentPopup();
+
+            if (idx >= 0 && idx < (int)myDocuments.size()) {
+                myDocuments[idx]->SetModified(false);
+            }
+            if (wasWindow) {
+                glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE);
+            } else if (idx >= 0 && idx < (int)myDocuments.size()) {
+                CloseDoc(idx);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Отмена", ImVec2(120, 0))) {
+            myPendingCloseDocIndex = -1;
+            myPendingWindowClose = false;
+            myShowUnsavedDialog = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
 void Application::DrawPropertiesDialog() {
     if (!myShowPropertiesDialog) return;
 
@@ -3856,6 +3939,25 @@ void Application::Run() {
       try {
         myWindow->PollEvents();
 
+        // Перехват X / Alt+F4: если есть несохранённые — показать диалог
+        if (glfwWindowShouldClose(myWindow->GetNativeWindow()) && !myShowUnsavedDialog) {
+            int modIdx = -1;
+            for (int i = 0; i < (int)myDocuments.size(); i++) {
+                if (myDocuments[i]->IsModified()) { modIdx = i; break; }
+            }
+            if (modIdx >= 0) {
+                glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_FALSE);
+                myPendingWindowClose = true;
+                myPendingCloseDocIndex = modIdx;
+                std::snprintf(myUnsavedDialogInfo, sizeof(myUnsavedDialogInfo),
+                    "Проект Â«%sÂ» содержит "
+                    "несохранённые изменения.\n"
+                    "Сохранить перед выходом?",
+                    myProjectNames[modIdx].c_str());
+                myShowUnsavedDialog = true;
+            }
+        }
+
         bool curF11 = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_F11) == GLFW_PRESS;
         if (curF11 && !prevF11) myWindow->ToggleFullscreen();
         prevF11 = curF11;
@@ -4142,6 +4244,7 @@ void Application::Run() {
             DrawDependencyDialog();
             DrawRenameDialog();
             DrawDeleteConfirmDialog();
+            DrawUnsavedChangesDialog();
             DrawPropertiesDialog();
             DrawContextMenu3D();
             DrawSelectionRect();

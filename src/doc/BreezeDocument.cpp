@@ -104,6 +104,7 @@ BreezeDocument::~BreezeDocument() = default;
 
 void BreezeDocument::SetDocument(const Handle(TDocStd_Document)& doc) {
     myDoc = doc;
+    myModified = false;
     myBaseLabel = TDF_Label();
     RefreshNextFeatureId();
 
@@ -212,6 +213,7 @@ void BreezeDocument::StartTransaction() {
 void BreezeDocument::CommitTransaction() {
     if (myDoc.IsNull()) return;
     myDoc->CommitCommand();
+    myModified = true;
 }
 
 bool BreezeDocument::Undo() {
@@ -266,6 +268,7 @@ TDF_Label BreezeDocument::AddCylinderFeature(const std::string& name,
     TopoDS_Shape cyl = BRepPrimAPI_MakeCylinder(radius, height).Shape();
     TNaming_Builder(label).Generated(cyl);
 
+    myModified = true;
     return label;
 }
 
@@ -380,6 +383,7 @@ void BreezeDocument::ClearSketch(const TDF_Label& sketchLabel) {
     for (auto& l : toRemove) {
         l.ForgetAllAttributes(true);
     }
+    myModified = true;
     std::cout << "BreezeDocument: cleared sketch\n";
 }
 
