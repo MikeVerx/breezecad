@@ -41,6 +41,7 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -57,6 +58,18 @@ extern "C" unsigned char* stbi_load(const char* filename, int* x, int* y,
 extern "C" void stbi_image_free(void* retval_from_stbi_load);
 
 namespace BreezeCAD {
+
+// === TRACE (enabled only when env BREEZECAD_TRACE is set) ===
+static void TRACE(const char* msg) {
+    static FILE* g_traceFile = nullptr;
+    static bool g_enabled = (getenv("BREEZECAD_TRACE") != nullptr);
+    if (!g_enabled) return;
+    if (!g_traceFile) g_traceFile = fopen("breezecad_trace.log", "w");
+    if (g_traceFile) {
+        fprintf(g_traceFile, "%s\n", msg);
+        fflush(g_traceFile);
+    }
+}
 
 // Вспомогательная: получить tint-цвет иконки по текущей теме
 static ImVec4 IconTintColor(bool enabled) {
@@ -3937,6 +3950,7 @@ void Application::Run() {
 
     while (!myWindow->ShouldClose()) {
       try {
+        TRACE("iter: start");
         myWindow->PollEvents();
 
         // Перехват X / Alt+F4: если есть несохранённые — показать диалог
@@ -4253,7 +4267,9 @@ void Application::Run() {
         }
         DrawHomeScreen();
         DrawSettingsDialog();
+        TRACE("iter: before UpdateTelemetry");
         UpdateTelemetry();
+        TRACE("iter: after UpdateTelemetry");
 
         ImGui::Render();
 
@@ -4268,7 +4284,9 @@ void Application::Run() {
         glViewport(0, 0, fbW, fbH);
         glfwMakeContextCurrent(myWindow->GetNativeWindow());
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        TRACE("iter: before SwapBuffers");
         myWindow->SwapBuffers();
+        TRACE("iter: after SwapBuffers");
       } catch (const std::exception& e) {
         std::cerr << "Runtime exception in main loop: " << e.what() << "\n";
       } catch (...) {
