@@ -2889,52 +2889,68 @@ void Application::DrawStatusBar() {
 
     ImGui::SetNextWindowPos(ImVec2(0, io.DisplaySize.y - h), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, h), ImGuiCond_Always);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 2));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 0));
+
     ImGui::Begin("##statusbar", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
+        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 2));
+    ImGui::SetCursorPosY(4);
 
-    // === Слева: режим / активный инструмент ===
     if (!myActiveSketchLabel.IsNull()) {
         ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "Эскиз");
     } else {
-        ImGui::Text("Режим ожидания");
+        ImGui::TextUnformatted("Режим ожидания");
     }
 
-    ImGui::SameLine(0, 20);
+    ImGui::SameLine(0, 16);
     ImGui::TextDisabled("|");
-    ImGui::SameLine(0, 20);
+    ImGui::SameLine(0, 16);
 
-    // === Координаты мыши ===
-    ImGui::TextDisabled("X: %.2f  Y: %.2f  Z: %.2f",
-                        myMouseX, myMouseY, 0.0);
-
-    ImGui::SameLine(0, 20);
-    ImGui::TextDisabled("|");
-    ImGui::SameLine(0, 20);
-
-    // === Снап ===
     if (!myActiveSketchLabel.IsNull()) {
         if (mySnapToGrid && mySnapToPoints) ImGui::TextDisabled("Снап: сетка + точки");
-        else if (mySnapToGrid)                ImGui::TextDisabled("Снап: сетка 10 мм");
-        else if (mySnapToPoints)              ImGui::TextDisabled("Снап: точки");
-        else                                   ImGui::TextDisabled("Снап: выкл");
+        else if (mySnapToGrid)              ImGui::TextDisabled("Снап: сетка 10 мм");
+        else if (mySnapToPoints)            ImGui::TextDisabled("Снап: точки");
+        else                                 ImGui::TextDisabled("Снап: выкл");
     } else {
         ImGui::TextDisabled("Снап: н/д");
     }
 
-    // === Справа: телеметрия и ОС ===
-    const char* right = "Готово";
-    float rightW = ImGui::CalcTextSize(right).x;
-    ImGui::SameLine(io.DisplaySize.x - rightW - 12);
-    ImGui::TextDisabled("%s", right);
+    ImGui::SameLine(0, 16);
+    ImGui::TextDisabled("|");
+    ImGui::SameLine(0, 16);
 
-    ImGui::PopStyleVar();
+    ImGui::TextDisabled("X: %.2f  Y: %.2f  Z: %.2f",
+                        myMouseX, myMouseY, 0.0);
+
+    const float rightPanelW = myRightPanelExpanded ? 320.0f : 80.0f;
+    const float margin      = 12.0f;
+
+    const char* statusText = "Готово";
+    const char* zoomText   = "1:1";
+
+    float statusW = ImGui::CalcTextSize(statusText).x;
+    float zoomW   = ImGui::CalcTextSize(zoomText).x;
+
+    float statusX = io.DisplaySize.x - rightPanelW - margin - statusW;
+    float zoomX   = statusX - 20.0f - zoomW;
+
+    if (zoomX > 400.0f) {
+        ImGui::SameLine(zoomX);
+        ImGui::TextDisabled("%s", zoomText);
+    }
+    if (statusX > 400.0f) {
+        ImGui::SameLine(statusX);
+        ImGui::TextDisabled("%s", statusText);
+    }
+
     ImGui::End();
+    ImGui::PopStyleVar(2);
 }
-
 
 void Application::DrawAdvancedTooltip(const std::string& id,
                                        const std::string& name,
@@ -3665,13 +3681,6 @@ void Application::DrawProjectTabs() {
         if (myOcctView) myOcctView->FitAll();
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Новый проект");
-
-    // === Прогресс-бар справа (placeholder) ===
-    {
-        float panelW = 200.0f;
-        ImGui::SameLine(io.DisplaySize.x - panelW - 10);
-        ImGui::TextDisabled("Готово");
-    }
 
     ImGui::End();
 
