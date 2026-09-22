@@ -214,10 +214,13 @@ void IconManager::PreloadDefaults() {
         "equal", "target", "align-justify", "corner-down-right",
         "move-vertical", "circle-dot-dashed", "spline",
         "flip-horizontal-2", "lock", "ruler",
-        // 3D операции
+        // 3D операции (базовые)
         "arrow-up-from-line", "arrow-right", "layers",
         "pencil-ruler", "package", "arrow-up", "plus", "minus", "boxes",
         "grid-3x3",
+        // CAD-иконки (собственные)
+        "cad/extrude", "cad/revolve", "cad/sweep", "cad/loft", "cad/hole",
+        "cad/thread", "cad/fillet", "cad/chamfer", "cad/shell", "cad/union",
         // Рабочие элементы
         "move-3d",
         // Аннотации
