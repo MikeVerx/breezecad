@@ -1369,10 +1369,21 @@ static bool RibbonButton(const char* label, bool active, const char* tooltip = n
 
 // Универсальная кнопка Ribbon с SVG-иконкой Lucide.
 void Application::RibbonGroupStart() {
+    // Запоминаем стартовую Y — чтобы потом дотянуть группу до стандартной высоты
+    static float s_groupStartY = 0.0f;
+    s_groupStartY = ImGui::GetCursorScreenPos().y;
     ImGui::BeginGroup();
 }
 
 void Application::RibbonGroupEnd(const char* name) {
+    // Дотягиваем группу до стандартной высоты 74 px (как большие кнопки)
+    static float s_groupStartY = 0.0f;
+    float curY = ImGui::GetCursorScreenPos().y;
+    float h = curY - s_groupStartY;
+    const float TARGET_H = 74.0f;
+    if (h < TARGET_H) {
+        ImGui::Dummy(ImVec2(1.0f, TARGET_H - h));
+    }
     ImGui::EndGroup();
 
     ImVec2 pMin = ImGui::GetItemRectMin();
@@ -1409,23 +1420,23 @@ void Application::RibbonGroupEnd(const char* name) {
 
 int Application::RibbonButton(const char* id, const char* const* opts,
                               int optCount, int& idx, const char* icon,
-                              bool enabled, bool big) {
+                              bool enabled, bool big, const char* tooltip) {
     int result = 0;
-    const float bigW = 84.0f, bigH = 74.0f;
+    const float bigW = 88.0f, bigH = 74.0f;
     const float smallW = 44.0f, smallH = 44.0f;
-    const float arrowH = 12.0f;
+    const float arrowW = 16.0f;  // ширина вертикальной полоски справа
     float w = big ? bigW : smallW;
     float h = big ? bigH : smallH;
     const int iconSize = big ? 32 : 24;
+    bool hasArrow = (optCount > 1);
+    float totalW = w + (hasArrow ? arrowW : 0.0f);
 
     bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
-    ImVec4 bgNormal, bgHover, bgActive;
+    ImVec4 bgHover, bgActive;
     if (isLight) {
-        bgNormal = ImVec4(0.845f, 0.855f, 0.870f, 0.0f);  // прозрачный — фон группы
         bgHover  = ImVec4(0.760f, 0.800f, 0.860f, 0.6f);
         bgActive = ImVec4(0.640f, 0.720f, 0.840f, 0.8f);
     } else {
-        bgNormal = ImVec4(1.0f, 1.0f, 1.0f, 0.0f);
         bgHover  = ImVec4(0.35f, 0.55f, 0.85f, 0.35f);
         bgActive = ImVec4(0.35f, 0.55f, 0.85f, 0.55f);
     }
@@ -1441,22 +1452,49 @@ int Application::RibbonButton(const char* id, const char* const* opts,
     ImGui::BeginGroup();
 
     ImVec2 startPos = ImGui::GetCursorScreenPos();
-    ImGui::InvisibleButton("##click", ImVec2(w, h));
+
+    // Кликабельная область на всю ширину (кнопка + стрелка)
+    ImGui::InvisibleButton("##click", ImVec2(totalW, h));
     bool clicked = ImGui::IsItemClicked();
     bool hovered = ImGui::IsItemHovered();
     ImVec2 min = ImGui::GetItemRectMin();
     ImVec2 max = ImGui::GetItemRectMax();
 
+    // Определяем: попали в стрелку?
+    ImVec2 mp = ImGui::GetIO().MousePos;
+    bool inArrow = hasArrow && (mp.x >= min.x + w);
+
+    if (tooltip && hovered && !inArrow) ImGui::SetTooltip("%s", tooltip);
+    if (inArrow && hovered) ImGui::SetTooltip("Открыть список вариантов");
+
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    if (hovered && enabled) {
+
+    // Основная кнопка — hover только если мышь НЕ на стрелке
+    ImVec2 mainMax(min.x + w, max.y);
+    if (hovered && enabled && !inArrow) {
         ImU32 bgCol = ImGui::GetColorU32(bgHover);
-        dl->AddRectFilled(min, max, bgCol, 4.0f);
+        dl->AddRectFilled(min, mainMax, bgCol, 4.0f);
     }
 
-    // Иконка — сверху по центру
+    // Полоска стрелки справа — светло-подкрашена
+    if (hasArrow) {
+        ImU32 arrowBg;
+        if (isLight) {
+            arrowBg = enabled ? IM_COL32(220, 225, 232, 220)
+                              : IM_COL32(210, 215, 220, 140);
+        } else {
+            arrowBg = enabled ? IM_COL32(60, 70, 86, 200)
+                              : IM_COL32(50, 58, 72, 130);
+        }
+        if (hovered && enabled && inArrow) {
+            arrowBg = ImGui::GetColorU32(bgActive);
+        }
+        dl->AddRectFilled(ImVec2(min.x + w, min.y), max, arrowBg, 4.0f);
+    }
+
+    // Иконка
     if (tid != 0) {
-        float iconY = min.y + (big ? 4.0f : 4.0f);
-        ImVec2 iconPos(min.x + (w - iconSize) * 0.5f, iconY);
+        ImVec2 iconPos(min.x + (w - iconSize) * 0.5f, min.y + 4.0f);
         dl->AddImage(tid, iconPos,
                      ImVec2(iconPos.x + iconSize, iconPos.y + iconSize),
                      ImVec2(0, 0), ImVec2(1, 1),
@@ -1467,76 +1505,73 @@ int Application::RibbonButton(const char* id, const char* const* opts,
                           IM_COL32(140, 140, 140, 160), 4.0f);
     }
 
-    // Текст — под иконкой, до 2 строк
+    // Текст — под иконкой (ширина = w, без стрелки)
     if (big && optCount > 0) {
         std::string label = Tr(opts[idx]);
         float maxTextW = w - 4.0f;
         ImFont* font = ImGui::GetFont();
-        float fontSize = ImGui::GetFontSize();
         ImU32 txtCol = ImGui::GetColorU32(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled);
 
-        ImVec2 sz = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, label.c_str());
-        if (sz.x > maxTextW) {
-            fontSize = fontSize * 0.72f;
-            sz = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, label.c_str());
-        }
+        auto fits = [&](const std::string& s, float fs) {
+            return font->CalcTextSizeA(fs, FLT_MAX, 0.0f, s.c_str()).x <= maxTextW;
+        };
+        auto splitMiddle = [&](const std::string& s) {
+            std::vector<size_t> spaces;
+            for (size_t i = 0; i < s.size(); ++i) if (s[i] == ' ') spaces.push_back(i);
+            if (spaces.empty()) return std::pair<std::string,std::string>{s, ""};
+            size_t pos = spaces[spaces.size() / 2];
+            return std::pair<std::string,std::string>{s.substr(0, pos), s.substr(pos + 1)};
+        };
 
+        float baseSize = ImGui::GetFontSize();
         float baseY = min.y + 4.0f + iconSize + 2.0f;
+        float textBottom = max.y - 1.0f;
+        bool done = false;
 
-        if (sz.x <= maxTextW) {
-            ImVec2 tp(min.x + (w - sz.x) * 0.5f, baseY);
-            dl->AddText(font, fontSize, tp, txtCol, label.c_str());
-        } else {
-            size_t sp = label.find(' ');
-            bool drawn = false;
-            if (sp != std::string::npos) {
-                std::string l1 = label.substr(0, sp);
-                std::string l2 = label.substr(sp + 1);
-                ImVec2 s1 = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, l1.c_str());
-                ImVec2 s2 = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, l2.c_str());
-                if (s1.x <= maxTextW && s2.x <= maxTextW) {
-                    float lineH = fontSize + 1.0f;
-                    dl->AddText(font, fontSize,
-                                ImVec2(min.x + (w - s1.x) * 0.5f, baseY),
-                                txtCol, l1.c_str());
-                    dl->AddText(font, fontSize,
-                                ImVec2(min.x + (w - s2.x) * 0.5f, baseY + lineH),
-                                txtCol, l2.c_str());
-                    drawn = true;
+        auto drawLines = [&](const std::vector<std::string>& ls, float fs) {
+            float lineH = fs + 1.0f;
+            float y = baseY;
+            for (auto& s : ls) {
+                if (y + fs > textBottom) break;
+                ImVec2 sz = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, s.c_str());
+                dl->AddText(font, fs,
+                            ImVec2(min.x + (w - sz.x) * 0.5f, y),
+                            txtCol, s.c_str());
+                y += lineH;
+            }
+        };
+
+        float sizes[] = { baseSize, baseSize * 0.82f, baseSize * 0.62f, baseSize * 0.52f };
+        for (float fs : sizes) {
+            if (done) break;
+            if (fits(label, fs)) { drawLines({label}, fs); done = true; break; }
+            auto [l1, l2] = splitMiddle(label);
+            if (!l2.empty() && fits(l1, fs) && fits(l2, fs)) {
+                if (baseY + 2.0f * (fs + 1.0f) - 1.0f <= textBottom) {
+                    drawLines({l1, l2}, fs); done = true; break;
                 }
             }
-            if (!drawn) {
-                ImVec2 tp(min.x + (w - sz.x) * 0.5f, baseY);
-                dl->AddText(font, fontSize, tp, txtCol, label.c_str());
-            }
         }
+        if (!done) drawLines({label}, baseSize * 0.45f);
     }
 
-    if (clicked && enabled) result = 1;
-
-    // Стрелка ▼ внизу
-    if (optCount > 1) {
-        ImVec2 aMin = ImGui::GetCursorScreenPos();
-        ImGui::InvisibleButton("##arrow", ImVec2(w, arrowH));
-        bool arrowClick = ImGui::IsItemClicked();
-        bool arrowHover = ImGui::IsItemHovered();
-        ImVec2 aMax = ImGui::GetItemRectMax();
-
-        if (arrowHover && enabled) {
-            ImU32 arrowBg = ImGui::GetColorU32(bgHover);
-            dl->AddRectFilled(aMin, aMax, arrowBg, 3.0f);
-        }
-
+    // Стрелка ▼ — вертикально по центру правой полоски
+    if (hasArrow) {
         GLuint arrowTex = myIcons.Get("chevron-down", 10);
         if (arrowTex != 0) {
-            ImVec2 ip(aMin.x + (w - 10) * 0.5f, aMin.y + (arrowH - 10) * 0.5f);
-            dl->AddImage((ImTextureID)(intptr_t)arrowTex, ip,
-                         ImVec2(ip.x + 10, ip.y + 10),
+            float ax = min.x + w + (arrowW - 10) * 0.5f;
+            float ay = min.y + (h - 10) * 0.5f;
+            dl->AddImage((ImTextureID)(intptr_t)arrowTex,
+                         ImVec2(ax, ay), ImVec2(ax + 10, ay + 10),
                          ImVec2(0, 0), ImVec2(1, 1),
                          ImGui::GetColorU32(tint));
         }
+    }
 
-        if (arrowClick && enabled) result = 2;
+    // Клик: по стрелке — popup, по кнопке — action
+    if (clicked && enabled) {
+        if (inArrow) result = 2;
+        else result = 1;
     }
 
     ImGui::EndGroup();
@@ -1566,186 +1601,147 @@ int Application::RibbonSingleButton(const char* id, const char* key,
 
 void Application::DrawRibbonSketchTab() {
     bool inSketch = !myActiveSketchLabel.IsNull();
-
-    // --- Группа: Создать ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.create").c_str());
+    static int dummy = 0;
 
     static const char* lineOpts[]   = { "tool.line", "tool.curve", "tool.spline", "tool.bridge" };
     static const char* rectOpts[]   = { "tool.rect.2pt", "tool.rect.center", "tool.rect.3pt" };
     static const char* circleOpts[] = { "tool.circle.center", "tool.circle.2pt",
                                         "tool.circle.3pt", "tool.circle.tan" };
     static const char* arcOpts[]    = { "tool.arc.center", "tool.arc.3pt", "tool.arc.tan" };
-    static const char* polyOpts[]   = { "tool.poly.inscribed", "tool.poly.circum" };
-    static int dummy = 0;
+    static const char* pointOpt[]   = { "tool.point" };
+    static const char* textOpt[]    = { "tool.text" };
+    static const char* projOpt[]    = { "tool.project" };
+    static const char* projLoopOpt[]= { "tool.project.loop" };
+    static const char* trimOpt[]    = { "tool.trim" };
+    static const char* offsetOpt[]  = { "tool.offset" };
+    static const char* moveOpt[]    = { "tool.move" };
+    static const char* finishOpt[]  = { "tool.finish" };
+    static const char* clearOpt[]   = { "tool.clear" };
 
-    int r;
-    r = RibbonButton("line", lineOpts, 4, myLineToolIndex, ICON_LINE, inSketch, true);
-    if (r == 1 || r == 3) {
-        myCurrentLineStyle = LS_Normal;
-        myHasSketchStart = false;
-        if (myOcctView) myOcctView->ClearPreviewLine();
-    }
-    ImGui::SameLine();
-    RibbonButton("rect",   rectOpts,   3, myRectToolIndex,   ICON_RECT,    inSketch, true);
-    ImGui::SameLine();
-    RibbonButton("circle", circleOpts, 4, myCircleToolIndex, ICON_CIRCLE,  inSketch, true);
-    ImGui::SameLine();
-    RibbonButton("arc",    arcOpts,    3, myArcToolIndex,    ICON_ARC,     inSketch, true);
-    ImGui::SameLine();
-    RibbonButton("poly",   polyOpts,   2, myPolyToolIndex,   ICON_POLYGON, inSketch, true);
-    ImGui::SameLine();
-    RibbonButton("point",  lineOpts,   1, dummy,             ICON_POINT,   inSketch, true);
-    ImGui::SameLine();
-    RibbonButton("text",   lineOpts,   1, dummy,             ICON_TEXT,    inSketch, true);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Группа: Проецировать ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.project").c_str());
-    RibbonButton("proj_geom", lineOpts, 1, dummy, ICON_PROJECT,      inSketch, true);
-    ImGui::SameLine();
-    RibbonButton("proj_loop", lineOpts, 1, dummy, ICON_PROJECT_LOOP, inSketch, true);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Группа: Изменить ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.modify").c_str());
-
-    static const char* trimOpts[]   = { "tool.trim", "tool.extend" };
-    static const char* offsetOpts[] = { "tool.offset", "tool.scale" };
-    static const char* moveOpts[]   = { "tool.move", "tool.copy", "tool.rotate", "tool.mirror" };
-
-    RibbonButton("trim",   trimOpts,   2, myTrimToolIndex,   ICON_TRIM,    inSketch, false);
-    ImGui::SameLine();
-    RibbonButton("offset", offsetOpts, 2, myOffsetToolIndex, ICON_OFFSET,  inSketch, false);
-    ImGui::SameLine();
-    RibbonButton("move",   moveOpts,   4, myMoveToolIndex,   ICON_MOVE,    inSketch, false);
-    ImGui::SameLine();
-    RibbonButton("rotate", lineOpts,   1, dummy,             ICON_ROTATE,  inSketch, false);
-    ImGui::SameLine();
-    RibbonButton("mirror", lineOpts,   1, dummy,             ICON_MIRROR,  inSketch, false);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Группа: Ограничения ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.constrain").c_str());
-
-    static const char* conOpts[] = { "tool.coincident", "tool.parallel", "tool.perpendicular",
-                                     "tool.horizontal", "tool.vertical", "tool.tangent",
-                                     "tool.concentric", "tool.equal" };
-
-    int conResult = RibbonButton("constrain", conOpts, 8, myConstrainToolIndex,
-                                  ICON_COINCIDENT, inSketch, false);
-    if (conResult == 1 || conResult == 3) OpenDependencyDialog(myConstrainToolIndex);
-
-    ImGui::SameLine();
-    RibbonButton("dim", lineOpts, 1, dummy, ICON_DIMENSION, inSketch, false);
-    ImGui::SameLine();
-    RibbonButton("collinear", lineOpts, 1, dummy, ICON_COLLINEAR,    inSketch, false);
-    ImGui::SameLine();
-    RibbonButton("concentric", lineOpts, 1, dummy, ICON_CONCENTRIC,  inSketch, false);
-    ImGui::SameLine();
-    RibbonButton("fix", lineOpts, 1, dummy, ICON_FIX,                inSketch, false);
-    ImGui::SameLine();
-    RibbonButton("symmetric", lineOpts, 1, dummy, ICON_SYMMETRIC,    inSketch, false);
-    ImGui::SameLine();
-    RibbonButton("smooth", lineOpts, 1, dummy, ICON_SMOOTH_G2,       inSketch, false);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Группа: Массив ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.pattern").c_str());
-    RibbonButton("sk_pattern_rect", lineOpts, 1, dummy, ICON_PATTERN_RECT, inSketch, false);
-    ImGui::SameLine();
-    RibbonButton("sk_pattern_circ", lineOpts, 1, dummy, ICON_PATTERN_CIRC, inSketch, false);
-    ImGui::SameLine();
-    RibbonButton("sk_mirror",       lineOpts, 1, dummy, ICON_MIRROR,       inSketch, false);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Группа: Формат (стили линий — столбик 3 кнопки) ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.format").c_str());
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6, 2));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 3));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
-
-    // Основная — фиолетовая
+    // ============================================================
+    // СОЗДАТЬ — 6 больших в один ряд
+    // ============================================================
+    RibbonGroupStart();
     {
-        bool active = (myCurrentLineStyle == LS_Normal);
-        ImVec4 bg = active ? ImVec4(0.55f, 0.20f, 0.75f, 1.0f)
-                           : ImVec4(0.22f, 0.24f, 0.30f, 1.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button, bg);
-        ImGui::PushStyleColor(ImGuiCol_Text,
-            active ? ImVec4(1, 1, 1, 1) : ImVec4(0.8f, 0.8f, 0.8f, 1));
-        if (ImGui::Button("Основная##ls_norm", ImVec2(110, 22)))
+        int r = RibbonButton("line", lineOpts, 4, myLineToolIndex, ICON_LINE, inSketch, true,
+                             "Отрезок / кривая / сплайн");
+        if (r == 1 || r == 3) {
             myCurrentLineStyle = LS_Normal;
-        ImGui::PopStyleColor(2);
-    }
-
-    // Вспомогательная — серая
-    {
-        bool active = (myCurrentLineStyle == LS_Construction);
-        ImVec4 bg = active ? ImVec4(0.45f, 0.50f, 0.65f, 1.0f)
-                           : ImVec4(0.22f, 0.24f, 0.30f, 1.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button, bg);
-        ImGui::PushStyleColor(ImGuiCol_Text,
-            active ? ImVec4(1, 1, 1, 1) : ImVec4(0.8f, 0.8f, 0.8f, 1));
-        if (ImGui::Button("Вспомогательная##ls_const", ImVec2(110, 22)))
-            myCurrentLineStyle = LS_Construction;
-        ImGui::PopStyleColor(2);
-    }
-
-    // Осевая — коричневая
-    {
-        bool active = (myCurrentLineStyle == LS_Centerline);
-        ImVec4 bg = active ? ImVec4(0.70f, 0.40f, 0.15f, 1.0f)
-                           : ImVec4(0.22f, 0.24f, 0.30f, 1.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button, bg);
-        ImGui::PushStyleColor(ImGuiCol_Text,
-            active ? ImVec4(1, 1, 1, 1) : ImVec4(0.8f, 0.8f, 0.8f, 1));
-        if (ImGui::Button("Осевая##ls_center", ImVec2(110, 22)))
-            myCurrentLineStyle = LS_Centerline;
-        ImGui::PopStyleColor(2);
-    }
-
-    ImGui::PopStyleVar(3);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Группа: Выход ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.exit").c_str());
-
-    if (RibbonButton("finish", lineOpts, 1, dummy, ICON_FINISH, inSketch, true)) {
-        ExitSketch();
+            myHasSketchStart = false;
+            if (myOcctView) myOcctView->ClearPreviewLine();
+        }
     }
     ImGui::SameLine();
-    if (RibbonButton("clear", lineOpts, 1, dummy, ICON_TRASH, inSketch, false)) {
+    RibbonButton("rect",   rectOpts,   3, myRectToolIndex,   ICON_RECT,    inSketch, true, "Прямоугольник");
+    ImGui::SameLine();
+    RibbonButton("circle", circleOpts, 4, myCircleToolIndex, ICON_CIRCLE,  inSketch, true, "Окружность");
+    ImGui::SameLine();
+    RibbonButton("arc",    arcOpts,    3, myArcToolIndex,    ICON_ARC,     inSketch, true, "Дуга");
+    ImGui::SameLine();
+    RibbonButton("point",  pointOpt,   1, dummy,             ICON_POINT,   inSketch, true, "Точка");
+    ImGui::SameLine();
+    RibbonButton("text",   textOpt,    1, dummy,             ICON_TEXT,    inSketch, true, "Текст");
+    RibbonGroupEnd(Tr("grp.create").c_str());
+
+    // ============================================================
+    // ПРОЕЦИРОВАТЬ — 2 малые иконки в ряд
+    // ============================================================
+    RibbonGroupStart();
+    RibbonButton("proj_geom", projOpt,     1, dummy, ICON_PROJECT,      inSketch, true, "Проецирование геометрии");
+    ImGui::SameLine();
+    RibbonButton("proj_loop", projLoopOpt, 1, dummy, ICON_PROJECT_LOOP, inSketch, true, "Проецирование рёбер");
+    RibbonGroupEnd(Tr("grp.project").c_str());
+
+    // ============================================================
+    // ИЗМЕНИТЬ — 3 большие в ряд
+    // ============================================================
+    RibbonGroupStart();
+    RibbonButton("trim",   trimOpt,   1, dummy, ICON_TRIM,    inSketch, true, "Обрезать / удлинить");
+    ImGui::SameLine();
+    RibbonButton("offset", offsetOpt, 1, dummy, ICON_OFFSET,  inSketch, true, "Сместить");
+    ImGui::SameLine();
+    RibbonButton("move",   moveOpt,   1, dummy, ICON_MOVE,    inSketch, true, "Перенести / копировать / повернуть");
+    RibbonGroupEnd(Tr("grp.modify").c_str());
+
+    // ============================================================
+    // ОГРАНИЧЕНИЯ — 12 малых, 2 ряда по 6
+    // ============================================================
+    RibbonGroupStart();
+    // Ряд 1
+    RibbonButton("con_coincident",  pointOpt, 1, dummy, ICON_COINCIDENT,    inSketch, false, "Совпадение");
+    ImGui::SameLine();
+    RibbonButton("con_parallel",    pointOpt, 1, dummy, ICON_PARALLEL,      inSketch, false, "Параллельность");
+    ImGui::SameLine();
+    RibbonButton("con_perp",        pointOpt, 1, dummy, ICON_PERPENDICULAR, inSketch, false, "Перпендикулярность");
+    ImGui::SameLine();
+    RibbonButton("con_horiz",       pointOpt, 1, dummy, ICON_HORIZONTAL,    inSketch, false, "Горизонталь");
+    ImGui::SameLine();
+    RibbonButton("con_vert",        pointOpt, 1, dummy, ICON_VERTICAL,      inSketch, false, "Вертикаль");
+    ImGui::SameLine();
+    RibbonButton("con_tangent",     pointOpt, 1, dummy, ICON_TANGENT,       inSketch, false, "Касание");
+    // Ряд 2 (начинается с новой строки автоматически)
+    RibbonButton("con_concentric",  pointOpt, 1, dummy, ICON_CONCENTRIC,    inSketch, false, "Концентричность");
+    ImGui::SameLine();
+    RibbonButton("con_equal",       pointOpt, 1, dummy, ICON_EQUAL,         inSketch, false, "Равенство");
+    ImGui::SameLine();
+    RibbonButton("con_collinear",   pointOpt, 1, dummy, ICON_COLLINEAR,     inSketch, false, "Коллинеарность");
+    ImGui::SameLine();
+    RibbonButton("con_fix",         pointOpt, 1, dummy, ICON_FIX,           inSketch, false, "Фиксация");
+    ImGui::SameLine();
+    RibbonButton("con_symmetric",   pointOpt, 1, dummy, ICON_SYMMETRIC,     inSketch, false, "Симметрия");
+    ImGui::SameLine();
+    RibbonButton("con_smooth",      pointOpt, 1, dummy, ICON_SMOOTH_G2,     inSketch, false, "Сглаживание G2");
+    RibbonGroupEnd(Tr("grp.constrain").c_str());
+
+    // ============================================================
+    // МАССИВ — 3 малые иконки в столбик
+    // ============================================================
+    RibbonGroupStart();
+    RibbonButton("pat_rect", pointOpt, 1, dummy, ICON_PATTERN_RECT, inSketch, false, "Прямоугольный массив");
+    ImGui::SameLine();
+    RibbonButton("pat_circ", pointOpt, 1, dummy, ICON_PATTERN_CIRC, inSketch, false, "Круговой массив");
+    RibbonButton("pat_mirr", pointOpt, 1, dummy, ICON_MIRROR,       inSketch, false, "Зеркало");
+    RibbonGroupEnd(Tr("grp.pattern").c_str());
+
+    // ============================================================
+    // ФОРМАТ — 3 тонкие кнопки в столбик
+    // ============================================================
+    RibbonGroupStart();
+    {
+        struct LSItem { const char* label; const char* tip; LineStyle style; ImU32 bg; };
+        LSItem items[] = {
+            { "Основная",   "Основная линия",        LS_Normal,       IM_COL32(140, 51, 191, 255) },
+            { "Вспомог.",   "Вспомогательная линия", LS_Construction, IM_COL32(115, 128, 166, 255) },
+            { "Осевая",     "Осевая линия",          LS_Centerline,   IM_COL32(179, 102, 38, 255) },
+        };
+        for (int i = 0; i < 3; ++i) {
+            if (i > 0) ImGui::SameLine();
+            bool active = (myCurrentLineStyle == items[i].style);
+            ImVec4 bg = active ? ImColor(items[i].bg).Value
+                               : ImVec4(0.22f, 0.24f, 0.30f, 1.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, bg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                                  ImVec4(bg.x*1.2f, bg.y*1.2f, bg.z*1.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+                                  ImVec4(bg.x*0.8f, bg.y*0.8f, bg.z*0.8f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+            char buf[64];
+            snprintf(buf, sizeof(buf), "%s##ls_%d", items[i].label, i);
+            if (ImGui::Button(buf, ImVec2(85, 74))) myCurrentLineStyle = items[i].style;
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", items[i].tip);
+            ImGui::PopStyleColor(4);
+        }
+    }
+    RibbonGroupEnd(Tr("grp.format").c_str());
+
+    // ============================================================
+    // ВЫХОД — 2 большие в ряд
+    // ============================================================
+    RibbonGroupStart();
+    if (RibbonButton("finish", finishOpt, 1, dummy, ICON_FINISH, inSketch, true, "Завершить эскиз"))
+        ExitSketch();
+    ImGui::SameLine();
+    if (RibbonButton("clear", clearOpt, 1, dummy, ICON_TRASH, inSketch, true, "Очистить эскиз")) {
         if (myDocument && !myActiveSketchLabel.IsNull()) {
             myDocument->ClearSketch(myActiveSketchLabel);
             if (myOcctView) myOcctView->ClearAllShapes();
@@ -1753,12 +1749,9 @@ void Application::DrawRibbonSketchTab() {
             if (myOcctView) myOcctView->ShowGrid(myShowGrid);
         }
     }
-    ImGui::EndGroup();
+    RibbonGroupEnd(Tr("grp.exit").c_str());
 }
 
-// ============================================================
-//  Вкладка «3D Модель»
-// ============================================================
 void Application::DrawRibbonModelTab() {
     static int dummy = 0;
     static const char* oneOpt[] = { "tool.dummy" };
@@ -1974,128 +1967,96 @@ void Application::DrawRibbonManageTab() {
 //  Вкладка «Вид»
 // ============================================================
 void Application::DrawRibbonAssemblyTab() {
-    // === Сборка (заглушка до реализации модуля) ===
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.component").c_str());
-    RibbonSingleButton("asm_place",   "tool.asm.place",   ICON_PLANE,    false, true);
+    // === Компонент ===
+    RibbonGroupStart();
+    RibbonSingleButton("asm_place",   "tool.asm.place",   ICON_PLANE, false, true);
     ImGui::SameLine();
-    RibbonSingleButton("asm_create",  "tool.asm.create",  ICON_MOVE,     false, true);
+    RibbonSingleButton("asm_create",  "tool.asm.create",  ICON_MOVE,  false, true);
     ImGui::SameLine();
-    RibbonSingleButton("asm_replace", "tool.asm.replace", ICON_MOVE,     false, true);
-    ImGui::EndGroup();
+    RibbonSingleButton("asm_replace", "tool.asm.replace", ICON_MOVE,  false, true);
+    RibbonGroupEnd(Tr("grp.component").c_str());
 
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.position").c_str());
+    // === Позиционирование ===
+    RibbonGroupStart();
     RibbonSingleButton("asm_joint",   "tool.asm.joint",   ICON_MOVE,     false, true);
-    RibbonSingleButton("asm_dof",     "tool.asm.dof",     ICON_SHOW_ALL, false, true);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.pattern").c_str());
-    RibbonSingleButton("asm_pat_rect", "tool.pattern.rect", ICON_PATTERN_RECT, false, true);
     ImGui::SameLine();
-    RibbonSingleButton("asm_pat_circ", "tool.pattern.circ", ICON_PATTERN_CIRC, false, true);
+    RibbonSingleButton("asm_dof",     "tool.asm.dof",     ICON_SHOW_ALL, false, true);
+    RibbonGroupEnd(Tr("grp.position").c_str());
+
+    // === Массив ===
+    RibbonGroupStart();
+    RibbonSingleButton("asm_pat_rect", "tool.pattern_rect", ICON_PATTERN_RECT, false, true);
+    ImGui::SameLine();
+    RibbonSingleButton("asm_pat_circ", "tool.pattern_circ", ICON_PATTERN_CIRC, false, true);
     ImGui::SameLine();
     RibbonSingleButton("asm_mirror",   "tool.mirror",       ICON_MIRROR,       false, true);
-    ImGui::EndGroup();
+    RibbonGroupEnd(Tr("grp.pattern").c_str());
 
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.standards").c_str());
+    // === Спецификация ===
+    RibbonGroupStart();
+    RibbonSingleButton("asm_bom",     "tool.bom",     ICON_CASCADE, false, true);
+    ImGui::SameLine();
     RibbonSingleButton("asm_library", "tool.library", ICON_CASCADE, false, true);
-    ImGui::EndGroup();
+    RibbonGroupEnd(Tr("grp.standards").c_str());
 }
 
 void Application::DrawRibbonViewTab() {
     static int dummy = 0;
-    static const char* oneOpt[] = { "tool.dummy" };
 
-    // --- Навигация ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.navigation").c_str());
+    // === Навигация ===
+    RibbonGroupStart();
     RibbonSingleButton("pan",    "tool.pan",    ICON_PAN,     true, true);
     ImGui::SameLine();
     RibbonSingleButton("zoom",   "tool.zoom",   ICON_ZOOM,    true, true);
     ImGui::SameLine();
     RibbonSingleButton("orbit",  "tool.orbit",  ICON_ORBIT,   true, true);
-    if (ImGui::IsItemHovered()) {}
+    ImGui::SameLine();
     if (RibbonSingleButton("home_v", "tool.home", ICON_HOME, true, true)) {
         if (myOcctView) myOcctView->SetHomeView();
     }
-    ImGui::EndGroup();
+    RibbonGroupEnd(Tr("grp.navigation").c_str());
 
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
+    // === Виды ===
+    RibbonGroupStart();
+    RibbonSingleButton("v_top",   "tool.view_top",   ICON_VIEW_TOP,   true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("v_front", "tool.view_front", ICON_VIEW_FRONT, true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("v_right", "tool.view_right", ICON_VIEW_RIGHT, true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("v_iso",   "tool.view_iso",   ICON_VIEW_ISO,   true, true);
+    RibbonGroupEnd(Tr("grp.views").c_str());
 
-    // --- Стандартные виды ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.views").c_str());
-    RibbonSingleButton("v_top",   "tool.view_top",   ICON_VIEW_TOP,    true, false);
+    // === Стиль отображения ===
+    RibbonGroupStart();
+    RibbonSingleButton("shadows",     "tool.shadows",     ICON_SHADOWS,     true, true);
     ImGui::SameLine();
-    RibbonSingleButton("v_front", "tool.view_front", ICON_VIEW_FRONT,  true, false);
+    RibbonSingleButton("reflections", "tool.reflections", ICON_REFLECTIONS, true, true);
     ImGui::SameLine();
-    RibbonSingleButton("v_right", "tool.view_right", ICON_VIEW_RIGHT,  true, false);
+    RibbonSingleButton("grid",        "tool.grid",        ICON_GRID,        true, true);
     ImGui::SameLine();
-    RibbonSingleButton("v_iso",   "tool.view_iso",   ICON_VIEW_ISO,    true, false);
-    ImGui::EndGroup();
+    RibbonSingleButton("background",  "tool.background",  ICON_BACKGROUND,  true, true);
+    RibbonGroupEnd(Tr("grp.display").c_str());
 
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
+    // === Видимость ===
+    RibbonGroupStart();
+    RibbonSingleButton("hide",        "tool.hide",        ICON_HIDE,        true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("show_all",    "tool.show_all",    ICON_SHOW_ALL,    true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("isolate",     "tool.isolate",     ICON_ISOLATE,     true, true);
+    ImGui::SameLine();
+    RibbonSingleButton("show_hidden", "tool.show_hidden", ICON_SHOW_HIDDEN, true, true);
+    RibbonGroupEnd(Tr("grp.visibility").c_str());
 
-    // --- Отображение ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.display").c_str());
-    RibbonSingleButton("shadows",     "tool.shadows",     ICON_SHADOWS,     true, false);
+    // === Окна ===
+    RibbonGroupStart();
+    RibbonSingleButton("new_window", "tool.new_window", ICON_NEW_WINDOW, true, true);
     ImGui::SameLine();
-    RibbonSingleButton("reflections", "tool.reflections", ICON_REFLECTIONS, true, false);
+    RibbonSingleButton("tile",       "tool.tile",       ICON_TILE,       true, true);
     ImGui::SameLine();
-    RibbonSingleButton("grid",        "tool.grid",        ICON_GRID,        true, false);
-    ImGui::SameLine();
-    RibbonSingleButton("background",  "tool.background",  ICON_BACKGROUND,  true, false);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Видимость ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.visibility").c_str());
-    RibbonSingleButton("hide",        "tool.hide",        ICON_HIDE,        true, false);
-    ImGui::SameLine();
-    RibbonSingleButton("show_all",    "tool.show_all",    ICON_SHOW_ALL,    true, false);
-    ImGui::SameLine();
-    RibbonSingleButton("isolate",     "tool.isolate",     ICON_ISOLATE,     true, false);
-    ImGui::SameLine();
-    RibbonSingleButton("show_hidden", "tool.show_hidden", ICON_SHOW_HIDDEN, true, false);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Окна ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.windows").c_str());
-    RibbonSingleButton("new_window", "tool.new_window", ICON_NEW_WINDOW, true, false);
-    ImGui::SameLine();
-    RibbonSingleButton("tile",       "tool.tile",       ICON_TILE,       true, false);
-    ImGui::SameLine();
-    RibbonSingleButton("cascade",    "tool.cascade",    ICON_CASCADE,    true, false);
-    ImGui::EndGroup();
+    RibbonSingleButton("cascade",    "tool.cascade",    ICON_CASCADE,    true, true);
+    RibbonGroupEnd(Tr("grp.windows").c_str());
 }
 
 void Application::DrawRibbon() {
@@ -2115,7 +2076,8 @@ void Application::DrawRibbon() {
     DrawRibbonTabs();
     ImGui::Separator();
 
-    // Высота содержимого — 90px
+    // Child с отступом сверху 6 px
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 6));
     if (ImGui::BeginChild("##ribbon_content", ImVec2(0, 0), false,
                           ImGuiWindowFlags_HorizontalScrollbar)) {
         switch (myActiveRibbonTab) {
@@ -2126,6 +2088,7 @@ void Application::DrawRibbon() {
         }
     }
     ImGui::EndChild();
+    ImGui::PopStyleVar();
     ImGui::End();
     ImGui::PopStyleVar();
 }

@@ -44,20 +44,20 @@ const std::unordered_map<std::string, std::pair<std::string, std::string>> kDict
     { "tool.more",           { "More options",            "Дополнительные опции" } },
 
     // Прямоугольник
-    { "tool.rect.2pt",       { "Two Point Rectangle",   "Прямоугольник по двум точкам" } },
-    { "tool.rect.center",    { "Center Rectangle",      "Прямоугольник по центру" } },
-    { "tool.rect.3pt",       { "Three Point Rectangle", "Прямоугольник по трём точкам" } },
+    { "tool.rect.2pt",       { "Two Point Rectangle",   "Прямоугольник" } },
+    { "tool.rect.center",    { "Center Rectangle",      "Прямоуг. центр" } },
+    { "tool.rect.3pt",       { "Three Point Rectangle", "Прямоуг. 3 точки" } },
 
     // Окружность
-    { "tool.circle.center",  { "Center Point Circle",   "Окружность по центру" } },
-    { "tool.circle.2pt",     { "Two Point Circle",      "Окружность по двум точкам" } },
-    { "tool.circle.3pt",     { "Three Point Circle",    "Окружность по трём точкам" } },
-    { "tool.circle.tan",     { "Tangent Circle",        "Касательная окружность" } },
+    { "tool.circle.center",  { "Center Point Circle",   "Окружность" } },
+    { "tool.circle.2pt",     { "Two Point Circle",      "Окруж. 2 точки" } },
+    { "tool.circle.3pt",     { "Three Point Circle",    "Окруж. 3 точки" } },
+    { "tool.circle.tan",     { "Tangent Circle",        "Окруж. кас." } },
 
     // Дуга
-    { "tool.arc.center",     { "Center Point Arc",      "Дуга по центру" } },
-    { "tool.arc.3pt",        { "Three Point Arc",       "Дуга по трём точкам" } },
-    { "tool.arc.tan",        { "Tangent Arc",           "Касательная дуга" } },
+    { "tool.arc.center",     { "Center Point Arc",      "Дуга" } },
+    { "tool.arc.3pt",        { "Three Point Arc",       "Дуга 3 точки" } },
+    { "tool.arc.tan",        { "Tangent Arc",           "Дуга кас." } },
 
     // Многоугольник
     { "tool.poly.inscribed", { "Inscribed Polygon",     "Вписанный многоугольник" } },
@@ -66,8 +66,8 @@ const std::unordered_map<std::string, std::pair<std::string, std::string>> kDict
     // Modify
     { "tool.trim",           { "Trim",                  "Обрезать" } },
     { "tool.extend",         { "Extend",                "Удлинить" } },
-    { "tool.offset",         { "Offset",                "Смещение" } },
-    { "tool.move",           { "Move",                  "Переместить" } },
+    { "tool.offset",         { "Offset",                "Сместить" } },
+    { "tool.move",           { "Move",                  "Перенести" } },
     { "tool.copy",           { "Copy",                  "Копировать" } },
     { "tool.rotate",         { "Rotate",                "Повернуть" } },
     { "tool.scale",          { "Scale",                 "Масштаб" } },
@@ -85,7 +85,7 @@ const std::unordered_map<std::string, std::pair<std::string, std::string>> kDict
     { "tool.equal",          { "Equal",                 "Равенство" } },
 
     // Exit
-    { "tool.finish",         { "Finish Sketch",         "Завершить эскиз" } },
+    { "tool.finish",         { "Finish Sketch",         "Завершить" } },
 
     // 3D Model
     { "tool.extrude",        { "Extrude",               "Выдавливание" } },
@@ -180,7 +180,7 @@ const std::unordered_map<std::string, std::pair<std::string, std::string>> kDict
     { "tool.spline",    { "Spline",     "Сплайн" } },
     { "tool.bridge",    { "Bridge",     "Соединительная" } },
     { "tool.dummy",     { "-",          "-" } },
-    { "tool.newSketch",      { "New Sketch",       "Создать эскиз" } },
+    { "tool.newSketch",      { "New Sketch",       "Начать эскиз" } },
     { "tool.union",          { "Union",            "Объединить" } },
     { "tool.cut",            { "Cut",              "Вычесть" } },
     { "tool.intersect",      { "Intersect",        "Пересечение" } },
@@ -228,10 +228,10 @@ const std::unordered_map<std::string, std::pair<std::string, std::string>> kDict
     { "tool.new_window",     { "New Window",       "Новое окно" } },
     { "tool.tile",           { "Tile",             "Мозаика" } },
     { "tool.cascade",        { "Cascade",          "Каскад" } },
-    { "tool.pan",            { "Pan",              "Панорамировать" } },
+    { "tool.pan",            { "Pan",              "Панорама" } },
     { "tool.zoom",           { "Zoom",             "Зум" } },
     { "tool.orbit",          { "Orbit",            "Орбита" } },
-    { "tool.home",           { "Home View",        "Домой" } },
+    { "tool.home",           { "Home View",        "Исходный вид" } },
     { "tool.section",        { "Section",          "Сечение" } },
     { "tool.thickness",      { "Thickness",        "Толщина" } },
     { "tool.curvature",      { "Curvature",        "Кривизна" } },
@@ -252,6 +252,27 @@ const std::unordered_map<std::string, std::pair<std::string, std::string>> kDict
     { "panel.deps.fully",      { "Fully Constrained",      "Полностью определено" } },
     { "panel.deps.dof",        { "DOF remaining",          "Осталось степеней свободы" } },
 
+    // === Добавлено при редизайне ribbon ===
+    { "grp.component",        { "Component",                "Компонент" } },
+    { "grp.position",         { "Position",                 "Позиционирование" } },
+    { "grp.standards",        { "Standards",                "Стандартные изделия" } },
+    { "tool.newSketch",       { "Start 2D Sketch",          "Начать эскиз" } },
+    { "tool.asm.place",       { "Place",                    "Вставить" } },
+    { "tool.asm.create",      { "Create",                   "Создать" } },
+    { "tool.asm.replace",     { "Replace",                  "Заменить" } },
+    { "tool.asm.joint",       { "Joint",                    "Соединение" } },
+    { "tool.asm.dof",         { "Degrees of Freedom",       "Степени свободы" } },
+    { "tool.bom",             { "BOM",                      "Спецификация" } },
+    { "tool.library",         { "Library",                  "Библиотека" } },
+    { "tool.project",         { "Project Geometry",         "Проецировать" } },
+    { "tool.dim",             { "Dimension",                "Размер" } },
+    { "tool.collinear",       { "Collinear",                "Коллинеарность" } },
+    { "tool.fix",             { "Fix",                      "Фиксация" } },
+    { "tool.symmetric",       { "Symmetric",                "Симметрия" } },
+    { "tool.smooth",          { "Smooth G2",                "Сглаживание G2" } },
+    { "tool.clear",           { "Clear Sketch",             "Очистить" } },
+    { "tool.sketch.proj",     { "Project",                  "Проецировать" } },
+
 };
 
 } // namespace
