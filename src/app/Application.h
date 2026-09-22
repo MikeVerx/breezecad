@@ -256,6 +256,7 @@ private:
 
     // Группы ribbon — блок с рамкой и заголовком снизу по центру
     void RibbonGroupStart();
+    float myRibbonGroupStartY = 0.0f;
     void RibbonGroupEnd(const char* name);
     void EnterSketch(const TDF_Label& sketchLabel);
     void ExitSketch();

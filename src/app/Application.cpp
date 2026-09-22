@@ -1369,21 +1369,11 @@ static bool RibbonButton(const char* label, bool active, const char* tooltip = n
 
 // Универсальная кнопка Ribbon с SVG-иконкой Lucide.
 void Application::RibbonGroupStart() {
-    // Запоминаем стартовую Y — чтобы потом дотянуть группу до стандартной высоты
-    static float s_groupStartY = 0.0f;
-    s_groupStartY = ImGui::GetCursorScreenPos().y;
+    myRibbonGroupStartY = ImGui::GetCursorScreenPos().y;
     ImGui::BeginGroup();
 }
 
 void Application::RibbonGroupEnd(const char* name) {
-    // Дотягиваем группу до стандартной высоты 74 px (как большие кнопки)
-    static float s_groupStartY = 0.0f;
-    float curY = ImGui::GetCursorScreenPos().y;
-    float h = curY - s_groupStartY;
-    const float TARGET_H = 74.0f;
-    if (h < TARGET_H) {
-        ImGui::Dummy(ImVec2(1.0f, TARGET_H - h));
-    }
     ImGui::EndGroup();
 
     ImVec2 pMin = ImGui::GetItemRectMin();
@@ -1427,7 +1417,25 @@ int Application::RibbonButton(const char* id, const char* const* opts,
     const float arrowW = 16.0f;  // ширина вертикальной полоски справа
     float w = big ? bigW : smallW;
     float h = big ? bigH : smallH;
-    const int iconSize = big ? 32 : 24;
+    // Адаптивный размер иконки для больших: если текст в одну строку — крупнее
+    int iconSize = big ? 32 : 20;
+    if (big && optCount > 0) {
+        std::string labelT = Tr(opts[idx]);
+        float maxTW = w - 4.0f;
+        ImFont* fnt = ImGui::GetFont();
+        float baseSz = ImGui::GetFontSize();
+        ImVec2 szBase = fnt->CalcTextSizeA(baseSz, FLT_MAX, 0.0f, labelT.c_str());
+        if (szBase.x <= maxTW) {
+            iconSize = 40;   // одна строка обычным шрифтом — крупная иконка
+        } else {
+            ImVec2 szFallback = fnt->CalcTextSizeA(baseSz * 0.82f, FLT_MAX, 0.0f, labelT.c_str());
+            if (szFallback.x <= maxTW) {
+                iconSize = 34;  // одна строка уменьшенным
+            } else {
+                iconSize = 30;  // две строки
+            }
+        }
+    }
     bool hasArrow = (optCount > 1);
     float totalW = w + (hasArrow ? arrowW : 0.0f);
 
@@ -1667,30 +1675,33 @@ void Application::DrawRibbonSketchTab() {
     // ОГРАНИЧЕНИЯ — 12 малых, 2 ряда по 6
     // ============================================================
     RibbonGroupStart();
+    // Уплотняем вертикальный отступ между двумя рядами
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, 0.0f));
     // Ряд 1
-    RibbonButton("con_coincident",  pointOpt, 1, dummy, ICON_COINCIDENT,    inSketch, false, "Совпадение");
+    RibbonButton("con_coincident",  pointOpt, 1, dummy, ICON_COINCIDENT,    true, false, "Совпадение");
     ImGui::SameLine();
-    RibbonButton("con_parallel",    pointOpt, 1, dummy, ICON_PARALLEL,      inSketch, false, "Параллельность");
+    RibbonButton("con_parallel",    pointOpt, 1, dummy, ICON_PARALLEL,      true, false, "Параллельность");
     ImGui::SameLine();
-    RibbonButton("con_perp",        pointOpt, 1, dummy, ICON_PERPENDICULAR, inSketch, false, "Перпендикулярность");
+    RibbonButton("con_perp",        pointOpt, 1, dummy, ICON_PERPENDICULAR, true, false, "Перпендикулярность");
     ImGui::SameLine();
-    RibbonButton("con_horiz",       pointOpt, 1, dummy, ICON_HORIZONTAL,    inSketch, false, "Горизонталь");
+    RibbonButton("con_horiz",       pointOpt, 1, dummy, ICON_HORIZONTAL,    true, false, "Горизонталь");
     ImGui::SameLine();
-    RibbonButton("con_vert",        pointOpt, 1, dummy, ICON_VERTICAL,      inSketch, false, "Вертикаль");
+    RibbonButton("con_vert",        pointOpt, 1, dummy, ICON_VERTICAL,      true, false, "Вертикаль");
     ImGui::SameLine();
-    RibbonButton("con_tangent",     pointOpt, 1, dummy, ICON_TANGENT,       inSketch, false, "Касание");
+    RibbonButton("con_tangent",     pointOpt, 1, dummy, ICON_TANGENT,       true, false, "Касание");
     // Ряд 2 (начинается с новой строки автоматически)
-    RibbonButton("con_concentric",  pointOpt, 1, dummy, ICON_CONCENTRIC,    inSketch, false, "Концентричность");
+    RibbonButton("con_concentric",  pointOpt, 1, dummy, ICON_CONCENTRIC,    true, false, "Концентричность");
     ImGui::SameLine();
-    RibbonButton("con_equal",       pointOpt, 1, dummy, ICON_EQUAL,         inSketch, false, "Равенство");
+    RibbonButton("con_equal",       pointOpt, 1, dummy, ICON_EQUAL,         true, false, "Равенство");
     ImGui::SameLine();
-    RibbonButton("con_collinear",   pointOpt, 1, dummy, ICON_COLLINEAR,     inSketch, false, "Коллинеарность");
+    RibbonButton("con_collinear",   pointOpt, 1, dummy, ICON_COLLINEAR,     true, false, "Коллинеарность");
     ImGui::SameLine();
-    RibbonButton("con_fix",         pointOpt, 1, dummy, ICON_FIX,           inSketch, false, "Фиксация");
+    RibbonButton("con_fix",         pointOpt, 1, dummy, ICON_FIX,           true, false, "Фиксация");
     ImGui::SameLine();
-    RibbonButton("con_symmetric",   pointOpt, 1, dummy, ICON_SYMMETRIC,     inSketch, false, "Симметрия");
+    RibbonButton("con_symmetric",   pointOpt, 1, dummy, ICON_SYMMETRIC,     true, false, "Симметрия");
     ImGui::SameLine();
-    RibbonButton("con_smooth",      pointOpt, 1, dummy, ICON_SMOOTH_G2,     inSketch, false, "Сглаживание G2");
+    RibbonButton("con_smooth",      pointOpt, 1, dummy, ICON_SMOOTH_G2,     true, false, "Сглаживание G2");
+    ImGui::PopStyleVar();
     RibbonGroupEnd(Tr("grp.constrain").c_str());
 
     // ============================================================

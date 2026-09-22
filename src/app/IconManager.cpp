@@ -221,6 +221,10 @@ void IconManager::PreloadDefaults() {
         // CAD-иконки (собственные)
         "cad/extrude", "cad/revolve", "cad/sweep", "cad/loft", "cad/hole",
         "cad/thread", "cad/fillet", "cad/chamfer", "cad/shell", "cad/union",
+        "cad/cut", "cad/intersect", "cad/plane", "cad/axis", "cad/point",
+        "cad/pattern_rect", "cad/pattern_circ",
+        "cad/view_iso", "cad/view_top", "cad/view_front", "cad/view_right",
+        "cad/parallel",
         // Рабочие элементы
         "move-3d",
         // Аннотации
