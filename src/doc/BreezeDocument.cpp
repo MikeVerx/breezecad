@@ -195,8 +195,36 @@ void BreezeDocument::CreateBaseGeometry() {
             -planeSize, planeSize, -planeSize, planeSize).Shape();
         TNaming_Builder(l).Generated(f);
     }
+    // X Axis
+    {
+        TDF_Label l = myBaseLabel.FindChild(5, true);
+        TDataStd_Name::Set(l, TCollection_ExtendedString("X Axis"));
+        TDataStd_Integer::Set(l, FT_Axis);
+        TopoDS_Shape e = BRepBuilderAPI_MakeEdge(
+            gp_Pnt(-axisLen, 0, 0), gp_Pnt(axisLen, 0, 0)).Shape();
+        TNaming_Builder(l).Generated(e);
+    }
+    // Y Axis
+    {
+        TDF_Label l = myBaseLabel.FindChild(6, true);
+        TDataStd_Name::Set(l, TCollection_ExtendedString("Y Axis"));
+        TDataStd_Integer::Set(l, FT_Axis);
+        TopoDS_Shape e = BRepBuilderAPI_MakeEdge(
+            gp_Pnt(0, -axisLen, 0), gp_Pnt(0, axisLen, 0)).Shape();
+        TNaming_Builder(l).Generated(e);
+    }
+    // Z Axis
+    {
+        TDF_Label l = myBaseLabel.FindChild(7, true);
+        TDataStd_Name::Set(l, TCollection_ExtendedString("Z Axis"));
+        TDataStd_Integer::Set(l, FT_Axis);
+        TopoDS_Shape e = BRepBuilderAPI_MakeEdge(
+            gp_Pnt(0, 0, -axisLen), gp_Pnt(0, 0, axisLen)).Shape();
+        TNaming_Builder(l).Generated(e);
+    }
+
     myNextFeatureId = 10;
-    std::cout << "BreezeDocument: base geometry created (Start + planes + origin)\n";
+    std::cout << "BreezeDocument: base geometry created (Start + planes + axes + origin)\n";
 }
 
 TDF_Label BreezeDocument::GetBaseGeometryLabel() const {

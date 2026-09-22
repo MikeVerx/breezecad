@@ -2190,7 +2190,7 @@ void Application::DrawDocumentTree() {
                     if (type == FT_OriginPoint) continue;
 
                     // Оси не показываем вообще
-                    if (type == FT_Axis) continue;
+                    // FT_Axis теперь тоже показывается
 
                     // Плоскости и (при отсутствии операций) оси — показываем
                     DrawLabelTree(child, selectedLabel, hasOps);
