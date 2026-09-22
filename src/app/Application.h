@@ -252,6 +252,10 @@ private:
     void DrawRibbonManageTab();
     void DrawRibbonViewTab();
     void DrawRibbonAssemblyTab();  // заглушка
+
+    // Группы ribbon — блок с рамкой и заголовком снизу по центру
+    void RibbonGroupStart();
+    void RibbonGroupEnd(const char* name);
     void EnterSketch(const TDF_Label& sketchLabel);
     void ExitSketch();
     void OnSketchClick(int px, int py);
