@@ -1,7 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <ellipse cx="12" cy="18" rx="7" ry="3"/>
-  <path d="M 5 18 L 5 12 L 12 8 L 19 12 L 19 18"/>
-  <path d="M 12 8 L 12 3"/>
-  <path d="M 9 6 L 12 3 L 15 6"/>
+  <!-- Эскиз: прямоугольник (плоскость) -->
+  <rect x="2" y="13" width="13" height="7"/>
+  <!-- Выдавленное тело сверху (залито) -->
+  <rect x="2" y="6" width="13" height="7" fill="currentColor" opacity="0.35" stroke="none"/>
+  <rect x="2" y="6" width="13" height="7"/>
+  <!-- Стрелка вверх справа -->
+  <line x1="20" y1="20" x2="20" y2="6"/>
+  <path d="M 17 9 L 20 6 L 23 9"/>
 </svg>
