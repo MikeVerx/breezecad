@@ -1593,10 +1593,11 @@ int Application::RibbonButton(const char* id, const char* const* opts,
 }
 
 int Application::RibbonSingleButton(const char* id, const char* key,
-                                    const char* icon, bool enabled, bool big) {
+                                    const char* icon, bool enabled, bool big,
+                                    const char* tooltip) {
     static int dummy = 0;
     const char* opts[] = { key };
-    return RibbonButton(id, opts, 1, dummy, icon, enabled, big);
+    return RibbonButton(id, opts, 1, dummy, icon, enabled, big, tooltip);
 }
 
 void Application::DrawRibbonSketchTab() {
@@ -2027,61 +2028,100 @@ void Application::DrawRibbonAssemblyTab() {
 void Application::DrawRibbonViewTab() {
     static int dummy = 0;
 
-    // === Навигация ===
+    // === Навигация (3 кнопки-меню) ===
     RibbonGroupStart();
-    RibbonSingleButton("pan",    "tool.pan",    ICON_PAN,     true, true);
+    {
+        static const char* panOpts[]  = { "tool.pan", "tool.pan", "tool.pan" };
+        RibbonButton("nav_pan",   panOpts,  1, dummy, ICON_PAN,   true, true, "Панорамирование");
+    }
     ImGui::SameLine();
-    RibbonSingleButton("zoom",   "tool.zoom",   ICON_ZOOM,    true, true);
+    {
+        static const char* zoomOpts[] = { "tool.zoom_all", "tool.zoom_frame", "tool.zoom_sel", "tool.zoom" };
+        int zoomIdx = 0;
+        RibbonButton("nav_zoom",  zoomOpts, 4, zoomIdx, ICON_ZOOM,  true, true, "Зум");
+    }
     ImGui::SameLine();
-    RibbonSingleButton("orbit",  "tool.orbit",  ICON_ORBIT,   true, true);
+    {
+        static const char* orbOpts[] = { "tool.orbit", "tool.orbit_dep", "tool.orbit_angle" };
+        int orbIdx = 0;
+        RibbonButton("nav_orbit", orbOpts, 3, orbIdx, ICON_ORBIT, true, true, "Орбита");
+    }
     RibbonGroupEnd(Tr("grp.navigation").c_str());
 
     // === Виды (7) ===
     RibbonGroupStart();
-    RibbonSingleButton("v_top",    "tool.view_top",    ICON_VIEW_TOP,    true, false);
+    RibbonSingleButton("v_top",    "tool.view_top",    ICON_VIEW_TOP,    true, false, "Сверху");
     ImGui::SameLine();
-    RibbonSingleButton("v_bottom", "tool.view_bottom", ICON_VIEW_BOTTOM, true, false);
+    RibbonSingleButton("v_bottom", "tool.view_bottom", ICON_VIEW_BOTTOM, true, false, "Снизу");
     ImGui::SameLine();
-    RibbonSingleButton("v_front",  "tool.view_front",  ICON_VIEW_FRONT,  true, false);
+    RibbonSingleButton("v_front",  "tool.view_front",  ICON_VIEW_FRONT,  true, false, "Спереди");
     ImGui::SameLine();
-    RibbonSingleButton("v_back",   "tool.view_back",   ICON_VIEW_BACK,   true, false);
+    RibbonSingleButton("v_back",   "tool.view_back",   ICON_VIEW_BACK,   true, false, "Сзади");
     ImGui::SameLine();
-    RibbonSingleButton("v_left",   "tool.view_left",   ICON_VIEW_LEFT,   true, false);
+    RibbonSingleButton("v_left",   "tool.view_left",   ICON_VIEW_LEFT,   true, false, "Слева");
     ImGui::SameLine();
-    RibbonSingleButton("v_right",  "tool.view_right",  ICON_VIEW_RIGHT,  true, false);
+    RibbonSingleButton("v_right",  "tool.view_right",  ICON_VIEW_RIGHT,  true, false, "Справа");
     ImGui::SameLine();
-    RibbonSingleButton("v_iso",    "tool.view_iso",    ICON_VIEW_ISO,    true, false);
+    RibbonSingleButton("v_iso",    "tool.view_iso",    ICON_VIEW_ISO,    true, false, "Изометрия");
     RibbonGroupEnd(Tr("grp.views").c_str());
 
-    // === Стиль отображения ===
+    // === Стиль отображения (7, кнопка-меню) ===
     RibbonGroupStart();
-    RibbonSingleButton("shadows",     "tool.shadows",     ICON_SHADOWS,     true, true);
+    {
+        static const char* styleOpts[] = {
+            "tool.style_realistic", "tool.style_shaded", "tool.style_shaded_edges",
+            "tool.style_shaded_hidden", "tool.style_wireframe",
+            "tool.style_mono", "tool.style_tech"
+        };
+        RibbonButton("view_style", styleOpts, 7, myDisplayStyleIndex, ICON_SHADOWS, true, true,
+                     "Стиль отображения");
+    }
     ImGui::SameLine();
-    RibbonSingleButton("reflections", "tool.reflections", ICON_REFLECTIONS, true, true);
-    ImGui::SameLine();
-    RibbonSingleButton("grid",        "tool.grid",        ICON_GRID,        true, true);
-    ImGui::SameLine();
-    RibbonSingleButton("background",  "tool.background",  ICON_BACKGROUND,  true, true);
-    RibbonGroupEnd(Tr("grp.display").c_str());
+    {
+        static const char* bgOpts[] = {
+            "tool.bg_white", "tool.bg_gray", "tool.bg_grad_light",
+            "tool.bg_grad_dark", "tool.bg_custom"
+        };
+        RibbonButton("view_bg", bgOpts, 5, myBackgroundIndex, ICON_BACKGROUND, true, true,
+                     "Фон вьюпорта");
+    }
+    RibbonGroupEnd(Tr("grp.style").c_str());
 
-    // === Видимость ===
+    // === Представление модели (6 малых) ===
     RibbonGroupStart();
-    RibbonSingleButton("hide",        "tool.hide",        ICON_HIDE,        true, true);
+    RibbonSingleButton("mdl_shadows",     "tool.shadows",       ICON_SHADOWS,     true, false, "Тени");
     ImGui::SameLine();
-    RibbonSingleButton("show_all",    "tool.show_all",    ICON_SHOW_ALL,    true, true);
+    RibbonSingleButton("mdl_reflections", "tool.reflections",   ICON_REFLECTIONS, true, false, "Отражения");
     ImGui::SameLine();
-    RibbonSingleButton("isolate",     "tool.isolate",     ICON_ISOLATE,     true, true);
+    RibbonSingleButton("mdl_textures",    "tool.textures",      ICON_GRID,        true, false, "Текстуры");
     ImGui::SameLine();
-    RibbonSingleButton("show_hidden", "tool.show_hidden", ICON_SHOW_HIDDEN, true, true);
+    RibbonSingleButton("mdl_zero_plane",  "tool.zero_plane",    "plus",           true, false, "Нулевая плоскость");
+    ImGui::SameLine();
+    RibbonSingleButton("mdl_refine",      "tool.refine",        ICON_SHOW_ALL,    true, false, "Уточнить");
+    RibbonGroupEnd(Tr("grp.model_view").c_str());
+
+    // === Видимость (4) ===
+    RibbonGroupStart();
+    RibbonSingleButton("hide",        "tool.hide",        ICON_HIDE,        true, false, "Скрыть");
+    ImGui::SameLine();
+    RibbonSingleButton("show_all",    "tool.show_all",    ICON_SHOW_ALL,    true, false, "Показать всё");
+    ImGui::SameLine();
+    RibbonSingleButton("isolate",     "tool.isolate",     ICON_ISOLATE,     true, false, "Изолировать");
+    ImGui::SameLine();
+    RibbonSingleButton("show_hidden", "tool.show_hidden", ICON_SHOW_HIDDEN, true, false, "Показать скрытое");
     RibbonGroupEnd(Tr("grp.visibility").c_str());
 
-    // === Окна ===
+    // === Окна (5 малых) ===
     RibbonGroupStart();
-    RibbonSingleButton("new_window", "tool.new_window", ICON_NEW_WINDOW, true, true);
+    RibbonSingleButton("win_ui",    "tool.ui",           "layout-grid", true, false, "Интерфейс");
     ImGui::SameLine();
-    RibbonSingleButton("tile",       "tool.tile",       ICON_TILE,       true, true);
+    RibbonSingleButton("win_clear", "tool.clear_screen", ICON_BACKGROUND,  true, false, "Очистить экран");
     ImGui::SameLine();
-    RibbonSingleButton("cascade",    "tool.cascade",    ICON_CASCADE,    true, true);
+    RibbonSingleButton("win_switch","tool.new_window",   ICON_NEW_WINDOW,  true, false, "Переключение");
+    ImGui::SameLine();
+    RibbonSingleButton("win_new",   "tool.new_window",   "plus",           true, false, "Создать окно");
+    ImGui::SameLine();
+    RibbonSingleButton("win_tile",  "tool.tile",         ICON_TILE,        true, false, "Упорядочить");
     RibbonGroupEnd(Tr("grp.windows").c_str());
 }
 
@@ -2782,12 +2822,12 @@ void Application::DrawViewCube() {
 
     struct Face { int v[4]; gp_Dir n; const char* label; };
     Face faces[6] = {
-        {{4,5,6,7}, {0,0, 1}, "TOP"},
-        {{0,3,2,1}, {0,0,-1}, "BOT"},
-        {{0,1,5,4}, {0,-1,0}, "FRONT"},
-        {{2,3,7,6}, {0, 1,0}, "BACK"},
-        {{1,2,6,5}, { 1,0,0}, "RIGHT"},
-        {{3,0,4,7}, {-1,0,0}, "LEFT"},
+        {{4,5,6,7}, {0,0, 1}, "ВЕРХ"},
+        {{0,3,2,1}, {0,0,-1}, "НИЗ"},
+        {{0,1,5,4}, {0,-1,0}, "ПЕРЕД"},
+        {{2,3,7,6}, {0, 1,0}, "ЗАД"},
+        {{1,2,6,5}, { 1,0,0}, "ПРАВО"},
+        {{3,0,4,7}, {-1,0,0}, "ЛЕВО"},
     };
 
     struct Visible { int idx; double depth; ImVec2 pts[4]; };
@@ -2846,13 +2886,20 @@ void Application::DrawViewCube() {
         draw->AddPolyline(v.pts, 4, outline, ImDrawFlags_Closed, 1.5f);
     }
 
-    // Labels
+    // Labels — сдвигаем от центра куба к периферии, чтобы не слипались
+    ImFont* font = ImGui::GetFont();
+    float fontSize = ImGui::GetFontSize() * 0.82f;
     for (auto& v : vis) {
         ImVec2 c2(0, 0);
         for (int i = 0; i < 4; i++) { c2.x += v.pts[i].x; c2.y += v.pts[i].y; }
         c2.x *= 0.25f; c2.y *= 0.25f;
-        ImVec2 ts = ImGui::CalcTextSize(faces[v.idx].label);
-        draw->AddText(ImVec2(c2.x - ts.x*0.5f, c2.y - ts.y*0.5f),
+        // Сдвиг от центра куба к периферии грани (18%)
+        const float pull = 1.18f;
+        c2.x = center.x + (c2.x - center.x) * pull;
+        c2.y = center.y + (c2.y - center.y) * pull;
+        ImVec2 ts = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, faces[v.idx].label);
+        draw->AddText(font, fontSize,
+                      ImVec2(c2.x - ts.x * 0.5f, c2.y - ts.y * 0.5f),
                       IM_COL32(25, 30, 40, 255), faces[v.idx].label);
     }
 

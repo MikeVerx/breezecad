@@ -103,7 +103,9 @@ private:
     bool myShowNotImplementedDialog = false;
     std::string myNotImplementedFeature;
     int  myActiveSettingsTab  = 0;
-    int  myCurrentTheme       = 1;   // 0=light, 1=dark, 2=system
+    int  myCurrentTheme       = 1;
+    int  myDisplayStyleIndex = 0;   // Стиль отображения (7 вариантов)
+    int  myBackgroundIndex   = 0;   // Фон вьюпорта (5 вариантов)   // 0=light, 1=dark, 2=system
     std::vector<std::string> myPinnedCommands;
 
     // === Телеметрия ===
@@ -246,7 +248,8 @@ private:
                      int& idx, const char* icon, bool enabled, bool big = true,
                      const char* tooltip = nullptr);
     int RibbonSingleButton(const char* id, const char* key, const char* icon,
-                           bool enabled, bool big = true);
+                           bool enabled, bool big = true,
+                           const char* tooltip = nullptr);
 
     void DrawRibbonSketchTab();
     void DrawRibbonModelTab();
