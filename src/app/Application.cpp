@@ -640,6 +640,10 @@ Application::Application() {
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigDebugHighlightIdConflicts = false;
+    }
 
     // Отключаем сохранение позиций окон в imgui.ini —
     // это устраняет баг «белого экрана» при уехавших окнах
@@ -1221,28 +1225,75 @@ void Application::DrawQuickAccessToolbar() {
 
     // === 7. Показать формат ===
     if (QatIconButton(myIcons, "qat_format", "layout-grid", 20, "Показать формат")) {
-        // TODO: чекбоксы линии / размеры / ограничения
+        ImGui::OpenPopup("##format_menu");
+    }
+    if (ImGui::BeginPopup("##format_menu")) {
+        ImGui::PushID("format_popup");
+        static bool showLines = true, showDims = true, showConstraints = true;
+        ImGui::MenuItem("Линии",       nullptr, &showLines);
+        ImGui::MenuItem("Размеры",     nullptr, &showDims);
+        ImGui::MenuItem("Ограничения", nullptr, &showConstraints);
+        ImGui::PopID();
+        ImGui::EndPopup();
     }
 
     ImGui::SameLine();
 
     // === 8. Текстуры ===
     if (QatIconButton(myIcons, "qat_textures", "palette", 20, "Текстуры")) {
-        // TODO: палитра материалов + импорт текстуры
+        ImGui::OpenPopup("##textures_menu");
+    }
+    if (ImGui::BeginPopup("##textures_menu")) {
+        ImGui::PushID("textures_popup");
+        ImGui::TextDisabled("Материалы");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Сталь"))    {}
+        if (ImGui::MenuItem("Алюминий")) {}
+        if (ImGui::MenuItem("Латунь"))   {}
+        if (ImGui::MenuItem("Пластик"))  {}
+        ImGui::Separator();
+        if (ImGui::MenuItem("Импортировать текстуру...")) {}
+        ImGui::PopID();
+        ImGui::EndPopup();
     }
 
     ImGui::SameLine();
 
     // === 9. Параметры (fx) ===
     if (QatIconButton(myIcons, "qat_params", "square-function", 20, "Параметры")) {
-        // TODO: таблица параметров
+        ImGui::OpenPopup("##params_menu");
+    }
+    if (ImGui::BeginPopup("##params_menu")) {
+        ImGui::PushID("params_popup");
+        ImGui::TextDisabled("Таблица параметров");
+        ImGui::Separator();
+        ImGui::Text("Пока пусто");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Открыть в новой вкладке")) {}
+        ImGui::PopID();
+        ImGui::EndPopup();
     }
 
     ImGui::SameLine();
 
     // === 10. Измерение ===
     if (QatIconButton(myIcons, "qat_measure", "ruler", 20, "Измерение")) {
-        // TODO: инструмент измерения
+        ImGui::OpenPopup("##measure_menu");
+    }
+    if (ImGui::BeginPopup("##measure_menu")) {
+        ImGui::PushID("measure_popup");
+        if (ImGui::MenuItem("Расстояние"))        {}
+        if (ImGui::MenuItem("Угол"))              {}
+        if (ImGui::MenuItem("Радиус"))            {}
+        if (ImGui::MenuItem("Диаметр"))           {}
+        ImGui::Separator();
+        ImGui::TextDisabled("Точность");
+        static int precision = 2;
+        if (ImGui::MenuItem("0.1",   nullptr, precision == 1)) precision = 1;
+        if (ImGui::MenuItem("0.01",  nullptr, precision == 2)) precision = 2;
+        if (ImGui::MenuItem("0.001", nullptr, precision == 3)) precision = 3;
+        ImGui::PopID();
+        ImGui::EndPopup();
     }
 
     // === 11. Правая зона: Поиск + Телеметрия ===
@@ -2182,6 +2233,13 @@ void Application::DrawRibbon() {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 6));
     if (ImGui::BeginChild("##ribbon_content", ImVec2(0, 0), false,
                           ImGuiWindowFlags_HorizontalScrollbar)) {
+        // Колесо мыши прокручивает ribbon горизонтально
+        ImGuiIO& ioChild = ImGui::GetIO();
+        if (ioChild.MouseWheel != 0.0f && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows)) {
+            float scrollX = ImGui::GetScrollX() - ioChild.MouseWheel * 60.0f;
+            if (scrollX < 0.0f) scrollX = 0.0f;
+            ImGui::SetScrollX(scrollX);
+        }
         switch (myActiveRibbonTab) {
             case 0: DrawRibbonModelTab();      break;
             case 1: DrawRibbonSketchTab();     break;
