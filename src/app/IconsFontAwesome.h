@@ -44,6 +44,8 @@
 #define ICON_COPY          "copy"
 #define ICON_ROTATE        "rotate-cw"
 #define ICON_SCALE         "maximize-2"
+#define ICON_STRETCH       "arrow-left-right"
+#define ICON_SPLIT         "split"
 #define ICON_MIRROR        "flip-horizontal"
 #define ICON_CLONE         "copy"
 

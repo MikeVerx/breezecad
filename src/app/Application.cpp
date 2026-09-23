@@ -1681,9 +1681,11 @@ void Application::DrawRibbonSketchTab() {
         "tool.proj.3d", "tool.proj.dwg"
     };
     static int projIdx = 0;
-    static const char* trimOpt[]    = { "tool.trim" };
+    static const char* trimOpt[]    = { "tool.trim", "tool.extend" };
     static const char* offsetOpt[]  = { "tool.offset" };
-    static const char* moveOpt[]    = { "tool.move" };
+    static const char* moveOpt[]    = { "tool.move", "tool.copy", "tool.rotate" };
+    static const char* scaleOpt[]   = { "tool.scale", "tool.stretch" };
+    static const char* splitOpt[]   = { "tool.split" };
     static const char* finishOpt[]  = { "tool.finish" };
     static const char* clearOpt[]   = { "tool.clear" };
     static const char* showFormatOpt[] = { "tool.show_format" };
@@ -1723,14 +1725,18 @@ void Application::DrawRibbonSketchTab() {
     RibbonGroupEnd(Tr("grp.project").c_str());
 
     // ============================================================
-    // ИЗМЕНИТЬ — 3 большие в ряд
+    // ИЗМЕНИТЬ — 5 кнопок-меню
     // ============================================================
     RibbonGroupStart();
-    RibbonButton("trim",   trimOpt,   1, dummy, ICON_TRIM,    inSketch, true, "Обрезать / удлинить");
+    RibbonButton("move",   moveOpt,   3, myMoveToolIndex,   ICON_MOVE,   inSketch, false, "Перенести");
     ImGui::SameLine();
-    RibbonButton("offset", offsetOpt, 1, dummy, ICON_OFFSET,  inSketch, true, "Сместить");
+    RibbonButton("trim",   trimOpt,   2, myTrimToolIndex,   ICON_TRIM,   inSketch, false, "Обрезать");
     ImGui::SameLine();
-    RibbonButton("move",   moveOpt,   1, dummy, ICON_MOVE,    inSketch, true, "Перенести / копировать / повернуть");
+    RibbonButton("offset", offsetOpt, 1, myOffsetToolIndex, ICON_OFFSET, inSketch, false, "Сместить");
+    ImGui::SameLine();
+    RibbonButton("scale",  scaleOpt,  2, dummy,             ICON_SCALE,  inSketch, false, "Масштаб");
+    ImGui::SameLine();
+    RibbonButton("split",  splitOpt,  1, dummy,             ICON_SPLIT,  inSketch, false, "Разделить");
     RibbonGroupEnd(Tr("grp.modify").c_str());
 
     // ============================================================
@@ -1884,15 +1890,6 @@ void Application::DrawRibbonModelTab() {
     ImGui::SameLine();
     RibbonSingleButton("rib",      "tool.rib",     "plus",       true, false);
     RibbonGroupEnd(Tr("grp.modify").c_str());
-
-    // === Группа: Boolean ===
-    RibbonGroupStart();
-    RibbonSingleButton("union",     "tool.union",     ICON_UNION,     true, false);
-    ImGui::SameLine();
-    RibbonSingleButton("cut",       "tool.cut",       ICON_CUT,       true, false);
-    ImGui::SameLine();
-    RibbonSingleButton("intersect", "tool.intersect", ICON_INTERSECT, true, false);
-    RibbonGroupEnd(Tr("grp.boolean").c_str());
 
     // === Группа: Массив ===
     RibbonGroupStart();

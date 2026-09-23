@@ -71,6 +71,7 @@ const std::unordered_map<std::string, std::pair<std::string, std::string>> kDict
     { "tool.copy",           { "Copy",                  "Копировать" } },
     { "tool.rotate",         { "Rotate",                "Повернуть" } },
     { "tool.scale",          { "Scale",                 "Масштаб" } },
+    { "tool.stretch",     { "Stretch",            "Растянуть" } },
     { "tool.mirror",         { "Mirror",                "Зеркало" } },
 
     // Constrain
