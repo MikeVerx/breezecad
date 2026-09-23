@@ -1655,13 +1655,27 @@ void Application::DrawRibbonSketchTab() {
     bool inSketch = !myActiveSketchLabel.IsNull();
     static int dummy = 0;
 
-    static const char* lineOpts[]   = { "tool.line", "tool.curve", "tool.spline", "tool.bridge" };
-    static const char* rectOpts[]   = { "tool.rect.2pt", "tool.rect.center", "tool.rect.3pt" };
-    static const char* circleOpts[] = { "tool.circle.center", "tool.circle.2pt",
-                                        "tool.circle.3pt", "tool.circle.tan" };
-    static const char* arcOpts[]    = { "tool.arc.center", "tool.arc.3pt", "tool.arc.tan" };
+    // Отрезок: Отрезок / Сплайн(упр.верш.) / Сплайн(интерп.) / Кривая по формуле / Замкнуть
+    static const char* lineOpts[]   = {
+        "tool.line", "tool.spline.ctrl", "tool.spline.interp",
+        "tool.curve.fx", "tool.close"
+    };
+    // Прямоугольник: 4 прямоугольника + 5 пазов + Многоугольник
+    static const char* rectOpts[]   = {
+        "tool.rect.2pt", "tool.rect.3pt",
+        "tool.rect.2pt.center", "tool.rect.3pt.center",
+        "tool.slot.2center", "tool.slot.common", "tool.slot.center",
+        "tool.slot.arc3pt", "tool.slot.arc.center",
+        "tool.polygon"
+    };
+    // Окружность: Окружность (центр) / Окружность (касательная) / Эллипс
+    static const char* circleOpts[] = { "tool.circle.center", "tool.circle.tan", "tool.ellipse" };
+    // Дуга: по трём точкам / касательная / центр
+    static const char* arcOpts[]    = { "tool.arc.3pt", "tool.arc.tan", "tool.arc.center" };
     static const char* pointOpt[]   = { "tool.point" };
-    static const char* textOpt[]    = { "tool.text" };
+    static const char* textOpt[]    = { "tool.text", "tool.text.line" };
+    // Сопряжение: Сопряжение / Фаска
+    static const char* fillet2dOpts[] = { "tool.fillet.2d", "tool.chamfer.2d" };
     static const char* projOpt[] = {
         "tool.proj.geom", "tool.project.loop", "tool.proj.unfold",
         "tool.proj.3d", "tool.proj.dwg"
@@ -1679,8 +1693,8 @@ void Application::DrawRibbonSketchTab() {
     // ============================================================
     RibbonGroupStart();
     {
-        int r = RibbonButton("line", lineOpts, 4, myLineToolIndex, ICON_LINE, inSketch, true,
-                             "Отрезок / кривая / сплайн");
+        int r = RibbonButton("line", lineOpts, 5, myLineToolIndex, ICON_LINE, inSketch, true,
+                             "Отрезок");
         if (r == 1 || r == 3) {
             myCurrentLineStyle = LS_Normal;
             myHasSketchStart = false;
@@ -1688,15 +1702,17 @@ void Application::DrawRibbonSketchTab() {
         }
     }
     ImGui::SameLine();
-    RibbonButton("rect",   rectOpts,   3, myRectToolIndex,   ICON_RECT,    inSketch, true, "Прямоугольник");
+    RibbonButton("rect",   rectOpts,   10, myRectToolIndex,   ICON_RECT,    inSketch, true, "Прямоугольник");
     ImGui::SameLine();
-    RibbonButton("circle", circleOpts, 4, myCircleToolIndex, ICON_CIRCLE,  inSketch, true, "Окружность");
+    RibbonButton("circle", circleOpts, 3,  myCircleToolIndex, ICON_CIRCLE,  inSketch, true, "Окружность");
     ImGui::SameLine();
-    RibbonButton("arc",    arcOpts,    3, myArcToolIndex,    ICON_ARC,     inSketch, true, "Дуга");
+    RibbonButton("arc",    arcOpts,    3,  myArcToolIndex,    ICON_ARC,     inSketch, true, "Дуга");
     ImGui::SameLine();
-    RibbonButton("point",  pointOpt,   1, dummy,             ICON_POINT,   inSketch, true, "Точка");
+    RibbonButton("point",  pointOpt,   1,  dummy,             ICON_POINT,   inSketch, true, "Точка");
     ImGui::SameLine();
-    RibbonButton("text",   textOpt,    1, dummy,             ICON_TEXT,    inSketch, true, "Текст");
+    RibbonButton("text",   textOpt,    2,  dummy,             ICON_TEXT,    inSketch, true, "Текст");
+    ImGui::SameLine();
+    RibbonButton("fillet_2d", fillet2dOpts, 2, dummy, ICON_FILLET, inSketch, true, "Сопряжение");
     RibbonGroupEnd(Tr("grp.create").c_str());
 
     // ============================================================
