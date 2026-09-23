@@ -1255,6 +1255,17 @@ void Application::DrawQuickAccessToolbar() {
 
     float telemetryX = io.DisplaySize.x - margin - rightPanelW - telemetryW;
     float searchX    = telemetryX - searchW - 12.0f;
+    float modulesX   = searchX - 32.0f - 8.0f;
+
+    // 🧩 Модули (disabled, заглушка)
+    ImGui::SameLine(modulesX);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_Button));
+    if (SvgIconBtn(myIcons, "qat_modules", "puzzle", 18, 28, 26, "Модули")) {
+        // TODO: меню управления модулями (Фаза 5+)
+    }
+    ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Модули (не разработано)");
 
     ImGui::SameLine(searchX);
     ImGui::SetNextItemWidth(searchW);
@@ -2021,10 +2032,6 @@ void Application::DrawRibbonViewTab() {
     RibbonSingleButton("zoom",   "tool.zoom",   ICON_ZOOM,    true, true);
     ImGui::SameLine();
     RibbonSingleButton("orbit",  "tool.orbit",  ICON_ORBIT,   true, true);
-    ImGui::SameLine();
-    if (RibbonSingleButton("home_v", "tool.home", ICON_HOME, true, true)) {
-        if (myOcctView) myOcctView->SetHomeView();
-    }
     RibbonGroupEnd(Tr("grp.navigation").c_str());
 
     // === Виды ===
