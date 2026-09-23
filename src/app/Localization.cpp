@@ -282,6 +282,10 @@ const std::unordered_map<std::string, std::pair<std::string, std::string>> kDict
     { "tool.info",            { "Info",               "Информация" } },
     { "tool.measure",         { "Measure",            "Расстояние и угол" } },
     { "tool.import_stl",      { "Import STL",         "Импорт STL" } },
+    { "tool.view_left",   { "Left View",          "Слева" } },
+    { "tool.view_bottom", { "Bottom View",        "Снизу" } },
+    { "tool.view_back",   { "Back View",          "Сзади" } },
+    { "tool.show_format", { "Show Format",        "Показать формат" } },
 };
 
 } // namespace

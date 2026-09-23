@@ -1617,7 +1617,8 @@ void Application::DrawRibbonSketchTab() {
     static const char* offsetOpt[]  = { "tool.offset" };
     static const char* moveOpt[]    = { "tool.move" };
     static const char* finishOpt[]  = { "tool.finish" };
-    static const char* clearOpt[]   = { "tool.clear" };
+    static const char* clearOpt[]   = { "tool.clear" };
+    static const char* showFormatOpt[] = { "tool.show_format" };
 
     // ============================================================
     // СОЗДАТЬ — 6 больших в один ряд
@@ -1745,13 +1746,8 @@ void Application::DrawRibbonSketchTab() {
     if (RibbonButton("finish", finishOpt, 1, dummy, ICON_FINISH, inSketch, true, "Завершить эскиз"))
         ExitSketch();
     ImGui::SameLine();
-    if (RibbonButton("clear", clearOpt, 1, dummy, ICON_TRASH, inSketch, true, "Очистить эскиз")) {
-        if (myDocument && !myActiveSketchLabel.IsNull()) {
-            myDocument->ClearSketch(myActiveSketchLabel);
-            if (myOcctView) myOcctView->ClearAllShapes();
-            RefreshSketchLines();
-            if (myOcctView) myOcctView->ShowGrid(myShowGrid);
-        }
+    if (RibbonButton("show_format", showFormatOpt, 1, dummy, "layout-grid", inSketch, true, "Показать формат")) {
+        // TODO: чекбоксы линий / размеров / ограничений
     }
     RibbonGroupEnd(Tr("grp.exit").c_str());
 }
@@ -2041,15 +2037,21 @@ void Application::DrawRibbonViewTab() {
     RibbonSingleButton("orbit",  "tool.orbit",  ICON_ORBIT,   true, true);
     RibbonGroupEnd(Tr("grp.navigation").c_str());
 
-    // === Виды ===
+    // === Виды (7) ===
     RibbonGroupStart();
-    RibbonSingleButton("v_top",   "tool.view_top",   ICON_VIEW_TOP,   true, true);
+    RibbonSingleButton("v_top",    "tool.view_top",    ICON_VIEW_TOP,    true, false);
     ImGui::SameLine();
-    RibbonSingleButton("v_front", "tool.view_front", ICON_VIEW_FRONT, true, true);
+    RibbonSingleButton("v_bottom", "tool.view_bottom", ICON_VIEW_BOTTOM, true, false);
     ImGui::SameLine();
-    RibbonSingleButton("v_right", "tool.view_right", ICON_VIEW_RIGHT, true, true);
+    RibbonSingleButton("v_front",  "tool.view_front",  ICON_VIEW_FRONT,  true, false);
     ImGui::SameLine();
-    RibbonSingleButton("v_iso",   "tool.view_iso",   ICON_VIEW_ISO,   true, true);
+    RibbonSingleButton("v_back",   "tool.view_back",   ICON_VIEW_BACK,   true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("v_left",   "tool.view_left",   ICON_VIEW_LEFT,   true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("v_right",  "tool.view_right",  ICON_VIEW_RIGHT,  true, false);
+    ImGui::SameLine();
+    RibbonSingleButton("v_iso",    "tool.view_iso",    ICON_VIEW_ISO,    true, false);
     RibbonGroupEnd(Tr("grp.views").c_str());
 
     // === Стиль отображения ===
