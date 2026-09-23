@@ -2021,34 +2021,43 @@ void Application::DrawRibbonManageTab() {
 void Application::DrawRibbonAssemblyTab() {
     // === Компонент ===
     RibbonGroupStart();
-    RibbonSingleButton("asm_place",   "tool.asm.place",   ICON_PLANE, false, true);
+    RibbonSingleButton("asm_place",   "tool.asm.place",   "package-plus", true, true, "Вставить компонент");
     ImGui::SameLine();
-    RibbonSingleButton("asm_create",  "tool.asm.create",  ICON_MOVE,  false, true);
+    RibbonSingleButton("asm_create",  "tool.asm.create",  "package",      true, true, "Создать компонент");
     ImGui::SameLine();
-    RibbonSingleButton("asm_replace", "tool.asm.replace", ICON_MOVE,  false, true);
+    RibbonSingleButton("asm_replace", "tool.asm.replace", "refresh-cw",   true, true, "Заменить компонент");
+    ImGui::SameLine();
+    RibbonSingleButton("asm_copy",    "tool.asm.copy",    ICON_COPY,      true, true, "Копировать компонент");
     RibbonGroupEnd(Tr("grp.component").c_str());
 
     // === Позиционирование ===
     RibbonGroupStart();
-    RibbonSingleButton("asm_joint",   "tool.asm.joint",   ICON_MOVE,     false, true);
+    RibbonSingleButton("asm_joint",      "tool.asm.joint",      "link",    true, true, "Соединение (подвижное)");
     ImGui::SameLine();
-    RibbonSingleButton("asm_dof",     "tool.asm.dof",     ICON_SHOW_ALL, false, true);
+    RibbonSingleButton("asm_constraint", "tool.asm.constraint", "pin",     true, true, "Зависимость (статичная)");
+    ImGui::SameLine();
+    RibbonSingleButton("asm_dof",        "tool.asm.dof",        "move-3d", true, true, "Степени свободы");
     RibbonGroupEnd(Tr("grp.position").c_str());
 
     // === Массив ===
     RibbonGroupStart();
-    RibbonSingleButton("asm_pat_rect", "tool.pattern_rect", ICON_PATTERN_RECT, false, true);
+    RibbonSingleButton("asm_pat_rect", "tool.pattern_rect", ICON_PATTERN_RECT, true, false, "Прямоугольный массив");
     ImGui::SameLine();
-    RibbonSingleButton("asm_pat_circ", "tool.pattern_circ", ICON_PATTERN_CIRC, false, true);
+    RibbonSingleButton("asm_pat_circ", "tool.pattern_circ", ICON_PATTERN_CIRC, true, false, "Круговой массив");
     ImGui::SameLine();
-    RibbonSingleButton("asm_mirror",   "tool.mirror",       ICON_MIRROR,       false, true);
+    RibbonSingleButton("asm_mirror",   "tool.mirror",       ICON_MIRROR,       true, false, "Зеркало");
     RibbonGroupEnd(Tr("grp.pattern").c_str());
 
     // === Спецификация ===
     RibbonGroupStart();
-    RibbonSingleButton("asm_bom",     "tool.bom",     ICON_CASCADE, false, true);
+    RibbonSingleButton("asm_bom",  "tool.bom",           "list",      true, false, "Bill of Materials");
     ImGui::SameLine();
-    RibbonSingleButton("asm_library", "tool.library", ICON_CASCADE, false, true);
+    RibbonSingleButton("asm_spec", "tool.specification", ICON_FILE,   true, false, "Спецификация");
+    RibbonGroupEnd(Tr("grp.specification").c_str());
+
+    // === Стандартные изделия ===
+    RibbonGroupStart();
+    RibbonSingleButton("asm_library", "tool.library", "package", true, true, "Библиотека");
     RibbonGroupEnd(Tr("grp.standards").c_str());
 }
 
