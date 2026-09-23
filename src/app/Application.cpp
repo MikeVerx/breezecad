@@ -1126,43 +1126,23 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 5));
 
     // === 1. Логотип BreezeCAD — микро-меню ===
+    // === 1. Логотип — меню формата окна ===
     if (QatIconButton(myIcons, "qat_logo", "breeze-logo", 24, "BreezeCAD")) {
         ImGui::OpenPopup("##logo_menu");
     }
     if (ImGui::BeginPopup("##logo_menu")) {
-        if (ImGui::MenuItem("Создать", "Ctrl+N")) OnNewDocument();
-        if (ImGui::MenuItem("Открыть...", "Ctrl+O")) OnOpen();
-        if (ImGui::BeginMenu("Последние файлы")) {
-            if (myRecentFiles.empty()) {
-                ImGui::MenuItem("(пусто)", "", false, false);
-            } else {
-                for (size_t i = 0; i < myRecentFiles.size(); i++) {
-                    std::string label = myRecentFiles[i];
-                    if (label.length() > 60) label = "..." + label.substr(label.length() - 57);
-                    label += "##recent" + std::to_string(i);
-                    if (ImGui::MenuItem(label.c_str())) {
-                        Handle(TDocStd_Document) loaded =
-                            BreezeApplication::Instance().OpenDocument(myRecentFiles[i]);
-                        if (!loaded.IsNull()) {
-                            AddDocFromFile(myRecentFiles[i], loaded);
-                            RefreshView();
-                            if (myOcctView) myOcctView->FitAll();
-                            myShowHomeScreen = false;
-                        }
-                    }
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Очистить список")) myRecentFiles.clear();
-            }
-            ImGui::EndMenu();
+        if (ImGui::MenuItem("Свернуть")) {
+            glfwIconifyWindow(myWindow->GetNativeWindow());
+        }
+        if (ImGui::MenuItem("Развернуть")) {
+            myWindow->Maximize();
         }
         ImGui::Separator();
         if (ImGui::MenuItem("Настройки")) myShowSettingsDialog = true;
-        ImGui::Separator();
         if (ImGui::MenuItem("О программе")) {}
         if (ImGui::MenuItem("Справка", "F1")) {}
         ImGui::Separator();
-        if (ImGui::MenuItem("Выход", "Alt+F4")) {
+        if (ImGui::MenuItem("Закрыть", "Alt+F4")) {
             glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE);
         }
         ImGui::EndPopup();
@@ -1170,7 +1150,26 @@ void Application::DrawQuickAccessToolbar() {
 
     ImGui::SameLine();
 
-    // === 2. Документ (Backstage) ===
+    // === 2. Создать ▼ ===
+    if (QatIconButton(myIcons, "qat_create", "file-plus", 20, "Создать")) {
+        ImGui::OpenPopup("##create_menu");
+    }
+    if (ImGui::BeginPopup("##create_menu")) {
+        if (ImGui::MenuItem("Деталь", "Ctrl+N")) OnNewDocument();
+        if (ImGui::MenuItem("Сборка", "")) {
+            myNotImplementedFeature = "Сборка";
+            myShowNotImplementedDialog = true;
+        }
+        if (ImGui::MenuItem("Черчение", "", false, false)) {
+            myNotImplementedFeature = "Черчение";
+            myShowNotImplementedDialog = true;
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::SameLine();
+
+    // === 3. Документ (Backstage) ===
     if (QatIconButton(myIcons, "qat_doc", "file-text", 20, "Документ")) {
         CaptureCurrentThumbnail();
         myShowHomeScreen = true;
@@ -4369,6 +4368,24 @@ void Application::Run() {
         }
         DrawHomeScreen();
         DrawSettingsDialog();
+
+        // === Модалка «Не разработано» ===
+        if (myShowNotImplementedDialog) {
+            ImGui::OpenPopup("##not_implemented");
+        }
+        if (ImGui::BeginPopupModal("##not_implemented", &myShowNotImplementedDialog,
+                                    ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("Функция \"%s\" не разработана.", myNotImplementedFeature.c_str());
+            ImGui::Spacing();
+            ImGui::TextDisabled("Будет доступно в следующих версиях BreezeCAD.");
+            ImGui::Spacing();
+            ImGui::Separator();
+            if (ImGui::Button("OK", ImVec2(120, 0))) {
+                myShowNotImplementedDialog = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
         TRACE("iter: before UpdateTelemetry");
         UpdateTelemetry();
         TRACE("iter: after UpdateTelemetry");

@@ -99,7 +99,9 @@ private:
     bool  myIsResizingTree = false;  // идёт перетаскивание
 
     bool myStartExpandedManually = false;  // пользователь развернул Start вручную
-    bool myShowSettingsDialog = false;
+    bool myShowSettingsDialog = false;
+    bool myShowNotImplementedDialog = false;
+    std::string myNotImplementedFeature;
     int  myActiveSettingsTab  = 0;
     int  myCurrentTheme       = 1;   // 0=light, 1=dark, 2=system
     std::vector<std::string> myPinnedCommands;
