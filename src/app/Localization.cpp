@@ -212,6 +212,8 @@ const std::unordered_map<std::string, std::pair<std::string, std::string>> kDict
     { "tool.report",         { "Report",           "Отчёт" } },
     { "tool.insert_obj",     { "Insert Object",    "Вставить объект" } },
     { "tool.insert_img",     { "Insert Image",     "Вставить изображение" } },
+    { "tool.insert_points", { "Insert Points",    "Точки" } },
+    { "tool.insert_acad",   { "Import ACAD",      "ACAD" } },
     { "tool.import",         { "Import",           "Импорт" } },
     { "tool.view_top",       { "Top",              "Сверху" } },
     { "tool.view_front",     { "Front",            "Спереди" } },

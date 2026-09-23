@@ -1700,6 +1700,21 @@ void Application::DrawRibbonSketchTab() {
     RibbonGroupEnd(Tr("grp.constrain").c_str());
 
     // ============================================================
+    // РАЗМЕРЫ — 5 малых
+    // ============================================================
+    RibbonGroupStart();
+    RibbonButton("dim_linear",   pointOpt, 1, dummy, ICON_DIM_LINEAR,   inSketch, false, "Линейный размер");
+    ImGui::SameLine();
+    RibbonButton("dim_angle",    pointOpt, 1, dummy, ICON_DIM_ANGLE,    inSketch, false, "Угловой размер");
+    ImGui::SameLine();
+    RibbonButton("dim_radius",   pointOpt, 1, dummy, ICON_DIM_RADIUS,   inSketch, false, "Радиус");
+    ImGui::SameLine();
+    RibbonButton("dim_diameter", pointOpt, 1, dummy, ICON_DIM_DIAMETER, inSketch, false, "Диаметр");
+    ImGui::SameLine();
+    RibbonButton("dim_ordinate", pointOpt, 1, dummy, ICON_DIM_ORDINATE, inSketch, false, "Ординатный");
+    RibbonGroupEnd(Tr("grp.dimensions").c_str());
+
+    // ============================================================
     // МАССИВ — 3 малые иконки в столбик
     // ============================================================
     RibbonGroupStart();
@@ -1739,6 +1754,17 @@ void Application::DrawRibbonSketchTab() {
         }
     }
     RibbonGroupEnd(Tr("grp.format").c_str());
+
+    // ============================================================
+    // ВСТАВКА — 3 малые
+    // ============================================================
+    RibbonGroupStart();
+    RibbonButton("insert_img",    pointOpt, 1, dummy, ICON_INSERT_IMG, inSketch, false, "Вставить изображение");
+    ImGui::SameLine();
+    RibbonButton("insert_points", pointOpt, 1, dummy, ICON_POINT_3D,   inSketch, false, "Точки");
+    ImGui::SameLine();
+    RibbonButton("insert_acad",   pointOpt, 1, dummy, ICON_FILE,       inSketch, false, "ACAD");
+    RibbonGroupEnd(Tr("grp.insert").c_str());
 
     // ============================================================
     // ВЫХОД — 2 большие в ряд

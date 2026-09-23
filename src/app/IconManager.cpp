@@ -53,6 +53,12 @@ static const std::unordered_map<std::string, std::string> kIconAliases = {
     { "scissors", "scissors" },
     { "undo",     "undo-2" },
     { "redo",     "redo-2" },
+    // Lucide переименовал некоторые иконки — старые имена остаются как алиасы
+    { "align-justify",  "text-align-justify" },
+    { "alert-triangle", "triangle-alert" },
+    { "alert-circle",   "circle-alert" },
+    { "waves",          "waves-horizontal" },
+    { "distance",       "ruler-dimension-line" },
 };
 
 
