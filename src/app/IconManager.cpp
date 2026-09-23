@@ -224,7 +224,7 @@ void IconManager::PreloadDefaults() {
         "cad/cut", "cad/intersect", "cad/plane", "cad/axis", "cad/point",
         "cad/pattern_rect", "cad/pattern_circ",
         "cad/view_iso", "cad/view_top", "cad/view_front", "cad/view_right",
-        "cad/parallel",
+        "cad/parallel", "cad/spring",
         // Рабочие элементы
         "move-3d",
         // Аннотации

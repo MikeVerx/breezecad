@@ -1611,8 +1611,11 @@ void Application::DrawRibbonSketchTab() {
     static const char* arcOpts[]    = { "tool.arc.center", "tool.arc.3pt", "tool.arc.tan" };
     static const char* pointOpt[]   = { "tool.point" };
     static const char* textOpt[]    = { "tool.text" };
-    static const char* projOpt[]    = { "tool.project" };
-    static const char* projLoopOpt[]= { "tool.project.loop" };
+    static const char* projOpt[] = {
+        "tool.proj.geom", "tool.project.loop", "tool.proj.unfold",
+        "tool.proj.3d", "tool.proj.dwg"
+    };
+    static int projIdx = 0;
     static const char* trimOpt[]    = { "tool.trim" };
     static const char* offsetOpt[]  = { "tool.offset" };
     static const char* moveOpt[]    = { "tool.move" };
@@ -1649,9 +1652,7 @@ void Application::DrawRibbonSketchTab() {
     // ПРОЕЦИРОВАТЬ — 2 малые иконки в ряд
     // ============================================================
     RibbonGroupStart();
-    RibbonButton("proj_geom", projOpt,     1, dummy, ICON_PROJECT,      inSketch, true, "Проецирование геометрии");
-    ImGui::SameLine();
-    RibbonButton("proj_loop", projLoopOpt, 1, dummy, ICON_PROJECT_LOOP, inSketch, true, "Проецирование рёбер");
+    RibbonButton("proj_geom", projOpt, 5, projIdx, ICON_PROJECT, inSketch, true, "Проецирование");
     RibbonGroupEnd(Tr("grp.project").c_str());
 
     // ============================================================
@@ -1771,7 +1772,7 @@ void Application::DrawRibbonModelTab() {
     ImGui::SameLine();
     RibbonSingleButton("loft",    "tool.loft",    ICON_LOFT,    true, true);
     ImGui::SameLine();
-    RibbonSingleButton("spring",  "tool.spring",  "waves",      true, true);
+    RibbonSingleButton("spring",  "tool.spring",  "cad/spring", true, true);
     RibbonGroupEnd(Tr("grp.create").c_str());
 
     // === Группа: Изменить ===
