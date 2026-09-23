@@ -63,7 +63,7 @@ private:
     bool myShowHomeScreen = false;
 
     // === Правая панель навигации ===
-    bool myRightPanelExpanded = true;
+    bool myRightPanelExpanded = false;
 
     // === ПКМ-меню в 3D-сцене ===
     bool   myPendingContextMenu = false;
@@ -246,10 +246,10 @@ private:
     // Ribbon кнопки (используют SVG через myIcons)
     int RibbonButton(const char* id, const char* const* opts, int optCount,
                      int& idx, const char* icon, bool enabled, bool big = true,
-                     const char* tooltip = nullptr);
+                     const char* tooltip = nullptr, float iconScale = 1.0f);
     int RibbonSingleButton(const char* id, const char* key, const char* icon,
                            bool enabled, bool big = true,
-                           const char* tooltip = nullptr);
+                           const char* tooltip = nullptr, float iconScale = 1.0f);
 
     void DrawRibbonSketchTab();
     void DrawRibbonModelTab();

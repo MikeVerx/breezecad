@@ -2266,7 +2266,7 @@ void Application::DrawDocumentTree() {
     const float panelWidth = myTreeWidth;
 
     ImGui::SetNextWindowPos(ImVec2(0, 211), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 211 - 56), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 211 - 76), ImGuiCond_Always);
 
     ImGui::Begin("##tree_panel", nullptr,
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
@@ -2874,9 +2874,16 @@ void Application::DrawViewCube() {
     const float cubeSize   = 100.0f;
     const float cubeHalf   = 38.0f;
     const float margin     = 15.0f;
-    const float topOffset  = 210.0f;
+    const float topOffset  = 260.0f;
 
-    ImVec2 center(io.DisplaySize.x - margin - cubeSize * 0.5f,
+    // Сдвиг влево, чтобы не пересекаться с панелью/хлястиком.
+    // Свёрнутая: хлястик (26+14=40) + зазор 5.
+    // Развёрнутая: панель (44) + хлястик (26) + отступ (14) + зазор (10).
+    const float cubeShiftX = myRightPanelExpanded
+        ? 110.0f
+        : 55.0f;
+
+    ImVec2 center(io.DisplaySize.x - margin - cubeSize * 0.5f - cubeShiftX,
                   topOffset + cubeSize * 0.5f);
 
     ImDrawList* draw = ImGui::GetForegroundDrawList();
@@ -3626,7 +3633,7 @@ void Application::DrawTreeSplitter() {
     const float maxTreeW    = 600.0f;
 
     const float topY    = 200.0f;
-    const float bottomY = io.DisplaySize.y - 56.0f;
+    const float bottomY = io.DisplaySize.y - 76.0f;
     const float xPos    = myTreeWidth;
 
     // Невидимое окно-полоса поверх границы
@@ -3733,23 +3740,34 @@ void Application::DrawProjectTabs() {
     ImGuiIO& io = ImGui::GetIO();
 
     const float statusH = 24.0f;
-    const float tabsH   = 32.0f;
+    const float tabsH   = 52.0f;
     const float yPos    = io.DisplaySize.y - statusH - tabsH;
 
     ImGui::SetNextWindowPos(ImVec2(0, yPos), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, tabsH), ImGuiCond_Always);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
     ImGui::Begin("##project_tabs", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBringToFrontOnFocus);
 
+    // Скроллируемый child для вкладок
+    ImGui::BeginChild("##tabs_scroll", ImVec2(0, 0), false,
+                      ImGuiWindowFlags_HorizontalScrollbar);
+
+    // Колесо мыши = горизонтальный скролл
+    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && io.MouseWheel != 0.0f) {
+        float sx = ImGui::GetScrollX() - io.MouseWheel * 80.0f;
+        if (sx < 0.0f) sx = 0.0f;
+        ImGui::SetScrollX(sx);
+    }
+
     // === Вкладка "Главная" ===
     {
         bool isHome = (myActiveDocIndex < 0);
         if (isHome) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.55f, 0.95f, 1.0f));
-        if (SvgIconBtn(myIcons, "tab_home", "house", 14, 120, 24, "Главная")) {
-            // Home — сбросить активный документ (но не закрыть)
+        if (SvgIconBtn(myIcons, "tab_home", "house", 14, 120, 30, "Главная")) {
             myActiveDocIndex = -1;
             myDocument = nullptr;
             myActiveSketchLabel = TDF_Label();
@@ -3765,7 +3783,7 @@ void Application::DrawProjectTabs() {
 
     // === Вкладки проектов ===
     static int pendingCloseIdx = -1;
-    static int switchToIdx    = -2;  // -2 = no change
+    static int switchToIdx    = -2;
 
     for (int i = 0; i < (int)myDocuments.size(); i++) {
         ImGui::SameLine();
@@ -3773,54 +3791,39 @@ void Application::DrawProjectTabs() {
         ImGui::PushID(i);
 
         bool active = (i == myActiveDocIndex);
-        bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
         ImVec4 accent(0.20f, 0.55f, 0.95f, 1.0f);
         ImVec4 accentHover(0.30f, 0.65f, 1.00f, 1.0f);
         ImVec4 accentActive(0.15f, 0.45f, 0.85f, 1.0f);
 
-        ImVec4 colNormal = active ? accent
-                                   : ImGui::GetStyleColorVec4(ImGuiCol_Button);
-        ImVec4 colHover  = active ? accentHover
-                                   : ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
-        ImVec4 colActive = active ? accentActive
-                                   : ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+        ImVec4 colNormal = active ? accent : ImGui::GetStyleColorVec4(ImGuiCol_Button);
+        ImVec4 colHover  = active ? accentHover : ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
+        ImVec4 colActive = active ? accentActive : ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
 
         ImGui::PushStyleColor(ImGuiCol_Button, colNormal);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colHover);
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, colActive);
 
-        // Имя вкладки + " *" если не сохранён
         std::string label = myProjectNames[i];
         if (myProjectPaths[i].empty()) label += " *";
 
-        if (ImGui::Button((label + "##tab").c_str(), ImVec2(140, 24))) {
+        if (ImGui::Button((label + "##tab").c_str(), ImVec2(140, 30))) {
             switchToIdx = i;
         }
 
-        // ПКМ — контекстное меню
         if (ImGui::BeginPopupContextItem("##tab_ctx")) {
-            if (ImGui::MenuItem("Сохранить")) {
-                // TODO: save this doc
-            }
-            if (ImGui::MenuItem("Сохранить как...")) {
-                // TODO: save as
-            }
+            if (ImGui::MenuItem("Сохранить")) {}
+            if (ImGui::MenuItem("Сохранить как...")) {}
             ImGui::Separator();
-            if (ImGui::MenuItem("Закрыть")) {
-                pendingCloseIdx = i;
-            }
-            if (ImGui::MenuItem("Закрыть другие")) {
-                // TODO: close others
-            }
+            if (ImGui::MenuItem("Закрыть")) pendingCloseIdx = i;
+            if (ImGui::MenuItem("Закрыть другие")) {}
             ImGui::EndPopup();
         }
 
         ImGui::PopStyleColor(3);
 
-        // Кнопка × закрытия — только если больше одного документа
         if (myDocuments.size() > 1) {
             ImGui::SameLine(0, 2);
-            if (SvgIconBtn(myIcons, "tab_close", "x", 12, 20, 24, "Закрыть")) {
+            if (SvgIconBtn(myIcons, "tab_close", "x", 12, 20, 30, "Закрыть")) {
                 pendingCloseIdx = i;
             }
         }
@@ -3828,18 +3831,19 @@ void Application::DrawProjectTabs() {
         ImGui::PopID();
     }
 
-    // Кнопка "+" — создать новый проект
+    // Кнопка "+"
     ImGui::SameLine();
-    if (SvgIconBtn(myIcons, "tab_plus", "plus", 14, 28, 24, "Новый проект")) {
+    if (SvgIconBtn(myIcons, "tab_plus", "plus", 14, 28, 30, "Новый проект")) {
         CreateNewDoc();
         RefreshView();
         if (myOcctView) myOcctView->FitAll();
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Новый проект");
 
+    ImGui::EndChild();
     ImGui::End();
+    ImGui::PopStyleVar();
 
-    // === Отложенные операции (после закрытия окна — иначе ломаем итерацию) ===
     if (pendingCloseIdx >= 0) {
         CloseDoc(pendingCloseIdx);
         pendingCloseIdx = -1;
@@ -4589,24 +4593,27 @@ void Application::DrawSelectionRect() {
 void Application::DrawRightPanel() {
     ImGuiIO& io = ImGui::GetIO();
 
-    const float toolW    = 40.0f;
-    const float toolH    = 32.0f;
-    const float arrowH   = 14.0f;
-    const float handleW  = 26.0f;   // заметный
-    const float pad      = 2.0f;
-    const float panelW   = toolW + pad * 2.0f;
-    const float topY     = 385.0f;
-    const float bottomY  = io.DisplaySize.y - 56.0f;
-    const float panelH   = bottomY - topY;
+    const float toolW    = 44.0f;
+    const float toolH    = 34.0f;
+    const float arrowH   = 20.0f;
+    const float handleW  = 26.0f;
+    const float pad      = 3.0f;
+    const float panelW   = toolW + pad * 2.0f;   // = 50
+    // Адаптив: если окно узкое — принудительно свернуть панель
+    bool forceCollapsed = (io.DisplaySize.x < 1100.0f);
+    bool panelExpanded = myRightPanelExpanded && !forceCollapsed;
+
+    const float topY     = 235.0f;   // сразу под ribbon
+    const float panelH   = 330.0f;   // по контенту
     const float rightEdge = io.DisplaySize.x;
 
     // === Хлястик (стрелка-таб) слева от панели ===
     const float edgeMargin = 14.0f;  // отступ от правого края
-    float handleX = myRightPanelExpanded
+    float handleX = panelExpanded
                     ? (rightEdge - panelW - handleW - edgeMargin)
                     : (rightEdge - handleW - edgeMargin);
     float handleH = 84.0f;
-    float handleY = topY + (panelH - handleH) * 0.5f;
+    float handleY = topY + (panelH - handleH) * 0.35f;
 
     ImGui::SetNextWindowPos(ImVec2(handleX, handleY), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(handleW, handleH), ImGuiCond_Always);
@@ -4641,7 +4648,7 @@ void Application::DrawRightPanel() {
     hdl->AddRectFilled(hMin, hMax, hBg, 6.0f);
 
     // Иконка шеврона
-    const char* hIcon = myRightPanelExpanded ? "chevron-right" : "chevron-left";
+    const char* hIcon = panelExpanded ? "chevron-right" : "chevron-left";
     GLuint hTex = myIcons.Get(hIcon, 20);
     if (hTex != 0) {
         ImVec2 ip(hMin.x + (handleW - 20) * 0.5f,
@@ -4656,11 +4663,11 @@ void Application::DrawRightPanel() {
         myRightPanelExpanded = !myRightPanelExpanded;
     }
     if (hHovered) {
-        ImGui::SetTooltip(myRightPanelExpanded ? "Свернуть панель" : "Развернуть панель");
+        ImGui::SetTooltip(panelExpanded ? "Свернуть панель" : "Развернуть панель");
     }
     ImGui::End();
 
-    if (!myRightPanelExpanded) return;
+    if (!panelExpanded) return;
 
     // === Тело панели ===
     float panelX = rightEdge - panelW - edgeMargin;
@@ -4671,8 +4678,8 @@ void Application::DrawRightPanel() {
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 6));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 2));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 5));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 6));
 
     // --- 1. Панорамировать ---
     if (SvgIconBtn(myIcons, "panel_pan", "hand", 20, toolW, toolH, "Панорамировать")) {
@@ -4694,8 +4701,12 @@ void Application::DrawRightPanel() {
         "Основное действие — приблизить область, выделенную рамкой. "
         "Стрелка вниз открывает дополнительные режимы зуммирования.");
 
-    if (ImGui::Button(ICON_CHEVRON_DOWN "##zoom_dd", ImVec2(toolW, arrowH))) {
+    if (SvgIconBtn(myIcons, "zoom_dd", "chevron-down", 14, toolW, arrowH, "Доп. режимы зума")) {
         ImGui::OpenPopup("##zoom_menu");
+        ImVec2 btnMin = ImGui::GetItemRectMin();
+        ImVec2 pp(btnMin.x - 280.0f, btnMin.y);
+        if (pp.x < 8.0f) pp.x = 8.0f;
+        ImGui::SetNextWindowPos(pp, ImGuiCond_Always);
     }
     if (ImGui::BeginPopup("##zoom_menu")) {
         if (ImGui::MenuItem("Зуммировать")) {}
@@ -4723,8 +4734,12 @@ void Application::DrawRightPanel() {
         "Основное действие — свободное вращение вида. Стрелка вниз открывает "
         "различные режимы вращения (с зависимостями, поворот под углом).");
 
-    if (ImGui::Button(ICON_CHEVRON_DOWN "##orbit_dd", ImVec2(toolW, arrowH))) {
+    if (SvgIconBtn(myIcons, "orbit_dd", "chevron-down", 14, toolW, arrowH, "Доп. режимы орбиты")) {
         ImGui::OpenPopup("##orbit_menu");
+        ImVec2 btnMin = ImGui::GetItemRectMin();
+        ImVec2 pp(btnMin.x - 280.0f, btnMin.y);
+        if (pp.x < 8.0f) pp.x = 8.0f;
+        ImGui::SetNextWindowPos(pp, ImGuiCond_Always);
     }
     if (ImGui::BeginPopup("##orbit_menu")) {
         if (ImGui::MenuItem("Орбита")) {}
@@ -4755,8 +4770,12 @@ void Application::DrawRightPanel() {
         "Основное действие — переключение стиля отображения модели. "
         "Стрелка вниз открывает полный список стилей.");
 
-    if (ImGui::Button(ICON_CHEVRON_DOWN "##style_dd", ImVec2(toolW, arrowH))) {
+    if (SvgIconBtn(myIcons, "style_dd", "chevron-down", 14, toolW, arrowH, "Все стили отображения")) {
         ImGui::OpenPopup("##style_menu");
+        ImVec2 btnMin = ImGui::GetItemRectMin();
+        ImVec2 pp(btnMin.x - 280.0f, btnMin.y);
+        if (pp.x < 8.0f) pp.x = 8.0f;
+        ImGui::SetNextWindowPos(pp, ImGuiCond_Always);
     }
     if (ImGui::BeginPopup("##style_menu")) {
         if (ImGui::MenuItem("Тонированный с рёбрами")) {
