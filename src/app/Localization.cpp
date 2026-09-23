@@ -274,6 +274,14 @@ const std::unordered_map<std::string, std::pair<std::string, std::string>> kDict
     { "tool.clear",           { "Clear Sketch",             "Очистить" } },
     { "tool.sketch.proj",     { "Project",                  "Проецировать" } },
 
+    { "tool.spring",          { "Spring",             "Пружина" } },
+    { "tool.rib",             { "Rib",                "Ребро жёсткости" } },
+    { "tool.split",           { "Split",              "Разделить" } },
+    { "grp.boolean",          { "Boolean",            "Boolean" } },
+    { "grp.diagnostics",      { "Diagnostics",        "Диагностика" } },
+    { "tool.info",            { "Info",               "Информация" } },
+    { "tool.measure",         { "Measure",            "Расстояние и угол" } },
+    { "tool.import_stl",      { "Import STL",         "Импорт STL" } },
 };
 
 } // namespace
