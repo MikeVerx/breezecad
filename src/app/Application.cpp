@@ -1725,6 +1725,16 @@ void Application::DrawRibbonSketchTab() {
     RibbonGroupEnd(Tr("grp.project").c_str());
 
     // ============================================================
+    // МАССИВ — 3 малые иконки в столбик
+    // ============================================================
+    RibbonGroupStart();
+    RibbonButton("pat_rect", pointOpt, 1, dummy, ICON_PATTERN_RECT, inSketch, false, "Прямоугольный массив");
+    ImGui::SameLine();
+    RibbonButton("pat_circ", pointOpt, 1, dummy, ICON_PATTERN_CIRC, inSketch, false, "Круговой массив");
+    RibbonButton("pat_mirr", pointOpt, 1, dummy, ICON_MIRROR,       inSketch, false, "Зеркало");
+    RibbonGroupEnd(Tr("grp.pattern").c_str());
+
+    // ============================================================
     // ИЗМЕНИТЬ — 5 кнопок-меню
     // ============================================================
     RibbonGroupStart();
@@ -1788,14 +1798,16 @@ void Application::DrawRibbonSketchTab() {
     RibbonGroupEnd(Tr("grp.dimensions").c_str());
 
     // ============================================================
-    // МАССИВ — 3 малые иконки в столбик
+    // ВСТАВКА — 3 малые
     // ============================================================
     RibbonGroupStart();
-    RibbonButton("pat_rect", pointOpt, 1, dummy, ICON_PATTERN_RECT, inSketch, false, "Прямоугольный массив");
+    RibbonButton("insert_img",    pointOpt, 1, dummy, ICON_INSERT_IMG, inSketch, false, "Вставить изображение");
     ImGui::SameLine();
-    RibbonButton("pat_circ", pointOpt, 1, dummy, ICON_PATTERN_CIRC, inSketch, false, "Круговой массив");
-    RibbonButton("pat_mirr", pointOpt, 1, dummy, ICON_MIRROR,       inSketch, false, "Зеркало");
-    RibbonGroupEnd(Tr("grp.pattern").c_str());
+    RibbonButton("insert_points", pointOpt, 1, dummy, ICON_POINT_3D,   inSketch, false, "Точки");
+    ImGui::SameLine();
+    RibbonButton("insert_acad",   pointOpt, 1, dummy, ICON_FILE,       inSketch, false, "ACAD");
+    RibbonGroupEnd(Tr("grp.insert").c_str());
+
 
     // ============================================================
     // ФОРМАТ — 3 тонкие кнопки в столбик
@@ -1828,16 +1840,6 @@ void Application::DrawRibbonSketchTab() {
     }
     RibbonGroupEnd(Tr("grp.format").c_str());
 
-    // ============================================================
-    // ВСТАВКА — 3 малые
-    // ============================================================
-    RibbonGroupStart();
-    RibbonButton("insert_img",    pointOpt, 1, dummy, ICON_INSERT_IMG, inSketch, false, "Вставить изображение");
-    ImGui::SameLine();
-    RibbonButton("insert_points", pointOpt, 1, dummy, ICON_POINT_3D,   inSketch, false, "Точки");
-    ImGui::SameLine();
-    RibbonButton("insert_acad",   pointOpt, 1, dummy, ICON_FILE,       inSketch, false, "ACAD");
-    RibbonGroupEnd(Tr("grp.insert").c_str());
 
     // ============================================================
     // ВЫХОД — 2 большие в ряд
