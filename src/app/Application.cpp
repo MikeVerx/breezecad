@@ -5310,8 +5310,12 @@ void Application::DrawHomeScreen() {
                         + std::chrono::system_clock::now()));
             }
             auto cacheIt = s_thumbs.find(thumbPath);
-            bool needLoad = (cacheIt == s_thumbs.end()) ||
-                            (s_thumbTimes[thumbPath] != wt);
+            // Утечка была здесь: сравнение s_thumbTimes != wt давало
+            // флуктуации из-за file_clock/system_clock, needLoad был
+            // ВСЕГДА true, glGenTextures создавал новую текстуру каждый
+            // кадр без glDeleteTextures. 20 ГБ утечки за 20 сек.
+            // Оставляем только проверку «нет в кэше».
+            bool needLoad = (cacheIt == s_thumbs.end());
             if (needLoad) {
                 int w = 0, h = 0, channels = 0;
                 unsigned char* data = ::stbi_load(thumbPath.c_str(), &w, &h, &channels, 4);
