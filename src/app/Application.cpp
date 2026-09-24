@@ -2948,35 +2948,35 @@ void Application::DrawViewCube() {
     gp_Dir camUp  = myOcctView->GetCameraUp();
 
     // --- Плавная анимация камеры: 0.5 сек, smoothstep, очередь ---
-    if (myVCAnimActive) {
-        myVCAnimT += io.DeltaTime / 0.5f;
-        if (myVCAnimT > 1.0f) myVCAnimT = 1.0f;
+    if (myViewCube.myAnimator.myActive) {
+        myViewCube.myAnimator.myT += io.DeltaTime / 0.5f;
+        if (myViewCube.myAnimator.myT > 1.0f) myViewCube.myAnimator.myT = 1.0f;
     }
 
     // Доигравшие шаги: применяем ТОЧНЫЙ финал предыдущего, стартуем следующий
     // из очереди. Для roll (kind=1) считаем дельту от финала, а не от
     // промежуточной позиции — так дабл-клик даёт ровно 180°.
-    while (myVCAnimActive && myVCAnimT >= 1.0f) {
-        gp_Dir finDir(myVCAnimToDir[0], myVCAnimToDir[1], myVCAnimToDir[2]);
-        gp_Dir finUp (myVCAnimToUp[0],  myVCAnimToUp[1],  myVCAnimToUp[2]);
+    while (myViewCube.myAnimator.myActive && myViewCube.myAnimator.myT >= 1.0f) {
+        gp_Dir finDir(myViewCube.myAnimator.myToDir[0], myViewCube.myAnimator.myToDir[1], myViewCube.myAnimator.myToDir[2]);
+        gp_Dir finUp (myViewCube.myAnimator.myToUp[0],  myViewCube.myAnimator.myToUp[1],  myViewCube.myAnimator.myToUp[2]);
         myOcctView->SetCameraDirectionAndUp(finDir, finUp);
         camDir = finDir;
         camUp  = finUp;
 
-        if (myVCAnimQueue.empty()) {
-            myVCAnimActive = false;
+        if (myViewCube.myAnimator.myQueue.empty()) {
+            myViewCube.myAnimator.myActive = false;
             break;
         }
 
-        UI::ViewCube::AnimTarget nxt = myVCAnimQueue.front();
-        myVCAnimQueue.erase(myVCAnimQueue.begin());
+        UI::ViewCube::AnimTarget nxt = myViewCube.myAnimator.myQueue.front();
+        myViewCube.myAnimator.myQueue.erase(myViewCube.myAnimator.myQueue.begin());
 
-        myVCAnimFromDir[0] = finDir.X(); myVCAnimFromDir[1] = finDir.Y(); myVCAnimFromDir[2] = finDir.Z();
-        myVCAnimFromUp[0]  = finUp.X();  myVCAnimFromUp[1]  = finUp.Y();  myVCAnimFromUp[2]  = finUp.Z();
+        myViewCube.myAnimator.myFromDir[0] = finDir.X(); myViewCube.myAnimator.myFromDir[1] = finDir.Y(); myViewCube.myAnimator.myFromDir[2] = finDir.Z();
+        myViewCube.myAnimator.myFromUp[0]  = finUp.X();  myViewCube.myAnimator.myFromUp[1]  = finUp.Y();  myViewCube.myAnimator.myFromUp[2]  = finUp.Z();
 
         if (nxt.kind == 0) {
-            myVCAnimToDir[0] = nxt.dir[0]; myVCAnimToDir[1] = nxt.dir[1]; myVCAnimToDir[2] = nxt.dir[2];
-            myVCAnimToUp[0]  = nxt.up[0];  myVCAnimToUp[1]  = nxt.up[1];  myVCAnimToUp[2]  = nxt.up[2];
+            myViewCube.myAnimator.myToDir[0] = nxt.dir[0]; myViewCube.myAnimator.myToDir[1] = nxt.dir[1]; myViewCube.myAnimator.myToDir[2] = nxt.dir[2];
+            myViewCube.myAnimator.myToUp[0]  = nxt.up[0];  myViewCube.myAnimator.myToUp[1]  = nxt.up[1];  myViewCube.myAnimator.myToUp[2]  = nxt.up[2];
         } else {
             double angleDeg = nxt.dir[0];
             double a  = angleDeg * 3.14159265358979323846 / 180.0;
@@ -2985,25 +2985,25 @@ void Application::DrawViewCube() {
             gp_Vec crossV = dirV.Crossed(upV);
             gp_Vec newUpV = upV * ca + crossV * sa;
             double len = std::sqrt(newUpV.X()*newUpV.X() + newUpV.Y()*newUpV.Y() + newUpV.Z()*newUpV.Z());
-            if (len < 1e-9) { myVCAnimT = 0.0f; continue; }
+            if (len < 1e-9) { myViewCube.myAnimator.myT = 0.0f; continue; }
             gp_Dir newUp(newUpV.X()/len, newUpV.Y()/len, newUpV.Z()/len);
-            myVCAnimToDir[0] = finDir.X(); myVCAnimToDir[1] = finDir.Y(); myVCAnimToDir[2] = finDir.Z();
-            myVCAnimToUp[0]  = newUp.X();  myVCAnimToUp[1]  = newUp.Y();  myVCAnimToUp[2]  = newUp.Z();
+            myViewCube.myAnimator.myToDir[0] = finDir.X(); myViewCube.myAnimator.myToDir[1] = finDir.Y(); myViewCube.myAnimator.myToDir[2] = finDir.Z();
+            myViewCube.myAnimator.myToUp[0]  = newUp.X();  myViewCube.myAnimator.myToUp[1]  = newUp.Y();  myViewCube.myAnimator.myToUp[2]  = newUp.Z();
         }
-        myVCAnimT = 0.0f;
+        myViewCube.myAnimator.myT = 0.0f;
     }
 
-    if (myVCAnimActive) {
-        float s = myVCAnimT * myVCAnimT * (3.0f - 2.0f * myVCAnimT);
-        double dx = myVCAnimFromDir[0] + (myVCAnimToDir[0] - myVCAnimFromDir[0]) * s;
-        double dy = myVCAnimFromDir[1] + (myVCAnimToDir[1] - myVCAnimFromDir[1]) * s;
-        double dz = myVCAnimFromDir[2] + (myVCAnimToDir[2] - myVCAnimFromDir[2]) * s;
+    if (myViewCube.myAnimator.myActive) {
+        float s = myViewCube.myAnimator.myT * myViewCube.myAnimator.myT * (3.0f - 2.0f * myViewCube.myAnimator.myT);
+        double dx = myViewCube.myAnimator.myFromDir[0] + (myViewCube.myAnimator.myToDir[0] - myViewCube.myAnimator.myFromDir[0]) * s;
+        double dy = myViewCube.myAnimator.myFromDir[1] + (myViewCube.myAnimator.myToDir[1] - myViewCube.myAnimator.myFromDir[1]) * s;
+        double dz = myViewCube.myAnimator.myFromDir[2] + (myViewCube.myAnimator.myToDir[2] - myViewCube.myAnimator.myFromDir[2]) * s;
         double dlen = std::sqrt(dx*dx + dy*dy + dz*dz);
         if (dlen < 1e-9) dlen = 1.0;
         gp_Dir curDir(dx/dlen, dy/dlen, dz/dlen);
-        double ux = myVCAnimFromUp[0] + (myVCAnimToUp[0] - myVCAnimFromUp[0]) * s;
-        double uy = myVCAnimFromUp[1] + (myVCAnimToUp[1] - myVCAnimFromUp[1]) * s;
-        double uz = myVCAnimFromUp[2] + (myVCAnimToUp[2] - myVCAnimFromUp[2]) * s;
+        double ux = myViewCube.myAnimator.myFromUp[0] + (myViewCube.myAnimator.myToUp[0] - myViewCube.myAnimator.myFromUp[0]) * s;
+        double uy = myViewCube.myAnimator.myFromUp[1] + (myViewCube.myAnimator.myToUp[1] - myViewCube.myAnimator.myFromUp[1]) * s;
+        double uz = myViewCube.myAnimator.myFromUp[2] + (myViewCube.myAnimator.myToUp[2] - myViewCube.myAnimator.myFromUp[2]) * s;
         double dot = ux*curDir.X() + uy*curDir.Y() + uz*curDir.Z();
         ux -= dot * curDir.X(); uy -= dot * curDir.Y(); uz -= dot * curDir.Z();
         double ulen = std::sqrt(ux*ux + uy*uy + uz*uz);
@@ -3319,34 +3319,34 @@ void Application::DrawViewCube() {
     auto startVCAnim = [&](const gp_Dir& targetDir, const gp_Dir& targetUp) {
         // Если анимация уже играет или в очереди что-то есть — в очередь.
         // Иначе стартуем сразу.
-        if (myVCAnimActive || !myVCAnimQueue.empty()) {
-            if (myVCAnimQueue.size() < 8) {
+        if (myViewCube.myAnimator.myActive || !myViewCube.myAnimator.myQueue.empty()) {
+            if (myViewCube.myAnimator.myQueue.size() < 8) {
                 UI::ViewCube::AnimTarget t;
                 t.kind = 0;
                 t.dir[0] = targetDir.X(); t.dir[1] = targetDir.Y(); t.dir[2] = targetDir.Z();
                 t.up[0]  = targetUp.X();  t.up[1]  = targetUp.Y();  t.up[2]  = targetUp.Z();
-                myVCAnimQueue.push_back(t);
+                myViewCube.myAnimator.myQueue.push_back(t);
             }
             return;
         }
-        myVCAnimFromDir[0] = camDir.X(); myVCAnimFromDir[1] = camDir.Y(); myVCAnimFromDir[2] = camDir.Z();
-        myVCAnimFromUp[0]  = camUp.X();  myVCAnimFromUp[1]  = camUp.Y();  myVCAnimFromUp[2]  = camUp.Z();
-        myVCAnimToDir[0]   = targetDir.X(); myVCAnimToDir[1] = targetDir.Y(); myVCAnimToDir[2] = targetDir.Z();
-        myVCAnimToUp[0]    = targetUp.X();  myVCAnimToUp[1]  = targetUp.Y();  myVCAnimToUp[2]  = targetUp.Z();
-        myVCAnimT = 0.0f;
-        myVCAnimActive = true;
+        myViewCube.myAnimator.myFromDir[0] = camDir.X(); myViewCube.myAnimator.myFromDir[1] = camDir.Y(); myViewCube.myAnimator.myFromDir[2] = camDir.Z();
+        myViewCube.myAnimator.myFromUp[0]  = camUp.X();  myViewCube.myAnimator.myFromUp[1]  = camUp.Y();  myViewCube.myAnimator.myFromUp[2]  = camUp.Z();
+        myViewCube.myAnimator.myToDir[0]   = targetDir.X(); myViewCube.myAnimator.myToDir[1] = targetDir.Y(); myViewCube.myAnimator.myToDir[2] = targetDir.Z();
+        myViewCube.myAnimator.myToUp[0]    = targetUp.X();  myViewCube.myAnimator.myToUp[1]  = targetUp.Y();  myViewCube.myAnimator.myToUp[2]  = targetUp.Z();
+        myViewCube.myAnimator.myT = 0.0f;
+        myViewCube.myAnimator.myActive = true;
     };
 
     // Roll-очередь: хранит дельту угла (kind=1). Реальная цель — при старте,
     // от ТОЧНОГО финала предыдущей анимации.
     auto startVCRoll = [&](double angleDeg) {
-        if (myVCAnimActive || !myVCAnimQueue.empty()) {
-            if (myVCAnimQueue.size() < 8) {
+        if (myViewCube.myAnimator.myActive || !myViewCube.myAnimator.myQueue.empty()) {
+            if (myViewCube.myAnimator.myQueue.size() < 8) {
                 UI::ViewCube::AnimTarget t;
                 t.kind = 1;
                 t.dir[0] = angleDeg; t.dir[1] = 0; t.dir[2] = 0;
                 t.up[0] = 0; t.up[1] = 0; t.up[2] = 0;
-                myVCAnimQueue.push_back(t);
+                myViewCube.myAnimator.myQueue.push_back(t);
             }
             return;
         }
@@ -3360,12 +3360,12 @@ void Application::DrawViewCube() {
         double len = std::sqrt(newUpV.X()*newUpV.X() + newUpV.Y()*newUpV.Y() + newUpV.Z()*newUpV.Z());
         if (len < 1e-9) return;
         gp_Dir newUp(newUpV.X()/len, newUpV.Y()/len, newUpV.Z()/len);
-        myVCAnimFromDir[0] = curDir.X(); myVCAnimFromDir[1] = curDir.Y(); myVCAnimFromDir[2] = curDir.Z();
-        myVCAnimFromUp[0]  = curUp.X();  myVCAnimFromUp[1]  = curUp.Y();  myVCAnimFromUp[2]  = curUp.Z();
-        myVCAnimToDir[0]   = curDir.X(); myVCAnimToDir[1]   = curDir.Y(); myVCAnimToDir[2]   = curDir.Z();
-        myVCAnimToUp[0]    = newUp.X();  myVCAnimToUp[1]    = newUp.Y();  myVCAnimToUp[2]    = newUp.Z();
-        myVCAnimT = 0.0f;
-        myVCAnimActive = true;
+        myViewCube.myAnimator.myFromDir[0] = curDir.X(); myViewCube.myAnimator.myFromDir[1] = curDir.Y(); myViewCube.myAnimator.myFromDir[2] = curDir.Z();
+        myViewCube.myAnimator.myFromUp[0]  = curUp.X();  myViewCube.myAnimator.myFromUp[1]  = curUp.Y();  myViewCube.myAnimator.myFromUp[2]  = curUp.Z();
+        myViewCube.myAnimator.myToDir[0]   = curDir.X(); myViewCube.myAnimator.myToDir[1]   = curDir.Y(); myViewCube.myAnimator.myToDir[2]   = curDir.Z();
+        myViewCube.myAnimator.myToUp[0]    = newUp.X();  myViewCube.myAnimator.myToUp[1]    = newUp.Y();  myViewCube.myAnimator.myToUp[2]    = newUp.Z();
+        myViewCube.myAnimator.myT = 0.0f;
+        myViewCube.myAnimator.myActive = true;
     };
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -3412,15 +3412,15 @@ void Application::DrawViewCube() {
 
     // Таймер 0.5 с — кнопки не мигают, пока мышь в зоне.
     if (cubeAligned && hoveredFace >= 0) {
-        myVCButtonsTimer = 0.5f;
-    } else if (cubeAligned && mouseInBtnZone && myVCButtonsTimer > 0.0f) {
-        myVCButtonsTimer = 0.5f;
+        myViewCube.myButtonsTimer = 0.5f;
+    } else if (cubeAligned && mouseInBtnZone && myViewCube.myButtonsTimer > 0.0f) {
+        myViewCube.myButtonsTimer = 0.5f;
     } else {
-        myVCButtonsTimer -= io.DeltaTime;
-        if (myVCButtonsTimer < 0.0f) myVCButtonsTimer = 0.0f;
+        myViewCube.myButtonsTimer -= io.DeltaTime;
+        if (myViewCube.myButtonsTimer < 0.0f) myViewCube.myButtonsTimer = 0.0f;
     }
 
-    if (myVCButtonsTimer > 0.0f) {
+    if (myViewCube.myButtonsTimer > 0.0f) {
         auto rollCameraAnim = [&](double angleDeg) {
             startVCRoll(angleDeg);
         };

@@ -22,17 +22,16 @@ public:
     Animator()  = default;
     ~Animator() = default;
 
-    // TODO(step 1.2):
-    //   void Update(float dt, bool& outActive, double outDir[3], double outUp[3]);
-    //   void StartAbsolute(double dx, double dy, double dz,
-    //                      double ux, double uy, double uz);
-    //   void StartRoll(double angleDeg,
-    //                  double curDirX, double curDirY, double curDirZ,
-    //                  double curUpX,  double curUpY,  double curUpZ);
-    //   bool IsActive() const;
+    // ==== Состояние (пока public — на шаге 1.2b, потом закроем) ====
+    bool    myActive = false;
+    float   myT      = 0.0f;
+    double  myFromDir[3] = {0, 0, -1};
+    double  myToDir[3]   = {0, 0, -1};
+    double  myFromUp[3]  = {0, 1, 0};
+    double  myToUp[3]    = {0, 1, 0};
+    std::vector<AnimTarget> myQueue;
 
-private:
-    // TODO(step 1.2): активность, прогресс t, from/to, очередь
+    // TODO(step 1.3/1.4): методы Update, StartAbsolute, StartRoll.
 };
 
 } // namespace BreezeCAD::UI::ViewCube

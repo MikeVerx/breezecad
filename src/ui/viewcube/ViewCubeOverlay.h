@@ -37,7 +37,7 @@ public:
 
     // TODO(step 1.4): void Draw(const Context& ctx);
 
-private:
+public:  // TODO(step 1.4): закрыть через аксессоры
     Animator myAnimator;
     float    myButtonsTimer = 0.0f;
 };

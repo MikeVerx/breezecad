@@ -4,7 +4,7 @@
 #include "occt/OcctView.h"
 #include "doc/BreezeDocument.h"
 #include "app/IconManager.h"
-#include "ui/viewcube/ViewCubeAnimator.h"  // AnimTarget
+#include "ui/viewcube/ViewCubeOverlay.h"   // ViewCubeOverlay + Animator
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -64,6 +64,7 @@ public:
 private:
     std::unique_ptr<GlfwWindow>   myWindow;
     std::unique_ptr<OcctView>     myOcctView;
+    UI::ViewCube::ViewCubeOverlay myViewCube;
     IconManager                   myIcons;
     // === Диалог зависимостей ===
     bool myDependencyDialogOpen = false;
@@ -102,16 +103,7 @@ private:
 
     // === Правая панель навигации ===
     bool myRightPanelExpanded = false;
-
-    // --- ViewCube camera animation ---
-    bool   myVCAnimActive = false;
-    float  myVCAnimT      = 0.0f;
-    double myVCAnimFromDir[3] = {0, 0, -1};
-    double myVCAnimToDir[3]   = {0, 0, -1};
-    double myVCAnimFromUp[3]  = {0, 1, 0};
-    double myVCAnimToUp[3]    = {0, 1, 0};
-    float  myVCButtonsTimer   = 0.0f;
-    std::vector<UI::ViewCube::AnimTarget> myVCAnimQueue;
+    // ViewCube-состояние переехало в myViewCube (ViewCubeOverlay)
 
     // === ПКМ-меню в 3D-сцене ===
     bool   myPendingContextMenu = false;
