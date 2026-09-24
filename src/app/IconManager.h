@@ -19,7 +19,7 @@ public:
     void PreloadAll(const std::vector<std::string>& names);
     // Предзагрузка дефолтного списка иконок проекта
     void PreloadDefaults();
-    GLuint Get(const std::string& name, int size);
+    GLuint Get(const std::string& name, int size = 32);
     void Clear();
 
     // Установить путь к папке с иконками

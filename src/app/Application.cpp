@@ -5163,92 +5163,193 @@ void Application::DrawHomeScreen() {
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    const float topH  = 40.0f;
-    const float leftW = 240.0f;
-    const float pad   = 16.0f;
+    const float titleH  = 32.0f;              // титульная полоса
+    const float topBarH = 76.0f;              // топ-полоса с кнопками
+    const float topH    = titleH + topBarH;   // = 108
+    const float leftW   = 240.0f;
+    const float pad     = 16.0f;
 
-    // ВЕРХНЯЯ ПОЛОСА
+    // ===== ТИТУЛЬНАЯ ПОЛОСА (32 px) =====
+    ImGui::GetWindowDrawList()->AddRectFilled(
+        ImVec2(0, 0), ImVec2(io.DisplaySize.x, titleH),
+        IM_COL32(28, 32, 40, 255));
+
     ImGui::SetCursorPos(ImVec2(pad, 8));
     ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "BreezeCAD");
-    ImGui::SameLine(0, 20);
 
-    if (myActiveDocIndex >= 0) {
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 4));
-        if (ImGui::Button("  Назад в документ  ")) {
-            myShowHomeScreen = false;
+    {
+        char telBuf[128];
+        std::snprintf(telBuf, sizeof(telBuf), "FPS: %.0f | RAM: %.0f MB",
+                      io.Framerate, myLastRAMMB);
+        ImVec2 tsz = ImGui::CalcTextSize(telBuf);
+        float tx = io.DisplaySize.x - pad - tsz.x;
+        ImGui::SetCursorPos(ImVec2(tx, 8));
+        ImGui::TextDisabled("%s", telBuf);
+    }
+
+    ImGui::GetWindowDrawList()->AddLine(
+        ImVec2(0, titleH), ImVec2(io.DisplaySize.x, titleH),
+        IM_COL32(60, 68, 82, 255), 1.0f);
+
+    // ===== ТОП-ПОЛОСА (76 px): Деталь / Сборка / Открыть =====
+    ImGui::GetWindowDrawList()->AddRectFilled(
+        ImVec2(0, titleH), ImVec2(io.DisplaySize.x, topH),
+        IM_COL32(34, 38, 48, 255));
+
+    const float hbtnW   = 88.0f;
+    const float hbtnH   = 74.0f;
+    const float hbtnY   = titleH + (topBarH - hbtnH) * 0.5f;
+    const float hbtnGap = 8.0f;
+    const char* hbtnIcons[3]  = { "box", "boxes", "folder-open" };
+    const char* hbtnLabels[3] = { "Деталь", "Сборка", "Открыть" };
+    float hbx = pad;
+    for (int bi = 0; bi < 3; bi++) {
+        ImGui::PushID(1000 + bi);
+        ImGui::SetCursorPos(ImVec2(hbx, hbtnY));
+        ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(50, 58, 72, 255));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(60, 72, 92, 255));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(51, 140, 242, 255));
+        bool hbPressed = ImGui::Button("##hbtn", ImVec2(hbtnW, hbtnH));
+        ImGui::PopStyleColor(3);
+
+        ImVec2 bmin = ImGui::GetItemRectMin();
+        GLuint icoTex = myIcons.Get(hbtnIcons[bi], 32);
+        if (icoTex) {
+            float ix = bmin.x + (hbtnW - 32) * 0.5f;
+            float iy = bmin.y + 12.0f;
+            ImGui::GetWindowDrawList()->AddImage(
+                (ImTextureID)(intptr_t)icoTex,
+                ImVec2(ix, iy), ImVec2(ix + 32, iy + 32));
         }
-        ImGui::PopStyleVar();
-    }
+        ImVec2 lsz = ImGui::CalcTextSize(hbtnLabels[bi]);
+        float lx = bmin.x + (hbtnW - lsz.x) * 0.5f;
+        float ly = bmin.y + hbtnH - lsz.y - 8.0f;
+        ImGui::GetWindowDrawList()->AddText(
+            ImVec2(lx, ly), IM_COL32(220, 230, 245, 255), hbtnLabels[bi]);
 
-    const float searchW = 240.0f;
-    const float telW    = 200.0f;
-    float searchX = io.DisplaySize.x - pad - searchW - telW - 20.0f;
-    if (searchX > leftW + 40) {
-        ImGui::SameLine(searchX);
-        ImGui::SetNextItemWidth(searchW);
-        ImGui::InputTextWithHint("##home_search", "Поиск команд...",
-                                 mySearchBuffer, sizeof(mySearchBuffer));
+        if (hbPressed) {
+            if (bi == 0)      CreateNewDoc();
+            else if (bi == 1) CreateNewDoc();   // TODO: сборка
+            else if (bi == 2) OnOpen();
+        }
+        ImGui::PopID();
+        hbx += hbtnW + hbtnGap;
     }
-    float telX = io.DisplaySize.x - pad - telW;
-    ImGui::SameLine(telX);
-    ImGui::TextDisabled("FPS: %.0f | RAM: %.0f MB", io.Framerate, myLastRAMMB);
 
     ImGui::GetWindowDrawList()->AddLine(
         ImVec2(0, topH), ImVec2(io.DisplaySize.x, topH),
         IM_COL32(60, 68, 82, 255), 1.0f);
-
     // ЛЕВАЯ КОЛОНКА
     ImGui::SetCursorPos(ImVec2(0, topH));
     ImGui::BeginChild("##home_left", ImVec2(leftW, io.DisplaySize.y - topH),
                       false, ImGuiWindowFlags_NoScrollbar);
 
-    ImGui::SetCursorPos(ImVec2(pad, 24));
-    ImGui::TextColored(ImVec4(0.9f, 0.95f, 1.0f, 1.0f), "BreezeCAD");
-    ImGui::SetCursorPos(ImVec2(pad, 46));
-    ImGui::TextDisabled("Версия 0.1.x - Prototype");
+    const float colH = io.DisplaySize.y - topH;
 
-    ImGui::SetCursorPos(ImVec2(0, 90));
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(16, 10));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 2));
-    const float cmdW = leftW;
-
-    if (ImGui::Button("Создать",             ImVec2(cmdW, 0))) CreateNewDoc();
-    if (ImGui::Button("Открыть...",          ImVec2(cmdW, 0))) OnOpen();
-    if (ImGui::Button("Сохранить",           ImVec2(cmdW, 0))) OnSave();
-    if (ImGui::Button("Сохранить как...",    ImVec2(cmdW, 0))) { myCurrentPath.clear(); OnSave(); }
-    if (ImGui::Button("Экспорт в STEP...",   ImVec2(cmdW, 0))) OnExportSTEP();
-    if (ImGui::Button("Экспорт в STL...",    ImVec2(cmdW, 0))) OnExportSTL();
-
-    ImGui::SetCursorPos(ImVec2(pad, ImGui::GetCursorPosY() + 8));
-    ImGui::Separator();
-    ImGui::SetCursorPos(ImVec2(0, ImGui::GetCursorPosY() + 4));
-
-    if (ImGui::Button("Управление", ImVec2(cmdW, 0))) myShowSettingsDialog = true;
-    if (ImGui::Button("Свойства",   ImVec2(cmdW, 0))) {}
-    if (ImGui::Button("Печать...",  ImVec2(cmdW, 0))) {}
-
-    if (ImGui::Button("Закрыть", ImVec2(cmdW, 0))) {
-        if (myActiveDocIndex >= 0) CloseDoc(myActiveDocIndex);
+    // ===== Название BreezeCAD (крупно, полужирно) =====
+    {
+        ImFont* font = ImGui::GetFont();
+        const float bigSize = 26.0f;
+        const char* nm = "BreezeCAD";
+        ImVec2 base = ImGui::GetCursorScreenPos();
+        ImVec2 tsz = font->CalcTextSizeA(bigSize, FLT_MAX, 0.0f, nm);
+        ImVec2 pos(base.x + (leftW - tsz.x) * 0.5f, base.y + 22.0f);
+        ImU32 colText = IM_COL32(232, 238, 248, 255);
+        // Псевдо-жирный: дважды с 0.6 px
+        ImGui::GetWindowDrawList()->AddText(font, bigSize, pos, colText, nm);
+        ImGui::GetWindowDrawList()->AddText(font, bigSize, ImVec2(pos.x + 0.6f, pos.y), colText, nm);
     }
 
-    ImGui::PopStyleVar(2);
+    // ===== Логотип 140x140 (под названием) =====
+    {
+        const float logoSz = 140.0f;
+        float logoX = (leftW - logoSz) * 0.5f;
+        float logoY = 22.0f + 36.0f + 16.0f;  // название + gap
+        GLuint logo = myIcons.Get("breeze-logo", (int)logoSz);
+        if (logo) {
+            ImGui::SetCursorPos(ImVec2(logoX, logoY));
+            ImGui::Image((ImTextureID)(intptr_t)logo, ImVec2(logoSz, logoSz));
+        }
+    }
 
-    ImGui::SetCursorPos(ImVec2(pad, io.DisplaySize.y - topH - 56));
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(12, 8));
-    if (ImGui::Button("Параметры", ImVec2((leftW - pad * 2 - 8) / 2.0f, 0))) {
-        myShowSettingsDialog = true;
+    // ===== Хелпер: кнопка с фиксированной шириной и центрированным текстом =====
+    auto homeBtn = [&](const char* id, const char* label, float w, float h, bool disabled) -> bool {
+        ImGui::PushID(id);
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##btn", ImVec2(w, h));
+        bool clicked = ImGui::IsItemClicked();
+        bool hovered = ImGui::IsItemHovered();
+        ImGui::PopID();
+        ImU32 bg;
+        if (disabled)      bg = IM_COL32(40, 45, 55, 180);
+        else if (clicked)  bg = IM_COL32(51, 140, 242, 255);
+        else if (hovered)  bg = IM_COL32(60, 72, 92, 255);
+        else               bg = IM_COL32(50, 58, 72, 255);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), bg, 4.0f);
+        ImVec2 tsz = ImGui::CalcTextSize(label);
+        ImU32 tcol = disabled ? IM_COL32(120, 130, 150, 200) : IM_COL32(220, 230, 245, 255);
+        dl->AddText(ImVec2(p.x + (w - tsz.x) * 0.5f, p.y + (h - tsz.y) * 0.5f), tcol, label);
+        return clicked && !disabled;
+    };
+
+    // ===== Позиции в левой колонке (абсолютные Y от низа) =====
+    // Схема снизу вверх:
+    //   20   нижий отступ
+    //   32   Параметры/Выход
+    //   20   gap
+    //   32   О программе
+    //    6   gap
+    //   32   Справка
+    //    6   gap
+    //   32   Управление модулями (disabled)
+    //   16   gap
+    //    1   разделитель
+    //    8   gap
+    //   36   Версия (2 строки)
+    const float bh      = 32.0f;
+    const float gap     = 6.0f;
+    const float bwFull  = leftW - pad * 2.0f;
+    const float yParamsTop  = colH - 20.0f - bh;
+    const float yAboutTop   = yParamsTop - 20.0f - bh;
+    const float yHelpTop    = yAboutTop - gap - bh;
+    const float yModulesTop = yHelpTop  - gap - bh;
+    const float ySepY       = yModulesTop - 16.0f;
+    const float yVerTop     = ySepY - 8.0f - 36.0f;
+
+    // ===== Версия (над разделителем) =====
+    {
+        const char* v1 = "Версия 0.1.x";
+        const char* v2 = "Прототип";
+        ImVec2 s1 = ImGui::CalcTextSize(v1);
+        ImVec2 s2 = ImGui::CalcTextSize(v2);
+        ImGui::SetCursorPos(ImVec2((leftW - s1.x) * 0.5f, yVerTop));
+        ImGui::TextDisabled("%s", v1);
+        ImGui::SetCursorPos(ImVec2((leftW - s2.x) * 0.5f, yVerTop + 18.0f));
+        ImGui::TextDisabled("%s", v2);
+        ImGui::SetCursorPos(ImVec2(pad, ySepY));
+        ImGui::Separator();
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Выход", ImVec2((leftW - pad * 2 - 8) / 2.0f, 0))) {
-        glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE);
+
+    // ===== 3 кнопки внизу колонки (абсолютные Y) =====
+    ImGui::SetCursorPos(ImVec2(pad, yModulesTop));
+    homeBtn("btn_modules", "Управление модулями", bwFull, bh, true);
+    ImGui::SetCursorPos(ImVec2(pad, yHelpTop));
+    if (homeBtn("btn_help", "Справка", bwFull, bh, false)) myShowNotImplementedDialog = true;
+    ImGui::SetCursorPos(ImVec2(pad, yAboutTop));
+    if (homeBtn("btn_about", "О программе", bwFull, bh, false)) myShowSettingsDialog = true;
+
+    // ===== Параметры / Выход (самый низ) =====
+    {
+        const float bw2 = (bwFull - 8.0f) * 0.5f;
+        ImGui::SetCursorPos(ImVec2(pad, yParamsTop));
+        if (homeBtn("btn_settings", "Параметры", bw2, bh, false)) myShowSettingsDialog = true;
+        ImGui::SetCursorPos(ImVec2(pad + bw2 + 8.0f, yParamsTop));
+        if (homeBtn("btn_exit", "Выход", bw2, bh, false)) {
+            glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE);
+        }
     }
-    ImGui::PopStyleVar();
     ImGui::EndChild();
-
-    ImGui::GetWindowDrawList()->AddLine(
-        ImVec2(leftW, topH), ImVec2(leftW, io.DisplaySize.y),
-        IM_COL32(60, 68, 82, 255), 1.0f);
-
     // ПРАВАЯ ОБЛАСТЬ
     const float rightX = leftW + pad;
     const float rightW = io.DisplaySize.x - rightX - pad;

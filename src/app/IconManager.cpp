@@ -110,7 +110,7 @@ GLuint IconManager::RasterizeToTexture(const std::string& svgPath, int size) {
     }
 
     // Рендерим в 2x размере для HiDPI
-    int renderSize = size * 2;
+    int renderSize = size * 4;  // x4 для HiDPI и векторной чёткости
     auto bitmap = doc->renderToBitmap(renderSize, renderSize);
     if (bitmap.isNull()) {
         std::cerr << "IconManager: render failed: " << svgPath << "\n";
@@ -148,10 +148,11 @@ void IconManager::LoadAll(const std::string& dir) {
     std::cout << "IconManager: icons dir = " << dir << "\n";
 }
 
-GLuint IconManager::Get(const std::string& name, int /*size*/) {
-    // Всегда рендерим в 32px — ImGui масштабирует при отрисовке.
-    // Это позволяет кешировать одну текстуру для всех размеров.
-    std::string key = name;
+GLuint IconManager::Get(const std::string& name, int size) {
+    // Кэш по паре (имя, размер). Позволяет держать и мелкие иконки (32),
+    // и крупные (лого 280+) в правильном разрешении без размытия.
+    if (size <= 0) size = 32;
+    std::string key = name + "#" + std::to_string(size);
     auto it = myCache.find(key);
     if (it != myCache.end()) return it->second;
 
