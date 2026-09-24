@@ -239,7 +239,7 @@ static void SetupDarkTheme() {
     s.IndentSpacing     = 18.0f;
 
     // === Рамки — минимализм ===
-    s.WindowBorderSize  = 0.0f;
+    s.WindowBorderSize  = 1.0f;
     s.ChildBorderSize   = 0.0f;
     s.FrameBorderSize   = 0.0f;
     s.PopupBorderSize   = 1.0f;
@@ -367,13 +367,13 @@ static void SetupLightTheme() {
     ImVec4 BTN      (0.878f, 0.878f, 0.878f, 1.00f);   // #E0E0E0 — кнопки
     ImVec4 BTN_HOV  (0.831f, 0.831f, 0.831f, 1.00f);   // #D4D4D4
     ImVec4 BTN_ACT  (0.784f, 0.784f, 0.784f, 1.00f);   // #C8C8C8
-    ImVec4 BORDER   (0.753f, 0.753f, 0.753f, 1.00f);   // #C0C0C0
-    ImVec4 TXT      (0.200f, 0.200f, 0.200f, 1.00f);   // #333333 — тёмно-серый
-    ImVec4 TXT_DIS  (0.502f, 0.502f, 0.502f, 1.00f);   // #808080 — приглушённый
+    ImVec4 BORDER   (0.600f, 0.600f, 0.600f, 1.00f);   // #999999 — темнее
+    ImVec4 TXT      (0.000f, 0.000f, 0.000f, 1.00f);   // #000000 — чёрный
+    ImVec4 TXT_DIS  (0.350f, 0.350f, 0.350f, 1.00f);   // #595959 — приглушённый
 
-    ImVec4 accent      (0.969f, 0.635f, 0.000f, 1.00f);   // #F7A200 — Autodesk оранжевый
-    ImVec4 accentHover (1.000f, 0.706f, 0.157f, 1.00f);   // #FFB428
-    ImVec4 accentActive(0.816f, 0.510f, 0.000f, 1.00f);   // #D08200
+    ImVec4 accent      (0.000f, 0.851f, 0.753f, 1.00f);   // #00D9C0 — бирюза, как в тёмной
+    ImVec4 accentHover (0.114f, 0.914f, 0.816f, 1.00f);   // #1DE9D0
+    ImVec4 accentActive(0.000f, 0.690f, 0.610f, 1.00f);   // #00B09B
 
     ImVec4* c = s.Colors;
 
@@ -555,6 +555,40 @@ void Application::ApplyTheme(int theme) {
         ImGui::StyleColorsLight();
         SetupLightTheme();
 
+        // Принудительно чёрный текст и иконки (override любых стилей)
+        ImGui::GetStyle().Colors[ImGuiCol_Text]         = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+        ImGui::GetStyle().Colors[ImGuiCol_TextDisabled] = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
+
+        // ==== Токены светлой темы (Inventor-style: серо-градиентная) ====
+        myTheme.bgTitle             = IM_COL32(178, 182, 190, 255);
+        myTheme.bgRibbon            = IM_COL32(190, 194, 202, 255);
+        myTheme.bgContent           = IM_COL32(214, 218, 222, 255);
+        myTheme.bgCardBg            = IM_COL32(202, 206, 212, 255);
+        myTheme.border              = IM_COL32(140, 144, 152, 255);
+        myTheme.borderStrong        = IM_COL32(112, 116, 124, 255);
+        myTheme.textMain            = IM_COL32(  0,   0,   0, 255);
+        myTheme.textDim             = IM_COL32( 52,  56,  64, 255);
+        myTheme.homeBtnLabel        = IM_COL32(  0,   0,   0, 255);
+        myTheme.homeBtnBg           = IM_COL32(198, 200, 204, 255);
+        myTheme.homeBtnBgHover      = IM_COL32(178, 182, 188, 255);
+        myTheme.homeBtnBgDisabled   = IM_COL32(184, 186, 190, 200);
+        myTheme.homeBtnTextDisabled = IM_COL32( 96, 100, 108, 220);
+        myTheme.thumbBg             = IM_COL32(198, 202, 208, 255);
+        myTheme.accent              = IM_COL32( 40, 120, 216, 255);
+        myTheme.accentHover         = IM_COL32( 64, 144, 232, 255);
+
+        myTheme.cubeBgCircle        = IM_COL32(200, 204, 210, 180);
+        myTheme.cubeFaceTop         = IM_COL32(232, 232, 232, 255);
+        myTheme.cubeFaceBottom      = IM_COL32(184, 184, 184, 255);
+        myTheme.cubeFaceFront       = IM_COL32(208, 208, 208, 255);
+        myTheme.cubeFaceBack        = IM_COL32(200, 200, 200, 255);
+        myTheme.cubeFaceRight       = IM_COL32(216, 216, 216, 255);
+        myTheme.cubeFaceLeft        = IM_COL32(192, 192, 192, 255);
+        myTheme.cubeOutline         = IM_COL32(  0,   0,   0, 255);
+        myTheme.cubeText            = IM_COL32(  0,   0,   0, 255);
+        myTheme.cubeHover           = IM_COL32( 40, 120, 216, 200);
+        myTheme.cubeFaceHover       = IM_COL32( 40, 120, 216, 120);
+
         if (myOcctView) {
             Quantity_Color top(0.66, 0.72, 0.78, Quantity_TOC_RGB);      // #A8B8C7
             Quantity_Color bottom(0.85, 0.88, 0.91, Quantity_TOC_RGB);   // #D9E0E8
@@ -564,6 +598,36 @@ void Application::ApplyTheme(int theme) {
         // 1 = Тёмная, 2 = Авто (пока тоже тёмная)
         ImGui::StyleColorsDark();
         SetupDeepSTheme();
+
+        // ==== Токены тёмной темы ====
+        myTheme.bgTitle             = IM_COL32( 28,  32,  40, 255);
+        myTheme.bgRibbon            = IM_COL32( 34,  38,  48, 255);
+        myTheme.bgContent           = IM_COL32( 22,  24,  30, 255);
+        myTheme.bgCardBg            = IM_COL32( 32,  36,  46, 255);
+        myTheme.border              = IM_COL32( 60,  68,  82, 255);
+        myTheme.borderStrong        = IM_COL32( 60,  70,  90, 255);
+        myTheme.textMain            = IM_COL32(220, 230, 245, 255);
+        myTheme.textDim             = IM_COL32(120, 130, 150, 255);
+        myTheme.homeBtnLabel        = IM_COL32(220, 230, 245, 255);
+        myTheme.homeBtnBg           = IM_COL32( 50,  58,  72, 255);
+        myTheme.homeBtnBgHover      = IM_COL32( 60,  72,  92, 255);
+        myTheme.homeBtnBgDisabled   = IM_COL32( 40,  45,  55, 180);
+        myTheme.homeBtnTextDisabled = IM_COL32(120, 130, 150, 220);
+        myTheme.thumbBg             = IM_COL32( 24,  28,  36, 255);
+        myTheme.accent              = IM_COL32( 51, 140, 242, 255);
+        myTheme.accentHover         = IM_COL32( 76, 164, 255, 255);
+
+        myTheme.cubeBgCircle        = IM_COL32( 40,  45,  55, 180);
+        myTheme.cubeFaceTop         = IM_COL32(180, 195, 210, 255);
+        myTheme.cubeFaceBottom      = IM_COL32(120, 130, 145, 255);
+        myTheme.cubeFaceFront       = IM_COL32(160, 175, 195, 255);
+        myTheme.cubeFaceBack        = IM_COL32(140, 155, 175, 255);
+        myTheme.cubeFaceRight       = IM_COL32(150, 165, 185, 255);
+        myTheme.cubeFaceLeft        = IM_COL32(130, 145, 165, 255);
+        myTheme.cubeOutline         = IM_COL32( 30,  35,  45, 255);
+        myTheme.cubeText            = IM_COL32( 25,  30,  40, 255);
+        myTheme.cubeHover           = IM_COL32( 51, 140, 242, 200);
+        myTheme.cubeFaceHover       = IM_COL32( 51, 140, 242, 120);
 
         if (myOcctView) {
             Quantity_Color top(0.040, 0.075, 0.130, Quantity_TOC_RGB);
@@ -2882,7 +2946,7 @@ void Application::DrawViewCube() {
 
     ImDrawList* draw = ImGui::GetForegroundDrawList();
 
-    draw->AddCircleFilled(center, cubeSize * 0.55f, IM_COL32(40, 45, 55, 180));
+    draw->AddCircleFilled(center, cubeSize * 0.55f, myTheme.cubeBgCircle);
 
     gp_Dir camDir = myOcctView->GetCameraDirection();
     gp_Dir camUp  = myOcctView->GetCameraUp();
@@ -3045,13 +3109,13 @@ void Application::DrawViewCube() {
         visCorners.push_back(c);
     }
 
-    auto faceColor = [](const gp_Dir& n) -> ImU32 {
-        if (n.Z() > 0.5)  return IM_COL32(180, 195, 210, 255);
-        if (n.Z() < -0.5) return IM_COL32(120, 130, 145, 255);
-        if (n.Y() < -0.5) return IM_COL32(160, 175, 195, 255);
-        if (n.Y() > 0.5)  return IM_COL32(140, 155, 175, 255);
-        if (n.X() > 0.5)  return IM_COL32(150, 165, 185, 255);
-        return IM_COL32(130, 145, 165, 255);
+    auto faceColor = [&](const gp_Dir& n) -> ImU32 {
+        if (n.Z() > 0.5)  return myTheme.cubeFaceTop;
+        if (n.Z() < -0.5) return myTheme.cubeFaceBottom;
+        if (n.Y() < -0.5) return myTheme.cubeFaceFront;
+        if (n.Y() > 0.5)  return myTheme.cubeFaceBack;
+        if (n.X() > 0.5)  return myTheme.cubeFaceRight;
+        return myTheme.cubeFaceLeft;
     };
 
     ImVec2 mouse = io.MousePos;
@@ -3106,9 +3170,9 @@ void Application::DrawViewCube() {
         }
     }
 
-    const ImU32 accentHover    = IM_COL32( 51, 140, 242, 200);
-    const ImU32 faceHoverColor = IM_COL32( 51, 140, 242, 120);
-    const ImU32 outlineColor   = IM_COL32( 30,  35,  45, 255);
+    const ImU32 accentHover    = myTheme.cubeHover;
+    const ImU32 faceHoverColor = myTheme.cubeFaceHover;
+    const ImU32 outlineColor   = myTheme.cubeOutline;
 
     for (int k = 0; k < (int)vis.size(); k++) {
         auto& v = vis[k];
@@ -3232,7 +3296,7 @@ void Application::DrawViewCube() {
 
                     draw->AddImageQuad(atlasTex, s00, s10, s11, s01,
                                        uv00, uv10, uv11, uv01,
-                                       IM_COL32(35, 45, 65, 255));
+                                       myTheme.cubeText);
                 }
                 cursorPx += advPx;
             }
@@ -3380,7 +3444,7 @@ void Application::DrawViewCube() {
             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(gap, 0));
-        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(60, 70, 90, 220));
+        ImGui::PushStyleColor(ImGuiCol_Button, myTheme.homeBtnBg);
         if (ImGui::Button("<<", ImVec2(btnW, btnH))) {
             rollCameraAnim( 90.0);
         }
@@ -5158,7 +5222,7 @@ void Application::DrawHomeScreen() {
 
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - 76.0f));  // -76 = таб 52 + статус 24
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(22, 24, 30, 255));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, myTheme.bgContent);
     ImGui::Begin("##home_bg", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
@@ -5173,10 +5237,12 @@ void Application::DrawHomeScreen() {
     // ===== ТИТУЛЬНАЯ ПОЛОСА (32 px) =====
     ImGui::GetWindowDrawList()->AddRectFilled(
         ImVec2(0, 0), ImVec2(io.DisplaySize.x, titleH),
-        IM_COL32(28, 32, 40, 255));
+        myTheme.bgTitle);
 
     ImGui::SetCursorPos(ImVec2(pad, 8));
-    ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "BreezeCAD");
+    ImGui::PushStyleColor(ImGuiCol_Text, myTheme.textMain);
+    ImGui::TextUnformatted("BreezeCAD");
+    ImGui::PopStyleColor();
 
     {
         char telBuf[128];
@@ -5190,12 +5256,12 @@ void Application::DrawHomeScreen() {
 
     ImGui::GetWindowDrawList()->AddLine(
         ImVec2(0, titleH), ImVec2(io.DisplaySize.x, titleH),
-        IM_COL32(60, 68, 82, 255), 1.0f);
+        myTheme.border, 1.0f);
 
     // ===== ТОП-ПОЛОСА (76 px): Деталь / Сборка / Открыть =====
     ImGui::GetWindowDrawList()->AddRectFilled(
         ImVec2(0, titleH), ImVec2(io.DisplaySize.x, topH),
-        IM_COL32(34, 38, 48, 255));
+        myTheme.bgRibbon);
 
     const float hbtnW   = 88.0f;
     const float hbtnH   = 74.0f;
@@ -5207,9 +5273,9 @@ void Application::DrawHomeScreen() {
     for (int bi = 0; bi < 3; bi++) {
         ImGui::PushID(1000 + bi);
         ImGui::SetCursorPos(ImVec2(hbx, hbtnY));
-        ImGui::PushStyleColor(ImGuiCol_Button,        IM_COL32(50, 58, 72, 255));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(60, 72, 92, 255));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  IM_COL32(51, 140, 242, 255));
+        ImGui::PushStyleColor(ImGuiCol_Button,        myTheme.homeBtnBg);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, myTheme.homeBtnBgHover);
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  myTheme.accent);
         bool hbPressed = ImGui::Button("##hbtn", ImVec2(hbtnW, hbtnH));
         ImGui::PopStyleColor(3);
 
@@ -5226,7 +5292,7 @@ void Application::DrawHomeScreen() {
         float lx = bmin.x + (hbtnW - lsz.x) * 0.5f;
         float ly = bmin.y + hbtnH - lsz.y - 8.0f;
         ImGui::GetWindowDrawList()->AddText(
-            ImVec2(lx, ly), IM_COL32(220, 230, 245, 255), hbtnLabels[bi]);
+            ImVec2(lx, ly), myTheme.homeBtnLabel, hbtnLabels[bi]);
 
         if (hbPressed) {
             if (bi == 0)      CreateNewDoc();
@@ -5255,7 +5321,7 @@ void Application::DrawHomeScreen() {
         ImVec2 base = ImGui::GetCursorScreenPos();
         ImVec2 tsz = font->CalcTextSizeA(bigSize, FLT_MAX, 0.0f, nm);
         ImVec2 pos(base.x + (leftW - tsz.x) * 0.5f, base.y + 22.0f);
-        ImU32 colText = IM_COL32(232, 238, 248, 255);
+        ImU32 colText = myTheme.textMain;
         // Псевдо-жирный: дважды с 0.6 px
         ImGui::GetWindowDrawList()->AddText(font, bigSize, pos, colText, nm);
         ImGui::GetWindowDrawList()->AddText(font, bigSize, ImVec2(pos.x + 0.6f, pos.y), colText, nm);
@@ -5282,14 +5348,14 @@ void Application::DrawHomeScreen() {
         bool hovered = ImGui::IsItemHovered();
         ImGui::PopID();
         ImU32 bg;
-        if (disabled)      bg = IM_COL32(40, 45, 55, 180);
-        else if (clicked)  bg = IM_COL32(51, 140, 242, 255);
-        else if (hovered)  bg = IM_COL32(60, 72, 92, 255);
-        else               bg = IM_COL32(50, 58, 72, 255);
+        if (disabled)      bg = myTheme.homeBtnBgDisabled;
+        else if (clicked)  bg = myTheme.accent;
+        else if (hovered)  bg = myTheme.homeBtnBgHover;
+        else               bg = myTheme.homeBtnBg;
         ImDrawList* dl = ImGui::GetWindowDrawList();
         dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), bg, 4.0f);
         ImVec2 tsz = ImGui::CalcTextSize(label);
-        ImU32 tcol = disabled ? IM_COL32(120, 130, 150, 200) : IM_COL32(220, 230, 245, 255);
+        ImU32 tcol = disabled ? myTheme.homeBtnTextDisabled : myTheme.homeBtnLabel;
         dl->AddText(ImVec2(p.x + (w - tsz.x) * 0.5f, p.y + (h - tsz.y) * 0.5f), tcol, label);
         return clicked && !disabled;
     };
@@ -5365,7 +5431,9 @@ void Application::DrawHomeScreen() {
         const char* h = "Последние документы";
         ImVec2 hs = ImGui::CalcTextSize(h);
         ImGui::SetCursorPos(ImVec2((rightW - hs.x) * 0.5f, 20.0f));
-        ImGui::TextColored(ImVec4(0.85f, 0.9f, 1.0f, 1.0f), "%s", h);
+        ImGui::PushStyleColor(ImGuiCol_Text, myTheme.textMain);
+        ImGui::TextUnformatted(h);
+        ImGui::PopStyleColor();
     }
 
     // Тумблер Плитки/Список + Поиск
@@ -5449,8 +5517,8 @@ void Application::DrawHomeScreen() {
             any = true;
             ImGui::PushID(i);
             ImGui::SetCursorPos(ImVec2(x, y));
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(32, 36, 46, 255));
-            ImGui::PushStyleColor(ImGuiCol_Border,  IM_COL32(60, 70, 90, 255));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, myTheme.bgCardBg);
+            ImGui::PushStyleColor(ImGuiCol_Border,  myTheme.borderStrong);
             ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
             ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
             ImGui::BeginChild(("##tile_" + std::to_string(i)).c_str(),
@@ -5486,12 +5554,12 @@ void Application::DrawHomeScreen() {
             if (!thumbLoaded) {
                 ImGui::GetWindowDrawList()->AddRectFilled(thumbPos,
                     ImVec2(thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y),
-                    IM_COL32(24, 28, 36, 255), 6.0f);
+                    myTheme.thumbBg, 6.0f);
                 ImVec2 ts = ImGui::CalcTextSize("[ 3D ]");
                 ImGui::GetWindowDrawList()->AddText(
                     ImVec2(thumbPos.x + (thumbSize.x - ts.x) * 0.5f,
                            thumbPos.y + (thumbSize.y - ts.y) * 0.5f),
-                    IM_COL32(120, 130, 150, 120), "[ 3D ]");
+                    myTheme.textDim, "[ 3D ]");
             }
             ImGui::SetCursorPosY(132);
             ImGui::Text("%s", myProjectNames[i].c_str());
