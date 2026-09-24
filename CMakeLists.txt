@@ -56,6 +56,10 @@ add_executable(breezecad
     src/ui/theme/ThemePresets.cpp
     src/ui/theme/ThemeManager.cpp
     src/ui/theme/Fonts.cpp
+    src/ui/widgets/IconTint.cpp
+    src/ui/widgets/SvgButton.cpp
+    src/ui/widgets/Tooltip.cpp
+    src/ui/widgets/SelectionRect.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp
