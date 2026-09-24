@@ -76,9 +76,9 @@ static void TRACE(const char* msg) {
 
 // Вспомогательная: получить tint-цвет иконки по текущей теме
 static ImVec4 IconTintColor(bool enabled) {
-    bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
-    ImVec4 tint = isLight ? ImVec4(0.176f, 0.196f, 0.227f, 1.0f)   // #2d323a
-                          : ImVec4(0.92f, 0.94f, 0.97f, 1.0f);
+    // Tint иконок = цвет текста темы. В светлой теме — чёрный,
+    // в тёмной — светлый. Единообразно, без хардкода.
+    ImVec4 tint = ImGui::GetStyleColorVec4(ImGuiCol_Text);
     if (!enabled) tint.w *= 0.45f;
     return tint;
 }
@@ -1120,10 +1120,8 @@ bool Application::DrawLabelTree(const TDF_Label& label,
     }
 
     if (isSystem) {
-        // Системные элементы — приглушённый цвет темы
-        ImVec4 txt = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-        txt.w *= 0.65f;  // чуть прозрачнее
-        ImGui::PushStyleColor(ImGuiCol_Text, txt);
+        // Системные элементы — цвет текста темы без изменений
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_Text));
     }
     bool opened = ImGui::TreeNodeEx(labelName.c_str(), flags);
     if (isSystem) ImGui::PopStyleColor();
@@ -1637,7 +1635,7 @@ int Application::RibbonButton(const char* id, const char* const* opts,
         float maxTextW = w - 4.0f;
         ImFont* font = ImGui::GetFont();
         float baseSize = ImGui::GetFontSize();
-        ImU32 txtCol = ImGui::GetColorU32(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+        ImU32 txtCol = ImGui::GetColorU32(tint);  // тот же цвет, что иконка
 
         float textTop    = min.y + o + iconSize + o;
         float textBottom = min.y + h - o;
@@ -1831,29 +1829,29 @@ void Application::DrawRibbonSketchTab() {
     // Уплотняем вертикальный отступ между двумя рядами
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, 0.0f));
     // Ряд 1
-    RibbonButton("con_coincident",  pointOpt, 1, dummy, ICON_COINCIDENT,    true, false, "Совпадение");
+    RibbonButton("con_coincident",  pointOpt, 1, dummy, ICON_COINCIDENT,    inSketch, false, "Совпадение");
     ImGui::SameLine();
-    RibbonButton("con_parallel",    pointOpt, 1, dummy, ICON_PARALLEL,      true, false, "Параллельность");
+    RibbonButton("con_parallel",    pointOpt, 1, dummy, ICON_PARALLEL,      inSketch, false, "Параллельность");
     ImGui::SameLine();
-    RibbonButton("con_perp",        pointOpt, 1, dummy, ICON_PERPENDICULAR, true, false, "Перпендикулярность");
+    RibbonButton("con_perp",        pointOpt, 1, dummy, ICON_PERPENDICULAR, inSketch, false, "Перпендикулярность");
     ImGui::SameLine();
-    RibbonButton("con_horiz",       pointOpt, 1, dummy, ICON_HORIZONTAL,    true, false, "Горизонталь");
+    RibbonButton("con_horiz",       pointOpt, 1, dummy, ICON_HORIZONTAL,    inSketch, false, "Горизонталь");
     ImGui::SameLine();
-    RibbonButton("con_vert",        pointOpt, 1, dummy, ICON_VERTICAL,      true, false, "Вертикаль");
+    RibbonButton("con_vert",        pointOpt, 1, dummy, ICON_VERTICAL,      inSketch, false, "Вертикаль");
     ImGui::SameLine();
-    RibbonButton("con_tangent",     pointOpt, 1, dummy, ICON_TANGENT,       true, false, "Касание");
+    RibbonButton("con_tangent",     pointOpt, 1, dummy, ICON_TANGENT,       inSketch, false, "Касание");
     // Ряд 2 (начинается с новой строки автоматически)
-    RibbonButton("con_concentric",  pointOpt, 1, dummy, ICON_CONCENTRIC,    true, false, "Концентричность");
+    RibbonButton("con_concentric",  pointOpt, 1, dummy, ICON_CONCENTRIC,    inSketch, false, "Концентричность");
     ImGui::SameLine();
-    RibbonButton("con_equal",       pointOpt, 1, dummy, ICON_EQUAL,         true, false, "Равенство");
+    RibbonButton("con_equal",       pointOpt, 1, dummy, ICON_EQUAL,         inSketch, false, "Равенство");
     ImGui::SameLine();
-    RibbonButton("con_collinear",   pointOpt, 1, dummy, ICON_COLLINEAR,     true, false, "Коллинеарность");
+    RibbonButton("con_collinear",   pointOpt, 1, dummy, ICON_COLLINEAR,     inSketch, false, "Коллинеарность");
     ImGui::SameLine();
-    RibbonButton("con_fix",         pointOpt, 1, dummy, ICON_FIX,           true, false, "Фиксация");
+    RibbonButton("con_fix",         pointOpt, 1, dummy, ICON_FIX,           inSketch, false, "Фиксация");
     ImGui::SameLine();
-    RibbonButton("con_symmetric",   pointOpt, 1, dummy, ICON_SYMMETRIC,     true, false, "Симметрия");
+    RibbonButton("con_symmetric",   pointOpt, 1, dummy, ICON_SYMMETRIC,     inSketch, false, "Симметрия");
     ImGui::SameLine();
-    RibbonButton("con_smooth",      pointOpt, 1, dummy, ICON_SMOOTH_G2,     true, false, "Сглаживание G2");
+    RibbonButton("con_smooth",      pointOpt, 1, dummy, ICON_SMOOTH_G2,     inSketch, false, "Сглаживание G2");
     ImGui::PopStyleVar();
     RibbonGroupEnd(Tr("grp.constrain").c_str());
 
@@ -2377,9 +2375,7 @@ void Application::DrawDocumentTree() {
             //  - пользователь развернул его вручную
             bool startOpen = !hasOps || myStartExpandedManually;
 
-            ImVec4 startTxt = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-            startTxt.w *= 0.65f;
-            ImGui::PushStyleColor(ImGuiCol_Text, startTxt);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_Text));
             ImGui::SetNextItemOpen(startOpen, ImGuiCond_Always);
             bool opened = ImGui::TreeNodeEx("Start",
                 ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth);
@@ -5073,7 +5069,7 @@ void Application::DrawRightPanel() {
         hdl->AddImage((ImTextureID)(intptr_t)hTex, ip,
                       ImVec2(ip.x + 20, ip.y + 20),
                       ImVec2(0, 0), ImVec2(1, 1),
-                      IM_COL32(255, 255, 255, 255));
+                      ImGui::GetColorU32(IconTintColor(true)));
     }
 
     if (hClicked) {
@@ -5286,7 +5282,9 @@ void Application::DrawHomeScreen() {
             float iy = bmin.y + 12.0f;
             ImGui::GetWindowDrawList()->AddImage(
                 (ImTextureID)(intptr_t)icoTex,
-                ImVec2(ix, iy), ImVec2(ix + 32, iy + 32));
+                ImVec2(ix, iy), ImVec2(ix + 32, iy + 32),
+                ImVec2(0, 0), ImVec2(1, 1),
+                ImGui::GetColorU32(IconTintColor(true)));
         }
         ImVec2 lsz = ImGui::CalcTextSize(hbtnLabels[bi]);
         float lx = bmin.x + (hbtnW - lsz.x) * 0.5f;
@@ -5459,7 +5457,9 @@ void Application::DrawHomeScreen() {
                 ImGui::GetWindowDrawList()->AddImage(
                     (ImTextureID)(intptr_t)ico,
                     ImVec2(mn.x + (tgW - 18) * 0.5f, mn.y + (tgH - 18) * 0.5f),
-                    ImVec2(mn.x + (tgW + 18) * 0.5f, mn.y + (tgH + 18) * 0.5f));
+                    ImVec2(mn.x + (tgW + 18) * 0.5f, mn.y + (tgH + 18) * 0.5f),
+                    ImVec2(0, 0), ImVec2(1, 1),
+                    ImGui::GetColorU32(IconTintColor(true)));
             }
         }
         ImGui::PopID();
@@ -5479,7 +5479,9 @@ void Application::DrawHomeScreen() {
                 ImGui::GetWindowDrawList()->AddImage(
                     (ImTextureID)(intptr_t)ico,
                     ImVec2(mn.x + (tgW - 18) * 0.5f, mn.y + (tgH - 18) * 0.5f),
-                    ImVec2(mn.x + (tgW + 18) * 0.5f, mn.y + (tgH + 18) * 0.5f));
+                    ImVec2(mn.x + (tgW + 18) * 0.5f, mn.y + (tgH + 18) * 0.5f),
+                    ImVec2(0, 0), ImVec2(1, 1),
+                    ImGui::GetColorU32(IconTintColor(true)));
             }
         }
         ImGui::PopID();
