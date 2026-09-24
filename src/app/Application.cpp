@@ -4117,20 +4117,21 @@ void Application::DrawProjectTabs() {
 
     // === Вкладка "Главная" ===
     {
-        bool isHome = (myActiveDocIndex < 0);
-        if (isHome) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.55f, 0.95f, 1.0f));
-        if (SvgIconBtn(myIcons, "tab_home", "house", 14, 120, 30, "Главная")) {
-            myActiveDocIndex = -1;
-            myDocument = nullptr;
-            myActiveSketchLabel = TDF_Label();
-            myHasSketchStart = false;
-            if (myOcctView) {
-                myOcctView->ClearAllShapes();
-                myOcctView->ClearGrid();
-                myOcctView->ExitSketchMode();
-            }
+        const bool onHome = myShowHomeScreen;
+        if (onHome) {
+            // На home — серая и некликабельная
+            ImGui::BeginDisabled();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.55f, 0.95f, 1.0f));
         }
-        if (isHome) ImGui::PopStyleColor();
+        if (SvgIconBtn(myIcons, "tab_home", "house", 14, 120, 30, "На главную")) {
+            // Возврат на стартовую страницу. Активный документ НЕ сбрасываем —
+            // он остаётся в таб-баре, к нему можно вернуться кликом на его вкладку.
+            myShowHomeScreen = true;
+        }
+        if (onHome) {
+            ImGui::PopStyleColor();
+            ImGui::EndDisabled();
+        }
     }
 
     // === Вкладки проектов ===
@@ -4854,8 +4855,6 @@ void Application::Run() {
             DrawTreeSplitter();
             DrawAddBoxDialog();
             DrawPreviewInfo();
-            DrawProjectTabs();
-            DrawStatusBar();
             DrawViewCube();
             DrawDependencyDialog();
             DrawRenameDialog();
@@ -4867,6 +4866,8 @@ void Application::Run() {
             DrawRightPanel();
         }
         DrawHomeScreen();
+        DrawProjectTabs();
+        DrawStatusBar();
         DrawSettingsDialog();
 
         // === Модалка «Не разработано» ===
@@ -5156,7 +5157,7 @@ void Application::DrawHomeScreen() {
     ImGuiIO& io = ImGui::GetIO();
 
     ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(io.DisplaySize);
+    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - 76.0f));  // -76 = таб 52 + статус 24
     ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(22, 24, 30, 255));
     ImGui::Begin("##home_bg", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
@@ -5241,10 +5242,10 @@ void Application::DrawHomeScreen() {
         IM_COL32(60, 68, 82, 255), 1.0f);
     // ЛЕВАЯ КОЛОНКА
     ImGui::SetCursorPos(ImVec2(0, topH));
-    ImGui::BeginChild("##home_left", ImVec2(leftW, io.DisplaySize.y - topH),
+    ImGui::BeginChild("##home_left", ImVec2(leftW, io.DisplaySize.y - topH - 76.0f),
                       false, ImGuiWindowFlags_NoScrollbar);
 
-    const float colH = io.DisplaySize.y - topH;
+    const float colH = io.DisplaySize.y - topH - 76.0f;
 
     // ===== Название BreezeCAD (крупно, полужирно) =====
     {
@@ -5356,7 +5357,7 @@ void Application::DrawHomeScreen() {
     const float contentY = topH;
 
     ImGui::SetCursorPos(ImVec2(rightX, contentY));
-    ImGui::BeginChild("##home_right", ImVec2(rightW, io.DisplaySize.y - topH),
+    ImGui::BeginChild("##home_right", ImVec2(rightW, io.DisplaySize.y - topH - 76.0f),
                       false, ImGuiWindowFlags_NoScrollbar);
 
     // Заголовок по центру
@@ -5425,7 +5426,7 @@ void Application::DrawHomeScreen() {
 
     // Контент
     const float listY = 110.0f;
-    const float listH = io.DisplaySize.y - topH - listY - 16.0f;
+    const float listH = io.DisplaySize.y - topH - 76.0f - listY - 16.0f;
     ImGui::SetCursorPos(ImVec2(pad, listY));
     ImGui::BeginChild("##home_content", ImVec2(rightW - pad * 2, listH), false,
                       ImGuiWindowFlags_NoScrollbar);
