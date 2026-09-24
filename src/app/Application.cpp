@@ -3132,18 +3132,112 @@ void Application::DrawViewCube() {
     }
 
     ImFont* font = ImGui::GetFont();
-    float fontSize = ImGui::GetFontSize() * 0.82f;
+    // ===== Подписи: каждая буква натягивается на грань через AddImageQuad,
+    //       UV из атласа шрифта. Буквы перекашиваются перспективой грани. =====
+    ImTextureID atlasTex = io.Fonts->TexID;
+
+    static const double faceTextRight[6][3] = {
+        { 1, 0, 0},  // ВЕРХ
+        {-1, 0, 0},  // НИЗ
+        { 1, 0, 0},  // ПЕРЕД
+        {-1, 0, 0},  // ЗАД
+        { 0, 1, 0},  // ПРАВО
+        { 0,-1, 0},  // ЛЕВО
+    };
+    static const double faceTextDown[6][3] = {
+        { 0,-1, 0},  // ВЕРХ
+        { 0,-1, 0},  // НИЗ
+        { 0, 0,-1},  // ПЕРЕД
+        { 0, 0,-1},  // ЗАД
+        { 0, 0,-1},  // ПРАВО
+        { 0, 0,-1},  // ЛЕВО
+    };
+
     for (auto& v : vis) {
-        ImVec2 c2(0, 0);
-        for (int k = 0; k < 4; k++) { c2.x += v.pts[k].x; c2.y += v.pts[k].y; }
-        c2.x *= 0.25f; c2.y *= 0.25f;
-        const float pull = 1.18f;
-        c2.x = center.x + (c2.x - center.x) * pull;
-        c2.y = center.y + (c2.y - center.y) * pull;
-        ImVec2 ts = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, faces[v.idx].label);
-        draw->AddText(font, fontSize,
-                      ImVec2(c2.x - ts.x * 0.5f, c2.y - ts.y * 0.5f),
-                      IM_COL32(25, 30, 40, 255), faces[v.idx].label);
+        const auto& fc = faces[v.idx];
+        int fi = v.idx;
+
+        double cx3 = (C[fc.v[0]].X() + C[fc.v[1]].X() + C[fc.v[2]].X() + C[fc.v[3]].X()) * 0.25;
+        double cy3 = (C[fc.v[0]].Y() + C[fc.v[1]].Y() + C[fc.v[2]].Y() + C[fc.v[3]].Y()) * 0.25;
+        double cz3 = (C[fc.v[0]].Z() + C[fc.v[1]].Z() + C[fc.v[2]].Z() + C[fc.v[3]].Z()) * 0.25;
+
+        float dxU = v.pts[1].x - v.pts[0].x;
+        float dyU = v.pts[1].y - v.pts[0].y;
+        float edgeU = std::sqrt(dxU*dxU + dyU*dyU);
+        float dxV = v.pts[3].x - v.pts[0].x;
+        float dyV = v.pts[3].y - v.pts[0].y;
+        float edgeV = std::sqrt(dxV*dxV + dyV*dyV);
+        if (edgeU < 6.0f || edgeV < 6.0f) continue;
+
+        float fSize = edgeV * 0.30f;
+        if (fSize < 8.0f)  fSize = 8.0f;
+        if (fSize > 24.0f) fSize = 24.0f;
+
+        const char* s = fc.label;
+        const char* s_end = s + std::strlen(s);
+        float totalPx = font->CalcTextSizeA(fSize, FLT_MAX, 0.0f, s).x;
+        if (totalPx < 1.0f) continue;
+
+        float k_u = 1.0f / edgeU;
+        float k_v = 1.0f / edgeV;
+        float uStart = 0.5f - (totalPx * k_u) * 0.5f;
+        float cursorPx = 0.0f;
+
+        const double* r3 = faceTextRight[fi];
+        const double* d3 = faceTextDown[fi];
+
+        auto p3d = [&](float tu, float tv) -> gp_Pnt {
+            double ox = (tu - 0.5) * 2.0;
+            double oy = (tv - 0.5) * 2.0;
+            return gp_Pnt(cx3 + ox * r3[0] + oy * d3[0],
+                          cy3 + ox * r3[1] + oy * d3[1],
+                          cz3 + ox * r3[2] + oy * d3[2]);
+        };
+
+        while (s < s_end) {
+            unsigned char c0 = (unsigned char)s[0];
+            int charLen = 1;
+            unsigned int cp = c0;
+            if      (c0 < 0x80)                       charLen = 1;
+            else if ((c0 & 0xE0) == 0xC0 && s+1 < s_end) { cp = ((c0 & 0x1F) << 6) | ((unsigned char)s[1] & 0x3F); charLen = 2; }
+            else if ((c0 & 0xF0) == 0xE0 && s+2 < s_end) { cp = ((c0 & 0x0F) << 12) | (((unsigned char)s[1] & 0x3F) << 6) | ((unsigned char)s[2] & 0x3F); charLen = 3; }
+            else if ((c0 & 0xF8) == 0xF0 && s+3 < s_end) { cp = ((c0 & 0x07) << 18) | (((unsigned char)s[1] & 0x3F) << 12) | (((unsigned char)s[2] & 0x3F) << 6) | ((unsigned char)s[3] & 0x3F); charLen = 4; }
+
+            const ImFontGlyph* g = font->FindGlyph((ImWchar)cp);
+            if (g) {
+                float scale = fSize / font->FontSize;
+                float advPx = g->AdvanceX * scale;
+                float u0 = uStart + cursorPx * k_u;
+                float u1 = u0 + advPx * k_u;
+
+                float yc = (g->Y0 + g->Y1) * 0.5f;
+                float vTop = 0.5f + (g->Y0 - yc) * scale * k_v;
+                float vBot = 0.5f + (g->Y1 - yc) * scale * k_v;
+
+                if (g->X1 > g->X0 && g->Y1 > g->Y0 && advPx > 0.01f) {
+                    gp_Pnt q00 = p3d(u0, vTop);
+                    gp_Pnt q10 = p3d(u1, vTop);
+                    gp_Pnt q11 = p3d(u1, vBot);
+                    gp_Pnt q01 = p3d(u0, vBot);
+
+                    ImVec2 s00 = project(q00);
+                    ImVec2 s10 = project(q10);
+                    ImVec2 s11 = project(q11);
+                    ImVec2 s01 = project(q01);
+
+                    ImVec2 uv00(g->U0, g->V0);
+                    ImVec2 uv10(g->U1, g->V0);
+                    ImVec2 uv11(g->U1, g->V1);
+                    ImVec2 uv01(g->U0, g->V1);
+
+                    draw->AddImageQuad(atlasTex, s00, s10, s11, s01,
+                                       uv00, uv10, uv11, uv01,
+                                       IM_COL32(35, 45, 65, 255));
+                }
+                cursorPx += advPx;
+            }
+            s += charLen;
+        }
     }
 
     if (hoveredCorner >= 0 || hoveredEdge >= 0 || hoveredFace >= 0) {
