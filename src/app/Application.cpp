@@ -6,7 +6,8 @@
 #include "ui/theme/ThemePresets.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/widgets/IconTint.h"
-#include "ui/widgets/SvgButton.h"         // UI::Widgets::SvgIconBtn / QatIconButton
+#include "ui/widgets/SvgButton.h"
+#include "ui/widgets/Tooltip.h"            // UI::Widgets::TooltipState
 #include "ui/theme/Fonts.h"
 
 #include "imgui.h"
@@ -711,7 +712,7 @@ void Application::DrawQuickAccessToolbar() {
         CaptureCurrentThumbnail();
         myShowHomeScreen = true;
     }
-    DrawAdvancedTooltip("qat.doc",
+    myTooltipState.Draw("qat.doc",
                         "Документ",
                         "Backstage — все операции с файлами",
                         "Открывает экран Backstage: создание, открытие, сохранение, "
@@ -721,7 +722,7 @@ void Application::DrawQuickAccessToolbar() {
 
     // === 3. Сохранить ===
     if (UI::Widgets::QatIconButton(myIcons, "qat_save", "save", 20, "Сохранить (Ctrl+S)")) OnSave();
-    DrawAdvancedTooltip("qat.save",
+    myTooltipState.Draw("qat.save",
                         "Сохранить (Ctrl+S)",
                         "Сохранить текущий проект в файл",
                         "Записывает все изменения текущего проекта в файл .cbf. "
@@ -748,7 +749,7 @@ void Application::DrawQuickAccessToolbar() {
     if (UI::Widgets::QatIconButton(myIcons, "qat_modules", "puzzle", 20, "Модули")) {
         // TODO: диалог управления модулями
     }
-    DrawAdvancedTooltip("qat.modules",
+    myTooltipState.Draw("qat.modules",
                         "Модули",
                         "Установка и удаление модулей BreezeCAD",
                         "Управление модулями: Сборка, Черчение, Стандартные изделия, "
@@ -2477,69 +2478,6 @@ void Application::DrawStatusBar() {
     ImGui::PopStyleVar(2);
 }
 
-void Application::DrawAdvancedTooltip(const std::string& id,
-                                       const std::string& name,
-                                       const std::string& shortDesc,
-                                       const std::string& longDesc,
-                                       const std::string& imagePath) {
-    // Вызывается сразу после кнопки. Проверяем — наведена ли она.
-    if (!ImGui::IsItemHovered()) {
-        // Если это тот же элемент, что сейчас в hover — сбрасываем
-        if (myHoveredItemId == id) {
-            myHoveredItemId.clear();
-            myHoverStartTime = 0.0;
-            myLastTooltipLevel = 0;
-        }
-        return;
-    }
-
-    // Только что навели на новый элемент
-    if (myHoveredItemId != id) {
-        myHoveredItemId = id;
-        myHoverStartTime = ImGui::GetTime();
-        myLastTooltipLevel = 0;
-    }
-
-    double elapsed = ImGui::GetTime() - myHoverStartTime;
-
-    int level = 0;
-    if (elapsed >= 3.0)      level = 3;
-    else if (elapsed >= 1.5) level = 2;
-    else if (elapsed >= 0.5) level = 1;
-    else                     return;  // ещё рано
-
-    if (level == 0) return;
-
-    // Рисуем tooltip
-    ImGui::BeginTooltip();
-    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
-
-    // Уровень 1: название
-    ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "%s", name.c_str());
-
-    // Уровень 2: краткое описание
-    if (level >= 2 && !shortDesc.empty()) {
-        ImGui::Separator();
-        ImGui::TextUnformatted(shortDesc.c_str());
-    }
-
-    // Уровень 3: подробное описание + картинка
-    if (level >= 3) {
-        if (!longDesc.empty()) {
-            ImGui::Separator();
-            ImGui::TextWrapped("%s", longDesc.c_str());
-        }
-        if (!imagePath.empty()) {
-            ImGui::Separator();
-            ImGui::TextDisabled("(картинка: %s)", imagePath.c_str());
-            // TODO: загрузка PNG через imgui — следующая итерация
-        }
-    }
-
-    ImGui::PopTextWrapPos();
-    ImGui::EndTooltip();
-}
-
 void Application::RequestDelete(const TDF_Label& label) {
     if (label.IsNull()) return;
 
@@ -4049,7 +3987,7 @@ void Application::DrawRightPanel() {
     if (UI::Widgets::SvgIconBtn(myIcons, "panel_pan", "hand", 20, toolW, toolH, "Панорамировать")) {
         // TODO: активировать режим панорамирования
     }
-    DrawAdvancedTooltip("panel.pan", "Панорамировать",
+    myTooltipState.Draw("panel.pan", "Панорамировать",
         "Сдвинуть вид мышью",
         "Активирует инструмент панорамирования. После активации зажмите ЛКМ "
         "в 3D-сцене и перемещайте мышь, чтобы сдвинуть вид.");
@@ -4060,7 +3998,7 @@ void Application::DrawRightPanel() {
     if (UI::Widgets::SvgIconBtn(myIcons, "panel_zoom", "search", 20, toolW, toolH, "Показать рамкой")) {
         // TODO: активировать режим "показать рамкой"
     }
-    DrawAdvancedTooltip("panel.zoom", "Показать рамкой",
+    myTooltipState.Draw("panel.zoom", "Показать рамкой",
         "Зуммирование выделенной области",
         "Основное действие — приблизить область, выделенную рамкой. "
         "Стрелка вниз открывает дополнительные режимы зуммирования.");
@@ -4093,7 +4031,7 @@ void Application::DrawRightPanel() {
     if (UI::Widgets::SvgIconBtn(myIcons, "panel_orbit", "rotate-cw", 20, toolW, toolH, "Орбита")) {
         // TODO: активировать орбиту
     }
-    DrawAdvancedTooltip("panel.orbit", "Свободная орбита",
+    myTooltipState.Draw("panel.orbit", "Свободная орбита",
         "Вращение модели вокруг центра",
         "Основное действие — свободное вращение вида. Стрелка вниз открывает "
         "различные режимы вращения (с зависимостями, поворот под углом).");
@@ -4118,7 +4056,7 @@ void Application::DrawRightPanel() {
     if (UI::Widgets::SvgIconBtn(myIcons, "panel_viewon", "eye", 20, toolW, toolH, "Вид на объект")) {
         // TODO: активировать режим "вид на грань"
     }
-    DrawAdvancedTooltip("panel.viewon", "Вид на объект",
+    myTooltipState.Draw("panel.viewon", "Вид на объект",
         "Ориентировать вид по выбранной грани",
         "После активации кликните по любой грани модели — камера развернётся "
         "так, чтобы вы смотрели на эту грань перпендикулярно.");
@@ -4129,7 +4067,7 @@ void Application::DrawRightPanel() {
     if (UI::Widgets::SvgIconBtn(myIcons, "panel_style", "palette", 20, toolW, toolH, "Стиль отображения")) {
         // TODO: циклить стиль
     }
-    DrawAdvancedTooltip("panel.style", "Стили отображения",
+    myTooltipState.Draw("panel.style", "Стили отображения",
         "Тонированный, каркасный и другие режимы",
         "Основное действие — переключение стиля отображения модели. "
         "Стрелка вниз открывает полный список стилей.");

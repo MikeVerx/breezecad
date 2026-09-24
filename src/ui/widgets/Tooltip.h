@@ -15,12 +15,14 @@ public:
     TooltipState()  = default;
     ~TooltipState() = default;
 
-    // TODO(step 3.4):
-    //   void Draw(const std::string& id,
-    //             const std::string& name,
-    //             const std::string& shortDesc,
-    //             const std::string& longDesc,
-    //             const std::string& imagePath = "");
+    /// Нарисовать tooltip (3 уровня: 0.5 / 1.5 / 3.0 сек).
+    /// Вызывается СРАЗУ после отрисовки виджета — проверяет
+    /// ImGui::IsItemHovered() текущего item.
+    void Draw(const std::string& id,
+              const std::string& name,
+              const std::string& shortDesc,
+              const std::string& longDesc,
+              const std::string& imagePath = "");
 
 private:
     std::string myHoveredItemId;

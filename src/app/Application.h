@@ -5,7 +5,8 @@
 #include "doc/BreezeDocument.h"
 #include "app/IconManager.h"
 #include "ui/viewcube/ViewCubeOverlay.h"
-#include "ui/theme/ThemeTokens.h"          // struct ThemeTokens   // ViewCubeOverlay + Animator
+#include "ui/theme/ThemeTokens.h"
+#include "ui/widgets/Tooltip.h"           // UI::Widgets::TooltipState
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -34,6 +35,7 @@ private:
     std::unique_ptr<GlfwWindow>   myWindow;
     std::unique_ptr<OcctView>     myOcctView;
     UI::ViewCube::ViewCubeOverlay myViewCube;
+    UI::Widgets::TooltipState     myTooltipState;
     IconManager                   myIcons;
     // === Диалог зависимостей ===
     bool myDependencyDialogOpen = false;
@@ -98,10 +100,6 @@ private:
     TDF_Label myPendingPropertiesLabel;
     bool      myShowPropertiesDialog = false;
 
-    // === Tooltips (3 уровня задержки) ===
-    std::string myHoveredItemId;
-    double      myHoverStartTime = 0.0;
-    int         myLastTooltipLevel = 0;  // 0=нет, 1=название, 2=краткое, 3=подробное+картинка
 
     // === Splitter (регулировка ширины дерева) ===
     float myTreeWidth = 340.0f;      // текущая ширина
@@ -213,11 +211,6 @@ private:
     void DrawUnsavedChangesDialog();
     void DrawPropertiesDialog();
     void RequestDelete(const TDF_Label& label);
-    void DrawAdvancedTooltip(const std::string& id,
-                             const std::string& name,
-                             const std::string& shortDesc,
-                             const std::string& longDesc,
-                             const std::string& imagePath = "");
     void DrawAddBoxDialog();
     void DrawMenuBar();
     void DrawSketchOverlay();
