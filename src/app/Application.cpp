@@ -5,7 +5,8 @@
 #include "platform/FileDialog.h"
 #include "ui/theme/ThemePresets.h"
 #include "ui/theme/ThemeManager.h"
-#include "ui/widgets/IconTint.h"          // UI::Widgets::IconTintColor
+#include "ui/widgets/IconTint.h"
+#include "ui/widgets/SvgButton.h"         // UI::Widgets::SvgIconBtn / QatIconButton
 #include "ui/theme/Fonts.h"
 
 #include "imgui.h"
@@ -80,64 +81,7 @@ static void TRACE(const char* msg) {
 
 // Вспомогательная: получить tint-цвет иконки по текущей теме
 // Хелпер: маленькая кнопка с SVG-иконкой
-static bool SvgIconBtn(IconManager& icons, const char* id,
-                       const char* name, int iconSize,
-                       float btnW, float btnH,
-                       const char* tooltip = nullptr,
-                       bool transparentBg = false) {
-    ImGui::PushID(id);
-
-    ImVec4 tint = UI::Widgets::IconTintColor(true);
-    GLuint tex = icons.Get(name, iconSize);
-    ImTextureID tid = (ImTextureID)(intptr_t)tex;
-
-    ImGui::InvisibleButton("##svgb", ImVec2(btnW, btnH));
-    bool clicked = ImGui::IsItemClicked();
-    bool hovered = ImGui::IsItemHovered();
-    ImVec2 min = ImGui::GetItemRectMin();
-    ImVec2 max = ImGui::GetItemRectMax();
-
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    if (!transparentBg) {
-        ImU32 bg = ImGui::GetColorU32(hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
-        dl->AddRectFilled(min, max, bg, 4.0f);
-    } else if (hovered) {
-        dl->AddRectFilled(min, max,
-            ImGui::GetColorU32(ImGuiCol_ButtonHovered), 4.0f);
-    }
-
-    if (tid != 0) {
-        ImVec2 ip(min.x + (btnW - iconSize) * 0.5f,
-                  min.y + (btnH - iconSize) * 0.5f);
-        dl->AddImage(tid, ip,
-                     ImVec2(ip.x + iconSize, ip.y + iconSize),
-                     ImVec2(0, 0), ImVec2(1, 1),
-                     ImGui::GetColorU32(tint));
-    } else {
-        dl->AddRectFilled(ImVec2(min.x + 4, min.y + 4),
-                          ImVec2(max.x - 4, max.y - 4),
-                          IM_COL32(140, 140, 140, 180), 3.0f);
-    }
-
-    if (hovered && tooltip) ImGui::SetTooltip("%s", tooltip);
-
-    ImGui::PopID();
-    return clicked;
-}
-
 // Обёртка для QAT
-static bool QatIconButton(IconManager& icons, const char* id,
-                          const char* name, int size,
-                          const char* tooltip = nullptr) {
-    return SvgIconBtn(icons, id, name, size, 32, 28, tooltip, true);
-}
-
-
-
-
-
-
-
 // Чистый C++ конвертеры (см. BreezeDocument.cpp — там идентичные, но локальные)
 
 static TCollection_ExtendedString Utf8ToExt(const std::string& s) {
@@ -638,7 +582,7 @@ bool Application::DrawLabelTree(const TDF_Label& label,
 
                 const char* eyeName = visible ? "eye" : "eye-off";
         std::string eyeId = "eye_" + LabelKey(label);
-        if (SvgIconBtn(myIcons, eyeId.c_str(), eyeName, 14, 22, 18,
+        if (UI::Widgets::SvgIconBtn(myIcons, eyeId.c_str(), eyeName, 14, 22, 18,
                         visible ? "Скрыть" : "Показать", true)) {
             myVisibility[key] = !visible;
             if (myOcctView) myOcctView->SetShapeVisible(label, !visible);
@@ -720,7 +664,7 @@ void Application::DrawQuickAccessToolbar() {
 
     // === 1. Логотип BreezeCAD — микро-меню ===
     // === 1. Логотип — меню формата окна ===
-    if (QatIconButton(myIcons, "qat_logo", "breeze-logo", 24, "BreezeCAD")) {
+    if (UI::Widgets::QatIconButton(myIcons, "qat_logo", "breeze-logo", 24, "BreezeCAD")) {
         ImGui::OpenPopup("##logo_menu");
     }
     if (ImGui::BeginPopup("##logo_menu")) {
@@ -744,7 +688,7 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine();
 
     // === 2. Создать ▼ ===
-    if (QatIconButton(myIcons, "qat_create", "file-plus", 20, "Создать")) {
+    if (UI::Widgets::QatIconButton(myIcons, "qat_create", "file-plus", 20, "Создать")) {
         ImGui::OpenPopup("##create_menu");
     }
     if (ImGui::BeginPopup("##create_menu")) {
@@ -763,7 +707,7 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine();
 
     // === 3. Документ (Backstage) ===
-    if (QatIconButton(myIcons, "qat_doc", "file-text", 20, "Документ")) {
+    if (UI::Widgets::QatIconButton(myIcons, "qat_doc", "file-text", 20, "Документ")) {
         CaptureCurrentThumbnail();
         myShowHomeScreen = true;
     }
@@ -776,7 +720,7 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
 
     // === 3. Сохранить ===
-    if (QatIconButton(myIcons, "qat_save", "save", 20, "Сохранить (Ctrl+S)")) OnSave();
+    if (UI::Widgets::QatIconButton(myIcons, "qat_save", "save", 20, "Сохранить (Ctrl+S)")) OnSave();
     DrawAdvancedTooltip("qat.save",
                         "Сохранить (Ctrl+S)",
                         "Сохранить текущий проект в файл",
@@ -786,14 +730,14 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
 
     // === 4. Undo / Redo ===
-    if (QatIconButton(myIcons, "qat_undo", "undo-2", 18, "Отменить (Ctrl+Z)")) OnUndo();
+    if (UI::Widgets::QatIconButton(myIcons, "qat_undo", "undo-2", 18, "Отменить (Ctrl+Z)")) OnUndo();
     ImGui::SameLine();
-    if (QatIconButton(myIcons, "qat_redo", "redo-2", 18, "Повторить (Ctrl+Y)")) OnRedo();
+    if (UI::Widgets::QatIconButton(myIcons, "qat_redo", "redo-2", 18, "Повторить (Ctrl+Y)")) OnRedo();
 
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
 
     // === 5. Home ===
-    if (QatIconButton(myIcons, "qat_home", "house", 20, "Главная")) {
+    if (UI::Widgets::QatIconButton(myIcons, "qat_home", "house", 20, "Главная")) {
         CaptureCurrentThumbnail();
         myShowHomeScreen = true;
     }
@@ -801,7 +745,7 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine(); ImGui::Text("|"); ImGui::SameLine();
 
     // === 6. Модули ===
-    if (QatIconButton(myIcons, "qat_modules", "puzzle", 20, "Модули")) {
+    if (UI::Widgets::QatIconButton(myIcons, "qat_modules", "puzzle", 20, "Модули")) {
         // TODO: диалог управления модулями
     }
     DrawAdvancedTooltip("qat.modules",
@@ -813,7 +757,7 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine();
 
     // === 7. Показать формат ===
-    if (QatIconButton(myIcons, "qat_format", "layout-grid", 20, "Показать формат")) {
+    if (UI::Widgets::QatIconButton(myIcons, "qat_format", "layout-grid", 20, "Показать формат")) {
         ImGui::OpenPopup("##format_menu");
     }
     if (ImGui::BeginPopup("##format_menu")) {
@@ -829,7 +773,7 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine();
 
     // === 8. Текстуры ===
-    if (QatIconButton(myIcons, "qat_textures", "palette", 20, "Текстуры")) {
+    if (UI::Widgets::QatIconButton(myIcons, "qat_textures", "palette", 20, "Текстуры")) {
         ImGui::OpenPopup("##textures_menu");
     }
     if (ImGui::BeginPopup("##textures_menu")) {
@@ -849,7 +793,7 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine();
 
     // === 9. Параметры (fx) ===
-    if (QatIconButton(myIcons, "qat_params", "square-function", 20, "Параметры")) {
+    if (UI::Widgets::QatIconButton(myIcons, "qat_params", "square-function", 20, "Параметры")) {
         ImGui::OpenPopup("##params_menu");
     }
     if (ImGui::BeginPopup("##params_menu")) {
@@ -866,7 +810,7 @@ void Application::DrawQuickAccessToolbar() {
     ImGui::SameLine();
 
     // === 10. Измерение ===
-    if (QatIconButton(myIcons, "qat_measure", "ruler", 20, "Измерение")) {
+    if (UI::Widgets::QatIconButton(myIcons, "qat_measure", "ruler", 20, "Измерение")) {
         ImGui::OpenPopup("##measure_menu");
     }
     if (ImGui::BeginPopup("##measure_menu")) {
@@ -899,7 +843,7 @@ void Application::DrawQuickAccessToolbar() {
     // 🧩 Модули (disabled, заглушка)
     ImGui::SameLine(modulesX);
     ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_Button));
-    if (SvgIconBtn(myIcons, "qat_modules", "puzzle", 18, 28, 26, "Модули")) {
+    if (UI::Widgets::SvgIconBtn(myIcons, "qat_modules", "puzzle", 18, 28, 26, "Модули")) {
         // TODO: меню управления модулями (Фаза 5+)
     }
     ImGui::PopStyleColor();
@@ -981,7 +925,7 @@ void Application::DrawRibbonTabs() {
     // Кнопка "+" для подключения модулей
     ImGui::SameLine();
     ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_Button));
-    if (SvgIconBtn(myIcons, "ribbon_plus", "plus", 16, 32, 26, "Подключить модуль")) {
+    if (UI::Widgets::SvgIconBtn(myIcons, "ribbon_plus", "plus", 16, 32, 26, "Подключить модуль")) {
         // TODO: диалог подключения модуля
     }
     ImGui::PopStyleColor();
@@ -3190,7 +3134,7 @@ void Application::DrawProjectTabs() {
             ImGui::BeginDisabled();
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.55f, 0.95f, 1.0f));
         }
-        if (SvgIconBtn(myIcons, "tab_home", "house", 14, 120, 30, "На главную")) {
+        if (UI::Widgets::SvgIconBtn(myIcons, "tab_home", "house", 14, 120, 30, "На главную")) {
             // Возврат на стартовую страницу. Активный документ НЕ сбрасываем —
             // он остаётся в таб-баре, к нему можно вернуться кликом на его вкладку.
             myShowHomeScreen = true;
@@ -3243,7 +3187,7 @@ void Application::DrawProjectTabs() {
 
         if (myDocuments.size() > 1) {
             ImGui::SameLine(0, 2);
-            if (SvgIconBtn(myIcons, "tab_close", "x", 12, 20, 30, "Закрыть")) {
+            if (UI::Widgets::SvgIconBtn(myIcons, "tab_close", "x", 12, 20, 30, "Закрыть")) {
                 pendingCloseIdx = i;
             }
         }
@@ -3253,7 +3197,7 @@ void Application::DrawProjectTabs() {
 
     // Кнопка "+"
     ImGui::SameLine();
-    if (SvgIconBtn(myIcons, "tab_plus", "plus", 14, 28, 30, "Новый проект")) {
+    if (UI::Widgets::SvgIconBtn(myIcons, "tab_plus", "plus", 14, 28, 30, "Новый проект")) {
         CreateNewDoc();
         RefreshView();
         if (myOcctView) myOcctView->FitAll();
@@ -4102,7 +4046,7 @@ void Application::DrawRightPanel() {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 6));
 
     // --- 1. Панорамировать ---
-    if (SvgIconBtn(myIcons, "panel_pan", "hand", 20, toolW, toolH, "Панорамировать")) {
+    if (UI::Widgets::SvgIconBtn(myIcons, "panel_pan", "hand", 20, toolW, toolH, "Панорамировать")) {
         // TODO: активировать режим панорамирования
     }
     DrawAdvancedTooltip("panel.pan", "Панорамировать",
@@ -4113,7 +4057,7 @@ void Application::DrawRightPanel() {
     ImGui::Separator();
 
     // --- 2. Показать рамкой (с выпадающим меню) ---
-    if (SvgIconBtn(myIcons, "panel_zoom", "search", 20, toolW, toolH, "Показать рамкой")) {
+    if (UI::Widgets::SvgIconBtn(myIcons, "panel_zoom", "search", 20, toolW, toolH, "Показать рамкой")) {
         // TODO: активировать режим "показать рамкой"
     }
     DrawAdvancedTooltip("panel.zoom", "Показать рамкой",
@@ -4121,7 +4065,7 @@ void Application::DrawRightPanel() {
         "Основное действие — приблизить область, выделенную рамкой. "
         "Стрелка вниз открывает дополнительные режимы зуммирования.");
 
-    if (SvgIconBtn(myIcons, "zoom_dd", "chevron-down", 14, toolW, arrowH, "Доп. режимы зума")) {
+    if (UI::Widgets::SvgIconBtn(myIcons, "zoom_dd", "chevron-down", 14, toolW, arrowH, "Доп. режимы зума")) {
         ImGui::OpenPopup("##zoom_menu");
         ImVec2 btnMin = ImGui::GetItemRectMin();
         ImVec2 pp(btnMin.x - 280.0f, btnMin.y);
@@ -4146,7 +4090,7 @@ void Application::DrawRightPanel() {
     ImGui::Separator();
 
     // --- 3. Свободная орбита (с выпадающим меню) ---
-    if (SvgIconBtn(myIcons, "panel_orbit", "rotate-cw", 20, toolW, toolH, "Орбита")) {
+    if (UI::Widgets::SvgIconBtn(myIcons, "panel_orbit", "rotate-cw", 20, toolW, toolH, "Орбита")) {
         // TODO: активировать орбиту
     }
     DrawAdvancedTooltip("panel.orbit", "Свободная орбита",
@@ -4154,7 +4098,7 @@ void Application::DrawRightPanel() {
         "Основное действие — свободное вращение вида. Стрелка вниз открывает "
         "различные режимы вращения (с зависимостями, поворот под углом).");
 
-    if (SvgIconBtn(myIcons, "orbit_dd", "chevron-down", 14, toolW, arrowH, "Доп. режимы орбиты")) {
+    if (UI::Widgets::SvgIconBtn(myIcons, "orbit_dd", "chevron-down", 14, toolW, arrowH, "Доп. режимы орбиты")) {
         ImGui::OpenPopup("##orbit_menu");
         ImVec2 btnMin = ImGui::GetItemRectMin();
         ImVec2 pp(btnMin.x - 280.0f, btnMin.y);
@@ -4171,7 +4115,7 @@ void Application::DrawRightPanel() {
     ImGui::Separator();
 
     // --- 4. Вид на объект ---
-    if (SvgIconBtn(myIcons, "panel_viewon", "eye", 20, toolW, toolH, "Вид на объект")) {
+    if (UI::Widgets::SvgIconBtn(myIcons, "panel_viewon", "eye", 20, toolW, toolH, "Вид на объект")) {
         // TODO: активировать режим "вид на грань"
     }
     DrawAdvancedTooltip("panel.viewon", "Вид на объект",
@@ -4182,7 +4126,7 @@ void Application::DrawRightPanel() {
     ImGui::Separator();
 
     // --- 5. Стили отображения (с выпадающим меню) ---
-    if (SvgIconBtn(myIcons, "panel_style", "palette", 20, toolW, toolH, "Стиль отображения")) {
+    if (UI::Widgets::SvgIconBtn(myIcons, "panel_style", "palette", 20, toolW, toolH, "Стиль отображения")) {
         // TODO: циклить стиль
     }
     DrawAdvancedTooltip("panel.style", "Стили отображения",
@@ -4190,7 +4134,7 @@ void Application::DrawRightPanel() {
         "Основное действие — переключение стиля отображения модели. "
         "Стрелка вниз открывает полный список стилей.");
 
-    if (SvgIconBtn(myIcons, "style_dd", "chevron-down", 14, toolW, arrowH, "Все стили отображения")) {
+    if (UI::Widgets::SvgIconBtn(myIcons, "style_dd", "chevron-down", 14, toolW, arrowH, "Все стили отображения")) {
         ImGui::OpenPopup("##style_menu");
         ImVec2 btnMin = ImGui::GetItemRectMin();
         ImVec2 pp(btnMin.x - 280.0f, btnMin.y);
