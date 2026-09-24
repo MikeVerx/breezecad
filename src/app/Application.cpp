@@ -2875,32 +2875,87 @@ void Application::DrawViewCube() {
     const float cubeHalf   = 38.0f;
     const float margin     = 15.0f;
     const float topOffset  = 260.0f;
-
-    // Сдвиг влево, чтобы не пересекаться с панелью/хлястиком.
-    // Свёрнутая: хлястик (26+14=40) + зазор 5.
-    // Развёрнутая: панель (44) + хлястик (26) + отступ (14) + зазор (10).
-    const float cubeShiftX = myRightPanelExpanded
-        ? 110.0f
-        : 55.0f;
+    const float cubeShiftX = myRightPanelExpanded ? 110.0f : 55.0f;
 
     ImVec2 center(io.DisplaySize.x - margin - cubeSize * 0.5f - cubeShiftX,
                   topOffset + cubeSize * 0.5f);
 
     ImDrawList* draw = ImGui::GetForegroundDrawList();
 
-    // Фон
     draw->AddCircleFilled(center, cubeSize * 0.55f, IM_COL32(40, 45, 55, 180));
 
-    // Ориентация камеры
-    gp_Dir camDir   = myOcctView->GetCameraDirection();
-    gp_Dir camUp    = myOcctView->GetCameraUp();
+    gp_Dir camDir = myOcctView->GetCameraDirection();
+    gp_Dir camUp  = myOcctView->GetCameraUp();
 
-    // Защита: cross-product нулевой, если dir и up параллельны.
-    // В этом случае подставляем правый вектор по эвристике.
+    // --- Плавная анимация камеры: 0.5 сек, smoothstep, очередь ---
+    if (myVCAnimActive) {
+        myVCAnimT += io.DeltaTime / 0.5f;
+        if (myVCAnimT > 1.0f) myVCAnimT = 1.0f;
+    }
+
+    // Доигравшие шаги: применяем ТОЧНЫЙ финал предыдущего, стартуем следующий
+    // из очереди. Для roll (kind=1) считаем дельту от финала, а не от
+    // промежуточной позиции — так дабл-клик даёт ровно 180°.
+    while (myVCAnimActive && myVCAnimT >= 1.0f) {
+        gp_Dir finDir(myVCAnimToDir[0], myVCAnimToDir[1], myVCAnimToDir[2]);
+        gp_Dir finUp (myVCAnimToUp[0],  myVCAnimToUp[1],  myVCAnimToUp[2]);
+        myOcctView->SetCameraDirectionAndUp(finDir, finUp);
+        camDir = finDir;
+        camUp  = finUp;
+
+        if (myVCAnimQueue.empty()) {
+            myVCAnimActive = false;
+            break;
+        }
+
+        VCAnimTarget nxt = myVCAnimQueue.front();
+        myVCAnimQueue.erase(myVCAnimQueue.begin());
+
+        myVCAnimFromDir[0] = finDir.X(); myVCAnimFromDir[1] = finDir.Y(); myVCAnimFromDir[2] = finDir.Z();
+        myVCAnimFromUp[0]  = finUp.X();  myVCAnimFromUp[1]  = finUp.Y();  myVCAnimFromUp[2]  = finUp.Z();
+
+        if (nxt.kind == 0) {
+            myVCAnimToDir[0] = nxt.dir[0]; myVCAnimToDir[1] = nxt.dir[1]; myVCAnimToDir[2] = nxt.dir[2];
+            myVCAnimToUp[0]  = nxt.up[0];  myVCAnimToUp[1]  = nxt.up[1];  myVCAnimToUp[2]  = nxt.up[2];
+        } else {
+            double angleDeg = nxt.dir[0];
+            double a  = angleDeg * 3.14159265358979323846 / 180.0;
+            double ca = std::cos(a), sa = std::sin(a);
+            gp_Vec dirV(finDir), upV(finUp);
+            gp_Vec crossV = dirV.Crossed(upV);
+            gp_Vec newUpV = upV * ca + crossV * sa;
+            double len = std::sqrt(newUpV.X()*newUpV.X() + newUpV.Y()*newUpV.Y() + newUpV.Z()*newUpV.Z());
+            if (len < 1e-9) { myVCAnimT = 0.0f; continue; }
+            gp_Dir newUp(newUpV.X()/len, newUpV.Y()/len, newUpV.Z()/len);
+            myVCAnimToDir[0] = finDir.X(); myVCAnimToDir[1] = finDir.Y(); myVCAnimToDir[2] = finDir.Z();
+            myVCAnimToUp[0]  = newUp.X();  myVCAnimToUp[1]  = newUp.Y();  myVCAnimToUp[2]  = newUp.Z();
+        }
+        myVCAnimT = 0.0f;
+    }
+
+    if (myVCAnimActive) {
+        float s = myVCAnimT * myVCAnimT * (3.0f - 2.0f * myVCAnimT);
+        double dx = myVCAnimFromDir[0] + (myVCAnimToDir[0] - myVCAnimFromDir[0]) * s;
+        double dy = myVCAnimFromDir[1] + (myVCAnimToDir[1] - myVCAnimFromDir[1]) * s;
+        double dz = myVCAnimFromDir[2] + (myVCAnimToDir[2] - myVCAnimFromDir[2]) * s;
+        double dlen = std::sqrt(dx*dx + dy*dy + dz*dz);
+        if (dlen < 1e-9) dlen = 1.0;
+        gp_Dir curDir(dx/dlen, dy/dlen, dz/dlen);
+        double ux = myVCAnimFromUp[0] + (myVCAnimToUp[0] - myVCAnimFromUp[0]) * s;
+        double uy = myVCAnimFromUp[1] + (myVCAnimToUp[1] - myVCAnimFromUp[1]) * s;
+        double uz = myVCAnimFromUp[2] + (myVCAnimToUp[2] - myVCAnimFromUp[2]) * s;
+        double dot = ux*curDir.X() + uy*curDir.Y() + uz*curDir.Z();
+        ux -= dot * curDir.X(); uy -= dot * curDir.Y(); uz -= dot * curDir.Z();
+        double ulen = std::sqrt(ux*ux + uy*uy + uz*uz);
+        gp_Dir curUp = (ulen > 1e-6) ? gp_Dir(ux/ulen, uy/ulen, uz/ulen) : gp_Dir(0, 0, 1);
+        myOcctView->SetCameraDirectionAndUp(curDir, curUp);
+        camDir = curDir;
+        camUp  = curUp;
+    }
+
     gp_Vec crossVec = camDir.Crossed(camUp);
     gp_Dir camRight;
     if (crossVec.SquareMagnitude() < 1e-9) {
-        // Выбираем "right" так, чтобы он был не параллелен camDir
         gp_Dir fallback(1, 0, 0);
         if (std::abs(camDir.Dot(fallback)) > 0.9) fallback = gp_Dir(0, 1, 0);
         camRight = camDir.Crossed(fallback);
@@ -2908,7 +2963,6 @@ void Application::DrawViewCube() {
         camRight = gp_Dir(crossVec);
     }
 
-    // 8 вершин куба ±1
     gp_Pnt C[8] = {
         {-1,-1,-1}, { 1,-1,-1}, { 1, 1,-1}, {-1, 1,-1},
         {-1,-1, 1}, { 1,-1, 1}, { 1, 1, 1}, {-1, 1, 1}
@@ -2936,22 +2990,60 @@ void Application::DrawViewCube() {
 
     struct Visible { int idx; double depth; ImVec2 pts[4]; };
     std::vector<Visible> vis;
+    bool faceVisible[6] = {false, false, false, false, false, false};
 
     for (int fi = 0; fi < 6; fi++) {
-        if (faces[fi].n.Dot(camDir) >= -0.01) continue;  // back-facing
+        if (faces[fi].n.Dot(camDir) >= -0.01) continue;
         Visible v;
         v.idx = fi;
         double d = 0;
-        for (int i = 0; i < 4; i++) {
-            v.pts[i] = project(C[faces[fi].v[i]]);
-            d += depthOf(C[faces[fi].v[i]]);
+        for (int k = 0; k < 4; k++) {
+            v.pts[k] = project(C[faces[fi].v[k]]);
+            d += depthOf(C[faces[fi].v[k]]);
         }
         v.depth = d / 4.0;
         vis.push_back(v);
+        faceVisible[fi] = true;
     }
 
     std::sort(vis.begin(), vis.end(),
               [](const Visible& a, const Visible& b){ return a.depth < b.depth; });
+
+    struct Edge { int v1, v2; int f1, f2; };
+    Edge edges[12] = {
+        {0, 1, 1, 2}, {1, 2, 1, 4}, {2, 3, 1, 3}, {3, 0, 1, 5},
+        {4, 5, 0, 2}, {5, 6, 0, 4}, {6, 7, 0, 3}, {7, 4, 0, 5},
+        {0, 4, 2, 5}, {1, 5, 2, 4}, {2, 6, 3, 4}, {3, 7, 3, 5},
+    };
+
+    struct Corner { int v; int f1, f2, f3; };
+    Corner corners[8] = {
+        {0, 5, 2, 1}, {1, 2, 4, 1}, {2, 4, 3, 1}, {3, 3, 5, 1},
+        {4, 5, 2, 0}, {5, 2, 4, 0}, {6, 4, 3, 0}, {7, 3, 5, 0},
+    };
+
+    struct VisEdge { int idx; ImVec2 a, b; };
+    std::vector<VisEdge> visEdges;
+    for (int ei = 0; ei < 12; ei++) {
+        if (!faceVisible[edges[ei].f1] && !faceVisible[edges[ei].f2]) continue;
+        VisEdge e;
+        e.idx = ei;
+        e.a = project(C[edges[ei].v1]);
+        e.b = project(C[edges[ei].v2]);
+        visEdges.push_back(e);
+    }
+
+    struct VisCorner { int idx; ImVec2 p; };
+    std::vector<VisCorner> visCorners;
+    for (int ci = 0; ci < 8; ci++) {
+        if (!faceVisible[corners[ci].f1] &&
+            !faceVisible[corners[ci].f2] &&
+            !faceVisible[corners[ci].f3]) continue;
+        VisCorner c;
+        c.idx = ci;
+        c.p = project(C[corners[ci].v]);
+        visCorners.push_back(c);
+    }
 
     auto faceColor = [](const gp_Dir& n) -> ImU32 {
         if (n.Z() > 0.5)  return IM_COL32(180, 195, 210, 255);
@@ -2962,42 +3054,89 @@ void Application::DrawViewCube() {
         return IM_COL32(130, 145, 165, 255);
     };
 
-    // Mouse hover detection
     ImVec2 mouse = io.MousePos;
-    int hoveredFace = -1;
+    int hoveredCorner = -1;
+    int hoveredEdge   = -1;
+    int hoveredFace   = -1;
+
     if (!io.WantCaptureMouse) {
-        for (int i = (int)vis.size() - 1; i >= 0; i--) {
-            auto& v = vis[i];
-            int sign = 0; bool inside = true;
-            for (int e = 0; e < 4; e++) {
-                ImVec2 a = v.pts[e], b = v.pts[(e+1)%4];
-                float cr = (b.x-a.x)*(mouse.y-a.y) - (b.y-a.y)*(mouse.x-a.x);
-                int s = (cr > 0) ? 1 : -1;
-                if (sign == 0) sign = s;
-                else if (sign != s) { inside = false; break; }
+        const float cornerHalf = 10.0f;
+        const float edgeTol    = 6.0f;
+
+        for (int k = (int)visCorners.size() - 1; k >= 0; k--) {
+            ImVec2 p = visCorners[k].p;
+            if (mouse.x >= p.x - cornerHalf && mouse.x <= p.x + cornerHalf &&
+                mouse.y >= p.y - cornerHalf && mouse.y <= p.y + cornerHalf) {
+                hoveredCorner = k;
+                break;
             }
-            if (inside) { hoveredFace = i; break; }
+        }
+
+        if (hoveredCorner < 0) {
+            for (int k = (int)visEdges.size() - 1; k >= 0; k--) {
+                ImVec2 a = visEdges[k].a, b = visEdges[k].b;
+                float dx = b.x - a.x, dy = b.y - a.y;
+                float len2 = dx*dx + dy*dy;
+                if (len2 < 1e-6f) continue;
+                float t = ((mouse.x - a.x) * dx + (mouse.y - a.y) * dy) / len2;
+                if (t < 0.0f) t = 0.0f;
+                if (t > 1.0f) t = 1.0f;
+                float px = a.x + t * dx, py = a.y + t * dy;
+                float ddx = mouse.x - px, ddy = mouse.y - py;
+                if (ddx*ddx + ddy*ddy <= edgeTol * edgeTol) {
+                    hoveredEdge = k;
+                    break;
+                }
+            }
+        }
+
+        if (hoveredCorner < 0 && hoveredEdge < 0) {
+            for (int k = (int)vis.size() - 1; k >= 0; k--) {
+                auto& v = vis[k];
+                int sign = 0; bool inside = true;
+                for (int e = 0; e < 4; e++) {
+                    ImVec2 a = v.pts[e], b = v.pts[(e+1)%4];
+                    float cr = (b.x-a.x)*(mouse.y-a.y) - (b.y-a.y)*(mouse.x-a.x);
+                    int s = (cr > 0) ? 1 : -1;
+                    if (sign == 0) sign = s;
+                    else if (sign != s) { inside = false; break; }
+                }
+                if (inside) { hoveredFace = k; break; }
+            }
         }
     }
 
-    // Draw faces
-    for (int i = 0; i < (int)vis.size(); i++) {
-        auto& v = vis[i];
-        ImU32 col     = faceColor(faces[v.idx].n);
-        ImU32 outline = IM_COL32(30, 35, 45, 255);
-        if (i == hoveredFace) col = IM_COL32(255, 220, 120, 255);
+    const ImU32 accentHover    = IM_COL32( 51, 140, 242, 200);
+    const ImU32 faceHoverColor = IM_COL32( 51, 140, 242, 120);
+    const ImU32 outlineColor   = IM_COL32( 30,  35,  45, 255);
+
+    for (int k = 0; k < (int)vis.size(); k++) {
+        auto& v = vis[k];
+        ImU32 col = faceColor(faces[v.idx].n);
+        if (k == hoveredFace) col = faceHoverColor;
         draw->AddConvexPolyFilled(v.pts, 4, col);
-        draw->AddPolyline(v.pts, 4, outline, ImDrawFlags_Closed, 1.5f);
+        draw->AddPolyline(v.pts, 4, outlineColor, ImDrawFlags_Closed, 1.5f);
     }
 
-    // Labels — сдвигаем от центра куба к периферии, чтобы не слипались
+    if (hoveredEdge >= 0) {
+        draw->AddLine(visEdges[hoveredEdge].a, visEdges[hoveredEdge].b,
+                      accentHover, 3.0f);
+    }
+
+    if (hoveredCorner >= 0) {
+        ImVec2 p = visCorners[hoveredCorner].p;
+        const float h = 7.0f;
+        draw->AddRectFilled(ImVec2(p.x - h, p.y - h),
+                            ImVec2(p.x + h, p.y + h),
+                            accentHover, 2.0f);
+    }
+
     ImFont* font = ImGui::GetFont();
     float fontSize = ImGui::GetFontSize() * 0.82f;
     for (auto& v : vis) {
         ImVec2 c2(0, 0);
-        for (int i = 0; i < 4; i++) { c2.x += v.pts[i].x; c2.y += v.pts[i].y; }
+        for (int k = 0; k < 4; k++) { c2.x += v.pts[k].x; c2.y += v.pts[k].y; }
         c2.x *= 0.25f; c2.y *= 0.25f;
-        // Сдвиг от центра куба к периферии грани (18%)
         const float pull = 1.18f;
         c2.x = center.x + (c2.x - center.x) * pull;
         c2.y = center.y + (c2.y - center.y) * pull;
@@ -3007,42 +3146,161 @@ void Application::DrawViewCube() {
                       IM_COL32(25, 30, 40, 255), faces[v.idx].label);
     }
 
-    // Click handling — защита от выхода за границы
-    if (hoveredFace >= 0 && hoveredFace < (int)vis.size()) {
+    if (hoveredCorner >= 0 || hoveredEdge >= 0 || hoveredFace >= 0) {
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+    }
+
+    // Строит up-вектор, ГАРАНТИРОВАННО перпендикулярный dir.
+    // Берём мировой Z, проецируем на плоскость, перпендикулярную dir.
+    // Если dir почти совпал с Z (топ/низ) — fallback на Y.
+    auto computeUp = [](const gp_Dir& dir) -> gp_Dir {
+        gp_Dir zAxis(0, 0, 1);
+        if (std::abs(dir.Dot(zAxis)) > 0.99) {
+            return gp_Dir(0, 1, 0);
+        }
+        gp_Vec upProj = gp_Vec(zAxis) - gp_Vec(dir) * dir.Dot(zAxis);
+        return gp_Dir(upProj);
+    };
+
+    auto startVCAnim = [&](const gp_Dir& targetDir, const gp_Dir& targetUp) {
+        // Если анимация уже играет или в очереди что-то есть — в очередь.
+        // Иначе стартуем сразу.
+        if (myVCAnimActive || !myVCAnimQueue.empty()) {
+            if (myVCAnimQueue.size() < 8) {
+                VCAnimTarget t;
+                t.kind = 0;
+                t.dir[0] = targetDir.X(); t.dir[1] = targetDir.Y(); t.dir[2] = targetDir.Z();
+                t.up[0]  = targetUp.X();  t.up[1]  = targetUp.Y();  t.up[2]  = targetUp.Z();
+                myVCAnimQueue.push_back(t);
+            }
+            return;
+        }
+        myVCAnimFromDir[0] = camDir.X(); myVCAnimFromDir[1] = camDir.Y(); myVCAnimFromDir[2] = camDir.Z();
+        myVCAnimFromUp[0]  = camUp.X();  myVCAnimFromUp[1]  = camUp.Y();  myVCAnimFromUp[2]  = camUp.Z();
+        myVCAnimToDir[0]   = targetDir.X(); myVCAnimToDir[1] = targetDir.Y(); myVCAnimToDir[2] = targetDir.Z();
+        myVCAnimToUp[0]    = targetUp.X();  myVCAnimToUp[1]  = targetUp.Y();  myVCAnimToUp[2]  = targetUp.Z();
+        myVCAnimT = 0.0f;
+        myVCAnimActive = true;
+    };
+
+    // Roll-очередь: хранит дельту угла (kind=1). Реальная цель — при старте,
+    // от ТОЧНОГО финала предыдущей анимации.
+    auto startVCRoll = [&](double angleDeg) {
+        if (myVCAnimActive || !myVCAnimQueue.empty()) {
+            if (myVCAnimQueue.size() < 8) {
+                VCAnimTarget t;
+                t.kind = 1;
+                t.dir[0] = angleDeg; t.dir[1] = 0; t.dir[2] = 0;
+                t.up[0] = 0; t.up[1] = 0; t.up[2] = 0;
+                myVCAnimQueue.push_back(t);
+            }
+            return;
+        }
+        gp_Dir curDir = camDir;
+        gp_Dir curUp  = camUp;
+        double a  = angleDeg * 3.14159265358979323846 / 180.0;
+        double ca = std::cos(a), sa = std::sin(a);
+        gp_Vec dirV(curDir), upV(curUp);
+        gp_Vec crossV = dirV.Crossed(upV);
+        gp_Vec newUpV = upV * ca + crossV * sa;
+        double len = std::sqrt(newUpV.X()*newUpV.X() + newUpV.Y()*newUpV.Y() + newUpV.Z()*newUpV.Z());
+        if (len < 1e-9) return;
+        gp_Dir newUp(newUpV.X()/len, newUpV.Y()/len, newUpV.Z()/len);
+        myVCAnimFromDir[0] = curDir.X(); myVCAnimFromDir[1] = curDir.Y(); myVCAnimFromDir[2] = curDir.Z();
+        myVCAnimFromUp[0]  = curUp.X();  myVCAnimFromUp[1]  = curUp.Y();  myVCAnimFromUp[2]  = curUp.Z();
+        myVCAnimToDir[0]   = curDir.X(); myVCAnimToDir[1]   = curDir.Y(); myVCAnimToDir[2]   = curDir.Z();
+        myVCAnimToUp[0]    = newUp.X();  myVCAnimToUp[1]    = newUp.Y();  myVCAnimToUp[2]    = newUp.Z();
+        myVCAnimT = 0.0f;
+        myVCAnimActive = true;
+    };
+
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        if (hoveredCorner >= 0) {
+            auto& c = corners[visCorners[hoveredCorner].idx];
+            gp_Vec sum = gp_Vec(faces[c.f1].n) + gp_Vec(faces[c.f2].n) + gp_Vec(faces[c.f3].n);
+            gp_Dir newDir = gp_Dir(sum).Reversed();
+            gp_Dir newUp = computeUp(newDir);
+            startVCAnim(newDir, newUp);
+        } else if (hoveredEdge >= 0) {
+            auto& e = edges[visEdges[hoveredEdge].idx];
+            gp_Vec sum = gp_Vec(faces[e.f1].n) + gp_Vec(faces[e.f2].n);
+            gp_Dir newDir = gp_Dir(sum).Reversed();
+            gp_Dir newUp = computeUp(newDir);
+            startVCAnim(newDir, newUp);
+        } else if (hoveredFace >= 0) {
             gp_Dir n = faces[vis[hoveredFace].idx].n;
             gp_Dir newDir = n.Reversed();
-            gp_Dir newUp(0, 0, 1);
-            if (std::abs(newDir.Z()) > 0.5) {
-                newUp = gp_Dir(0, 1, 0);  // top/bottom view: Y up
-            }
-            myOcctView->SetCameraDirectionAndUp(newDir, newUp);
+            gp_Dir newUp = computeUp(newDir);
+            startVCAnim(newDir, newUp);
         }
     }
 
-    // Rotation arrows below cube
     float arrowY = center.y + cubeSize * 0.5f + 10.0f;
-    ImGui::SetNextWindowPos(ImVec2(center.x - 55, arrowY), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(110, 28), ImGuiCond_Always);
-    ImGui::Begin("##viewcube_arrows", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(60, 70, 90, 220));
-    if (ImGui::Button("<<", ImVec2(50, 24))) {
-        myOcctView->RotateAroundUp(90.0);
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Повернуть влево на 90°");
-    ImGui::SameLine();
-    if (ImGui::Button(">>", ImVec2(50, 24))) {
-        myOcctView->RotateAroundUp(-90.0);
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Повернуть вправо на 90°");
-    ImGui::PopStyleColor();
+    // Кнопки — только когда кубик «выровнен» по грани (видна ровно 1 грань,
+    // значит мы смотрим ортогонально), и мышь на этой грани.
+    // Иначе даже при hover на грань в изометрии кнопки не показываем.
+    bool cubeAligned = (vis.size() == 1);
 
-    ImGui::End();
+    // «Липкая» зона. Раньше тут было условие !io.WantCaptureMouse, из-за него
+    // таймер умирал, когда мышь уже касалась кнопок (ImGui перехватывал ввод,
+    // WantCaptureMouse становился true, и кнопки мгновенно исчезали).
+    // Теперь проверяем ТОЛЬКО позицию мыши.
+    // Зона — прямоугольник вокруг кубика + места под ним до низа кнопок,
+    // без мёртвых зазоров.
+    const float stickyL = center.x - 80.0f;
+    const float stickyR = center.x + 80.0f;
+    const float stickyT = center.y - 70.0f;
+    const float stickyB = center.y + cubeSize * 0.5f + 100.0f;
+    bool mouseInBtnZone =
+        (mouse.x >= stickyL && mouse.x <= stickyR &&
+         mouse.y >= stickyT && mouse.y <= stickyB);
+
+    // Таймер 0.5 с — кнопки не мигают, пока мышь в зоне.
+    if (cubeAligned && hoveredFace >= 0) {
+        myVCButtonsTimer = 0.5f;
+    } else if (cubeAligned && mouseInBtnZone && myVCButtonsTimer > 0.0f) {
+        myVCButtonsTimer = 0.5f;
+    } else {
+        myVCButtonsTimer -= io.DeltaTime;
+        if (myVCButtonsTimer < 0.0f) myVCButtonsTimer = 0.0f;
+    }
+
+    if (myVCButtonsTimer > 0.0f) {
+        auto rollCameraAnim = [&](double angleDeg) {
+            startVCRoll(angleDeg);
+        };
+
+        const float btnW = 40.0f;
+        const float btnH = 28.0f;
+        const float gap  = 6.0f;
+        const float winW = btnW * 2.0f + gap + 16.0f;
+        const float winH = btnH + 16.0f;
+
+        ImGui::SetNextWindowPos(ImVec2(center.x - winW * 0.5f, arrowY), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(winW, winH), ImGuiCond_Always);
+        ImGui::Begin("##viewcube_arrows", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus |
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(gap, 0));
+        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(60, 70, 90, 220));
+        if (ImGui::Button("<<", ImVec2(btnW, btnH))) {
+            rollCameraAnim( 90.0);
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Повернуть по часовой на 90");
+        ImGui::SameLine();
+        if (ImGui::Button(">>", ImVec2(btnW, btnH))) {
+            rollCameraAnim(-90.0);
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Повернуть против часовой на 90");
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar();
+
+        ImGui::End();
+    }
 }
 
 void Application::DrawStatusBar() {

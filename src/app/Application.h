@@ -18,6 +18,12 @@
 
 namespace BreezeCAD {
 
+struct VCAnimTarget {
+    int    kind;   // 0 = absolute (dir/up), 1 = roll by angle (angle in dir[0])
+    double dir[3];
+    double up[3];
+};
+
 class Application {
 public:
     Application();
@@ -64,6 +70,16 @@ private:
 
     // === Правая панель навигации ===
     bool myRightPanelExpanded = false;
+
+    // --- ViewCube camera animation ---
+    bool   myVCAnimActive = false;
+    float  myVCAnimT      = 0.0f;
+    double myVCAnimFromDir[3] = {0, 0, -1};
+    double myVCAnimToDir[3]   = {0, 0, -1};
+    double myVCAnimFromUp[3]  = {0, 1, 0};
+    double myVCAnimToUp[3]    = {0, 1, 0};
+    float  myVCButtonsTimer   = 0.0f;
+    std::vector<VCAnimTarget> myVCAnimQueue;
 
     // === ПКМ-меню в 3D-сцене ===
     bool   myPendingContextMenu = false;
