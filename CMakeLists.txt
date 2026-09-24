@@ -51,6 +51,8 @@ add_executable(breezecad
     src/app/Application.cpp
     src/app/IconManager.cpp
     src/app/Localization.cpp
+    src/ui/viewcube/ViewCubeAnimator.cpp
+    src/ui/viewcube/ViewCubeOverlay.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp
