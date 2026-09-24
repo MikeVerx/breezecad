@@ -67,6 +67,8 @@ private:
 
     // === Главная (Home) ===
     bool myShowHomeScreen = false;
+    int  myHomeViewMode = 0;   // 0 = плитки, 1 = список
+    char myHomeSearch[128] = {0};
 
     // === Правая панель навигации ===
     bool myRightPanelExpanded = false;

@@ -5351,139 +5351,215 @@ void Application::DrawHomeScreen() {
     }
     ImGui::EndChild();
     // ПРАВАЯ ОБЛАСТЬ
-    const float rightX = leftW + pad;
-    const float rightW = io.DisplaySize.x - rightX - pad;
+    const float rightX = leftW + 1.0f;
+    const float rightW = io.DisplaySize.x - rightX;
+    const float contentY = topH;
 
-    ImGui::SetCursorPos(ImVec2(rightX, topH + 24));
-    ImGui::TextColored(ImVec4(0.9f, 0.95f, 1.0f, 1.0f), "Последние документы");
-    ImGui::SameLine(rightX + rightW - 320);
-    ImGui::TextDisabled("Сортировка:");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(180);
-    static int sortMode = 0;
-    const char* sortItems[] = { "По дате", "По имени", "По пути" };
-    ImGui::Combo("##sort", &sortMode, sortItems, 3);
-
-    ImGui::SetCursorPos(ImVec2(rightX, topH + 56));
-    ImGui::BeginChild("##home_tiles", ImVec2(rightW, io.DisplaySize.y - topH - 80),
+    ImGui::SetCursorPos(ImVec2(rightX, contentY));
+    ImGui::BeginChild("##home_right", ImVec2(rightW, io.DisplaySize.y - topH),
                       false, ImGuiWindowFlags_NoScrollbar);
 
-    const float tileW   = 240.0f;
-    const float tileH   = 200.0f;
-    const float spacing = 16.0f;
-    int   col = 0;
-    float x   = 0;
-    float y   = 0;
-
-    if (myDocuments.empty()) {
-        ImGui::SetCursorPos(ImVec2(20, 40));
-        ImGui::TextDisabled("Нет недавних документов. Создайте новый - кнопка слева.");
+    // Заголовок по центру
+    {
+        const char* h = "Последние документы";
+        ImVec2 hs = ImGui::CalcTextSize(h);
+        ImGui::SetCursorPos(ImVec2((rightW - hs.x) * 0.5f, 20.0f));
+        ImGui::TextColored(ImVec4(0.85f, 0.9f, 1.0f, 1.0f), "%s", h);
     }
 
-    for (int i = 0; i < (int)myDocuments.size(); i++) {
-        ImGui::PushID(i);
-        ImGui::SetCursorPos(ImVec2(x, y));
+    // Тумблер Плитки/Список + Поиск
+    {
+        const float toggleY = 60.0f;
+        const float tgW = 36.0f;
+        const float tgH = 28.0f;
 
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(32, 36, 46, 255));
-        ImGui::PushStyleColor(ImGuiCol_Border,  IM_COL32(60, 70, 90, 255));
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,   8.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
-
-        ImGui::BeginChild(("##tile_" + std::to_string(i)).c_str(),
-                          ImVec2(tileW, tileH), true,
-                          ImGuiWindowFlags_NoScrollbar);
-
-        ImVec2 thumbPos = ImGui::GetCursorScreenPos();
-        ImVec2 thumbSize(tileW - 24, 120);
-        bool thumbLoaded = false;
-
-        std::string thumbPath = GetThumbnailPath(i);
-        if (!thumbPath.empty() && std::filesystem::exists(thumbPath)) {
-            static std::map<std::string, ImTextureID> s_thumbs;
-            static std::map<std::string, std::time_t> s_thumbTimes;
-            std::error_code ec;
-            auto writeTime = std::filesystem::last_write_time(thumbPath, ec);
-            std::time_t wt = 0;
-            if (!ec) {
-                wt = std::chrono::system_clock::to_time_t(
-                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-                        writeTime - std::filesystem::file_time_type::clock::now()
-                        + std::chrono::system_clock::now()));
+        // Тумблер слева
+        ImGui::SetCursorPos(ImVec2(pad, toggleY));
+        ImGui::PushID(2001);
+        bool activeTiles = (myHomeViewMode == 0);
+        ImGui::PushStyleColor(ImGuiCol_Button, activeTiles
+            ? ImVec4(0.20f, 0.55f, 0.95f, 1.0f)
+            : ImVec4(0.20f, 0.23f, 0.28f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.40f, 0.55f, 1.0f));
+        if (ImGui::Button("##tg_tiles", ImVec2(tgW, tgH))) myHomeViewMode = 0;
+        ImGui::PopStyleColor(2);
+        {
+            ImVec2 mn = ImGui::GetItemRectMin();
+            GLuint ico = myIcons.Get("layout-grid", 18);
+            if (ico) {
+                ImGui::GetWindowDrawList()->AddImage(
+                    (ImTextureID)(intptr_t)ico,
+                    ImVec2(mn.x + (tgW - 18) * 0.5f, mn.y + (tgH - 18) * 0.5f),
+                    ImVec2(mn.x + (tgW + 18) * 0.5f, mn.y + (tgH + 18) * 0.5f));
             }
-            auto cacheIt = s_thumbs.find(thumbPath);
-            // Утечка была здесь: сравнение s_thumbTimes != wt давало
-            // флуктуации из-за file_clock/system_clock, needLoad был
-            // ВСЕГДА true, glGenTextures создавал новую текстуру каждый
-            // кадр без glDeleteTextures. 20 ГБ утечки за 20 сек.
-            // Оставляем только проверку «нет в кэше».
-            bool needLoad = (cacheIt == s_thumbs.end());
-            if (needLoad) {
-                int w = 0, h = 0, channels = 0;
-                unsigned char* data = ::stbi_load(thumbPath.c_str(), &w, &h, &channels, 4);
-                if (data) {
-                    GLuint texId = 0;
-                    glGenTextures(1, &texId);
-                    glBindTexture(GL_TEXTURE_2D, texId);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
-                                 GL_UNSIGNED_BYTE, data);
-                    ::stbi_image_free(data);
-                    s_thumbs[thumbPath] = (ImTextureID)(intptr_t)texId;
-                    s_thumbTimes[thumbPath] = wt;
-                    cacheIt = s_thumbs.find(thumbPath);
+        }
+        ImGui::PopID();
+
+        ImGui::SameLine(0, 4);
+        ImGui::PushID(2002);
+        ImGui::PushStyleColor(ImGuiCol_Button, !activeTiles
+            ? ImVec4(0.20f, 0.55f, 0.95f, 1.0f)
+            : ImVec4(0.20f, 0.23f, 0.28f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.40f, 0.55f, 1.0f));
+        if (ImGui::Button("##tg_list", ImVec2(tgW, tgH))) myHomeViewMode = 1;
+        ImGui::PopStyleColor(2);
+        {
+            ImVec2 mn = ImGui::GetItemRectMin();
+            GLuint ico = myIcons.Get("list", 18);
+            if (ico) {
+                ImGui::GetWindowDrawList()->AddImage(
+                    (ImTextureID)(intptr_t)ico,
+                    ImVec2(mn.x + (tgW - 18) * 0.5f, mn.y + (tgH - 18) * 0.5f),
+                    ImVec2(mn.x + (tgW + 18) * 0.5f, mn.y + (tgH + 18) * 0.5f));
+            }
+        }
+        ImGui::PopID();
+
+        // Поиск справа
+        const float searchW = 260.0f;
+        ImGui::SetCursorPos(ImVec2(rightW - pad - searchW, toggleY));
+        ImGui::SetNextItemWidth(searchW);
+        ImGui::InputTextWithHint("##home_search", "Поиск...",
+                                 myHomeSearch, sizeof(myHomeSearch));
+    }
+
+    // Контент
+    const float listY = 110.0f;
+    const float listH = io.DisplaySize.y - topH - listY - 16.0f;
+    ImGui::SetCursorPos(ImVec2(pad, listY));
+    ImGui::BeginChild("##home_content", ImVec2(rightW - pad * 2, listH), false,
+                      ImGuiWindowFlags_NoScrollbar);
+
+    std::string searchLower = myHomeSearch;
+    for (auto& ch : searchLower) ch = (char)std::tolower((unsigned char)ch);
+
+    if (myHomeViewMode == 0) {
+        // ===== ПЛИТКИ =====
+        const float tileW = 200.0f;
+        const float tileH = 200.0f;
+        const float spacing = 16.0f;
+        int col = 0; float x = 0, y = 0;
+        bool any = false;
+        for (int i = 0; i < (int)myDocuments.size(); i++) {
+            std::string nm = myProjectNames[i];
+            std::string lname = nm;
+            for (auto& ch : lname) ch = (char)std::tolower((unsigned char)ch);
+            if (!searchLower.empty() && lname.find(searchLower) == std::string::npos) continue;
+            any = true;
+            ImGui::PushID(i);
+            ImGui::SetCursorPos(ImVec2(x, y));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32(32, 36, 46, 255));
+            ImGui::PushStyleColor(ImGuiCol_Border,  IM_COL32(60, 70, 90, 255));
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+            ImGui::BeginChild(("##tile_" + std::to_string(i)).c_str(),
+                              ImVec2(tileW, tileH), true, ImGuiWindowFlags_NoScrollbar);
+            ImVec2 thumbPos = ImGui::GetCursorScreenPos();
+            ImVec2 thumbSize(tileW - 24, 120);
+            bool thumbLoaded = false;
+            std::string thumbPath = GetThumbnailPath(i);
+            if (!thumbPath.empty() && std::filesystem::exists(thumbPath)) {
+                static std::map<std::string, ImTextureID> s_thumbs;
+                auto cacheIt = s_thumbs.find(thumbPath);
+                if (cacheIt == s_thumbs.end()) {
+                    int w = 0, h = 0, channels = 0;
+                    unsigned char* data = ::stbi_load(thumbPath.c_str(), &w, &h, &channels, 4);
+                    if (data) {
+                        GLuint texId = 0;
+                        glGenTextures(1, &texId);
+                        glBindTexture(GL_TEXTURE_2D, texId);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+                        ::stbi_image_free(data);
+                        s_thumbs[thumbPath] = (ImTextureID)(intptr_t)texId;
+                        cacheIt = s_thumbs.find(thumbPath);
+                    }
+                }
+                if (cacheIt != s_thumbs.end()) {
+                    ImGui::GetWindowDrawList()->AddImage(cacheIt->second, thumbPos,
+                        ImVec2(thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y));
+                    thumbLoaded = true;
                 }
             }
-            if (cacheIt != s_thumbs.end()) {
-                ImGui::GetWindowDrawList()->AddImage(
-                    cacheIt->second, thumbPos,
-                    ImVec2(thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y));
-                thumbLoaded = true;
+            if (!thumbLoaded) {
+                ImGui::GetWindowDrawList()->AddRectFilled(thumbPos,
+                    ImVec2(thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y),
+                    IM_COL32(24, 28, 36, 255), 6.0f);
+                ImVec2 ts = ImGui::CalcTextSize("[ 3D ]");
+                ImGui::GetWindowDrawList()->AddText(
+                    ImVec2(thumbPos.x + (thumbSize.x - ts.x) * 0.5f,
+                           thumbPos.y + (thumbSize.y - ts.y) * 0.5f),
+                    IM_COL32(120, 130, 150, 120), "[ 3D ]");
             }
-        }
-
-        if (!thumbLoaded) {
-            ImGui::GetWindowDrawList()->AddRectFilled(
-                thumbPos,
-                ImVec2(thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y),
-                IM_COL32(24, 28, 36, 255), 6.0f);
-            ImGui::SetCursorPos(ImVec2(tileW * 0.5f - 20, 46));
-            ImGui::TextColored(ImVec4(0.5f, 0.55f, 0.7f, 0.4f), "[ 3D ]");
-        }
-
-        ImGui::SetCursorPosY(132);
-        ImGui::Text("%s", myProjectNames[i].c_str());
-        ImGui::SetCursorPosY(152);
-        ImGui::TextDisabled("%s", myProjectPaths[i].empty()
-                                       ? "<не сохранён>"
-                                       : myProjectPaths[i].c_str());
-
-        ImGui::SetCursorPosY(172);
-        if (ImGui::Button("Открыть", ImVec2(tileW * 0.5f - 18, 0))) {
-            SwitchToDoc(i);
-            myShowHomeScreen = false;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Закрыть", ImVec2(tileW * 0.5f - 18, 0))) {
-            CloseDoc(i);
+            ImGui::SetCursorPosY(132);
+            ImGui::Text("%s", myProjectNames[i].c_str());
+            ImGui::SetCursorPosY(152);
+            ImGui::TextDisabled("%s", myProjectPaths[i].empty() ? "<не сохранён>" : myProjectPaths[i].c_str());
+            ImGui::SetCursorPosY(172);
+            if (ImGui::Button("Открыть", ImVec2((tileW - 36) * 0.5f - 2, 0))) {
+                SwitchToDoc(i);
+                myShowHomeScreen = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Закрыть", ImVec2((tileW - 36) * 0.5f - 2, 0))) {
+                CloseDoc(i);
+                ImGui::EndChild();
+                ImGui::PopStyleColor(2);
+                ImGui::PopStyleVar(2);
+                ImGui::PopID();
+                break;
+            }
             ImGui::EndChild();
             ImGui::PopStyleColor(2);
             ImGui::PopStyleVar(2);
             ImGui::PopID();
-            break;
+            col++;
+            if (col >= 4) { col = 0; x = 0; y += tileH + spacing; }
+            else x += tileW + spacing;
         }
-
-        ImGui::EndChild();
-        ImGui::PopStyleColor(2);
-        ImGui::PopStyleVar(2);
-        ImGui::PopID();
-
-        col++;
-        if (col >= 3) { col = 0; x = 0; y += tileH + spacing; }
-        else { x += tileW + spacing; }
+        if (!any) {
+            ImGui::SetCursorPos(ImVec2(20, 40));
+            ImGui::TextDisabled("Нет недавних документов. Создайте новый — кнопка «Деталь» сверху.");
+        }
+    } else {
+        // ===== СПИСОК =====
+        if (ImGui::BeginTable("##home_list", 4,
+                ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg |
+                ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable)) {
+            ImGui::TableSetupColumn("Имя",           ImGuiTableColumnFlags_WidthStretch, 3.0f);
+            ImGui::TableSetupColumn("Расположение",   ImGuiTableColumnFlags_WidthStretch, 4.0f);
+            ImGui::TableSetupColumn("Дата",           ImGuiTableColumnFlags_WidthStretch, 1.5f);
+            ImGui::TableSetupColumn("Размер",         ImGuiTableColumnFlags_WidthStretch, 1.0f);
+            ImGui::TableHeadersRow();
+            for (int i = 0; i < (int)myDocuments.size(); i++) {
+                std::string nm = myProjectNames[i];
+                std::string lname = nm;
+                for (auto& ch : lname) ch = (char)std::tolower((unsigned char)ch);
+                if (!searchLower.empty() && lname.find(searchLower) == std::string::npos) continue;
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::PushID(i);
+                bool sel = ImGui::Selectable(nm.c_str(), false,
+                    ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick);
+                if (sel && ImGui::IsMouseDoubleClicked(0)) {
+                    SwitchToDoc(i);
+                    myShowHomeScreen = false;
+                }
+                ImGui::PopID();
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextDisabled("%s", myProjectPaths[i].empty() ? "<не сохранён>" : myProjectPaths[i].c_str());
+                ImGui::TableSetColumnIndex(2);
+                ImGui::TextDisabled("—");
+                ImGui::TableSetColumnIndex(3);
+                ImGui::TextDisabled("—");
+            }
+            ImGui::EndTable();
+        }
     }
-
     ImGui::EndChild();
+
+    ImGui::EndChild();  // ##home_right
     ImGui::End();
     ImGui::PopStyleColor();
 }
