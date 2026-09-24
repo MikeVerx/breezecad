@@ -281,6 +281,9 @@ void ViewCubeOverlay::Draw(const Context& ctx) {
     ImFont* font = ImGui::GetFont();
     ImTextureID atlasTex = io.Fonts->TexID;
 
+    // ===== Подписи: буквы строятся в 3D-координатах грани,
+    //       затем проецируются через project() — то же искажение,
+    //       что у граней и рёбер. UV из атласа шрифта. =====
     static const double faceTextRight[6][3] = {
         { 1, 0, 0}, {-1, 0, 0}, { 1, 0, 0}, {-1, 0, 0}, { 0, 1, 0}, { 0,-1, 0},
     };
@@ -292,41 +295,42 @@ void ViewCubeOverlay::Draw(const Context& ctx) {
         const auto& fc = faces[v.idx];
         int fi = v.idx;
 
+        // Центр грани в 3D-пространстве куба (координаты ±1)
         double cx3 = (C[fc.v[0]].X() + C[fc.v[1]].X() + C[fc.v[2]].X() + C[fc.v[3]].X()) * 0.25;
         double cy3 = (C[fc.v[0]].Y() + C[fc.v[1]].Y() + C[fc.v[2]].Y() + C[fc.v[3]].Y()) * 0.25;
         double cz3 = (C[fc.v[0]].Z() + C[fc.v[1]].Z() + C[fc.v[2]].Z() + C[fc.v[3]].Z()) * 0.25;
 
+        // Экранные длины рёбер грани — только для выбора размера шрифта
         float dxU = v.pts[1].x - v.pts[0].x;
         float dyU = v.pts[1].y - v.pts[0].y;
-        float edgeU = std::sqrt(dxU*dxU + dyU*dyU);
+        float edgeUpx = std::sqrt(dxU*dxU + dyU*dyU);
         float dxV = v.pts[3].x - v.pts[0].x;
         float dyV = v.pts[3].y - v.pts[0].y;
-        float edgeV = std::sqrt(dxV*dxV + dyV*dyV);
-        if (edgeU < 6.0f || edgeV < 6.0f) continue;
+        float edgeVpx = std::sqrt(dxV*dxV + dyV*dyV);
+        if (edgeUpx < 6.0f || edgeVpx < 6.0f) continue;
 
-        float fSize = edgeV * 0.30f;
-        if (fSize < 8.0f)  fSize = 8.0f;
-        if (fSize > 24.0f) fSize = 24.0f;
+        float fSizePx = (edgeUpx + edgeVpx) * 0.5f * 0.30f;
+        if (fSizePx < 8.0f)  fSizePx = 8.0f;
+        if (fSizePx > 26.0f) fSizePx = 26.0f;
+
+        // КЛЮЧЕВОЕ: пиксели -> единицы куба (граница куба = [-1..+1] = 2 ед.)
+        const double px2cube = 1.0 / (double)cubeHalf;
 
         const char* s = fc.label;
         const char* s_end = s + std::strlen(s);
-        float totalPx = font->CalcTextSizeA(fSize, FLT_MAX, 0.0f, s).x;
+        float totalPx = font->CalcTextSizeA(fSizePx, FLT_MAX, 0.0f, s).x;
         if (totalPx < 1.0f) continue;
 
-        float k_u = 1.0f / edgeU;
-        float k_v = 1.0f / edgeV;
-        float uStart = 0.5f - (totalPx * k_u) * 0.5f;
-        float cursorPx = 0.0f;
+        double total3D  = (double)totalPx * px2cube;
+        double cursor3D = -total3D * 0.5;
 
         const double* r3 = faceTextRight[fi];
         const double* d3 = faceTextDown[fi];
 
-        auto p3d = [&](float tu, float tv) -> gp_Pnt {
-            double ox = (tu - 0.5) * 2.0;
-            double oy = (tv - 0.5) * 2.0;
-            return gp_Pnt(cx3 + ox * r3[0] + oy * d3[0],
-                          cy3 + ox * r3[1] + oy * d3[1],
-                          cz3 + ox * r3[2] + oy * d3[2]);
+        auto p3d = [&](double u, double v) -> gp_Pnt {
+            return gp_Pnt(cx3 + u * r3[0] + v * d3[0],
+                          cy3 + u * r3[1] + v * d3[1],
+                          cz3 + u * r3[2] + v * d3[2]);
         };
 
         while (s < s_end) {
@@ -340,20 +344,22 @@ void ViewCubeOverlay::Draw(const Context& ctx) {
 
             const ImFontGlyph* g = font->FindGlyph((ImWchar)cp);
             if (g) {
-                float scale = fSize / font->FontSize;
-                float advPx = g->AdvanceX * scale;
-                float u0 = uStart + cursorPx * k_u;
-                float u1 = u0 + advPx * k_u;
+                float  scale  = fSizePx / font->FontSize;
+                float  advPx  = g->AdvanceX * scale;
+                double adv3D  = (double)advPx * px2cube;
 
-                float yc = (g->Y0 + g->Y1) * 0.5f;
-                float vTop = 0.5f + (g->Y0 - yc) * scale * k_v;
-                float vBot = 0.5f + (g->Y1 - yc) * scale * k_v;
+                float  glyphYCenter = (g->Y0 + g->Y1) * 0.5f;
+                double gTop3D = ((double)(g->Y0 - glyphYCenter) * scale) * px2cube;
+                double gBot3D = ((double)(g->Y1 - glyphYCenter) * scale) * px2cube;
+
+                double left3D  = cursor3D;
+                double right3D = cursor3D + adv3D;
 
                 if (g->X1 > g->X0 && g->Y1 > g->Y0 && advPx > 0.01f) {
-                    gp_Pnt q00 = p3d(u0, vTop);
-                    gp_Pnt q10 = p3d(u1, vTop);
-                    gp_Pnt q11 = p3d(u1, vBot);
-                    gp_Pnt q01 = p3d(u0, vBot);
+                    gp_Pnt q00 = p3d(left3D,  gTop3D);
+                    gp_Pnt q10 = p3d(right3D, gTop3D);
+                    gp_Pnt q11 = p3d(right3D, gBot3D);
+                    gp_Pnt q01 = p3d(left3D,  gBot3D);
 
                     ImVec2 s00 = project(q00);
                     ImVec2 s10 = project(q10);
@@ -369,7 +375,7 @@ void ViewCubeOverlay::Draw(const Context& ctx) {
                                        uv00, uv10, uv11, uv01,
                                        theme.cubeText);
                 }
-                cursorPx += advPx;
+                cursor3D += adv3D;
             }
             s += charLen;
         }
