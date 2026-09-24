@@ -35,9 +35,11 @@ public:
     ViewCubeOverlay()  = default;
     ~ViewCubeOverlay() = default;
 
-    // TODO(step 1.4): void Draw(const Context& ctx);
+    /// Отрисовать кубик, обработать hover / клики по граням, рёбрам и углам.
+    /// Плавно анимирует камеру (0.5 с, smoothstep, очередь поворотов).
+    void Draw(const Context& ctx);
 
-public:  // TODO(step 1.4): закрыть через аксессоры
+private:
     Animator myAnimator;
     float    myButtonsTimer = 0.0f;
 };
