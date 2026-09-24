@@ -4,7 +4,8 @@
 #include "doc/BreezeApplication.h"
 #include "platform/FileDialog.h"
 #include "ui/theme/ThemePresets.h"
-#include "ui/theme/ThemeManager.h"           // UI::Theme::ApplyTheme
+#include "ui/theme/ThemeManager.h"
+#include "ui/widgets/IconTint.h"          // UI::Widgets::IconTintColor
 #include "ui/theme/Fonts.h"
 
 #include "imgui.h"
@@ -78,14 +79,6 @@ static void TRACE(const char* msg) {
 }
 
 // Вспомогательная: получить tint-цвет иконки по текущей теме
-static ImVec4 IconTintColor(bool enabled) {
-    // Tint иконок = цвет текста темы. В светлой теме — чёрный,
-    // в тёмной — светлый. Единообразно, без хардкода.
-    ImVec4 tint = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-    if (!enabled) tint.w *= 0.45f;
-    return tint;
-}
-
 // Хелпер: маленькая кнопка с SVG-иконкой
 static bool SvgIconBtn(IconManager& icons, const char* id,
                        const char* name, int iconSize,
@@ -94,7 +87,7 @@ static bool SvgIconBtn(IconManager& icons, const char* id,
                        bool transparentBg = false) {
     ImGui::PushID(id);
 
-    ImVec4 tint = IconTintColor(true);
+    ImVec4 tint = UI::Widgets::IconTintColor(true);
     GLuint tex = icons.Get(name, iconSize);
     ImTextureID tid = (ImTextureID)(intptr_t)tex;
 
@@ -1100,7 +1093,7 @@ int Application::RibbonButton(const char* id, const char* const* opts,
         bgHover.w *= 0.4f; bgActive.w *= 0.4f;
     }
 
-    ImVec4 tint = IconTintColor(enabled);
+    ImVec4 tint = UI::Widgets::IconTintColor(enabled);
     GLuint tex = myIcons.Get(icon, iconSize);
     ImTextureID tid = (ImTextureID)(intptr_t)tex;
 
@@ -4083,7 +4076,7 @@ void Application::DrawRightPanel() {
         hdl->AddImage((ImTextureID)(intptr_t)hTex, ip,
                       ImVec2(ip.x + 20, ip.y + 20),
                       ImVec2(0, 0), ImVec2(1, 1),
-                      ImGui::GetColorU32(IconTintColor(true)));
+                      ImGui::GetColorU32(UI::Widgets::IconTintColor(true)));
     }
 
     if (hClicked) {
@@ -4298,7 +4291,7 @@ void Application::DrawHomeScreen() {
                 (ImTextureID)(intptr_t)icoTex,
                 ImVec2(ix, iy), ImVec2(ix + 32, iy + 32),
                 ImVec2(0, 0), ImVec2(1, 1),
-                ImGui::GetColorU32(IconTintColor(true)));
+                ImGui::GetColorU32(UI::Widgets::IconTintColor(true)));
         }
         ImVec2 lsz = ImGui::CalcTextSize(hbtnLabels[bi]);
         float lx = bmin.x + (hbtnW - lsz.x) * 0.5f;
@@ -4473,7 +4466,7 @@ void Application::DrawHomeScreen() {
                     ImVec2(mn.x + (tgW - 18) * 0.5f, mn.y + (tgH - 18) * 0.5f),
                     ImVec2(mn.x + (tgW + 18) * 0.5f, mn.y + (tgH + 18) * 0.5f),
                     ImVec2(0, 0), ImVec2(1, 1),
-                    ImGui::GetColorU32(IconTintColor(true)));
+                    ImGui::GetColorU32(UI::Widgets::IconTintColor(true)));
             }
         }
         ImGui::PopID();
@@ -4495,7 +4488,7 @@ void Application::DrawHomeScreen() {
                     ImVec2(mn.x + (tgW - 18) * 0.5f, mn.y + (tgH - 18) * 0.5f),
                     ImVec2(mn.x + (tgW + 18) * 0.5f, mn.y + (tgH + 18) * 0.5f),
                     ImVec2(0, 0), ImVec2(1, 1),
-                    ImGui::GetColorU32(IconTintColor(true)));
+                    ImGui::GetColorU32(UI::Widgets::IconTintColor(true)));
             }
         }
         ImGui::PopID();
