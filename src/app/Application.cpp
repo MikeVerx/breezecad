@@ -2968,7 +2968,7 @@ void Application::DrawViewCube() {
             break;
         }
 
-        VCAnimTarget nxt = myVCAnimQueue.front();
+        UI::ViewCube::AnimTarget nxt = myVCAnimQueue.front();
         myVCAnimQueue.erase(myVCAnimQueue.begin());
 
         myVCAnimFromDir[0] = finDir.X(); myVCAnimFromDir[1] = finDir.Y(); myVCAnimFromDir[2] = finDir.Z();
@@ -3321,7 +3321,7 @@ void Application::DrawViewCube() {
         // Иначе стартуем сразу.
         if (myVCAnimActive || !myVCAnimQueue.empty()) {
             if (myVCAnimQueue.size() < 8) {
-                VCAnimTarget t;
+                UI::ViewCube::AnimTarget t;
                 t.kind = 0;
                 t.dir[0] = targetDir.X(); t.dir[1] = targetDir.Y(); t.dir[2] = targetDir.Z();
                 t.up[0]  = targetUp.X();  t.up[1]  = targetUp.Y();  t.up[2]  = targetUp.Z();
@@ -3342,7 +3342,7 @@ void Application::DrawViewCube() {
     auto startVCRoll = [&](double angleDeg) {
         if (myVCAnimActive || !myVCAnimQueue.empty()) {
             if (myVCAnimQueue.size() < 8) {
-                VCAnimTarget t;
+                UI::ViewCube::AnimTarget t;
                 t.kind = 1;
                 t.dir[0] = angleDeg; t.dir[1] = 0; t.dir[2] = 0;
                 t.up[0] = 0; t.up[1] = 0; t.up[2] = 0;

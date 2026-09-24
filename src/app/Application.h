@@ -4,6 +4,7 @@
 #include "occt/OcctView.h"
 #include "doc/BreezeDocument.h"
 #include "app/IconManager.h"
+#include "ui/viewcube/ViewCubeAnimator.h"  // AnimTarget
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -52,12 +53,6 @@ struct ThemeTokens {
 };
 
 
-
-struct VCAnimTarget {
-    int    kind;   // 0 = absolute (dir/up), 1 = roll by angle (angle in dir[0])
-    double dir[3];
-    double up[3];
-};
 
 class Application {
 public:
@@ -116,7 +111,7 @@ private:
     double myVCAnimFromUp[3]  = {0, 1, 0};
     double myVCAnimToUp[3]    = {0, 1, 0};
     float  myVCButtonsTimer   = 0.0f;
-    std::vector<VCAnimTarget> myVCAnimQueue;
+    std::vector<UI::ViewCube::AnimTarget> myVCAnimQueue;
 
     // === ПКМ-меню в 3D-сцене ===
     bool   myPendingContextMenu = false;
