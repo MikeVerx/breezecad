@@ -33,8 +33,8 @@
 
 | # | Что | Где | Статус |
 |---|---|---|---|
-| **B-01** | Тройное дублирование логики видимости: `IsLabelVisibleByDefault`, `ShowAllRespectingDefaults`, инлайн в `RefreshView` | Application.cpp | TODO |
-| **B-02** | `DrawContextMenuItems` и `DrawContextMenu3D` дублируют друг друга — оба вызывают Items, но с разной подготовкой. Унифицировать при выносе. | Application.cpp | TODO |
+| **B-01** | ~~Тройное дублирование логики видимости~~ — частично закрыто, осталось вынести `IsLabelVisibleByDefault` | Application.cpp | PARTIAL |
+| **B-02** | ~~`DrawContextMenuItems`/`DrawContextMenu3D` дублируют друг друга~~ — унифицированы, общий TreeContext. | ui/panels/ | DONE |
 | **B-03** | `AddDocFromFile` дублирует `CreateNewDoc` по заполнению `myDocuments/myProjectNames/myProjectPaths`. Унифицировать в DocumentManager. | Application.cpp | TODO |
 | **B-04** | `static bool focusLength` внутри `DrawPreviewInfo` — `static` в member-функции (RULES п.20). Заменить на member-поле. | Application.cpp | TODO |
 | **B-05** | `static int pendingCloseIdx/switchToIdx` в `ProjectTabs.cpp` — тот же антипаттерн, я перенёс как было. Заменить на состояние в struct. | ui/status/ProjectTabs.cpp | TODO |
@@ -79,6 +79,18 @@
 
 **Решение:** после вырезания блока — проверять, не остался ли характерный фрагмент второго блока (`BeginPopupModal`, `EndChild` и т.п.).
 
+### D-05. Кириллица в путях ломает Windows-ld
+**Симптом:** `ninja` внезапно перестал линковать OCCT (не находит `.dll.a` в `D:/home/Мишаня/occt/...`), хотя `ls` и `cmd.exe dir` файлы видят.
+
+**Причина:** `ld.exe` — нативный Win32-бинарник, использует ANSI CP1251 для путей. MSYS2 передаёт UTF-8 байты, ld их не декодирует.
+
+**Решение:** junction с ASCII-путём:
+cmd.exe //c "mklink /J C:\occt D:\home\Мишаня\occt"
+cmd.exe //c "mklink /J C:\lunasvg D:\home\Мишаня\lunasvg"
+CMakeLists.txt теперь использует `C:/occt/install` и `C:/lunasvg/install`.
+
+**Требуется:** создать junction при первой настройке окружения. Задокументировать в HANDOFF или METHODS.
+
 ### D-04. Расширение `Application.h` — риск срыва сигнатур
 При замене сигнатуры лямбды-коллбека (`onNotImplemented()` → `onNotImplemented(const char*)`) есть места в коде, где функция вызывается без аргумента — компилятор их не подсвечивает в отрыве.
 
@@ -98,10 +110,10 @@
 | `ui/home/` | ✅ закрыт |
 | `ui/dialogs/` | ✅ закрыт |
 
-| `ui/panels/` | ⏳ |
+| `ui/panels/` (кроме Visibility) | 🔨 в работе |
 | `ui/ribbon/` | ⏳ |
 | `app/` | ⏳ |
 | `util/` | ✅ закрыт |
 
-**Application.cpp:** 5638 → 3110 строк (**−45%**)
+**Application.cpp:** 5638 → 2434 строк (**−57%**)
 **Цель:** ~800 строк (тонкий оркестратор)
