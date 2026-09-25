@@ -68,6 +68,9 @@ add_executable(breezecad
     src/ui/dialogs/RenameDialog.cpp
     src/ui/dialogs/DeleteConfirmDialog.cpp
     src/ui/dialogs/AddBoxDialog.cpp
+    src/ui/dialogs/PropertiesDialog.cpp
+    src/ui/dialogs/NotImplementedDialog.cpp
+    src/ui/dialogs/UnsavedChangesDialog.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp

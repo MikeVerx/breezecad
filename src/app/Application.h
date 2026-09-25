@@ -13,7 +13,10 @@
 #include "ui/qat/QuickAccessToolbar.h"
 #include "ui/dialogs/RenameDialog.h"        // UI::Dialogs::RenameState
 #include "ui/dialogs/DeleteConfirmDialog.h" // UI::Dialogs::DeleteConfirmState
-#include "ui/dialogs/AddBoxDialog.h"        // UI::Dialogs::AddBoxState       // UI::Qat::QatCommand
+#include "ui/dialogs/AddBoxDialog.h"
+#include "ui/dialogs/PropertiesDialog.h"    // UI::Dialogs::PropertiesState
+#include "ui/dialogs/NotImplementedDialog.h"// UI::Dialogs::NotImplementedState
+#include "ui/dialogs/UnsavedChangesDialog.h"// UI::Dialogs::UnsavedState        // UI::Dialogs::AddBoxState       // UI::Qat::QatCommand
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -91,14 +94,10 @@ private:
     UI::Dialogs::DeleteConfirmState myDeleteConfirmState;
 
     // === Диалог несохранённых изменений ===
-    bool myShowUnsavedDialog = false;
-    int  myPendingCloseDocIndex = -1;   // какой документ закрываем (-1 = не закрывать)
-    bool myPendingWindowClose = false;  // закрытие всего окна
-    char myUnsavedDialogInfo[256] = "";
+    UI::Dialogs::UnsavedState myUnsavedState;
 
     // === Диалог свойств ===
-    TDF_Label myPendingPropertiesLabel;
-    bool      myShowPropertiesDialog = false;
+    UI::Dialogs::PropertiesState myPropertiesState;
 
 
     // === Splitter (регулировка ширины дерева) ===
@@ -107,8 +106,7 @@ private:
 
     bool myStartExpandedManually = false;  // пользователь развернул Start вручную
     bool myShowSettingsDialog = false;
-    bool myShowNotImplementedDialog = false;
-    std::string myNotImplementedFeature;
+    UI::Dialogs::NotImplementedState myNotImplementedState;
     int  myActiveSettingsTab  = 0;
     int  myCurrentTheme       = 1;
     ThemeTokens myTheme;

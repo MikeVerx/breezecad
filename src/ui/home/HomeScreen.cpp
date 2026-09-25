@@ -103,9 +103,9 @@ void DrawHomeScreen(const HomeContext& ctx) {
             ImVec2(lx, ly), ctx.theme->homeBtnLabel, hbtnLabels[bi]);
 
         if (hbPressed) {
-            if (bi == 0)      if (ctx.onCreateDoc) ctx.onCreateDoc();
-            else if (bi == 1) if (ctx.onCreateDoc) ctx.onCreateDoc();   // TODO: сборка
-            else if (bi == 2) if (ctx.onOpenFile) ctx.onOpenFile();
+            if (bi == 0)      { if (ctx.onCreateDoc) ctx.onCreateDoc(); }
+            else if (bi == 1) { if (ctx.onNotImplemented) ctx.onNotImplemented("Сборка"); }
+            else if (bi == 2) { if (ctx.onOpenFile) ctx.onOpenFile(); }
         }
         ImGui::PopID();
         hbx += hbtnW + hbtnGap;
@@ -210,7 +210,7 @@ void DrawHomeScreen(const HomeContext& ctx) {
     ImGui::SetCursorPos(ImVec2(pad, yModulesTop));
     homeBtn("btn_modules", "Управление модулями", bwFull, bh, true);
     ImGui::SetCursorPos(ImVec2(pad, yHelpTop));
-    if (homeBtn("btn_help", "Справка", bwFull, bh, false)) if (ctx.onNotImplemented) ctx.onNotImplemented();
+    if (homeBtn("btn_help", "Справка", bwFull, bh, false)) { if (ctx.onNotImplemented) ctx.onNotImplemented("Справка"); }
     ImGui::SetCursorPos(ImVec2(pad, yAboutTop));
     if (homeBtn("btn_about", "О программе", bwFull, bh, false)) if (ctx.onShowSettings) ctx.onShowSettings();
 

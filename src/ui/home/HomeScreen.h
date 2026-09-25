@@ -45,7 +45,7 @@ struct HomeContext {
     std::function<void()>    onCreateDoc;
     std::function<void()>    onOpenFile;
     std::function<void()>    onShowSettings;
-    std::function<void()>    onNotImplemented;
+    std::function<void(const char*)> onNotImplemented;
     std::function<void()>    onQuit;
 };
 

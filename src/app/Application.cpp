@@ -18,7 +18,10 @@
 #include "ui/home/HomeScreen.h"
 #include "ui/dialogs/RenameDialog.h"        // UI::Dialogs::DrawRenameDialog
 #include "ui/dialogs/DeleteConfirmDialog.h" // UI::Dialogs::DrawDeleteConfirmDialog
-#include "ui/dialogs/AddBoxDialog.h"        // UI::Dialogs::DrawAddBoxDialog            // UI::Home::DrawHomeScreen
+#include "ui/dialogs/AddBoxDialog.h"
+#include "ui/dialogs/PropertiesDialog.h"    // UI::Dialogs::DrawPropertiesDialog
+#include "ui/dialogs/NotImplementedDialog.h"// UI::Dialogs::DrawNotImplementedDialog
+#include "ui/dialogs/UnsavedChangesDialog.h"// UI::Dialogs::DrawUnsavedChangesDialog
 #include "ui/home/Thumbnails.h"            // UI::Home::CaptureCurrentThumbnail и др.
 #include "ui/theme/Fonts.h"
 
@@ -306,14 +309,14 @@ void Application::CloseDoc(int index) {
     // Проверка на несохранённые изменения
     BreezeDocument* checkDoc = myDocuments[index].get();
     if (checkDoc && checkDoc->IsModified()) {
-        myPendingCloseDocIndex = index;
-        myPendingWindowClose = false;
-        std::snprintf(myUnsavedDialogInfo, sizeof(myUnsavedDialogInfo),
+        myUnsavedState.pendingCloseDocIndex = index;
+        myUnsavedState.pendingWindowClose = false;
+        std::snprintf(myUnsavedState.info, sizeof(myUnsavedState.info),
             "Проект «%s» содержит "
             "несохранённые изменения.\n"
             "Сохранить перед закрытием?",
             myProjectNames[index].c_str());
-        myShowUnsavedDialog = true;
+        myUnsavedState.show = true;
         return;
     }
 
@@ -1449,8 +1452,8 @@ void Application::DrawRibbon() {
         qat.onGoHome         = [this]() { UI::Home::CaptureCurrentThumbnail(*myOcctView, myActiveDocIndex, myThumbnailPaths); myShowHomeScreen = true; };
         qat.onOpenSettings   = [this]() { myShowSettingsDialog = true; };
         qat.onNotImplemented = [this](const char* feat) {
-            myNotImplementedFeature = feat;
-            myShowNotImplementedDialog = true;
+            myNotImplementedState.feature = feat;
+            myNotImplementedState.show = true;
         };
         qat.onMinimize       = [this]() { glfwIconifyWindow(myWindow->GetNativeWindow()); };
         qat.onMaximize       = [this]() { myWindow->Maximize(); };
@@ -2059,116 +2062,6 @@ void Application::RequestDelete(const TDF_Label& label) {
     myDeleteConfirmState.show = true;
 }
 
-void Application::DrawUnsavedChangesDialog() {
-    if (!myShowUnsavedDialog) return;
-
-    ImGui::OpenPopup("Несохранённые изменения");
-
-    if (ImGui::BeginPopupModal("Несохранённые изменения", nullptr,
-                                ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextWrapped("%s", myUnsavedDialogInfo);
-        ImGui::Separator();
-
-        if (ImGui::Button("Сохранить", ImVec2(120, 0))) {
-            int idx = myPendingCloseDocIndex;
-            bool wasWindow = myPendingWindowClose;
-
-            if (idx >= 0 && idx < (int)myDocuments.size()) {
-                BreezeDocument* prevDoc = myDocument;
-                int prevIdx = myActiveDocIndex;
-                myDocument = myDocuments[idx].get();
-                myActiveDocIndex = idx;
-                OnSave();
-                bool saved = !myDocument->IsModified();
-                if (!saved) {
-                    myDocument = prevDoc;
-                    myActiveDocIndex = prevIdx;
-                    return;
-                }
-            }
-
-            myPendingCloseDocIndex = -1;
-            myPendingWindowClose = false;
-            myShowUnsavedDialog = false;
-            ImGui::CloseCurrentPopup();
-
-            if (wasWindow) {
-                glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE);
-            } else if (idx >= 0) {
-                CloseDoc(idx);
-            }
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Не сохранять", ImVec2(120, 0))) {
-            int idx = myPendingCloseDocIndex;
-            bool wasWindow = myPendingWindowClose;
-            myPendingCloseDocIndex = -1;
-            myPendingWindowClose = false;
-            myShowUnsavedDialog = false;
-            ImGui::CloseCurrentPopup();
-
-            if (idx >= 0 && idx < (int)myDocuments.size()) {
-                myDocuments[idx]->SetModified(false);
-            }
-            if (wasWindow) {
-                glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE);
-            } else if (idx >= 0 && idx < (int)myDocuments.size()) {
-                CloseDoc(idx);
-            }
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Отмена", ImVec2(120, 0))) {
-            myPendingCloseDocIndex = -1;
-            myPendingWindowClose = false;
-            myShowUnsavedDialog = false;
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-    }
-}
-
-void Application::DrawPropertiesDialog() {
-    if (!myShowPropertiesDialog) return;
-
-    ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
-
-    if (ImGui::Begin("Свойства", &myShowPropertiesDialog)) {
-        if (myPendingPropertiesLabel.IsNull() || !myDocument) {
-            ImGui::TextDisabled("Объект не выбран");
-        } else {
-            std::string name = "<unnamed>";
-            Handle(TDataStd_Name) nameAttr;
-            if (myPendingPropertiesLabel.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
-                name = ExtToUtf8(nameAttr->Get());
-            }
-
-            int type = BreezeDocument::GetType(myPendingPropertiesLabel);
-
-            ImGui::Text("Имя: %s", name.c_str());
-            ImGui::Text("Тип: %d", type);
-            ImGui::Text("Тег: %d", myPendingPropertiesLabel.Tag());
-
-            const char* typeName = "Неизвестно";
-            switch (type) {
-                case FT_Start:       typeName = "Папка Start"; break;
-                case FT_Plane:       typeName = "Плоскость"; break;
-                case FT_Axis:        typeName = "Ось"; break;
-                case FT_OriginPoint: typeName = "Точка Origin"; break;
-                case FT_Box:         typeName = "Куб"; break;
-                case FT_Cylinder:    typeName = "Цилиндр"; break;
-                case FT_Hole:        typeName = "Отверстие"; break;
-                case FT_Sketch:      typeName = "Эскиз"; break;
-                case FT_SketchLine:  typeName = "Линия эскиза"; break;
-            }
-            ImGui::Text("Описание: %s", typeName);
-
-            ImGui::Separator();
-            ImGui::TextDisabled("(расширенные свойства — позже)");
-        }
-    }
-    ImGui::End();
-}
-
 bool Application::IsLabelVisibleByDefault(const TDF_Label& label, bool hasOps) const {
     if (label.IsNull()) return false;
 
@@ -2337,8 +2230,8 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
 
     // === Свойства ===
     if (ImGui::MenuItem("Свойства...")) {
-        myPendingPropertiesLabel = label;
-        myShowPropertiesDialog = true;
+        myPropertiesState.pendingLabel = label;
+        myPropertiesState.show = true;
     }
 
     // === Удалить ===
@@ -2822,21 +2715,21 @@ void Application::Run() {
         myWindow->PollEvents();
 
         // Перехват X / Alt+F4: если есть несохранённые — показать диалог
-        if (glfwWindowShouldClose(myWindow->GetNativeWindow()) && !myShowUnsavedDialog) {
+        if (glfwWindowShouldClose(myWindow->GetNativeWindow()) && !myUnsavedState.show) {
             int modIdx = -1;
             for (int i = 0; i < (int)myDocuments.size(); i++) {
                 if (myDocuments[i]->IsModified()) { modIdx = i; break; }
             }
             if (modIdx >= 0) {
                 glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_FALSE);
-                myPendingWindowClose = true;
-                myPendingCloseDocIndex = modIdx;
-                std::snprintf(myUnsavedDialogInfo, sizeof(myUnsavedDialogInfo),
+                myUnsavedState.pendingWindowClose = true;
+                myUnsavedState.pendingCloseDocIndex = modIdx;
+                std::snprintf(myUnsavedState.info, sizeof(myUnsavedState.info),
                     "Проект «%s» содержит "
                     "несохранённые изменения.\n"
                     "Сохранить перед выходом?",
                     myProjectNames[modIdx].c_str());
-                myShowUnsavedDialog = true;
+                myUnsavedState.show = true;
             }
         }
 
@@ -2846,7 +2739,7 @@ void Application::Run() {
 
         // === Polling ПКМ через GLFW напрямую (ImGui колбэки перезаписаны нашими) ===
         if (!myDependencyDialogOpen && !myRenameState.show &&
-            !myDeleteConfirmState.show && !myShowPropertiesDialog) {
+            !myDeleteConfirmState.show && !myPropertiesState.show) {
             ImGuiIO& io = ImGui::GetIO();
 
             // Мышь в области 3D-сцены?
@@ -3127,8 +3020,22 @@ void Application::Run() {
             UI::Dialogs::DrawRenameDialog({ &myRenameState, myDocument });
             UI::Dialogs::DrawDeleteConfirmDialog({ &myDeleteConfirmState, myDocument,
                 [this]() { RefreshView(); if (myOcctView) myOcctView->FitAll(); } });
-            DrawUnsavedChangesDialog();
-            DrawPropertiesDialog();
+            UI::Dialogs::DrawUnsavedChangesDialog({ &myUnsavedState, (int)myDocuments.size(),
+                [this](int idx) -> bool {
+                    if (idx < 0 || idx >= (int)myDocuments.size()) return true;
+                    BreezeDocument* prevDoc = myDocument;
+                    int prevIdx = myActiveDocIndex;
+                    myDocument = myDocuments[idx].get();
+                    myActiveDocIndex = idx;
+                    OnSave();
+                    bool saved = !myDocument->IsModified();
+                    if (!saved) { myDocument = prevDoc; myActiveDocIndex = prevIdx; }
+                    return saved;
+                },
+                [this](int idx) { if (idx >= 0 && idx < (int)myDocuments.size()) myDocuments[idx]->SetModified(false); },
+                [this](int idx) { CloseDoc(idx); },
+                [this]() { glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE); } });
+            UI::Dialogs::DrawPropertiesDialog({ &myPropertiesState, myDocument });
             DrawContextMenu3D();
             UI::Widgets::DrawSelectionRect(*myOcctView, myWindow->GetNativeWindow());
             DrawRightPanel();
@@ -3151,7 +3058,10 @@ void Application::Run() {
             hs.onCreateDoc      = [this]() { CreateNewDoc(); RefreshView(); if (myOcctView) myOcctView->FitAll(); };
             hs.onOpenFile       = [this]() { OnOpen(); };
             hs.onShowSettings   = [this]() { myShowSettingsDialog = true; };
-            hs.onNotImplemented = [this]() { myShowNotImplementedDialog = true; };
+            hs.onNotImplemented = [this](const char* feat) {
+                myNotImplementedState.feature = feat;
+                myNotImplementedState.show = true;
+            };
             hs.onQuit           = [this]() { glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE); };
             UI::Home::DrawHomeScreen(hs);
         }
@@ -3185,23 +3095,7 @@ void Application::Run() {
         }
         DrawSettingsDialog();
 
-        // === Модалка «Не разработано» ===
-        if (myShowNotImplementedDialog) {
-            ImGui::OpenPopup("##not_implemented");
-        }
-        if (ImGui::BeginPopupModal("##not_implemented", &myShowNotImplementedDialog,
-                                    ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::Text("Функция \"%s\" не разработана.", myNotImplementedFeature.c_str());
-            ImGui::Spacing();
-            ImGui::TextDisabled("Будет доступно в следующих версиях BreezeCAD.");
-            ImGui::Spacing();
-            ImGui::Separator();
-            if (ImGui::Button("OK", ImVec2(120, 0))) {
-                myShowNotImplementedDialog = false;
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
-        }
+        UI::Dialogs::DrawNotImplementedDialog(myNotImplementedState);
         TRACE("iter: before UpdateTelemetry");
         UpdateTelemetry();
         TRACE("iter: after UpdateTelemetry");
