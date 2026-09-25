@@ -8,7 +8,9 @@
 #include "ui/widgets/IconTint.h"
 #include "ui/widgets/SvgButton.h"
 #include "ui/widgets/Tooltip.h"
-#include "ui/widgets/SelectionRect.h"     // UI::Widgets::DrawSelectionRect
+#include "ui/widgets/SelectionRect.h"
+#include "ui/status/StatusBar.h"            // UI::Status::DrawStatusBar
+#include "ui/status/ProjectTabs.h"          // UI::Status::DrawProjectTabs
 #include "ui/theme/Fonts.h"
 
 #include "imgui.h"
@@ -2410,75 +2412,6 @@ void Application::DrawViewCube() {
     myViewCube.Draw(ctx);
 }
 
-void Application::DrawStatusBar() {
-    ImGuiIO& io = ImGui::GetIO();
-    const float h = 24.0f;
-
-    ImGui::SetNextWindowPos(ImVec2(0, io.DisplaySize.y - h), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, h), ImGuiCond_Always);
-
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 2));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 0));
-
-    ImGui::Begin("##statusbar", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-    ImGui::SetCursorPosY(4);
-
-    if (!myActiveSketchLabel.IsNull()) {
-        ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "Эскиз");
-    } else {
-        ImGui::TextUnformatted("Режим ожидания");
-    }
-
-    ImGui::SameLine(0, 16);
-    ImGui::TextDisabled("|");
-    ImGui::SameLine(0, 16);
-
-    if (!myActiveSketchLabel.IsNull()) {
-        if (mySnapToGrid && mySnapToPoints) ImGui::TextDisabled("Снап: сетка + точки");
-        else if (mySnapToGrid)              ImGui::TextDisabled("Снап: сетка 10 мм");
-        else if (mySnapToPoints)            ImGui::TextDisabled("Снап: точки");
-        else                                 ImGui::TextDisabled("Снап: выкл");
-    } else {
-        ImGui::TextDisabled("Снап: н/д");
-    }
-
-    ImGui::SameLine(0, 16);
-    ImGui::TextDisabled("|");
-    ImGui::SameLine(0, 16);
-
-    ImGui::TextDisabled("X: %.2f  Y: %.2f  Z: %.2f",
-                        myMouseX, myMouseY, 0.0);
-
-    const float rightPanelW = myRightPanelExpanded ? 320.0f : 80.0f;
-    const float margin      = 12.0f;
-
-    const char* statusText = "Готово";
-    const char* zoomText   = "1:1";
-
-    float statusW = ImGui::CalcTextSize(statusText).x;
-    float zoomW   = ImGui::CalcTextSize(zoomText).x;
-
-    float statusX = io.DisplaySize.x - rightPanelW - margin - statusW;
-    float zoomX   = statusX - 20.0f - zoomW;
-
-    if (zoomX > 400.0f) {
-        ImGui::SameLine(zoomX);
-        ImGui::TextDisabled("%s", zoomText);
-    }
-    if (statusX > 400.0f) {
-        ImGui::SameLine(statusX);
-        ImGui::TextDisabled("%s", statusText);
-    }
-
-    ImGui::End();
-    ImGui::PopStyleVar(2);
-}
-
 void Application::RequestDelete(const TDF_Label& label) {
     if (label.IsNull()) return;
 
@@ -3036,125 +2969,6 @@ void Application::DrawDependenciesPanel() {
     ImGui::TextDisabled("DOF remaining: ?");
 
     ImGui::End();
-}
-
-void Application::DrawProjectTabs() {
-    ImGuiIO& io = ImGui::GetIO();
-
-    const float statusH = 24.0f;
-    const float tabsH   = 52.0f;
-    const float yPos    = io.DisplaySize.y - statusH - tabsH;
-
-    ImGui::SetNextWindowPos(ImVec2(0, yPos), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, tabsH), ImGuiCond_Always);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
-    ImGui::Begin("##project_tabs", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-    // Скроллируемый child для вкладок
-    ImGui::BeginChild("##tabs_scroll", ImVec2(0, 0), false,
-                      ImGuiWindowFlags_HorizontalScrollbar);
-
-    // Колесо мыши = горизонтальный скролл
-    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && io.MouseWheel != 0.0f) {
-        float sx = ImGui::GetScrollX() - io.MouseWheel * 80.0f;
-        if (sx < 0.0f) sx = 0.0f;
-        ImGui::SetScrollX(sx);
-    }
-
-    // === Вкладка "Главная" ===
-    {
-        const bool onHome = myShowHomeScreen;
-        if (onHome) {
-            // На home — серая и некликабельная
-            ImGui::BeginDisabled();
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.55f, 0.95f, 1.0f));
-        }
-        if (UI::Widgets::SvgIconBtn(myIcons, "tab_home", "house", 14, 120, 30, "На главную")) {
-            // Возврат на стартовую страницу. Активный документ НЕ сбрасываем —
-            // он остаётся в таб-баре, к нему можно вернуться кликом на его вкладку.
-            myShowHomeScreen = true;
-        }
-        if (onHome) {
-            ImGui::PopStyleColor();
-            ImGui::EndDisabled();
-        }
-    }
-
-    // === Вкладки проектов ===
-    static int pendingCloseIdx = -1;
-    static int switchToIdx    = -2;
-
-    for (int i = 0; i < (int)myDocuments.size(); i++) {
-        ImGui::SameLine();
-
-        ImGui::PushID(i);
-
-        bool active = (i == myActiveDocIndex);
-        ImVec4 accent(0.20f, 0.55f, 0.95f, 1.0f);
-        ImVec4 accentHover(0.30f, 0.65f, 1.00f, 1.0f);
-        ImVec4 accentActive(0.15f, 0.45f, 0.85f, 1.0f);
-
-        ImVec4 colNormal = active ? accent : ImGui::GetStyleColorVec4(ImGuiCol_Button);
-        ImVec4 colHover  = active ? accentHover : ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered);
-        ImVec4 colActive = active ? accentActive : ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
-
-        ImGui::PushStyleColor(ImGuiCol_Button, colNormal);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, colHover);
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, colActive);
-
-        std::string label = myProjectNames[i];
-        if (myProjectPaths[i].empty()) label += " *";
-
-        if (ImGui::Button((label + "##tab").c_str(), ImVec2(140, 30))) {
-            switchToIdx = i;
-        }
-
-        if (ImGui::BeginPopupContextItem("##tab_ctx")) {
-            if (ImGui::MenuItem("Сохранить")) {}
-            if (ImGui::MenuItem("Сохранить как...")) {}
-            ImGui::Separator();
-            if (ImGui::MenuItem("Закрыть")) pendingCloseIdx = i;
-            if (ImGui::MenuItem("Закрыть другие")) {}
-            ImGui::EndPopup();
-        }
-
-        ImGui::PopStyleColor(3);
-
-        if (myDocuments.size() > 1) {
-            ImGui::SameLine(0, 2);
-            if (UI::Widgets::SvgIconBtn(myIcons, "tab_close", "x", 12, 20, 30, "Закрыть")) {
-                pendingCloseIdx = i;
-            }
-        }
-
-        ImGui::PopID();
-    }
-
-    // Кнопка "+"
-    ImGui::SameLine();
-    if (UI::Widgets::SvgIconBtn(myIcons, "tab_plus", "plus", 14, 28, 30, "Новый проект")) {
-        CreateNewDoc();
-        RefreshView();
-        if (myOcctView) myOcctView->FitAll();
-    }
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Новый проект");
-
-    ImGui::EndChild();
-    ImGui::End();
-    ImGui::PopStyleVar();
-
-    if (pendingCloseIdx >= 0) {
-        CloseDoc(pendingCloseIdx);
-        pendingCloseIdx = -1;
-    }
-    if (switchToIdx != -2) {
-        if (switchToIdx >= 0) SwitchToDoc(switchToIdx);
-        switchToIdx = -2;
-    }
 }
 
 void Application::InitCommands() {
@@ -3816,8 +3630,34 @@ void Application::Run() {
             DrawRightPanel();
         }
         DrawHomeScreen();
-        DrawProjectTabs();
-        DrawStatusBar();
+        {
+            UI::Status::StatusInfo info;
+            info.sketchActive       = !myActiveSketchLabel.IsNull();
+            info.snapToGrid         = mySnapToGrid;
+            info.snapToPoints       = mySnapToPoints;
+            info.mouseX             = myMouseX;
+            info.mouseY             = myMouseY;
+            info.rightPanelExpanded = myRightPanelExpanded;
+            UI::Status::DrawStatusBar(info);
+        }
+        {
+            UI::Status::ProjectTabsContext ctx;
+            ctx.names         = &myProjectNames;
+            ctx.paths         = &myProjectPaths;
+            ctx.activeIndex   = myActiveDocIndex;
+            ctx.documentCount = (int)myDocuments.size();
+            ctx.onHome        = myShowHomeScreen;
+            ctx.icons         = &myIcons;
+            ctx.onGoHome      = [this]() { myShowHomeScreen = true; };
+            ctx.onCreate      = [this]() {
+                CreateNewDoc();
+                RefreshView();
+                if (myOcctView) myOcctView->FitAll();
+            };
+            ctx.onSwitch      = [this](int i) { SwitchToDoc(i); };
+            ctx.onClose       = [this](int i) { CloseDoc(i); };
+            UI::Status::DrawProjectTabs(ctx);
+        }
         DrawSettingsDialog();
 
         // === Модалка «Не разработано» ===

@@ -7,7 +7,9 @@
 #include "ui/viewcube/ViewCubeOverlay.h"
 #include "ui/theme/ThemeTokens.h"
 #include "ui/widgets/Tooltip.h"
-#include "ui/widgets/SelectionRect.h"     // UI::Widgets::DrawSelectionRect
+#include "ui/widgets/SelectionRect.h"
+#include "ui/status/StatusBar.h"            // UI::Status::DrawStatusBar
+#include "ui/status/ProjectTabs.h"          // UI::Status::DrawProjectTabs
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -214,7 +216,6 @@ private:
     void DrawAddBoxDialog();
     void DrawMenuBar();
     void DrawSketchOverlay();
-    void DrawStatusBar();
     void DrawViewCube();
     void DrawDependencyDialog();
     void OpenDependencyDialog(int type);
@@ -235,7 +236,6 @@ private:
                         const Handle(TDocStd_Document)& loaded);  // открыть из файла
     void SwitchToDoc(int index);                                  // переключиться
     void CloseDoc(int index);                                     // закрыть (с подтверждением)
-    void DrawProjectTabs();                                       // нижний таб-бар
     void OnUndo();
     void OnRedo();
     void DrawRibbon();
