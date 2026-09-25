@@ -68,6 +68,7 @@ add_executable(breezecad
     src/occt/OcctView.cpp
     src/doc/BreezeApplication.cpp
     src/doc/BreezeDocument.cpp
+    src/util/Utf8.cpp
     external/stb_image_impl.cpp
 )
 

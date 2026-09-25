@@ -11,7 +11,8 @@
 #include "ui/widgets/SelectionRect.h"
 #include "ui/status/StatusBar.h"            // UI::Status::DrawStatusBar
 #include "ui/status/ProjectTabs.h"
-#include "ui/qat/QuickAccessToolbar.h"       // UI::Qat::DrawQuickAccessToolbar
+#include "ui/qat/QuickAccessToolbar.h"
+#include "util/Utf8.h"                    // Util::Utf8ToExt / ExtToUtf8       // UI::Qat::DrawQuickAccessToolbar
 #include "ui/theme/Fonts.h"
 
 #include "imgui.h"
@@ -72,6 +73,10 @@ extern "C" void stbi_image_free(void* retval_from_stbi_load);
 
 namespace BreezeCAD {
 
+using Util::Utf8ToExt;
+using Util::ExtToUtf8;
+
+
 // === TRACE (enabled only when env BREEZECAD_TRACE is set) ===
 static void TRACE(const char* msg) {
     static FILE* g_traceFile = nullptr;
@@ -89,70 +94,6 @@ static void TRACE(const char* msg) {
 // Обёртка для QAT
 // Чистый C++ конвертеры (см. BreezeDocument.cpp — там идентичные, но локальные)
 
-static TCollection_ExtendedString Utf8ToExt(const std::string& s) {
-    if (s.empty()) return TCollection_ExtendedString();
-    std::wstring ws;
-    ws.reserve(s.size());
-    size_t i = 0;
-    while (i < s.size()) {
-        unsigned char c = (unsigned char)s[i];
-        uint32_t cp = 0;
-        int extra = 0;
-        if      (c < 0x80) { cp = c;          extra = 0; }
-        else if ((c & 0xE0) == 0xC0) { cp = c & 0x1F; extra = 1; }
-        else if ((c & 0xF0) == 0xE0) { cp = c & 0x0F; extra = 2; }
-        else if ((c & 0xF8) == 0xF0) { cp = c & 0x07; extra = 3; }
-        else { i++; continue; }
-        if (i + extra >= s.size()) break;
-        for (int k = 1; k <= extra; k++) {
-            unsigned char cc = (unsigned char)s[i + k];
-            if ((cc & 0xC0) != 0x80) { cp = 0; break; }
-            cp = (cp << 6) | (cc & 0x3F);
-        }
-        i += extra + 1;
-        if (cp < 0x10000) {
-            ws.push_back((wchar_t)cp);
-        } else if (cp <= 0x10FFFF) {
-            cp -= 0x10000;
-            ws.push_back((wchar_t)(0xD800 + (cp >> 10)));
-            ws.push_back((wchar_t)(0xDC00 + (cp & 0x3FF)));
-        }
-    }
-    ws.push_back(0);
-    return TCollection_ExtendedString(ws.c_str());
-}
-
-static std::string ExtToUtf8(const TCollection_ExtendedString& es) {
-    const uint16_t* ws = (const uint16_t*)es.ToExtString();
-    if (!ws) return "";
-    std::string out;
-    for (size_t i = 0; ws[i] != 0; i++) {
-        uint32_t cp = ws[i];
-        if (cp >= 0xD800 && cp <= 0xDBFF && ws[i+1] != 0) {
-            uint32_t lo = ws[i+1];
-            if (lo >= 0xDC00 && lo <= 0xDFFF) {
-                cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
-                i++;
-            }
-        }
-        if (cp < 0x80) {
-            out.push_back((char)cp);
-        } else if (cp < 0x800) {
-            out.push_back((char)(0xC0 | (cp >> 6)));
-            out.push_back((char)(0x80 | (cp & 0x3F)));
-        } else if (cp < 0x10000) {
-            out.push_back((char)(0xE0 | (cp >> 12)));
-            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
-            out.push_back((char)(0x80 | (cp & 0x3F)));
-        } else {
-            out.push_back((char)(0xF0 | (cp >> 18)));
-            out.push_back((char)(0x80 | ((cp >> 12) & 0x3F)));
-            out.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
-            out.push_back((char)(0x80 | (cp & 0x3F)));
-        }
-    }
-    return out;
-}
 static std::string LabelKey(const TDF_Label& label) {
     std::ostringstream oss;
     label.EntryDump(oss);
