@@ -65,6 +65,9 @@ add_executable(breezecad
     src/ui/qat/QuickAccessToolbar.cpp
     src/ui/home/HomeScreen.cpp
     src/ui/home/Thumbnails.cpp
+    src/ui/dialogs/RenameDialog.cpp
+    src/ui/dialogs/DeleteConfirmDialog.cpp
+    src/ui/dialogs/AddBoxDialog.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp

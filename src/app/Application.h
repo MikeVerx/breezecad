@@ -10,7 +10,10 @@
 #include "ui/widgets/SelectionRect.h"
 #include "ui/status/StatusBar.h"            // UI::Status::DrawStatusBar
 #include "ui/status/ProjectTabs.h"
-#include "ui/qat/QuickAccessToolbar.h"       // UI::Qat::QatCommand
+#include "ui/qat/QuickAccessToolbar.h"
+#include "ui/dialogs/RenameDialog.h"        // UI::Dialogs::RenameState
+#include "ui/dialogs/DeleteConfirmDialog.h" // UI::Dialogs::DeleteConfirmState
+#include "ui/dialogs/AddBoxDialog.h"        // UI::Dialogs::AddBoxState       // UI::Qat::QatCommand
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -82,20 +85,16 @@ private:
     ImVec2 myContextMenuPos = ImVec2(0, 0);
 
     // === Диалог переименования ===
-    TDF_Label myPendingRenameLabel;
-    char      myRenameBuffer[128] = "";
-    bool      myShowRenameDialog = false;
+    UI::Dialogs::RenameState myRenameState;
 
     // === Диалог подтверждения удаления ===
-    bool myShowDeleteConfirm = false;
+    UI::Dialogs::DeleteConfirmState myDeleteConfirmState;
 
     // === Диалог несохранённых изменений ===
     bool myShowUnsavedDialog = false;
     int  myPendingCloseDocIndex = -1;   // какой документ закрываем (-1 = не закрывать)
     bool myPendingWindowClose = false;  // закрытие всего окна
     char myUnsavedDialogInfo[256] = "";
-    char myDeleteConfirmInfo[256] = "";
-    bool mySkipDeleteConfirm = false;   // «не спрашивать снова» (на сеанс)
 
     // === Диалог свойств ===
     TDF_Label myPendingPropertiesLabel;
@@ -136,17 +135,13 @@ private:
     std::vector<std::string> myProjectNames;   // параллельно с myDocuments
     std::vector<std::string> myProjectPaths;   // путь файла (пусто, если не сохранён)
 
-    bool  myShowAddBoxDialog = false;
-    char  myNewBoxName[128]  = "Box";
-    float myNewBoxPos[3]     = { 0.0f, 0.0f, 0.0f };
-    float myNewBoxSize[3]    = { 100.0f, 100.0f, 100.0f };
+    UI::Dialogs::AddBoxState myAddBoxState;
 
     std::string myCurrentPath;
     char        myFilePathBuffer[512] = "D:/test_breezecad/part.cbf";
 
     std::map<std::string, bool> myVisibility;
 
-    TDF_Label myPendingDeleteLabel;
     TDF_Label myPendingCreateSketchLabel;
     TDF_Label myPendingEnterSketchLabel;
 

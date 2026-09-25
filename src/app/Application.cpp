@@ -15,7 +15,10 @@
 #include "util/Utf8.h"
 #include "util/Geometry2D.h"
 #include "util/LabelName.h"
-#include "ui/home/HomeScreen.h"            // UI::Home::DrawHomeScreen
+#include "ui/home/HomeScreen.h"
+#include "ui/dialogs/RenameDialog.h"        // UI::Dialogs::DrawRenameDialog
+#include "ui/dialogs/DeleteConfirmDialog.h" // UI::Dialogs::DrawDeleteConfirmDialog
+#include "ui/dialogs/AddBoxDialog.h"        // UI::Dialogs::DrawAddBoxDialog            // UI::Home::DrawHomeScreen
 #include "ui/home/Thumbnails.h"            // UI::Home::CaptureCurrentThumbnail и др.
 #include "ui/theme/Fonts.h"
 
@@ -532,7 +535,7 @@ bool Application::DrawLabelTree(const TDF_Label& label,
     }
 
     ImGui::PopID();
-    return requested || !myPendingDeleteLabel.IsNull()
+    return requested || !myDeleteConfirmState.pendingLabel.IsNull()
                      || !myPendingCreateSketchLabel.IsNull();
 }
 
@@ -1503,11 +1506,11 @@ void Application::DrawDocumentTree() {
     ImGui::Separator();
 
     if (ImGui::Button(Tr("panel.addBox").c_str())) {
-        myShowAddBoxDialog = true;
-        std::strncpy(myNewBoxName, Tr("default.boxName").c_str(), sizeof(myNewBoxName) - 1);
-        myNewBoxName[sizeof(myNewBoxName) - 1] = '\0';
-        myNewBoxPos[0] = myNewBoxPos[1] = myNewBoxPos[2] = 0.0f;
-        myNewBoxSize[0] = myNewBoxSize[1] = myNewBoxSize[2] = 100.0f;
+        myAddBoxState.show = true;
+        std::strncpy(myAddBoxState.name, Tr("default.boxName").c_str(), sizeof(myAddBoxState.name) - 1);
+        myAddBoxState.name[sizeof(myAddBoxState.name) - 1] = '\0';
+        myAddBoxState.pos[0] = myAddBoxState.pos[1] = myAddBoxState.pos[2] = 0.0f;
+        myAddBoxState.size[0] = myAddBoxState.size[1] = myAddBoxState.size[2] = 100.0f;
     }
     ImGui::SameLine();
     if (ImGui::Button("Save")) OnSave();
@@ -1601,7 +1604,7 @@ void Application::DrawDocumentTree() {
         EnterSketch(myPendingEnterSketchLabel);
         myPendingEnterSketchLabel = TDF_Label();
     }
-    // myPendingDeleteLabel теперь обрабатывается через диалог подтверждения
+    // myDeleteConfirmState.pendingLabel теперь обрабатывается через диалог подтверждения
 }
 
 void Application::RefreshSketchLines() {
@@ -2023,7 +2026,7 @@ void Application::DrawViewCube() {
 void Application::RequestDelete(const TDF_Label& label) {
     if (label.IsNull()) return;
 
-    if (mySkipDeleteConfirm) {
+    if (myDeleteConfirmState.skipConfirm) {
         // Удаляем сразу
         if (myDocument) myDocument->RemoveFeature(label);
         RefreshView();
@@ -2031,7 +2034,7 @@ void Application::RequestDelete(const TDF_Label& label) {
         return;
     }
 
-    myPendingDeleteLabel = label;
+    myDeleteConfirmState.pendingLabel = label;
 
     // Собираем информацию: имя + сколько детей удалится
     std::string name = "<unnamed>";
@@ -2045,79 +2048,15 @@ void Application::RequestDelete(const TDF_Label& label) {
     for (; it.More(); it.Next()) childCount++;
 
     if (childCount > 0) {
-        std::snprintf(myDeleteConfirmInfo, sizeof(myDeleteConfirmInfo),
+        std::snprintf(myDeleteConfirmState.info, sizeof(myDeleteConfirmState.info),
                       "Удалить «%s»?\n\nВместе с ним будут удалены %d вложенных элементов.",
                       name.c_str(), childCount);
     } else {
-        std::snprintf(myDeleteConfirmInfo, sizeof(myDeleteConfirmInfo),
+        std::snprintf(myDeleteConfirmState.info, sizeof(myDeleteConfirmState.info),
                       "Удалить «%s»?", name.c_str());
     }
 
-    myShowDeleteConfirm = true;
-}
-
-void Application::DrawRenameDialog() {
-    if (!myShowRenameDialog) return;
-
-    ImGui::OpenPopup("Переименовать");
-
-    if (ImGui::BeginPopupModal("Переименовать", nullptr,
-                                ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Новое имя:");
-        ImGui::SetNextItemWidth(280);
-        ImGui::InputText("##rename_buf", myRenameBuffer, sizeof(myRenameBuffer),
-                         ImGuiInputTextFlags_EnterReturnsTrue);
-
-        ImGui::Separator();
-
-        if (ImGui::Button("OK", ImVec2(120, 0))) {
-            if (myDocument && !myPendingRenameLabel.IsNull() && myRenameBuffer[0] != '\0') {
-                myDocument->RenameFeature(myPendingRenameLabel, myRenameBuffer);
-                myPendingRenameLabel = TDF_Label();
-            }
-            myShowRenameDialog = false;
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Отмена", ImVec2(120, 0))) {
-            myPendingRenameLabel = TDF_Label();
-            myShowRenameDialog = false;
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-    }
-}
-
-void Application::DrawDeleteConfirmDialog() {
-    if (!myShowDeleteConfirm) return;
-
-    ImGui::OpenPopup("Подтверждение удаления");
-
-    if (ImGui::BeginPopupModal("Подтверждение удаления", nullptr,
-                                ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextWrapped("%s", myDeleteConfirmInfo);
-        ImGui::Separator();
-        ImGui::Checkbox("Не спрашивать снова (до перезапуска)", &mySkipDeleteConfirm);
-        ImGui::Separator();
-
-        if (ImGui::Button("Удалить", ImVec2(120, 0))) {
-            if (myDocument && !myPendingDeleteLabel.IsNull()) {
-                myDocument->RemoveFeature(myPendingDeleteLabel);
-                myPendingDeleteLabel = TDF_Label();
-                RefreshView();
-                if (myOcctView) myOcctView->FitAll();
-            }
-            myShowDeleteConfirm = false;
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Отмена", ImVec2(120, 0))) {
-            myPendingDeleteLabel = TDF_Label();
-            myShowDeleteConfirm = false;
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-    }
+    myDeleteConfirmState.show = true;
 }
 
 void Application::DrawUnsavedChangesDialog() {
@@ -2389,10 +2328,10 @@ void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
     // === Переименовать ===
     if (!isSystem) {
         if (ImGui::MenuItem("Переименовать")) {
-            myPendingRenameLabel = label;
-            std::strncpy(myRenameBuffer, labelName.c_str(), sizeof(myRenameBuffer) - 1);
-            myRenameBuffer[sizeof(myRenameBuffer) - 1] = '\0';
-            myShowRenameDialog = true;
+            myRenameState.pendingLabel = label;
+            std::strncpy(myRenameState.buffer, labelName.c_str(), sizeof(myRenameState.buffer) - 1);
+            myRenameState.buffer[sizeof(myRenameState.buffer) - 1] = '\0';
+            myRenameState.show = true;
         }
     }
 
@@ -2511,41 +2450,6 @@ void Application::DrawTreeSplitter() {
     }
 
     ImGui::End();
-}
-
-void Application::DrawAddBoxDialog() {
-    if (myShowAddBoxDialog) {
-        ImGui::OpenPopup(Tr("dlg.addBox.title").c_str());
-        myShowAddBoxDialog = false;
-    }
-    if (ImGui::BeginPopupModal(Tr("dlg.addBox.title").c_str(), nullptr,
-                                ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::InputText(Tr("dlg.name").c_str(), myNewBoxName, sizeof(myNewBoxName));
-        ImGui::Separator();
-        ImGui::Text("%s", Tr("dlg.position").c_str());
-        ImGui::InputFloat("X##pos", &myNewBoxPos[0]);
-        ImGui::InputFloat("Y##pos", &myNewBoxPos[1]);
-        ImGui::InputFloat("Z##pos", &myNewBoxPos[2]);
-        ImGui::Separator();
-        ImGui::Text("%s", Tr("dlg.size").c_str());
-        ImGui::InputFloat("DX", &myNewBoxSize[0]);
-        ImGui::InputFloat("DY", &myNewBoxSize[1]);
-        ImGui::InputFloat("DZ", &myNewBoxSize[2]);
-        ImGui::Separator();
-        if (ImGui::Button(Tr("btn.ok").c_str(), ImVec2(120, 0))) {
-            if (myDocument) {
-                myDocument->AddBoxFeature(myNewBoxName,
-                    myNewBoxSize[0], myNewBoxSize[1], myNewBoxSize[2],
-                    myNewBoxPos[0], myNewBoxPos[1], myNewBoxPos[2]);
-                RefreshView();
-            }
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button(Tr("btn.cancel").c_str(), ImVec2(120, 0)))
-            ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-    }
 }
 
 void Application::DrawDependenciesPanel() {
@@ -2941,8 +2845,8 @@ void Application::Run() {
         prevF11 = curF11;
 
         // === Polling ПКМ через GLFW напрямую (ImGui колбэки перезаписаны нашими) ===
-        if (!myDependencyDialogOpen && !myShowRenameDialog &&
-            !myShowDeleteConfirm && !myShowPropertiesDialog) {
+        if (!myDependencyDialogOpen && !myRenameState.show &&
+            !myDeleteConfirmState.show && !myShowPropertiesDialog) {
             ImGuiIO& io = ImGui::GetIO();
 
             // Мышь в области 3D-сцены?
@@ -3215,12 +3119,14 @@ void Application::Run() {
             DrawRibbon();
             DrawDocumentTree();
             DrawTreeSplitter();
-            DrawAddBoxDialog();
+            UI::Dialogs::DrawAddBoxDialog({ &myAddBoxState, myDocument,
+                [this]() { RefreshView(); } });
             DrawPreviewInfo();
             DrawViewCube();
             DrawDependencyDialog();
-            DrawRenameDialog();
-            DrawDeleteConfirmDialog();
+            UI::Dialogs::DrawRenameDialog({ &myRenameState, myDocument });
+            UI::Dialogs::DrawDeleteConfirmDialog({ &myDeleteConfirmState, myDocument,
+                [this]() { RefreshView(); if (myOcctView) myOcctView->FitAll(); } });
             DrawUnsavedChangesDialog();
             DrawPropertiesDialog();
             DrawContextMenu3D();
