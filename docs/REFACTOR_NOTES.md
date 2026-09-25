@@ -39,7 +39,7 @@
 
 | # | Что | Где | Статус |
 |---|---|---|---|
-| **B-01** | ~~Тройное дублирование логики видимости~~ — частично закрыто, осталось вынести `IsLabelVisibleByDefault` | Application.cpp | PARTIAL |
+| **B-01** | ~~Тройное дублирование логики видимости~~ — единая реализация в `ui/panels/Visibility.cpp` | ui/panels/ | ✅ DONE |
 | **B-02** | ~~`DrawContextMenuItems`/`DrawContextMenu3D` дублируют друг друга~~ — унифицированы, общий TreeContext. | ui/panels/ | DONE |
 | **B-03** | `AddDocFromFile` дублирует `CreateNewDoc` по заполнению `myDocuments/myProjectNames/myProjectPaths`. Унифицировать в DocumentManager. | Application.cpp | TODO |
 | **B-04** | `static bool focusLength` внутри `DrawPreviewInfo` — `static` в member-функции (RULES п.20). Заменить на member-поле. | Application.cpp | TODO |
@@ -119,12 +119,12 @@ CMakeLists.txt теперь использует `C:/occt/install` и `C:/lunasv
 | `ui/home/` | ✅ закрыт |
 | `ui/dialogs/` | ✅ закрыт |
 
-| `ui/panels/` (кроме Visibility) | ✅ закрыт |
+| `ui/panels/` | ✅ закрыт |
 | `ui/ribbon/` | ⏳ |
 | `app/` | ⏳ |
 | `util/` | ✅ закрыт |
 
-**Application.cpp:** 5638 → 2434 строк (**−57%**)
+**Application.cpp:** 5638 → 2403 строк (**−57%**)
 **Цель:** ~800 строк (тонкий оркестратор)
 
 ---
