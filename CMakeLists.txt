@@ -14,11 +14,14 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG")
 
 # --- lunasvg ---
-set(LUNASVG_ROOT "$ENV{HOME}/lunasvg/install")
+# C:/lunasvg — junction по той же причине.
+set(LUNASVG_ROOT "C:/lunasvg/install")
 include_directories(${LUNASVG_ROOT}/include)
 
 # --- Поиск OCCT ---
-set(OCCT_ROOT "$ENV{HOME}/occt/install")
+# C:/occt — junction на D:/home/Мишаня/occt (ASCII-путь для Windows-ld,
+# который не понимает кириллицу в путях). См. REFACTOR_NOTES D-05.
+set(OCCT_ROOT "C:/occt/install")
 find_package(OpenCASCADE REQUIRED
     PATHS "${OCCT_ROOT}/cmake"
     NO_DEFAULT_PATH
@@ -76,6 +79,8 @@ add_executable(breezecad
     src/ui/panels/TreeSplitter.cpp
     src/ui/panels/RightPanel.cpp
     src/ui/panels/DependenciesPanel.cpp
+    src/ui/panels/DocumentTree.cpp
+    src/ui/panels/ContextMenu.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp
