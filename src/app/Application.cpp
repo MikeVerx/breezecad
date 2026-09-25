@@ -23,7 +23,10 @@
 #include "ui/dialogs/NotImplementedDialog.h"// UI::Dialogs::DrawNotImplementedDialog
 #include "ui/dialogs/UnsavedChangesDialog.h"
 #include "ui/dialogs/DependencyDialog.h"
-#include "ui/dialogs/SettingsDialog.h"      // UI::Dialogs::DrawSettingsDialog    // UI::Dialogs::DrawDependencyDialog// UI::Dialogs::DrawUnsavedChangesDialog
+#include "ui/dialogs/SettingsDialog.h"
+#include "ui/panels/TreeSplitter.h"          // UI::Panels::DrawTreeSplitter
+#include "ui/panels/RightPanel.h"            // UI::Panels::DrawRightPanel
+#include "ui/panels/DependenciesPanel.h"     // UI::Panels::DrawDependenciesPanel
 #include "ui/home/Thumbnails.h"            // UI::Home::CaptureCurrentThumbnail и др.
 #include "ui/theme/Fonts.h"
 
@@ -2302,82 +2305,6 @@ void Application::DrawContextMenu3D() {
     }
 }
 
-void Application::DrawTreeSplitter() {
-    ImGuiIO& io = ImGui::GetIO();
-
-    const float splitterW   = 5.0f;
-    const float minTreeW    = 200.0f;
-    const float maxTreeW    = 600.0f;
-
-    const float topY    = 200.0f;
-    const float bottomY = io.DisplaySize.y - 76.0f;
-    const float xPos    = myTreeWidth;
-
-    // Невидимое окно-полоса поверх границы
-    ImGui::SetNextWindowPos(ImVec2(xPos - splitterW * 0.5f, topY), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(splitterW, bottomY - topY), ImGuiCond_Always);
-    ImGui::Begin("##tree_splitter", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
-        ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-    ImGui::InvisibleButton("##splitter_btn", ImVec2(splitterW, bottomY - topY));
-
-    bool hovered = ImGui::IsItemHovered();
-    bool active  = ImGui::IsItemActive();
-
-    if (hovered || active) {
-        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-    }
-
-    if (active) {
-        myTreeWidth += io.MouseDelta.x;
-        if (myTreeWidth < minTreeW) myTreeWidth = minTreeW;
-        if (myTreeWidth > maxTreeW) myTreeWidth = maxTreeW;
-    }
-
-    // Визуальный индикатор при перетаскивании
-    if (active) {
-        ImDrawList* draw = ImGui::GetForegroundDrawList();
-        draw->AddLine(ImVec2(xPos, topY), ImVec2(xPos, bottomY),
-                      IM_COL32(80, 130, 180, 255), 2.0f);
-    }
-
-    ImGui::End();
-}
-
-void Application::DrawDependenciesPanel() {
-    ImGuiIO& io = ImGui::GetIO();
-
-    // Панель только когда в эскизе
-    if (myActiveSketchLabel.IsNull()) return;
-
-    const float panelW = 280.0f;
-    const float panelTop = 340.0f;   // под ViewCube + стрелками
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - panelW - 15, panelTop), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelW, 0), ImGuiCond_Always);
-
-    ImGui::Begin(Tr("panel.dependencies").c_str(), nullptr,
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_AlwaysAutoResize);
-
-    ImGui::TextDisabled("%s", Tr("panel.deps.hint").c_str());
-
-    // === Здесь будут отображаться ограничения эскиза (Coincident, Parallel, и т.д.) ===
-    // Пока пусто — заполним, когда добавим solver.
-    if (ImGui::BeginListBox("##deps_list", ImVec2(-1, 120))) {
-        ImGui::TextDisabled("%s", Tr("panel.deps.empty").c_str());
-        ImGui::EndListBox();
-    }
-
-    ImGui::Separator();
-    ImGui::TextDisabled("Fully Constrained: NO");
-    ImGui::TextDisabled("DOF remaining: ?");
-
-    ImGui::End();
-}
-
 void Application::InitCommands() {
     myCommands.clear();
 
@@ -2748,7 +2675,7 @@ void Application::Run() {
         if (!myShowHomeScreen) {
             DrawRibbon();
             DrawDocumentTree();
-            DrawTreeSplitter();
+            UI::Panels::DrawTreeSplitter(myTreeWidth);
             UI::Dialogs::DrawAddBoxDialog({ &myAddBoxState, myDocument,
                 [this]() { RefreshView(); } });
             DrawPreviewInfo();
@@ -2776,7 +2703,14 @@ void Application::Run() {
             UI::Dialogs::DrawPropertiesDialog({ &myPropertiesState, myDocument });
             DrawContextMenu3D();
             UI::Widgets::DrawSelectionRect(*myOcctView, myWindow->GetNativeWindow());
-            DrawRightPanel();
+            UI::Panels::DrawDependenciesPanel(!myActiveSketchLabel.IsNull());
+            UI::Panels::DrawRightPanel({
+                &myRightPanelExpanded, myIsolationActive,
+                &myIcons, myOcctView.get(), &myTooltipState,
+                [this]() {
+                    if (myIsolationActive) ShowAllRespectingDefaults();
+                    if (myOcctView) myOcctView->FitAll();
+                } });
         }
         {
             UI::Home::HomeContext hs;
@@ -2862,214 +2796,6 @@ void Application::Run() {
         std::cerr << "Unknown exception in main loop (ignored)\n";
       }
     }
-}
-
-void Application::DrawRightPanel() {
-    ImGuiIO& io = ImGui::GetIO();
-
-    const float toolW    = 44.0f;
-    const float toolH    = 34.0f;
-    const float arrowH   = 20.0f;
-    const float handleW  = 26.0f;
-    const float pad      = 3.0f;
-    const float panelW   = toolW + pad * 2.0f;   // = 50
-    // Адаптив: если окно узкое — принудительно свернуть панель
-    bool forceCollapsed = (io.DisplaySize.x < 1100.0f);
-    bool panelExpanded = myRightPanelExpanded && !forceCollapsed;
-
-    const float topY     = 235.0f;   // сразу под ribbon
-    const float panelH   = 330.0f;   // по контенту
-    const float rightEdge = io.DisplaySize.x;
-
-    // === Хлястик (стрелка-таб) слева от панели ===
-    const float edgeMargin = 14.0f;  // отступ от правого края
-    float handleX = panelExpanded
-                    ? (rightEdge - panelW - handleW - edgeMargin)
-                    : (rightEdge - handleW - edgeMargin);
-    float handleH = 84.0f;
-    float handleY = topY + (panelH - handleH) * 0.35f;
-
-    ImGui::SetNextWindowPos(ImVec2(handleX, handleY), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(handleW, handleH), ImGuiCond_Always);
-    ImGui::Begin("##right_handle", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
-        ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-    // Кастомный хлястик — рисуем через GetWindowPos (надёжнее)
-    ImVec2 wpos = ImGui::GetWindowPos();
-    ImVec2 hMin = wpos;
-    ImVec2 hMax = ImVec2(wpos.x + handleW, wpos.y + handleH);
-
-    ImGui::SetCursorPos(ImVec2(0, 0));
-    ImGui::InvisibleButton("##right_handle_btn", ImVec2(handleW, handleH));
-    bool hClicked = ImGui::IsItemClicked();
-    bool hHovered = ImGui::IsItemHovered();
-
-    ImDrawList* hdl = ImGui::GetWindowDrawList();
-
-    // Фон хлястика — отчётливо видимый
-    ImU32 hBg;
-    bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
-    if (hHovered) {
-        hBg = IM_COL32(60, 120, 200, 255);
-    } else if (isLight) {
-        hBg = IM_COL32(140, 130, 110, 240);   // тёмно-бежевый в светлой
-    } else {
-        hBg = IM_COL32(90, 100, 120, 240);    // серо-синий в тёмной
-    }
-    hdl->AddRectFilled(hMin, hMax, hBg, 6.0f);
-
-    // Иконка шеврона
-    const char* hIcon = panelExpanded ? "chevron-right" : "chevron-left";
-    GLuint hTex = myIcons.Get(hIcon, 20);
-    if (hTex != 0) {
-        ImVec2 ip(hMin.x + (handleW - 20) * 0.5f,
-                  hMin.y + (handleH - 20) * 0.5f);
-        hdl->AddImage((ImTextureID)(intptr_t)hTex, ip,
-                      ImVec2(ip.x + 20, ip.y + 20),
-                      ImVec2(0, 0), ImVec2(1, 1),
-                      ImGui::GetColorU32(UI::Widgets::IconTintColor(true)));
-    }
-
-    if (hClicked) {
-        myRightPanelExpanded = !myRightPanelExpanded;
-    }
-    if (hHovered) {
-        ImGui::SetTooltip(panelExpanded ? "Свернуть панель" : "Развернуть панель");
-    }
-    ImGui::End();
-
-    if (!panelExpanded) return;
-
-    // === Тело панели ===
-    float panelX = rightEdge - panelW - edgeMargin;
-    ImGui::SetNextWindowPos(ImVec2(panelX, topY), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelW, panelH), ImGuiCond_Always);
-    ImGui::Begin("##right_panel", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 5));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 6));
-
-    // --- 1. Панорамировать ---
-    if (UI::Widgets::SvgIconBtn(myIcons, "panel_pan", "hand", 20, toolW, toolH, "Панорамировать")) {
-        // TODO: активировать режим панорамирования
-    }
-    myTooltipState.Draw("panel.pan", "Панорамировать",
-        "Сдвинуть вид мышью",
-        "Активирует инструмент панорамирования. После активации зажмите ЛКМ "
-        "в 3D-сцене и перемещайте мышь, чтобы сдвинуть вид.");
-
-    ImGui::Separator();
-
-    // --- 2. Показать рамкой (с выпадающим меню) ---
-    if (UI::Widgets::SvgIconBtn(myIcons, "panel_zoom", "search", 20, toolW, toolH, "Показать рамкой")) {
-        // TODO: активировать режим "показать рамкой"
-    }
-    myTooltipState.Draw("panel.zoom", "Показать рамкой",
-        "Зуммирование выделенной области",
-        "Основное действие — приблизить область, выделенную рамкой. "
-        "Стрелка вниз открывает дополнительные режимы зуммирования.");
-
-    if (UI::Widgets::SvgIconBtn(myIcons, "zoom_dd", "chevron-down", 14, toolW, arrowH, "Доп. режимы зума")) {
-        ImGui::OpenPopup("##zoom_menu");
-        ImVec2 btnMin = ImGui::GetItemRectMin();
-        ImVec2 pp(btnMin.x - 280.0f, btnMin.y);
-        if (pp.x < 8.0f) pp.x = 8.0f;
-        ImGui::SetNextWindowPos(pp, ImGuiCond_Always);
-    }
-    if (ImGui::BeginPopup("##zoom_menu")) {
-        if (ImGui::MenuItem("Зуммировать")) {}
-        if (ImGui::MenuItem("Показать всё")) {
-            if (myOcctView) {
-                if (myIsolationActive) {
-                    ShowAllRespectingDefaults();
-                }
-                myOcctView->FitAll();
-            }
-        }
-        if (ImGui::MenuItem("Показать рамкой")) {}
-        if (ImGui::MenuItem("Показать выбранное")) {}
-        ImGui::EndPopup();
-    }
-
-    ImGui::Separator();
-
-    // --- 3. Свободная орбита (с выпадающим меню) ---
-    if (UI::Widgets::SvgIconBtn(myIcons, "panel_orbit", "rotate-cw", 20, toolW, toolH, "Орбита")) {
-        // TODO: активировать орбиту
-    }
-    myTooltipState.Draw("panel.orbit", "Свободная орбита",
-        "Вращение модели вокруг центра",
-        "Основное действие — свободное вращение вида. Стрелка вниз открывает "
-        "различные режимы вращения (с зависимостями, поворот под углом).");
-
-    if (UI::Widgets::SvgIconBtn(myIcons, "orbit_dd", "chevron-down", 14, toolW, arrowH, "Доп. режимы орбиты")) {
-        ImGui::OpenPopup("##orbit_menu");
-        ImVec2 btnMin = ImGui::GetItemRectMin();
-        ImVec2 pp(btnMin.x - 280.0f, btnMin.y);
-        if (pp.x < 8.0f) pp.x = 8.0f;
-        ImGui::SetNextWindowPos(pp, ImGuiCond_Always);
-    }
-    if (ImGui::BeginPopup("##orbit_menu")) {
-        if (ImGui::MenuItem("Орбита")) {}
-        if (ImGui::MenuItem("Орбита с зависимостями")) {}
-        if (ImGui::MenuItem("Повернуть под углом")) {}
-        ImGui::EndPopup();
-    }
-
-    ImGui::Separator();
-
-    // --- 4. Вид на объект ---
-    if (UI::Widgets::SvgIconBtn(myIcons, "panel_viewon", "eye", 20, toolW, toolH, "Вид на объект")) {
-        // TODO: активировать режим "вид на грань"
-    }
-    myTooltipState.Draw("panel.viewon", "Вид на объект",
-        "Ориентировать вид по выбранной грани",
-        "После активации кликните по любой грани модели — камера развернётся "
-        "так, чтобы вы смотрели на эту грань перпендикулярно.");
-
-    ImGui::Separator();
-
-    // --- 5. Стили отображения (с выпадающим меню) ---
-    if (UI::Widgets::SvgIconBtn(myIcons, "panel_style", "palette", 20, toolW, toolH, "Стиль отображения")) {
-        // TODO: циклить стиль
-    }
-    myTooltipState.Draw("panel.style", "Стили отображения",
-        "Тонированный, каркасный и другие режимы",
-        "Основное действие — переключение стиля отображения модели. "
-        "Стрелка вниз открывает полный список стилей.");
-
-    if (UI::Widgets::SvgIconBtn(myIcons, "style_dd", "chevron-down", 14, toolW, arrowH, "Все стили отображения")) {
-        ImGui::OpenPopup("##style_menu");
-        ImVec2 btnMin = ImGui::GetItemRectMin();
-        ImVec2 pp(btnMin.x - 280.0f, btnMin.y);
-        if (pp.x < 8.0f) pp.x = 8.0f;
-        ImGui::SetNextWindowPos(pp, ImGuiCond_Always);
-    }
-    if (ImGui::BeginPopup("##style_menu")) {
-        if (ImGui::MenuItem("Тонированный с рёбрами")) {
-            if (myOcctView) myOcctView->SetDisplayModeAll(1, true);   // AIS_Shaded = 1
-        }
-        if (ImGui::MenuItem("Тонированный")) {
-            if (myOcctView) myOcctView->SetDisplayModeAll(1, false);
-        }
-        if (ImGui::MenuItem("Каркасный")) {
-            if (myOcctView) myOcctView->SetDisplayModeAll(0, false);  // AIS_WireFrame = 0
-        }
-        ImGui::Separator();
-        ImGui::MenuItem("Реалистичный (скоро)", nullptr, false, false);
-        ImGui::MenuItem("Скрытые линии (скоро)", nullptr, false, false);
-        ImGui::MenuItem("Прозрачный (скоро)", nullptr, false, false);
-        ImGui::EndPopup();
-    }
-
-    ImGui::PopStyleVar(2);
-    ImGui::End();
 }
 
 } // namespace BreezeCAD

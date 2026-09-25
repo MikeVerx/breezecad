@@ -18,7 +18,10 @@
 #include "ui/dialogs/NotImplementedDialog.h"// UI::Dialogs::NotImplementedState
 #include "ui/dialogs/UnsavedChangesDialog.h"
 #include "ui/dialogs/DependencyDialog.h"
-#include "ui/dialogs/SettingsDialog.h"      // UI::Dialogs::SettingsState    // UI::Dialogs::DependencyState// UI::Dialogs::UnsavedState        // UI::Dialogs::AddBoxState       // UI::Qat::QatCommand
+#include "ui/dialogs/SettingsDialog.h"
+#include "ui/panels/TreeSplitter.h"          // UI::Panels::DrawTreeSplitter
+#include "ui/panels/RightPanel.h"            // UI::Panels::DrawRightPanel
+#include "ui/panels/DependenciesPanel.h"     // UI::Panels::DrawDependenciesPanel
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -178,7 +181,6 @@ private:
     double myMouseY = 0.0;
 
     void DrawDocumentTree();
-    void DrawTreeSplitter();
     void DrawContextMenu3D();
     void DrawContextMenuItems(const TDF_Label& label, bool hasOps);
 
@@ -187,7 +189,6 @@ private:
 
     // Показать все объекты, уважая правила видимости (для снятия изоляции)
     void ShowAllRespectingDefaults();
-    void DrawRightPanel();
     void DrawRenameDialog();
     void DrawDeleteConfirmDialog();
     void DrawUnsavedChangesDialog();
@@ -199,7 +200,6 @@ private:
     void DrawViewCube();
     void DrawDependencyDialog();
     void OpenDependencyDialog(int type);
-    void DrawDependenciesPanel();
     void DrawPreviewInfo();
     void RefreshView();
     void RefreshSketchLines();
