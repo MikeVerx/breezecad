@@ -21,7 +21,8 @@
 #include "ui/dialogs/AddBoxDialog.h"
 #include "ui/dialogs/PropertiesDialog.h"    // UI::Dialogs::DrawPropertiesDialog
 #include "ui/dialogs/NotImplementedDialog.h"// UI::Dialogs::DrawNotImplementedDialog
-#include "ui/dialogs/UnsavedChangesDialog.h"// UI::Dialogs::DrawUnsavedChangesDialog
+#include "ui/dialogs/UnsavedChangesDialog.h"
+#include "ui/dialogs/DependencyDialog.h"    // UI::Dialogs::DrawDependencyDialog// UI::Dialogs::DrawUnsavedChangesDialog
 #include "ui/home/Thumbnails.h"            // UI::Home::CaptureCurrentThumbnail и др.
 #include "ui/theme/Fonts.h"
 
@@ -1717,7 +1718,7 @@ void Application::OnSketchClick(int px, int py) {
     if (!myOcctView || !myDocument || myActiveSketchLabel.IsNull()) return;
 
     // Если открыт диалог зависимостей — клик добавляет объекты в списки
-    if (myDependencyDialogOpen) {
+    if (myDependencyState.open) {
         if (!myOcctView->SelectAtPixel(px, py)) return;
 
         TDF_Label sel = myOcctView->GetSelectedLabel();
@@ -1735,13 +1736,13 @@ void Application::OnSketchClick(int px, int py) {
             return false;
         };
 
-        if (!inList(myDependencyBase) && !inList(myDependencyDependent)) {
+        if (!inList(myDependencyState.base) && !inList(myDependencyState.dependent)) {
             // Первый клик — базовый, остальные — зависимые
-            if (myDependencyBase.empty()) {
-                myDependencyBase.push_back(sel);
+            if (myDependencyState.base.empty()) {
+                myDependencyState.base.push_back(sel);
                 std::cout << "Dependency: base = " << Util::GetLabelName(sel) << "\n";
             } else {
-                myDependencyDependent.push_back(sel);
+                myDependencyState.dependent.push_back(sel);
                 std::cout << "Dependency: dependent = " << Util::GetLabelName(sel) << "\n";
             }
         }
@@ -2588,121 +2589,6 @@ void Application::DrawSettingsDialog() {
     ImGui::End();
 }
 
-void Application::OpenDependencyDialog(int type) {
-    myDependencyDialogOpen = true;
-    myCurrentDependencyType = type;
-    myDependencyBase.clear();
-    myDependencyDependent.clear();
-    // Позиция сохранится (myDependencyDialogPosSet)
-}
-
-void Application::DrawDependencyDialog() {
-    if (!myDependencyDialogOpen) return;
-
-    // Названия зависимостей по индексу
-    static const char* depNames[] = {
-        "Совпадение", "Параллельность", "Перпендикулярность",
-        "Горизонталь", "Вертикаль", "Касание",
-        "Концентричность", "Равенство"
-    };
-    const char* title = depNames[myCurrentDependencyType % 8];
-
-    // Позиция — по умолчанию по центру, но запоминается после первого перетаскивания
-    ImGuiIO& io = ImGui::GetIO();
-    if (!myDependencyDialogPosSet) {
-        myDependencyDialogPos = ImVec2(io.DisplaySize.x * 0.5f - 150,
-                                        io.DisplaySize.y * 0.5f - 150);
-        myDependencyDialogPosSet = true;
-    }
-
-    // Первая установка позиции — только один раз
-    ImGui::SetNextWindowPos(myDependencyDialogPos, ImGuiCond_Once);
-    ImGui::SetNextWindowSize(ImVec2(320, 0), ImGuiCond_Once);
-
-    std::string winTitle = std::string(title) + "##dep_dialog";
-    ImGui::Begin(winTitle.c_str(), nullptr,
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize);
-
-    // Запоминаем позицию — она сохранится до конца сеанса
-    myDependencyDialogPos = ImGui::GetWindowPos();
-
-    // === Базовый объект ===
-    ImGui::Text("Базовый объект:");
-    ImGui::BeginChild("##base_list", ImVec2(0, 80), true);
-    if (myDependencyBase.empty()) {
-        ImGui::TextDisabled("(кликните по линии в сцене)");
-    } else {
-        for (size_t i = 0; i < myDependencyBase.size(); i++) {
-            std::string name = Util::GetLabelName(myDependencyBase[i]);
-            ImGui::PushID((int)i);
-            ImGui::Text("%s", name.c_str());
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20);
-            if (ImGui::SmallButton("x")) {
-                myDependencyBase.erase(myDependencyBase.begin() + i);
-                ImGui::PopID();
-                break;
-            }
-            ImGui::PopID();
-        }
-    }
-    ImGui::EndChild();
-
-    ImGui::Spacing();
-
-    // === Зависимые объекты ===
-    ImGui::Text("Зависимые объекты:");
-    ImGui::BeginChild("##dep_list", ImVec2(0, 80), true);
-    if (myDependencyDependent.empty()) {
-        ImGui::TextDisabled("(кликните по линиям в сцене)");
-    } else {
-        for (size_t i = 0; i < myDependencyDependent.size(); i++) {
-            std::string name = Util::GetLabelName(myDependencyDependent[i]);
-            ImGui::PushID((int)(1000 + i));
-            ImGui::Text("%s", name.c_str());
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20);
-            if (ImGui::SmallButton("x")) {
-                myDependencyDependent.erase(myDependencyDependent.begin() + i);
-                ImGui::PopID();
-                break;
-            }
-            ImGui::PopID();
-        }
-    }
-    ImGui::EndChild();
-
-    ImGui::Spacing();
-    ImGui::Separator();
-
-    // === Кнопки ===
-    float btnW = 95.0f;
-    if (ImGui::Button("Отмена", ImVec2(btnW, 0))) {
-        myDependencyDialogOpen = false;
-        myDependencyBase.clear();
-        myDependencyDependent.clear();
-        if (myOcctView) myOcctView->ClearSelection();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Применить", ImVec2(btnW, 0))) {
-        // TODO: сохранить зависимость в OCAF
-        std::cout << "Dependency '" << title << "' applied with "
-                  << myDependencyBase.size() << " base and "
-                  << myDependencyDependent.size() << " dependent objects\n";
-        // Очищаем поля, но окно оставляем открытым
-        myDependencyBase.clear();
-        myDependencyDependent.clear();
-        if (myOcctView) myOcctView->ClearSelection();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Готово", ImVec2(btnW, 0))) {
-        myDependencyDialogOpen = false;
-        myDependencyBase.clear();
-        myDependencyDependent.clear();
-        if (myOcctView) myOcctView->ClearSelection();
-    }
-
-    ImGui::End();
-}
-
 void Application::Run() {
     bool prevF11 = false;
     bool prevDelete = false;
@@ -2738,7 +2624,7 @@ void Application::Run() {
         prevF11 = curF11;
 
         // === Polling ПКМ через GLFW напрямую (ImGui колбэки перезаписаны нашими) ===
-        if (!myDependencyDialogOpen && !myRenameState.show &&
+        if (!myDependencyState.open && !myRenameState.show &&
             !myDeleteConfirmState.show && !myPropertiesState.show) {
             ImGuiIO& io = ImGui::GetIO();
 
@@ -3016,7 +2902,8 @@ void Application::Run() {
                 [this]() { RefreshView(); } });
             DrawPreviewInfo();
             DrawViewCube();
-            DrawDependencyDialog();
+            UI::Dialogs::DrawDependencyDialog({ &myDependencyState, myOcctView.get(),
+                [](const char* t) { std::cout << "Dependency '" << t << "' applied\n"; } });
             UI::Dialogs::DrawRenameDialog({ &myRenameState, myDocument });
             UI::Dialogs::DrawDeleteConfirmDialog({ &myDeleteConfirmState, myDocument,
                 [this]() { RefreshView(); if (myOcctView) myOcctView->FitAll(); } });

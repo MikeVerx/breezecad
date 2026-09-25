@@ -71,6 +71,7 @@ add_executable(breezecad
     src/ui/dialogs/PropertiesDialog.cpp
     src/ui/dialogs/NotImplementedDialog.cpp
     src/ui/dialogs/UnsavedChangesDialog.cpp
+    src/ui/dialogs/DependencyDialog.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp

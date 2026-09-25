@@ -16,7 +16,8 @@
 #include "ui/dialogs/AddBoxDialog.h"
 #include "ui/dialogs/PropertiesDialog.h"    // UI::Dialogs::PropertiesState
 #include "ui/dialogs/NotImplementedDialog.h"// UI::Dialogs::NotImplementedState
-#include "ui/dialogs/UnsavedChangesDialog.h"// UI::Dialogs::UnsavedState        // UI::Dialogs::AddBoxState       // UI::Qat::QatCommand
+#include "ui/dialogs/UnsavedChangesDialog.h"
+#include "ui/dialogs/DependencyDialog.h"    // UI::Dialogs::DependencyState// UI::Dialogs::UnsavedState        // UI::Dialogs::AddBoxState       // UI::Qat::QatCommand
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -48,12 +49,7 @@ private:
     UI::Widgets::TooltipState     myTooltipState;
     IconManager                   myIcons;
     // === Диалог зависимостей ===
-    bool myDependencyDialogOpen = false;
-    int  myCurrentDependencyType = 0;  // 0=Coincident, 1=Parallel, ...
-    std::vector<TDF_Label> myDependencyBase;       // базовые объекты
-    std::vector<TDF_Label> myDependencyDependent;  // зависимые объекты
-    ImVec2 myDependencyDialogPos = ImVec2(0, 0);   // позиция (запоминается)
-    bool   myDependencyDialogPosSet = false;
+    UI::Dialogs::DependencyState myDependencyState;
 
     // === QAT (Quick Access Toolbar) ===
     char mySearchBuffer[128] = "";
