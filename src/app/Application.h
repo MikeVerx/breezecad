@@ -22,7 +22,8 @@
 #include "ui/panels/TreeSplitter.h"          // UI::Panels::DrawTreeSplitter
 #include "ui/panels/RightPanel.h"            // UI::Panels::DrawRightPanel
 #include "ui/panels/DependenciesPanel.h"
-#include "ui/panels/DocumentTree.h"          // UI::Panels::DrawDocumentTree
+#include "ui/panels/DocumentTree.h"
+#include "ui/panels/Visibility.h"          // UI::Panels::ShowAllRespectingDefaults
 #include "ui/panels/ContextMenu.h"           // UI::Panels::DrawContextMenu3D     // UI::Panels::DrawDependenciesPanel
 
 #include <TDF_Label.hxx>
@@ -184,10 +185,8 @@ private:
 
 
     // Логика видимости по умолчанию (учитывает hasOps и myVisibility)
-    bool IsLabelVisibleByDefault(const TDF_Label& label, bool hasOps) const;
 
     // Показать все объекты, уважая правила видимости (для снятия изоляции)
-    void ShowAllRespectingDefaults();
     void DrawRenameDialog();
     void DrawDeleteConfirmDialog();
     void DrawUnsavedChangesDialog();

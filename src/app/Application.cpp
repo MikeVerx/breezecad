@@ -27,7 +27,8 @@
 #include "ui/panels/TreeSplitter.h"          // UI::Panels::DrawTreeSplitter
 #include "ui/panels/RightPanel.h"            // UI::Panels::DrawRightPanel
 #include "ui/panels/DependenciesPanel.h"
-#include "ui/panels/DocumentTree.h"          // UI::Panels::DrawDocumentTree
+#include "ui/panels/DocumentTree.h"
+#include "ui/panels/Visibility.h"          // UI::Panels::ShowAllRespectingDefaults          // UI::Panels::DrawDocumentTree
 #include "ui/panels/ContextMenu.h"           // UI::Panels::DrawContextMenu3D
 #include "ui/home/Thumbnails.h"            // UI::Home::CaptureCurrentThumbnail и др.
 #include "ui/theme/Fonts.h"
@@ -1863,38 +1864,6 @@ void Application::RequestDelete(const TDF_Label& label) {
     myDeleteConfirmState.show = true;
 }
 
-bool Application::IsLabelVisibleByDefault(const TDF_Label& label, bool hasOps) const {
-    if (label.IsNull()) return false;
-
-    int type = BreezeDocument::GetType(label);
-
-    // Скрываемые системные элементы
-    bool isSystemHideable = (type == FT_Axis || type == FT_Plane);
-    if (isSystemHideable && hasOps) return false;
-
-    return true;
-}
-
-void Application::ShowAllRespectingDefaults() {
-    if (!myOcctView || !myDocument) return;
-
-    // Сбрасываем карту видимости полностью — она была навязана изоляцией
-    myVisibility.clear();
-    myIsolationBackup.clear();
-    myIsolationActive = false;
-
-    bool hasOps = myDocument->Has3DOperations();
-
-    // Проходим по всем объектам и применяем правила видимости
-    auto allLabels = myOcctView->GetAllLabels();
-    for (const auto& lbl : allLabels) {
-        bool visible = IsLabelVisibleByDefault(lbl, hasOps);
-        myOcctView->SetShapeVisible(lbl, visible);
-    }
-
-    std::cout << "ShowAllRespectingDefaults: restored\n";
-}
-
 void Application::InitCommands() {
     myCommands.clear();
 
@@ -2215,7 +2184,7 @@ void Application::Run() {
         if (curF6 && !prevF6 && myOcctView) {
             myOcctView->SetHomeView();
             if (myIsolationActive) {
-                ShowAllRespectingDefaults();
+                UI::Panels::ShowAllRespectingDefaults(myOcctView.get(), myDocument, myVisibility, myIsolationBackup, myIsolationActive);
             }
         }
         prevF6 = curF6;
@@ -2274,7 +2243,7 @@ void Application::Run() {
                 [this]() { OnSave(); },
                 [this]() { OnOpen(); },
                 [this](const TDF_Label& l) { EnterSketch(l); },
-                [this]() { ShowAllRespectingDefaults(); },
+                [this]() { UI::Panels::ShowAllRespectingDefaults(myOcctView.get(), myDocument, myVisibility, myIsolationBackup, myIsolationActive); },
                 [this](const TDF_Label& l) { RequestDelete(l); },
                 [this](const TDF_Label& l) {
                     myRenameState.pendingLabel = l;
@@ -2324,7 +2293,7 @@ void Application::Run() {
                 [this]() { OnSave(); },
                 [this]() { OnOpen(); },
                 [this](const TDF_Label& l) { EnterSketch(l); },
-                [this]() { ShowAllRespectingDefaults(); },
+                [this]() { UI::Panels::ShowAllRespectingDefaults(myOcctView.get(), myDocument, myVisibility, myIsolationBackup, myIsolationActive); },
                 [this](const TDF_Label& l) { RequestDelete(l); },
                 [this](const TDF_Label& l) {
                     myRenameState.pendingLabel = l;
@@ -2341,7 +2310,7 @@ void Application::Run() {
                 &myRightPanelExpanded, myIsolationActive,
                 &myIcons, myOcctView.get(), &myTooltipState,
                 [this]() {
-                    if (myIsolationActive) ShowAllRespectingDefaults();
+                    if (myIsolationActive) UI::Panels::ShowAllRespectingDefaults(myOcctView.get(), myDocument, myVisibility, myIsolationBackup, myIsolationActive);
                     if (myOcctView) myOcctView->FitAll();
                 } });
         }
