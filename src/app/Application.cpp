@@ -26,7 +26,9 @@
 #include "ui/dialogs/SettingsDialog.h"
 #include "ui/panels/TreeSplitter.h"          // UI::Panels::DrawTreeSplitter
 #include "ui/panels/RightPanel.h"            // UI::Panels::DrawRightPanel
-#include "ui/panels/DependenciesPanel.h"     // UI::Panels::DrawDependenciesPanel
+#include "ui/panels/DependenciesPanel.h"
+#include "ui/panels/DocumentTree.h"          // UI::Panels::DrawDocumentTree
+#include "ui/panels/ContextMenu.h"           // UI::Panels::DrawContextMenu3D
 #include "ui/home/Thumbnails.h"            // UI::Home::CaptureCurrentThumbnail и др.
 #include "ui/theme/Fonts.h"
 
@@ -457,95 +459,6 @@ void Application::OnOpen() {
 }
 
 // === Дерево ===
-
-bool Application::DrawLabelTree(const TDF_Label& label,
-                                 const TDF_Label& selectedLabel,
-                                 bool hasOps) {
-    // Линии эскиза не показываем в дереве
-    int _earlyType = BreezeDocument::GetType(label);
-    if (_earlyType == FT_SketchLine) return false;
-
-    std::string labelName = "<unnamed>";
-    Handle(TDataStd_Name) nameAttr;
-    if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
-        labelName = ExtToUtf8(nameAttr->Get());
-    }
-
-    int type = BreezeDocument::GetType(label);
-    bool isSystem = (type < 0);
-
-    TDF_ChildIterator childIt(label, false);
-    bool hasChildren = childIt.More();
-
-    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow |
-                                ImGuiTreeNodeFlags_SpanAvailWidth |
-                                ImGuiTreeNodeFlags_DefaultOpen;
-    if (!hasChildren)
-        flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-    if (!selectedLabel.IsNull() && selectedLabel.IsEqual(label))
-        flags |= ImGuiTreeNodeFlags_Selected;
-
-    ImGui::PushID(LabelKey(label).c_str());
-
-    // Чекбокс видимости для системных элементов с геометрией
-    if (isSystem && (type == FT_Plane || type == FT_Axis)) {
-        std::string key = LabelKey(label);
-        auto it = myVisibility.find(key);
-        bool visible;
-        if (it != myVisibility.end()) {
-            visible = it->second;
-        } else {
-            // По умолчанию: скрыто, если есть 3D-операции
-            visible = !hasOps;
-        }
-
-                const char* eyeName = visible ? "eye" : "eye-off";
-        std::string eyeId = "eye_" + LabelKey(label);
-        if (UI::Widgets::SvgIconBtn(myIcons, eyeId.c_str(), eyeName, 14, 22, 18,
-                        visible ? "Скрыть" : "Показать", true)) {
-            myVisibility[key] = !visible;
-            if (myOcctView) myOcctView->SetShapeVisible(label, !visible);
-        }
-        ImGui::SameLine();
-    }
-
-    if (isSystem) {
-        // Системные элементы — цвет текста темы без изменений
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_Text));
-    }
-    bool opened = ImGui::TreeNodeEx(labelName.c_str(), flags);
-    if (isSystem) ImGui::PopStyleColor();
-
-    // Двойной клик по эскизу → войти в режим 2D
-    if (type == FT_Sketch && ImGui::IsItemHovered()
-        && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-        myPendingEnterSketchLabel = label;
-    }
-
-    // === Контекстное меню (ПКМ) ===
-    if (ImGui::BeginPopupContextItem("##ctx")) {
-        ImGui::TextDisabled("%s", labelName.c_str());
-        ImGui::Separator();
-        DrawContextMenuItems(label, hasOps);
-        ImGui::EndPopup();
-    }
-
-    ImGui::SameLine();
-    ImGui::TextDisabled("[type=%d, tag=%d]", type, label.Tag());
-
-    bool requested = false;
-    if (opened && hasChildren) {
-        TDF_ChildIterator it(label, false);
-        for (; it.More(); it.Next()) {
-            if (DrawLabelTree(it.Value(), selectedLabel, hasOps)) requested = true;
-        }
-        ImGui::TreePop();
-    }
-
-    ImGui::PopID();
-    return requested || !myDeleteConfirmState.pendingLabel.IsNull()
-                     || !myPendingCreateSketchLabel.IsNull();
-}
 
 void Application::OnUndo() {
     if (!myDocument) return;
@@ -1498,123 +1411,6 @@ void Application::DrawMenuBar() {
     // Вызывается из Run()
 }
 
-void Application::DrawDocumentTree() {
-    ImGuiIO& io = ImGui::GetIO();
-    const float panelWidth = myTreeWidth;
-
-    ImGui::SetNextWindowPos(ImVec2(0, 211), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelWidth, io.DisplaySize.y - 211 - 76), ImGuiCond_Always);
-
-    ImGui::Begin("##tree_panel", nullptr,
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus |
-        ImGuiWindowFlags_NoTitleBar);
-
-    ImGui::Text("%s", Tr("panel.title").c_str());
-    ImGui::Separator();
-
-    if (ImGui::Button(Tr("panel.addBox").c_str())) {
-        myAddBoxState.show = true;
-        std::strncpy(myAddBoxState.name, Tr("default.boxName").c_str(), sizeof(myAddBoxState.name) - 1);
-        myAddBoxState.name[sizeof(myAddBoxState.name) - 1] = '\0';
-        myAddBoxState.pos[0] = myAddBoxState.pos[1] = myAddBoxState.pos[2] = 0.0f;
-        myAddBoxState.size[0] = myAddBoxState.size[1] = myAddBoxState.size[2] = 100.0f;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Save")) OnSave();
-    ImGui::SameLine();
-    if (ImGui::Button("Open")) OnOpen();
-    ImGui::Separator();
-
-    if (!myDocument || myDocument->GetDoc().IsNull()) {
-        ImGui::Text("%s", Tr("panel.document.null").c_str());
-        ImGui::End();
-        return;
-    }
-
-    bool hasOps = myDocument->Has3DOperations();
-
-    TDF_Label selectedLabel;
-    if (myOcctView) selectedLabel = myOcctView->GetSelectedLabel();
-
-    TDF_Label root = myDocument->MainLabel();
-
-    if (ImGui::TreeNodeEx(Tr("panel.document").c_str(),
-            ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
-
-        // === Папка Start ===
-        TDF_Label baseLabel = myDocument->GetBaseGeometryLabel();
-        if (!baseLabel.IsNull()) {
-            // Start открыт, если:
-            //  - нет 3D-операций, ИЛИ
-            //  - пользователь развернул его вручную
-            bool startOpen = !hasOps || myStartExpandedManually;
-
-            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_Text));
-            ImGui::SetNextItemOpen(startOpen, ImGuiCond_Always);
-            bool opened = ImGui::TreeNodeEx("Start",
-                ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth);
-            ImGui::PopStyleColor();
-
-            // Пользователь кликнул — запоминаем его выбор
-            if (ImGui::IsItemToggledOpen()) {
-                myStartExpandedManually = opened;
-            }
-
-            if (opened) {
-                // Внутри Start: только плоскости.
-                // Origin Point — скрыт. Оси — скрыты, если есть 3D-операции.
-                TDF_ChildIterator it(baseLabel, false);
-                for (; it.More(); it.Next()) {
-                    TDF_Label child = it.Value();
-                    int type = BreezeDocument::GetType(child);
-
-                    // Origin Point — никогда не показываем
-                    if (type == FT_OriginPoint) continue;
-
-                    // Оси не показываем вообще
-                    // FT_Axis теперь тоже показывается
-
-                    // Плоскости и (при отсутствии операций) оси — показываем
-                    DrawLabelTree(child, selectedLabel, hasOps);
-                }
-                ImGui::TreePop();
-            }
-        }
-
-        // === Пользовательские фичи (прямые дети Main, кроме Start) ===
-        TDF_ChildIterator it(root, false);
-        for (; it.More(); it.Next()) {
-            TDF_Label child = it.Value();
-            if (child.IsEqual(baseLabel)) continue;
-            DrawLabelTree(child, selectedLabel, hasOps);
-        }
-
-        ImGui::TreePop();
-    }
-
-    ImGui::End();
-
-    // Обработка отложенных операций
-    if (!myPendingCreateSketchLabel.IsNull() && myDocument) {
-        // Создаём эскиз и сразу запоминаем, куда войти
-        TDF_Label parentPlane = myPendingCreateSketchLabel;
-        TDF_Label newSketch = myDocument->AddSketchFeature(parentPlane);
-        myPendingCreateSketchLabel = TDF_Label();
-
-        // Автоматически входим в созданный эскиз
-        if (!newSketch.IsNull()) {
-            myPendingEnterSketchLabel = newSketch;
-            std::cout << "Auto-enter sketch: tag=" << newSketch.Tag() << "\n";
-        }
-    }
-    if (!myPendingEnterSketchLabel.IsNull() && myDocument) {
-        EnterSketch(myPendingEnterSketchLabel);
-        myPendingEnterSketchLabel = TDF_Label();
-    }
-    // myDeleteConfirmState.pendingLabel теперь обрабатывается через диалог подтверждения
-}
-
 void Application::RefreshSketchLines() {
     if (!myDocument || !myOcctView || myActiveSketchLabel.IsNull()) return;
 
@@ -2099,212 +1895,6 @@ void Application::ShowAllRespectingDefaults() {
     std::cout << "ShowAllRespectingDefaults: restored\n";
 }
 
-void Application::DrawContextMenuItems(const TDF_Label& label, bool hasOps) {
-    if (label.IsNull()) return;
-
-    std::string labelName = "<unnamed>";
-    Handle(TDataStd_Name) nameAttr;
-    if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
-        labelName = ExtToUtf8(nameAttr->Get());
-    }
-
-    int type = BreezeDocument::GetType(label);
-    bool isSystem = (type < 0);
-    std::string key = LabelKey(label);
-
-    // === Сброс изоляции (если активна) ===
-    if (myIsolationActive) {
-        if (ImGui::MenuItem("Показать всё (снять изоляцию)")) {
-            ShowAllRespectingDefaults();
-        }
-        ImGui::Separator();
-    }
-
-    // === Плоскость ===
-    if (type == FT_Plane) {
-        if (ImGui::MenuItem("Создать эскиз")) {
-            myPendingCreateSketchLabel = label;
-        }
-        ImGui::Separator();
-    }
-
-    // === Эскиз ===
-    if (type == FT_Sketch) {
-        if (ImGui::MenuItem("Редактировать эскиз")) {
-            myPendingEnterSketchLabel = label;
-        }
-        ImGui::Separator();
-    }
-
-    // === 3D-операция ===
-    if (type == FT_Box || type == FT_Cylinder || type == FT_Hole) {
-        if (ImGui::MenuItem("Редактировать")) {}
-        if (ImGui::MenuItem("Измерить")) {}
-        if (ImGui::MenuItem("Изолировать")) {
-            if (myOcctView && myDocument) {
-                // 1. Копируем список меток ДО любых изменений
-                std::vector<TDF_Label> allLabels = myOcctView->GetAllLabels();
-
-                // 2. Сохраняем текущую видимость для последующего "Показать всё"
-                myIsolationBackup = myVisibility;
-                myIsolationActive = true;
-
-                // 3. Скрываем всё, кроме выделенного
-                for (const auto& entry : allLabels) {
-                    if (entry.IsEqual(label)) continue;
-                    if (BreezeDocument::IsSystem(entry)) continue;  // системные не трогаем
-
-                    std::string k = LabelKey(entry);
-                    myVisibility[k] = false;
-                    myOcctView->SetShapeVisible(entry, false);
-                }
-            }
-        }
-        ImGui::Separator();
-    }
-
-    // === Start ===
-    if (type == FT_Start) {
-        if (ImGui::MenuItem("Показать все плоскости и оси")) {
-            TDF_ChildIterator it(label, false);
-            for (; it.More(); it.Next()) {
-                TDF_Label child = it.Value();
-                int ct = BreezeDocument::GetType(child);
-                if (ct == FT_Plane || ct == FT_Axis) {
-                    std::string k = LabelKey(child);
-                    myVisibility[k] = true;
-                    if (myOcctView) myOcctView->SetShapeVisible(child, true);
-                }
-            }
-        }
-        if (ImGui::MenuItem("Скрыть все плоскости и оси")) {
-            TDF_ChildIterator it(label, false);
-            for (; it.More(); it.Next()) {
-                TDF_Label child = it.Value();
-                int ct = BreezeDocument::GetType(child);
-                if (ct == FT_Plane || ct == FT_Axis) {
-                    std::string k = LabelKey(child);
-                    myVisibility[k] = false;
-                    if (myOcctView) myOcctView->SetShapeVisible(child, false);
-                }
-            }
-        }
-        ImGui::Separator();
-    }
-
-    // === Скрыть / Показать ===
-    if (isSystem && (type == FT_Plane || type == FT_Axis)) {
-        auto it = myVisibility.find(key);
-        bool curVisible = (it != myVisibility.end()) ? it->second : !hasOps;
-
-        if (ImGui::MenuItem(curVisible ? ICON_EYE_SLASH "  Скрыть" : ICON_EYE "  Показать")) {
-            myVisibility[key] = !curVisible;
-            if (myOcctView) myOcctView->SetShapeVisible(label, !curVisible);
-        }
-        ImGui::Separator();
-    }
-
-    // === Копировать ===
-    if (!isSystem) {
-        if (ImGui::MenuItem("Копировать")) {
-            myClipboardLabel = label;
-            std::cout << "Copied: " << labelName << "\n";
-        }
-    }
-
-    // === Вставить ===
-    if (!myClipboardLabel.IsNull()) {
-        if (ImGui::MenuItem("Вставить")) {
-            std::cout << "Paste — TODO\n";
-        }
-    }
-
-    if (!isSystem) {
-        ImGui::Separator();
-    }
-
-    // === Переименовать ===
-    if (!isSystem) {
-        if (ImGui::MenuItem("Переименовать")) {
-            myRenameState.pendingLabel = label;
-            std::strncpy(myRenameState.buffer, labelName.c_str(), sizeof(myRenameState.buffer) - 1);
-            myRenameState.buffer[sizeof(myRenameState.buffer) - 1] = '\0';
-            myRenameState.show = true;
-        }
-    }
-
-    // === Свойства ===
-    if (ImGui::MenuItem("Свойства...")) {
-        myPropertiesState.pendingLabel = label;
-        myPropertiesState.show = true;
-    }
-
-    // === Удалить ===
-    if (!isSystem) {
-        ImGui::Separator();
-        if (ImGui::MenuItem("Удалить")) {
-            RequestDelete(label);
-        }
-    }
-}
-
-void Application::DrawContextMenu3D() {
-    if (myPendingContextMenu) {
-        ImGui::SetNextWindowPos(myContextMenuPos, ImGuiCond_Always);
-        ImGui::OpenPopup("##ctx_3d");
-        myPendingContextMenu = false;
-    }
-
-    if (ImGui::BeginPopup("##ctx_3d")) {
-        TDF_Label sel;
-        if (myOcctView) sel = myOcctView->GetSelectedLabel();
-
-        if (sel.IsNull()) {
-            // === ПКМ по пустому месту ===
-            if (ImGui::MenuItem("Домой (F6)")) {
-                if (myOcctView) myOcctView->SetHomeView();
-            }
-            if (ImGui::MenuItem("Изометрия")) {
-                if (myOcctView) myOcctView->SetHomeView();
-            }
-            ImGui::Separator();
-            if (ImGui::BeginMenu("Вид")) {
-                if (ImGui::MenuItem("Сверху"))
-                    myOcctView->SetCameraDirectionAndUp(gp_Dir(0, 0, -1), gp_Dir(0, 1, 0));
-                if (ImGui::MenuItem("Снизу"))
-                    myOcctView->SetCameraDirectionAndUp(gp_Dir(0, 0, 1), gp_Dir(0, 1, 0));
-                if (ImGui::MenuItem("Спереди"))
-                    myOcctView->SetCameraDirectionAndUp(gp_Dir(0, -1, 0), gp_Dir(0, 0, 1));
-                if (ImGui::MenuItem("Сзади"))
-                    myOcctView->SetCameraDirectionAndUp(gp_Dir(0, 1, 0), gp_Dir(0, 0, 1));
-                if (ImGui::MenuItem("Справа"))
-                    myOcctView->SetCameraDirectionAndUp(gp_Dir(-1, 0, 0), gp_Dir(0, 0, 1));
-                if (ImGui::MenuItem("Слева"))
-                    myOcctView->SetCameraDirectionAndUp(gp_Dir(1, 0, 0), gp_Dir(0, 0, 1));
-                ImGui::EndMenu();
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Показать всё")) {
-                if (myOcctView) myOcctView->FitAll();
-            }
-        } else {
-            // === ПКМ по объекту — то же меню, что и в дереве ===
-            std::string name = "<unnamed>";
-            Handle(TDataStd_Name) nameAttr;
-            if (sel.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
-                name = ExtToUtf8(nameAttr->Get());
-            }
-
-            ImGui::TextDisabled("%s", name.c_str());
-            ImGui::Separator();
-
-            bool hasOps = myDocument ? myDocument->Has3DOperations() : false;
-            DrawContextMenuItems(sel, hasOps);
-        }
-        ImGui::EndPopup();
-    }
-}
-
 void Application::InitCommands() {
     myCommands.clear();
 
@@ -2674,7 +2264,30 @@ void Application::Run() {
 
         if (!myShowHomeScreen) {
             DrawRibbon();
-            DrawDocumentTree();
+            UI::Panels::DrawDocumentTree({
+                myDocument, myOcctView.get(), &myIcons,
+                &myVisibility, &myIsolationBackup,
+                &myAddBoxState, &myRenameState, &myDeleteConfirmState, &myPropertiesState,
+                &myStartExpandedManually, &myIsolationActive,
+                &myPendingCreateSketchLabel, &myPendingEnterSketchLabel, &myClipboardLabel,
+                &myPendingContextMenu, &myContextMenuPos,
+                [this]() { OnSave(); },
+                [this]() { OnOpen(); },
+                [this](const TDF_Label& l) { EnterSketch(l); },
+                [this]() { ShowAllRespectingDefaults(); },
+                [this](const TDF_Label& l) { RequestDelete(l); },
+                [this](const TDF_Label& l) {
+                    myRenameState.pendingLabel = l;
+                    std::string nm = Util::GetLabelName(l);
+                    std::strncpy(myRenameState.buffer, nm.c_str(), sizeof(myRenameState.buffer) - 1);
+                    myRenameState.buffer[sizeof(myRenameState.buffer) - 1] = '\0';
+                    myRenameState.show = true;
+                },
+                [this](const TDF_Label& l) {
+                    myPropertiesState.pendingLabel = l;
+                    myPropertiesState.show = true;
+                }
+            });
             UI::Panels::DrawTreeSplitter(myTreeWidth);
             UI::Dialogs::DrawAddBoxDialog({ &myAddBoxState, myDocument,
                 [this]() { RefreshView(); } });
@@ -2701,7 +2314,27 @@ void Application::Run() {
                 [this](int idx) { CloseDoc(idx); },
                 [this]() { glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE); } });
             UI::Dialogs::DrawPropertiesDialog({ &myPropertiesState, myDocument });
-            DrawContextMenu3D();
+            UI::Panels::DrawContextMenu3D({
+                myDocument, myOcctView.get(), &myIcons,
+                &myVisibility, &myIsolationBackup,
+                &myAddBoxState, &myRenameState, &myDeleteConfirmState, &myPropertiesState,
+                &myStartExpandedManually, &myIsolationActive,
+                &myPendingCreateSketchLabel, &myPendingEnterSketchLabel, &myClipboardLabel,
+                &myPendingContextMenu, &myContextMenuPos,
+                [this]() { OnSave(); },
+                [this]() { OnOpen(); },
+                [this](const TDF_Label& l) { EnterSketch(l); },
+                [this]() { ShowAllRespectingDefaults(); },
+                [this](const TDF_Label& l) { RequestDelete(l); },
+                [this](const TDF_Label& l) {
+                    myRenameState.pendingLabel = l;
+                    myRenameState.show = true;
+                },
+                [this](const TDF_Label& l) {
+                    myPropertiesState.pendingLabel = l;
+                    myPropertiesState.show = true;
+                }
+            });
             UI::Widgets::DrawSelectionRect(*myOcctView, myWindow->GetNativeWindow());
             UI::Panels::DrawDependenciesPanel(!myActiveSketchLabel.IsNull());
             UI::Panels::DrawRightPanel({
