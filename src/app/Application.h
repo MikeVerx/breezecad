@@ -53,16 +53,13 @@ private:
     char mySearchBuffer[128] = "";
     // === Недавние файлы ===
     std::vector<std::string> myRecentFiles;
-    void AddRecentFile(const std::string& path);
 
     // === Превью проектов ===
     // Для каждого документа — путь к файлу-превью (PNG)
     std::vector<std::string> myThumbnailPaths;
 
     // Сохранить превью текущего активного документа в PNG
-    void CaptureCurrentThumbnail();
     // Возвращает путь к превью для документа (пустой, если нет)
-    std::string GetThumbnailPath(int docIndex) const;
 
     // === Буфер обмена (для копирования объектов) ===
     TDF_Label myClipboardLabel;
@@ -202,7 +199,6 @@ private:
     // Показать все объекты, уважая правила видимости (для снятия изоляции)
     void ShowAllRespectingDefaults();
     void DrawRightPanel();
-    void DrawHomeScreen();
     void DrawRenameDialog();
     void DrawDeleteConfirmDialog();
     void DrawUnsavedChangesDialog();
