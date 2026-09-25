@@ -7,7 +7,8 @@
 #include "ui/theme/ThemeManager.h"
 #include "ui/widgets/IconTint.h"
 #include "ui/widgets/SvgButton.h"
-#include "ui/widgets/Tooltip.h"            // UI::Widgets::TooltipState
+#include "ui/widgets/Tooltip.h"
+#include "ui/widgets/SelectionRect.h"     // UI::Widgets::DrawSelectionRect
 #include "ui/theme/Fonts.h"
 
 #include "imgui.h"
@@ -3811,7 +3812,7 @@ void Application::Run() {
             DrawUnsavedChangesDialog();
             DrawPropertiesDialog();
             DrawContextMenu3D();
-            DrawSelectionRect();
+            UI::Widgets::DrawSelectionRect(*myOcctView, myWindow->GetNativeWindow());
             DrawRightPanel();
         }
         DrawHomeScreen();
@@ -3862,34 +3863,6 @@ void Application::Run() {
         std::cerr << "Unknown exception in main loop (ignored)\n";
       }
     }
-}
-
-void Application::DrawSelectionRect() {
-    if (!myOcctView) return;
-    if (!myOcctView->IsSelectionRectActive()) return;
-    if (ImGui::GetIO().WantCaptureMouse) return;
-
-    int x1, y1, x2, y2;
-    myOcctView->GetSelectionRect(x1, y1, x2, y2);
-
-    // Координаты в framebuffer'е — переводим в логические (ImGui)
-    int winW = 1, winH = 1, fbW = 1, fbH = 1;
-    glfwGetWindowSize(myWindow->GetNativeWindow(), &winW, &winH);
-    glfwGetFramebufferSize(myWindow->GetNativeWindow(), &fbW, &fbH);
-
-    float sx = (fbW > 0) ? (float)winW / fbW : 1.0f;
-    float sy = (fbH > 0) ? (float)winH / fbH : 1.0f;
-
-    ImVec2 p1(x1 * sx, y1 * sy);
-    ImVec2 p2(x2 * sx, y2 * sy);
-
-    ImVec2 tl(std::min(p1.x, p2.x), std::min(p1.y, p2.y));
-    ImVec2 br(std::max(p1.x, p2.x), std::max(p1.y, p2.y));
-
-    ImDrawList* draw = ImGui::GetForegroundDrawList();
-
-    draw->AddRectFilled(tl, br, IM_COL32(80, 130, 180, 60));
-    draw->AddRect(tl, br, IM_COL32(80, 130, 180, 255), 0.0f, 0, 1.5f);
 }
 
 void Application::DrawRightPanel() {

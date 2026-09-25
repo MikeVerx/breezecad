@@ -6,7 +6,8 @@
 #include "app/IconManager.h"
 #include "ui/viewcube/ViewCubeOverlay.h"
 #include "ui/theme/ThemeTokens.h"
-#include "ui/widgets/Tooltip.h"           // UI::Widgets::TooltipState
+#include "ui/widgets/Tooltip.h"
+#include "ui/widgets/SelectionRect.h"     // UI::Widgets::DrawSelectionRect
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -203,7 +204,6 @@ private:
 
     // Показать все объекты, уважая правила видимости (для снятия изоляции)
     void ShowAllRespectingDefaults();
-    void DrawSelectionRect();
     void DrawRightPanel();
     void DrawHomeScreen();
     void DrawRenameDialog();
