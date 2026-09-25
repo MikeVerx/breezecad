@@ -214,7 +214,6 @@ private:
     void DrawViewCube();
     void DrawDependencyDialog();
     void OpenDependencyDialog(int type);
-    std::string GetLabelName(const TDF_Label& label) const;
     void DrawDependenciesPanel();
     void DrawPreviewInfo();
     void RefreshView();

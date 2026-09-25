@@ -13,7 +13,8 @@
 #include "ui/status/ProjectTabs.h"
 #include "ui/qat/QuickAccessToolbar.h"
 #include "util/Utf8.h"
-#include "util/Geometry2D.h"              // Util::ComputeLengthAngle и др.                    // Util::Utf8ToExt / ExtToUtf8       // UI::Qat::DrawQuickAccessToolbar
+#include "util/Geometry2D.h"
+#include "util/LabelName.h"                // Util::LabelKey / GetLabelName              // Util::ComputeLengthAngle и др.                    // Util::Utf8ToExt / ExtToUtf8       // UI::Qat::DrawQuickAccessToolbar
 #include "ui/theme/Fonts.h"
 
 #include "imgui.h"
@@ -80,6 +81,8 @@ using Util::ComputeLengthAngle;
 using Util::ApplyOrtho;
 using Util::SnapToGridPoint;
 using Util::PointFromLengthAngle;
+using Util::LabelKey;
+using Util::GetLabelName;
 
 
 // === TRACE (enabled only when env BREEZECAD_TRACE is set) ===
@@ -98,12 +101,6 @@ static void TRACE(const char* msg) {
 // Хелпер: маленькая кнопка с SVG-иконкой
 // Обёртка для QAT
 // Чистый C++ конвертеры (см. BreezeDocument.cpp — там идентичные, но локальные)
-
-static std::string LabelKey(const TDF_Label& label) {
-    std::ostringstream oss;
-    label.EntryDump(oss);
-    return oss.str();
-}
 
 // Диапазоны глифов Font Awesome (Private Use Area)
 
@@ -1776,10 +1773,10 @@ void Application::OnSketchClick(int px, int py) {
             // Первый клик — базовый, остальные — зависимые
             if (myDependencyBase.empty()) {
                 myDependencyBase.push_back(sel);
-                std::cout << "Dependency: base = " << GetLabelName(sel) << "\n";
+                std::cout << "Dependency: base = " << Util::GetLabelName(sel) << "\n";
             } else {
                 myDependencyDependent.push_back(sel);
-                std::cout << "Dependency: dependent = " << GetLabelName(sel) << "\n";
+                std::cout << "Dependency: dependent = " << Util::GetLabelName(sel) << "\n";
             }
         }
 
@@ -2834,16 +2831,6 @@ void Application::DrawSettingsDialog() {
     ImGui::End();
 }
 
-std::string Application::GetLabelName(const TDF_Label& label) const {
-    Handle(TDataStd_Name) nameAttr;
-    if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
-        TCollection_AsciiString ascii(nameAttr->Get());
-        return ascii.ToCString();
-    }
-    // Если имени нет — генерируем "Line <tag>"
-    return "Line" + std::to_string(label.Tag());
-}
-
 void Application::OpenDependencyDialog(int type) {
     myDependencyDialogOpen = true;
     myCurrentDependencyType = type;
@@ -2889,7 +2876,7 @@ void Application::DrawDependencyDialog() {
         ImGui::TextDisabled("(кликните по линии в сцене)");
     } else {
         for (size_t i = 0; i < myDependencyBase.size(); i++) {
-            std::string name = GetLabelName(myDependencyBase[i]);
+            std::string name = Util::GetLabelName(myDependencyBase[i]);
             ImGui::PushID((int)i);
             ImGui::Text("%s", name.c_str());
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20);
@@ -2912,7 +2899,7 @@ void Application::DrawDependencyDialog() {
         ImGui::TextDisabled("(кликните по линиям в сцене)");
     } else {
         for (size_t i = 0; i < myDependencyDependent.size(); i++) {
-            std::string name = GetLabelName(myDependencyDependent[i]);
+            std::string name = Util::GetLabelName(myDependencyDependent[i]);
             ImGui::PushID((int)(1000 + i));
             ImGui::Text("%s", name.c_str());
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20);
