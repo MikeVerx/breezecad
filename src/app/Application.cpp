@@ -11,7 +11,7 @@
 #include "ui/widgets/SelectionRect.h"
 #include "ui/status/StatusBar.h"            // UI::Status::DrawStatusBar
 #include "ui/status/ProjectTabs.h"
-#include "ui/qat/QuickAccessToolbar.h"       // UI::Qat::DrawQuickAccessToolbar          // UI::Status::DrawProjectTabs
+#include "ui/qat/QuickAccessToolbar.h"       // UI::Qat::DrawQuickAccessToolbar
 #include "ui/theme/Fonts.h"
 
 #include "imgui.h"

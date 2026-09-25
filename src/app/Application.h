@@ -10,7 +10,7 @@
 #include "ui/widgets/SelectionRect.h"
 #include "ui/status/StatusBar.h"            // UI::Status::DrawStatusBar
 #include "ui/status/ProjectTabs.h"
-#include "ui/qat/QuickAccessToolbar.h"       // UI::Qat::QatCommand          // UI::Status::DrawProjectTabs
+#include "ui/qat/QuickAccessToolbar.h"       // UI::Qat::QatCommand
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
