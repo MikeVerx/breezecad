@@ -62,6 +62,7 @@ add_executable(breezecad
     src/ui/widgets/SelectionRect.cpp
     src/ui/status/StatusBar.cpp
     src/ui/status/ProjectTabs.cpp
+    src/ui/qat/QuickAccessToolbar.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp

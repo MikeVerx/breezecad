@@ -9,7 +9,8 @@
 #include "ui/widgets/Tooltip.h"
 #include "ui/widgets/SelectionRect.h"
 #include "ui/status/StatusBar.h"            // UI::Status::DrawStatusBar
-#include "ui/status/ProjectTabs.h"          // UI::Status::DrawProjectTabs
+#include "ui/status/ProjectTabs.h"
+#include "ui/qat/QuickAccessToolbar.h"       // UI::Qat::QatCommand          // UI::Status::DrawProjectTabs
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -124,13 +125,7 @@ private:
     int    myLastShapeCount = 0;
 
     // === Команды (для поиска) ===
-    struct CommandEntry {
-        std::string id;
-        std::string name;
-        std::string shortcut;
-        std::function<void()> action;
-    };
-    std::vector<CommandEntry> myCommands;
+    std::vector<UI::Qat::QatCommand> myCommands;
 
     // Активный документ (сырой указатель на один из myDocuments)
     BreezeDocument* myDocument = nullptr;
