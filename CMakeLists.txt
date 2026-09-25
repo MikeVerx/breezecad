@@ -69,6 +69,7 @@ add_executable(breezecad
     src/doc/BreezeApplication.cpp
     src/doc/BreezeDocument.cpp
     src/util/Utf8.cpp
+    src/util/Geometry2D.cpp
     external/stb_image_impl.cpp
 )
 
