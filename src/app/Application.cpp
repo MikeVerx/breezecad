@@ -22,7 +22,8 @@
 #include "ui/dialogs/PropertiesDialog.h"    // UI::Dialogs::DrawPropertiesDialog
 #include "ui/dialogs/NotImplementedDialog.h"// UI::Dialogs::DrawNotImplementedDialog
 #include "ui/dialogs/UnsavedChangesDialog.h"
-#include "ui/dialogs/DependencyDialog.h"    // UI::Dialogs::DrawDependencyDialog// UI::Dialogs::DrawUnsavedChangesDialog
+#include "ui/dialogs/DependencyDialog.h"
+#include "ui/dialogs/SettingsDialog.h"      // UI::Dialogs::DrawSettingsDialog    // UI::Dialogs::DrawDependencyDialog// UI::Dialogs::DrawUnsavedChangesDialog
 #include "ui/home/Thumbnails.h"            // UI::Home::CaptureCurrentThumbnail и др.
 #include "ui/theme/Fonts.h"
 
@@ -1451,7 +1452,7 @@ void Application::DrawRibbon() {
         qat.onUndo           = [this]() { OnUndo(); };
         qat.onRedo           = [this]() { OnRedo(); };
         qat.onGoHome         = [this]() { UI::Home::CaptureCurrentThumbnail(*myOcctView, myActiveDocIndex, myThumbnailPaths); myShowHomeScreen = true; };
-        qat.onOpenSettings   = [this]() { myShowSettingsDialog = true; };
+        qat.onOpenSettings   = [this]() { mySettingsState.show = true; };
         qat.onNotImplemented = [this](const char* feat) {
             myNotImplementedState.feature = feat;
             myNotImplementedState.show = true;
@@ -2412,7 +2413,7 @@ void Application::InitCommands() {
     add("model.hole",    "Отверстие",      "",  []{});
 
     // Настройки
-    add("view.settings", "Настройки", "", [this]{ myShowSettingsDialog = true; });
+    add("view.settings", "Настройки", "", [this]{ mySettingsState.show = true; });
 
     std::cout << "InitCommands: " << myCommands.size() << " commands loaded\n";
 }
@@ -2437,156 +2438,6 @@ void Application::UpdateTelemetry() {
     } else {
         myLastShapeCount = 0;
     }
-}
-
-void Application::DrawSettingsDialog() {
-    if (!myShowSettingsDialog) return;
-
-    ImGui::SetNextWindowSize(ImVec2(720, 480), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f,
-                                    ImGui::GetIO().DisplaySize.y * 0.5f),
-                             ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-
-    if (ImGui::Begin("Настройки", &myShowSettingsDialog,
-                      ImGuiWindowFlags_NoCollapse)) {
-
-        // Левая панель — вкладки
-        ImGui::BeginChild("##settings_tabs", ImVec2(180, 0), true);
-        const char* tabs[] = {
-            "Основные", "Графика", "Тема", "Язык", "Хоткеи", "О программе"
-        };
-        for (int i = 0; i < 6; i++) {
-            if (ImGui::Selectable(tabs[i], myActiveSettingsTab == i)) {
-                myActiveSettingsTab = i;
-            }
-        }
-        ImGui::EndChild();
-
-        ImGui::SameLine();
-
-        // Правая панель — контент
-        ImGui::BeginChild("##settings_content", ImVec2(0, 0), true);
-
-        switch (myActiveSettingsTab) {
-            case 0: {
-                ImGui::Text("Основные настройки");
-                ImGui::Separator();
-                ImGui::Spacing();
-
-                static int units = 0;
-                ImGui::Text("Единицы измерения:");
-                ImGui::RadioButton("Миллиметры (мм)", &units, 0); ImGui::SameLine();
-                ImGui::RadioButton("Дюймы (in)",      &units, 1);
-
-                ImGui::Spacing();
-                static int precision = 2;
-                ImGui::SliderInt("Знаков после запятой", &precision, 0, 6);
-
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Text("Автосохранение:");
-                static bool autosave = true;
-                ImGui::Checkbox("Включить автосохранение", &autosave);
-                static int autosaveInterval = 5;
-                ImGui::SliderInt("Интервал (мин)", &autosaveInterval, 1, 30);
-                break;
-            }
-            case 1: {
-                ImGui::Text("Графика");
-                ImGui::Separator();
-                ImGui::TextDisabled("(будет заполнено позже)");
-                ImGui::Spacing();
-                static int quality = 1;
-                ImGui::Text("Качество рендеринга:");
-                ImGui::RadioButton("Низкое",  &quality, 0); ImGui::SameLine();
-                ImGui::RadioButton("Среднее", &quality, 1); ImGui::SameLine();
-                ImGui::RadioButton("Высокое", &quality, 2);
-                ImGui::Spacing();
-                static bool aa = true;
-                ImGui::Checkbox("Сглаживание (antialiasing)", &aa);
-                static bool shadows = false;
-                ImGui::Checkbox("Тени", &shadows);
-                break;
-            }
-            case 2: {
-                ImGui::Text("Тема оформления");
-                ImGui::Separator();
-                ImGui::Spacing();
-
-                static int theme = myCurrentTheme;
-                if (ImGui::RadioButton("Светлая", &theme, 0)) {
-                    ApplyTheme(0);
-                }
-                ImGui::SameLine();
-                if (ImGui::RadioButton("Тёмная", &theme, 1)) {
-                    ApplyTheme(1);
-                }
-                ImGui::SameLine();
-                if (ImGui::RadioButton("Авто", &theme, 2)) {
-                    ApplyTheme(2);
-                }
-
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Text("Цвета линий эскиза:");
-
-                static ImVec4 colNormal(0.75f, 0.2f, 1.0f, 1.0f);
-                ImGui::ColorEdit3("Основная (недоопределённая)", (float*)&colNormal);
-
-                static ImVec4 colConstruction(0.55f, 0.55f, 0.75f, 1.0f);
-                ImGui::ColorEdit3("Вспомогательная", (float*)&colConstruction);
-
-                static ImVec4 colCenterline(0.9f, 0.45f, 0.15f, 1.0f);
-                ImGui::ColorEdit3("Осевая", (float*)&colCenterline);
-
-                ImGui::Spacing();
-                ImGui::TextDisabled("(применение цветов — позже)");
-                break;
-            }
-            case 3: {
-                ImGui::Text("Язык интерфейса");
-                ImGui::Separator();
-                Language cur = Localization::Instance().GetLanguage();
-                if (ImGui::RadioButton("English", cur == Language::EN))
-                    Localization::Instance().SetLanguage(Language::EN);
-                if (ImGui::RadioButton("Русский", cur == Language::RU))
-                    Localization::Instance().SetLanguage(Language::RU);
-                break;
-            }
-            case 4: {
-                ImGui::Text("Горячие клавиши");
-                ImGui::Separator();
-                ImGui::TextDisabled("(редактор хоткеев — позже)");
-                ImGui::Spacing();
-                ImGui::Text("Ctrl+N  — Новый проект");
-                ImGui::Text("Ctrl+O  — Открыть");
-                ImGui::Text("Ctrl+S  — Сохранить");
-                ImGui::Text("Ctrl+Z  — Отменить");
-                ImGui::Text("Ctrl+Y  — Повторить");
-                ImGui::Text("F11     — Полный экран");
-                ImGui::Text("F6      — Изометрия (домашний вид)");
-                ImGui::Text("Esc     — Прервать линию / выйти из эскиза");
-                break;
-            }
-            case 5: {
-                ImGui::Text("О программе BreezeCAD");
-                ImGui::Separator();
-                ImGui::Text("Версия: 0.1.0 (prototype)");
-                ImGui::Text("Сборка: %s %s", __DATE__, __TIME__);
-                ImGui::Spacing();
-                ImGui::TextWrapped(
-                    "BreezeCAD — лёгкая кроссплатформенная САПР на базе "
-                    "OpenCASCADE и Dear ImGui.");
-                ImGui::Spacing();
-                ImGui::Text("Ядро: OpenCASCADE 8.0");
-                ImGui::Text("UI: Dear ImGui + GLFW");
-                break;
-            }
-        }
-
-        ImGui::EndChild();
-    }
-    ImGui::End();
 }
 
 void Application::Run() {
@@ -2944,7 +2795,7 @@ void Application::Run() {
             hs.onCloseDoc       = [this](int i) { CloseDoc(i); };
             hs.onCreateDoc      = [this]() { CreateNewDoc(); RefreshView(); if (myOcctView) myOcctView->FitAll(); };
             hs.onOpenFile       = [this]() { OnOpen(); };
-            hs.onShowSettings   = [this]() { myShowSettingsDialog = true; };
+            hs.onShowSettings   = [this]() { mySettingsState.show = true; };
             hs.onNotImplemented = [this](const char* feat) {
                 myNotImplementedState.feature = feat;
                 myNotImplementedState.show = true;
@@ -2980,7 +2831,9 @@ void Application::Run() {
             ctx.onClose       = [this](int i) { CloseDoc(i); };
             UI::Status::DrawProjectTabs(ctx);
         }
-        DrawSettingsDialog();
+        UI::Dialogs::DrawSettingsDialog({ &mySettingsState, &myCurrentTheme,
+            [this](int t) { ApplyTheme(t); },
+            [](Language l) { Localization::Instance().SetLanguage(l); } });
 
         UI::Dialogs::DrawNotImplementedDialog(myNotImplementedState);
         TRACE("iter: before UpdateTelemetry");

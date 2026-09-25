@@ -17,7 +17,8 @@
 #include "ui/dialogs/PropertiesDialog.h"    // UI::Dialogs::PropertiesState
 #include "ui/dialogs/NotImplementedDialog.h"// UI::Dialogs::NotImplementedState
 #include "ui/dialogs/UnsavedChangesDialog.h"
-#include "ui/dialogs/DependencyDialog.h"    // UI::Dialogs::DependencyState// UI::Dialogs::UnsavedState        // UI::Dialogs::AddBoxState       // UI::Qat::QatCommand
+#include "ui/dialogs/DependencyDialog.h"
+#include "ui/dialogs/SettingsDialog.h"      // UI::Dialogs::SettingsState    // UI::Dialogs::DependencyState// UI::Dialogs::UnsavedState        // UI::Dialogs::AddBoxState       // UI::Qat::QatCommand
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -101,9 +102,8 @@ private:
     bool  myIsResizingTree = false;  // идёт перетаскивание
 
     bool myStartExpandedManually = false;  // пользователь развернул Start вручную
-    bool myShowSettingsDialog = false;
+    UI::Dialogs::SettingsState mySettingsState;
     UI::Dialogs::NotImplementedState myNotImplementedState;
-    int  myActiveSettingsTab  = 0;
     int  myCurrentTheme       = 1;
     ThemeTokens myTheme;
     int  myDisplayStyleIndex = 0;   // Стиль отображения (7 вариантов)
