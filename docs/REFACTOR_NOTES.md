@@ -43,6 +43,8 @@
 | **B-08** | `myPendingCreateSketchLabel` / `myPendingEnterSketchLabel` — отложенные операции через два флага, неявный порядок в `DrawDocumentTree`. Опасная связность. | Application.cpp | TODO |
 | **B-09** | `myMouseX/myMouseY` обновляются в `Run()` через `glfwGetCursorPos` каждый кадр — можно взять `io.MousePos` из ImGui. | Application.cpp | TODO |
 | **B-10** | Двойной блок Ctrl+C/Ctrl+V в `Run()` — Ctrl+C срабатывал дважды за нажатие. **Уже удалён** при выносе QAT? Проверить. | Application.cpp | TODO |
+| **B-11** | SettingsDialog: 4 из 6 вкладок — визуальные заглушки (единицы, точность, автосейв, качество, AA, тени, цвета линий эскиза). Все static-локалы, никуда не передаются. | ui/dialogs/SettingsDialog.cpp | TODO |
+| **B-12** | `static bool RibbonButton(const char*, bool, ...)` — мёртвый код, нигде не вызывается. Удалить при выносе `ui/ribbon/`. | Application.cpp:~613 | TODO |
 
 ---
 
@@ -92,12 +94,12 @@
 | `ui/status/` | ✅ закрыт |
 | `ui/qat/` | ✅ закрыт |
 | `ui/home/` | ✅ закрыт |
-| `ui/dialogs/` (6 из 8) | 🔨 в работе |
+| `ui/dialogs/` | ✅ закрыт |
 | `ui/dialogs/` (Settings, остальные) | ⏳ |
 | `ui/panels/` | ⏳ |
 | `ui/ribbon/` | ⏳ |
 | `app/` | ⏳ |
 | `util/` | ✅ закрыт |
 
-**Application.cpp:** 5638 → 3348 строк (**−41%**)
+**Application.cpp:** 5638 → 3110 строк (**−45%**)
 **Цель:** ~800 строк (тонкий оркестратор)
