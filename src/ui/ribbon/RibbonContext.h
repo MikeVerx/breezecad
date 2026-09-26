@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/ribbon/RibbonState.h"
+#include "doc/BreezeDocument.h"   // LineStyle
 
 namespace BreezeCAD { class IconManager; }
 
@@ -17,16 +18,18 @@ struct RibbonContext {
     RibbonState* state = nullptr;
     IconManager* icons = nullptr;
 
+    // Данные для вкладки «Эскиз» (Application заполняет каждый кадр).
+    bool         inSketch          = false;
+    LineStyle*   currentLineStyle  = nullptr;
+    bool*        hasSketchStart    = nullptr;
+    std::function<void()> clearPreviewLine;
+    std::function<void()> exitSketch;
+
     // Рисование QAT (пока живёт в Application).
     std::function<void()> drawQat;
 
     // Рисование строки вкладок (DrawRibbonTabs).
     std::function<void()> drawTabs;
-
-    // Рисование ещё-не-вынесенных вкладок (переходный период 10.5-10.7).
-    // Model и View уже в модулях, зовутся Ribbon.cpp напрямую.
-    std::function<void()> drawSketchTab;
-    std::function<void()> drawAssemblyTab;
 };
 
 }}}

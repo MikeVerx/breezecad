@@ -89,6 +89,10 @@ add_executable(breezecad
     src/ui/ribbon/tabs/ModelTab.cpp
     src/ui/ribbon/tabs/ViewTab.cpp
     src/ui/ribbon/tabs/SketchTab.cpp
+    src/ui/ribbon/tabs/AnnotateTab.cpp
+    src/ui/ribbon/tabs/ToolsTab.cpp
+    src/ui/ribbon/tabs/ManageTab.cpp
+    src/ui/ribbon/tabs/AssemblyTab.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp

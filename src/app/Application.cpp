@@ -16,8 +16,6 @@
 #include "ui/ribbon/RibbonButton.h"
 #include "ui/ribbon/RibbonGroup.h"
 #include "ui/ribbon/RibbonTabs.h"
-#include "ui/ribbon/tabs/ModelTab.h"
-#include "ui/ribbon/tabs/ViewTab.h"
 #include "ui/ribbon/tabs/SketchTab.h"
 #include "util/Utf8.h"
 #include "util/Geometry2D.h"
@@ -528,204 +526,6 @@ static bool RibbonButton(const char* label, bool active, const char* tooltip = n
 
 
 // Универсальная кнопка Ribbon с SVG-иконкой Lucide.
-void Application::DrawRibbonAnnotateTab() {
-    static int dummy = 0;
-    static const char* oneOpt[] = { "tool.dummy" };
-
-    // --- Размеры ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.dimensions").c_str());
-    UI::Ribbon::SingleButton(myIcons, "dim_linear",   "tool.dim_linear",   ICON_DIM_LINEAR,   true, true);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "dim_angle",    "tool.dim_angle",    ICON_DIM_ANGLE,    true, true);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "dim_radius",   "tool.dim_radius",   ICON_DIM_RADIUS,   true, true);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "dim_diameter", "tool.dim_diameter", ICON_DIM_DIAMETER, true, true);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "dim_ordinate", "tool.dim_ordinate", ICON_DIM_ORDINATE, true, true);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Текст и символы ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.text").c_str());
-    UI::Ribbon::SingleButton(myIcons, "leader",    "tool.leader",     ICON_LEADER,     true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "text_ann",  "tool.text",       ICON_TEXT,       true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "datum",     "tool.datum",      ICON_DATUM,      true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "tolerance", "tool.tolerance",  ICON_TOLERANCE,  true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "roughness", "tool.roughness",  ICON_ROUGHNESS,  true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "weld",      "tool.weld",       ICON_WELD,       true, false);
-    ImGui::EndGroup();
-}
-
-// ============================================================
-//  Вкладка «Инструменты»
-// ============================================================
-void Application::DrawRibbonToolsTab() {
-    static int dummy = 0;
-    static const char* oneOpt[] = { "tool.dummy" };
-
-    // --- Измерить ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.measure").c_str());
-    UI::Ribbon::SingleButton(myIcons, "measure",  "tool.measure",  ICON_MEASURE,  true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "distance", "tool.distance", ICON_DISTANCE, true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "angle",    "tool.angle",    ICON_ANGLE,    true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "area",     "tool.area",     ICON_AREA,     true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "volume",   "tool.volume",   ICON_VOLUME,   true, false);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Анализ ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.analysis").c_str());
-    UI::Ribbon::SingleButton(myIcons, "section",       "tool.section",       ICON_SECTION,       true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "draft_analysis","tool.draft_analysis",ICON_DRAFT_ANALYSIS,true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "thickness",     "tool.thickness",     ICON_THICKNESS,     true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "curvature",     "tool.curvature",     ICON_CURVATURE,     true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "zebra",         "tool.zebra",         ICON_ZEBRA,         true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "interference",  "tool.interference",  ICON_INTERFERENCE,  true, false);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Свойства ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.properties").c_str());
-    UI::Ribbon::SingleButton(myIcons, "model_props", "tool.model_props", ICON_MODEL_PROPS, true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "mass",        "tool.mass",        ICON_MASS,        true, false);
-    ImGui::EndGroup();
-}
-
-// ============================================================
-//  Вкладка «Управление»
-// ============================================================
-void Application::DrawRibbonManageTab() {
-    static int dummy = 0;
-    static const char* oneOpt[] = { "tool.dummy" };
-
-    // --- Параметры ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.parameters").c_str());
-    UI::Ribbon::SingleButton(myIcons, "parameters", "tool.parameters", ICON_PARAMETERS, true, true);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "functions",  "tool.functions",  ICON_FUNCTION,   true, true);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "texts",      "tool.texts",      ICON_TEXT,       true, true);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Материалы (будущее) ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.materials").c_str());
-    UI::Ribbon::SingleButton(myIcons, "material",   "tool.material",   ICON_MATERIAL,   true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "texture",    "tool.texture",    ICON_TEXTURE,    true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "appearance", "tool.appearance", ICON_APPEARANCE, true, false);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Обновление ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.update").c_str());
-    UI::Ribbon::SingleButton(myIcons, "update",    "tool.update",    ICON_UPDATE,    true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "recompute", "tool.recompute", ICON_RECOMPUTE, true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "report",    "tool.report",    ICON_REPORT,    true, false);
-    ImGui::EndGroup();
-
-    ImGui::SameLine(0, 10);
-    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-    ImGui::SameLine(0, 10);
-
-    // --- Вставка ---
-    ImGui::BeginGroup();
-    ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_Text), "%s", Tr("grp.insert").c_str());
-    UI::Ribbon::SingleButton(myIcons, "insert_obj", "tool.insert_obj", ICON_INSERT_OBJ, true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "insert_img", "tool.insert_img", ICON_INSERT_IMG, true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "import",     "tool.import",     ICON_IMPORT,     true, false);
-    ImGui::EndGroup();
-}
-
-// ============================================================
-//  Вкладка «Вид»
-// ============================================================
-void Application::DrawRibbonAssemblyTab() {
-    // === Компонент ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "asm_place",   "tool.asm.place",   "package-plus", true, true, "Вставить компонент");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "asm_create",  "tool.asm.create",  "package",      true, true, "Создать компонент");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "asm_replace", "tool.asm.replace", "refresh-cw",   true, true, "Заменить компонент");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "asm_copy",    "tool.asm.copy",    ICON_COPY,      true, true, "Копировать компонент");
-    UI::Ribbon::GroupEnd(Tr("grp.component").c_str(), myRibbonState);
-
-    // === Позиционирование ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "asm_joint",      "tool.asm.joint",      "link",    true, true, "Соединение (подвижное)");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "asm_constraint", "tool.asm.constraint", "pin",     true, true, "Зависимость (статичная)");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "asm_dof",        "tool.asm.dof",        "move-3d", true, true, "Степени свободы");
-    UI::Ribbon::GroupEnd(Tr("grp.position").c_str(), myRibbonState);
-
-    // === Массив ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "asm_pat_rect", "tool.pattern_rect", ICON_PATTERN_RECT, true, false, "Прямоуг.");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "asm_pat_circ", "tool.pattern_circ", ICON_PATTERN_CIRC, true, false, "Круговой");
-    UI::Ribbon::SingleButton(myIcons, "asm_mirror",   "tool.mirror",       ICON_MIRROR,       true, false, "Зеркало");
-    UI::Ribbon::GroupEnd(Tr("grp.pattern").c_str(), myRibbonState);
-
-    // === Спецификация ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "asm_bom",  "tool.bom",           "list",      true, true, "Bill of Materials");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "asm_spec", "tool.specification", ICON_FILE,   true, true, "Спецификация");
-    UI::Ribbon::GroupEnd(Tr("grp.specification").c_str(), myRibbonState);
-
-    // === Стандартные изделия ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "asm_library", "tool.library", "package", true, true, "Библиотека");
-    UI::Ribbon::GroupEnd(Tr("grp.standards").c_str(), myRibbonState);
-}
-
 void Application::DrawRibbon() {
     // Тонкая обёртка: собираем RibbonContext и вызываем модуль.
     // Логика самого ribbon — в src/ui/ribbon/Ribbon.cpp (подшаг 10.2).
@@ -760,18 +560,13 @@ void Application::DrawRibbon() {
 
     ctx.icons    = &myIcons;
 
-    ctx.drawSketchTab = [this]() {
-        UI::Ribbon::SketchTabContext sctx;
-        sctx.icons            = &myIcons;
-        sctx.state            = &myRibbonState;
-        sctx.inSketch         = !myActiveSketchLabel.IsNull();
-        sctx.currentLineStyle = &myCurrentLineStyle;
-        sctx.hasSketchStart   = &myHasSketchStart;
-        sctx.clearPreviewLine = [this]() { if (myOcctView) myOcctView->ClearPreviewLine(); };
-        sctx.exitSketch       = [this]() { ExitSketch(); };
-        UI::Ribbon::DrawSketchTab(sctx);
-    };
-    ctx.drawAssemblyTab = [this]() { DrawRibbonAssemblyTab(); };
+    // Данные для вкладки «Эскиз».
+    ctx.inSketch         = !myActiveSketchLabel.IsNull();
+    ctx.currentLineStyle = &myCurrentLineStyle;
+    ctx.hasSketchStart   = &myHasSketchStart;
+    ctx.clearPreviewLine = [this]() { if (myOcctView) myOcctView->ClearPreviewLine(); };
+    ctx.exitSketch       = [this]() { ExitSketch(); };
+
 
     UI::Ribbon::Draw(ctx);
 }

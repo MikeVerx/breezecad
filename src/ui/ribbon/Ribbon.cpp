@@ -2,6 +2,8 @@
 #include "ui/ribbon/RibbonTabs.h"
 #include "ui/ribbon/tabs/ModelTab.h"
 #include "ui/ribbon/tabs/ViewTab.h"
+#include "ui/ribbon/tabs/SketchTab.h"
+#include "ui/ribbon/tabs/AssemblyTab.h"
 
 #include "imgui.h"
 
@@ -38,12 +40,23 @@ void Draw(RibbonContext& ctx) {
             if (scrollX < 0.0f) scrollX = 0.0f;
             ImGui::SetScrollX(scrollX);
         }
-        // Switch по активной вкладке. Model/View уже в модулях, остальные — колбэки.
+        // Switch по активной вкладке — все 4 уже в модулях.
         switch (ctx.state->activeTab) {
-            case 0: UI::Ribbon::DrawModelTab(*ctx.icons, *ctx.state); break;
-            case 1: if (ctx.drawSketchTab)   ctx.drawSketchTab();     break;
-            case 2: if (ctx.drawAssemblyTab) ctx.drawAssemblyTab();   break;
-            case 3: UI::Ribbon::DrawViewTab(*ctx.icons, *ctx.state);  break;
+            case 0: UI::Ribbon::DrawModelTab(*ctx.icons, *ctx.state);    break;
+            case 1: {
+                UI::Ribbon::SketchTabContext sctx;
+                sctx.icons            = ctx.icons;
+                sctx.state            = ctx.state;
+                sctx.inSketch         = ctx.inSketch;
+                sctx.currentLineStyle = ctx.currentLineStyle;
+                sctx.hasSketchStart   = ctx.hasSketchStart;
+                sctx.clearPreviewLine = ctx.clearPreviewLine;
+                sctx.exitSketch       = ctx.exitSketch;
+                UI::Ribbon::DrawSketchTab(sctx);
+                break;
+            }
+            case 2: UI::Ribbon::DrawAssemblyTab(*ctx.icons, *ctx.state); break;
+            case 3: UI::Ribbon::DrawViewTab(*ctx.icons, *ctx.state);     break;
         }
     }
     ImGui::EndChild();
