@@ -237,3 +237,101 @@ CMakeLists.txt теперь использует `C:/occt/install` и `C:/lunasv
 - Автосейв 1 мин / 3 версии / `std::async` / atomic write.
 - `IconManager::Get(name, size)` кэширует по паре (имя, размер) — не пересоздаёт.
 - ImGui draw-list — быстрый, работает нормально.
+
+
+---
+
+## I. ТОЧКА ОСТАНОВКИ (2026-09-26, коммит d9fc870)
+
+**Для нового чата: это первое, что нужно прочитать после HANDOFF и RULES.**
+
+### Текущее состояние
+
+| Параметр | Значение |
+|---|---|
+| Ветка | `refactor/v2` (запушена в origin) |
+| Коммит | `d9fc870` |
+| Коммитов впереди main | **40** |
+| `Application.cpp` | **2403** строки (было 5638, −57%) |
+| `Application.h` | **253** строки |
+| Закрыто модулей | **12** |
+| Осталось вынести | `ui/ribbon/` (~955), `app/` (~300). Скетч (~370) отложен. |
+
+### Что сделано (12 модулей)
+src/
+app/ ← Application.{h,cpp} — оркестратор (растёт цель → ~800)
+doc/ ← BreezeDocument, BreezeApplication
+occt/ ← OcctView
+platform/ ← FileDialog, GlfwWindow
+ui/
+theme/ ✅ ThemeTokens, ThemePresets, ThemeManager, Fonts
+widgets/ ✅ IconTint, SvgButton, Tooltip, SelectionRect
+viewcube/ ✅ ViewCubeOverlay, ViewCubeAnimator, ViewCubeGeometry
+status/ ✅ StatusBar, ProjectTabs
+qat/ ✅ QuickAccessToolbar
+home/ ✅ HomeScreen, Thumbnails
+dialogs/ ✅ 8 диалогов
+panels/ ✅ DocumentTree, ContextMenu, TreeSplitter, RightPanel,
+DependenciesPanel, Visibility
+ribbon/ ⏳ ← СЛЕДУЮЩИЙ МОДУЛЬ
+util/ ✅ Utf8, Geometry2D, LabelName
+main.cpp
+
+### Следующая задача — `ui/ribbon/` (7 подшагов)
+
+План разбит на 7 подшагов, каждый — коммит:
+
+| # | Что | Строк | Риск |
+|---|---|---|---|
+| **10.1** | **RibbonState + скелет.** 13 полей из Application.h → struct в модуле | ~40 | 🟢 |
+| 10.2 | Ribbon.h/.cpp — оркестратор | ~50 | 🟢 |
+| 10.3 | RibbonButton.h/.cpp + удаление **B-12** (мёртвый static RibbonButton) | ~170 | 🟡 |
+| 10.4 | RibbonGroup + RibbonTabs | ~90 | 🟢 |
+| 10.5 | tabs/ModelTab + tabs/ViewTab | ~200 | 🟡 |
+| 10.6 | tabs/SketchTab (большая) | ~250 | 🔴 |
+| 10.7 | tabs/Assembly + Annotate + Tools + Manage (заглушки) | ~220 | 🟢 |
+
+**Подшаг 10.1 — конкретно:**
+
+13 полей, которые надо вынести в `UI::Ribbon::RibbonState`:
+myActiveRibbonTab, myRibbonGroupStartY,
+myLineToolIndex, myRectToolIndex, myCircleToolIndex,
+myArcToolIndex, myPolyToolIndex, myTrimToolIndex,
+myOffsetToolIndex, myMoveToolIndex, myConstrainToolIndex,
+myDisplayStyleIndex, myBackgroundIndex
+
+Application получит одно поле: `UI::Ribbon::RibbonState myRibbonState;`.
+
+При замене — массивная правка `myLineToolIndex` → `myRibbonState.lineToolIndex` и т.п.
+
+**Первая команда для нового чата (диагностика):**
+cd ~/BreezeCAD && grep -a -n "myLineToolIndex\|myRectToolIndex\|myCircleToolIndex\|myArcToolIndex\|myPolyToolIndex\|myTrimToolIndex\|myOffsetToolIndex\|myMoveToolIndex\|myConstrainToolIndex\|myDisplayStyleIndex\|myBackgroundIndex\|myActiveRibbonTab\|myRibbonGroupStartY" src/app/Application.cpp | wc -l
+Потом — то же без `| wc -l`, чтобы увидеть все места.
+
+### Что после ribbon
+
+1. **Merge `refactor/v2` → `main`** — рефакторинг закрыт
+2. **Функциональные баги** (см. раздел A):
+   - BUG-4.1 — подписи ViewCube (привязка к граням)
+   - BUG-A2 — вращение объектов в пространстве
+   - BUG-A3 — медленный рост RAM
+3. **`app/`** — DocumentManager, FileOps, CommandRegistry, Telemetry (после ribbon)
+
+### Критично для нового чата
+
+- **Junction `C:/occt` → `D:/home/Мишаня/occt`** — без него ninja не найдёт `.dll.a` (Windows-ld не понимает кириллицу). То же для `C:/lunasvg`.
+- **CMakeLists.txt уже использует `C:/occt/install`** — не откатывать.
+- **Mixed line endings** в `Application.cpp/.h` — искать блоки без привязки к переводам строк.
+- **REVIEW-правило** — ничего не удалять без явного согласования с MikeVerx.
+
+### Ссылки на ключевые разделы этого файла
+
+- **A** — функциональные баги (BUG-4.1, A2, A3, A4, A5)
+- **B** — находки рефакторинга (B-01..B-15, часть KEEP, часть TODO)
+- **C** — отложенные дизайн-решения (C-01..C-07)
+- **D** — техника (D-01 mixed line endings, D-03 brace-counting, D-05 кириллица)
+- **F** — итог рефакторинга
+- **G** — видение MVP (философия автора)
+- **H** — оптимизация OPT-01/02/03
+
+**Стартовое сообщение в новом чате:** промт передаётся дословно от MikeVerx.
