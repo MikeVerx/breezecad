@@ -213,13 +213,6 @@ private:
     void InitCommands();
     void UpdateTelemetry();
     void DrawRibbonTabs();
-    // Ribbon кнопки (используют SVG через myIcons)
-    int RibbonButton(const char* id, const char* const* opts, int optCount,
-                     int& idx, const char* icon, bool enabled, bool big = true,
-                     const char* tooltip = nullptr, float iconScale = 1.0f);
-    int RibbonSingleButton(const char* id, const char* key, const char* icon,
-                           bool enabled, bool big = true,
-                           const char* tooltip = nullptr, float iconScale = 1.0f);
 
     void DrawRibbonSketchTab();
     void DrawRibbonModelTab();

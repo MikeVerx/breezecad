@@ -83,6 +83,7 @@ add_executable(breezecad
     src/ui/panels/Visibility.cpp
     src/ui/panels/ContextMenu.cpp
     src/ui/ribbon/Ribbon.cpp
+    src/ui/ribbon/RibbonButton.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp
