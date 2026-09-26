@@ -25,6 +25,7 @@
 #include "ui/panels/DocumentTree.h"
 #include "ui/panels/Visibility.h"          // UI::Panels::ShowAllRespectingDefaults
 #include "ui/panels/ContextMenu.h"           // UI::Panels::DrawContextMenu3D     // UI::Panels::DrawDependenciesPanel
+#include "ui/ribbon/RibbonState.h"          // UI::Ribbon::RibbonState
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -55,6 +56,7 @@ private:
     UI::ViewCube::ViewCubeOverlay myViewCube;
     UI::Widgets::TooltipState     myTooltipState;
     IconManager                   myIcons;
+    UI::Ribbon::RibbonState      myRibbonState;
     // === Диалог зависимостей ===
     UI::Dialogs::DependencyState myDependencyState;
 
@@ -112,8 +114,7 @@ private:
     UI::Dialogs::NotImplementedState myNotImplementedState;
     int  myCurrentTheme       = 1;
     ThemeTokens myTheme;
-    int  myDisplayStyleIndex = 0;   // Стиль отображения (7 вариантов)
-    int  myBackgroundIndex   = 0;   // Фон вьюпорта (5 вариантов)   // 0=light, 1=dark, 2=system
+
     std::vector<std::string> myPinnedCommands;
 
     // === Телеметрия ===
@@ -153,18 +154,7 @@ private:
     bool myAutoContinue = true;
     bool myOrthoMode    = false;  // Shift — угол кратен 45°
     bool myShowGrid     = true;   // показывать ли сетку в эскизе
-    int  myActiveRibbonTab = 0;
 
-    // Индекс выбранного инструмента в каждой группе (для Ribbon-split)
-    int myLineToolIndex   = 0;
-    int myRectToolIndex   = 0;
-    int myCircleToolIndex = 0;
-    int myArcToolIndex    = 0;
-    int myPolyToolIndex   = 0;
-    int myTrimToolIndex   = 0;
-    int myOffsetToolIndex = 0;
-    int myMoveToolIndex   = 0;
-    int myConstrainToolIndex = 0;  // 3D Model по умолчанию   // 0=Sketch, 1=3D Model, 2=Annotate, 3=Tools, 4=Manage, 5=View
     LineStyle myCurrentLineStyle = LS_Normal;
 
     // === Состояние рисования ===
@@ -241,7 +231,6 @@ private:
 
     // Группы ribbon — блок с рамкой и заголовком снизу по центру
     void RibbonGroupStart();
-    float myRibbonGroupStartY = 0.0f;
     void RibbonGroupEnd(const char* name);
     void EnterSketch(const TDF_Label& sketchLabel);
     void ExitSketch();

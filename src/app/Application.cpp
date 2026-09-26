@@ -498,7 +498,7 @@ void Application::DrawRibbonTabs() {
     };
     for (int i = 0; i < 4; i++) {
         if (i > 0) ImGui::SameLine();
-        bool active = (myActiveRibbonTab == i);
+        bool active = (myRibbonState.activeTab == i);
         bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
         if (active) {
             if (isLight) {
@@ -512,7 +512,7 @@ void Application::DrawRibbonTabs() {
             ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_Button));
         }
         if (ImGui::Button(Tr(tabs[i]).c_str(), ImVec2(120, 26))) {
-            myActiveRibbonTab = i;
+            myRibbonState.activeTab = i;
         }
         ImGui::PopStyleColor();
     }
@@ -557,14 +557,14 @@ static bool RibbonButton(const char* label, bool active, const char* tooltip = n
 
 // Универсальная кнопка Ribbon с SVG-иконкой Lucide.
 void Application::RibbonGroupStart() {
-    myRibbonGroupStartY = ImGui::GetCursorScreenPos().y;
+    myRibbonState.groupStartY = ImGui::GetCursorScreenPos().y;
     ImGui::BeginGroup();
 }
 
 void Application::RibbonGroupEnd(const char* name) {
     // Подтягиваем группу до общей высоты TARGET_H
     float curY = ImGui::GetCursorScreenPos().y;
-    float groupH = curY - myRibbonGroupStartY;
+    float groupH = curY - myRibbonState.groupStartY;
     const float TARGET_H = 76.0f;
     if (groupH < TARGET_H) {
         ImGui::Dummy(ImVec2(1.0f, TARGET_H - groupH));
@@ -832,7 +832,7 @@ void Application::DrawRibbonSketchTab() {
     // ============================================================
     RibbonGroupStart();
     {
-        int r = RibbonButton("line", lineOpts, 5, myLineToolIndex, ICON_LINE, inSketch, true,
+        int r = RibbonButton("line", lineOpts, 5, myRibbonState.lineToolIndex, ICON_LINE, inSketch, true,
                              "Отрезок");
         if (r == 1 || r == 3) {
             myCurrentLineStyle = LS_Normal;
@@ -841,11 +841,11 @@ void Application::DrawRibbonSketchTab() {
         }
     }
     ImGui::SameLine();
-    RibbonButton("rect",   rectOpts,   10, myRectToolIndex,   ICON_RECT,    inSketch, true, "Прямоугольник");
+    RibbonButton("rect",   rectOpts,   10, myRibbonState.rectToolIndex,   ICON_RECT,    inSketch, true, "Прямоугольник");
     ImGui::SameLine();
-    RibbonButton("circle", circleOpts, 3,  myCircleToolIndex, ICON_CIRCLE,  inSketch, true, "Окружность");
+    RibbonButton("circle", circleOpts, 3,  myRibbonState.circleToolIndex, ICON_CIRCLE,  inSketch, true, "Окружность");
     ImGui::SameLine();
-    RibbonButton("arc",    arcOpts,    3,  myArcToolIndex,    ICON_ARC,     inSketch, true, "Дуга");
+    RibbonButton("arc",    arcOpts,    3,  myRibbonState.arcToolIndex,    ICON_ARC,     inSketch, true, "Дуга");
     ImGui::SameLine();
     RibbonButton("point",  pointOpt,   1,  dummy,             ICON_POINT,   inSketch, true, "Точка");
     ImGui::SameLine();
@@ -875,11 +875,11 @@ void Application::DrawRibbonSketchTab() {
     // ИЗМЕНИТЬ — 5 кнопок-меню
     // ============================================================
     RibbonGroupStart();
-    RibbonButton("move",   moveOpt,   3, myMoveToolIndex,   ICON_MOVE,   inSketch, false, "Перенести");
+    RibbonButton("move",   moveOpt,   3, myRibbonState.moveToolIndex,   ICON_MOVE,   inSketch, false, "Перенести");
     ImGui::SameLine();
-    RibbonButton("trim",   trimOpt,   2, myTrimToolIndex,   ICON_TRIM,   inSketch, false, "Обрезать");
+    RibbonButton("trim",   trimOpt,   2, myRibbonState.trimToolIndex,   ICON_TRIM,   inSketch, false, "Обрезать");
     ImGui::SameLine();
-    RibbonButton("offset", offsetOpt, 1, myOffsetToolIndex, ICON_OFFSET, inSketch, false, "Сместить");
+    RibbonButton("offset", offsetOpt, 1, myRibbonState.offsetToolIndex, ICON_OFFSET, inSketch, false, "Сместить");
     RibbonButton("scale",  scaleOpt,  2, dummy,             ICON_SCALE,  inSketch, false, "Масштаб");
     ImGui::SameLine();
     RibbonButton("split",  splitOpt,  1, dummy,             ICON_SPLIT,  inSketch, false, "Разделить");
@@ -1293,7 +1293,7 @@ void Application::DrawRibbonViewTab() {
             "tool.style_shaded_hidden", "tool.style_wireframe",
             "tool.style_mono", "tool.style_tech"
         };
-        RibbonButton("view_style", styleOpts, 7, myDisplayStyleIndex, ICON_SHADOWS, true, true,
+        RibbonButton("view_style", styleOpts, 7, myRibbonState.displayStyleIndex, ICON_SHADOWS, true, true,
                      "Стиль отображения");
     }
     ImGui::SameLine();
@@ -1302,7 +1302,7 @@ void Application::DrawRibbonViewTab() {
             "tool.bg_white", "tool.bg_gray", "tool.bg_grad_light",
             "tool.bg_grad_dark", "tool.bg_custom"
         };
-        RibbonButton("view_bg", bgOpts, 5, myBackgroundIndex, ICON_BACKGROUND, true, true,
+        RibbonButton("view_bg", bgOpts, 5, myRibbonState.backgroundIndex, ICON_BACKGROUND, true, true,
                      "Фон вьюпорта");
     }
     RibbonGroupEnd(Tr("grp.style").c_str());
@@ -1394,7 +1394,7 @@ void Application::DrawRibbon() {
             if (scrollX < 0.0f) scrollX = 0.0f;
             ImGui::SetScrollX(scrollX);
         }
-        switch (myActiveRibbonTab) {
+        switch (myRibbonState.activeTab) {
             case 0: DrawRibbonModelTab();      break;
             case 1: DrawRibbonSketchTab();     break;
             case 2: DrawRibbonAssemblyTab();   break;
@@ -1676,7 +1676,7 @@ void Application::EnterSketch(const TDF_Label& sketchLabel) {
     myOcctView->ShowGrid(myShowGrid);
     myActiveSketchLabel = sketchLabel;
     myHasSketchStart = false;
-    myActiveRibbonTab = 1;  // Sketch tab
+    myRibbonState.activeTab = 1;  // Sketch tab
 
     // Показать уже существующие линии эскиза
     RefreshSketchLines();
@@ -1691,7 +1691,7 @@ void Application::ExitSketch() {
         myOcctView->ExitSketchMode();
     }
     myActiveSketchLabel = TDF_Label();
-    myActiveRibbonTab = 0;  // 3D Model tab
+    myRibbonState.activeTab = 0;  // 3D Model tab
 
     // Принудительно перерисовываем всё из документа —
     // это гарантирует, что плоскости и другие системные объекты вернутся
