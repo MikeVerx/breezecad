@@ -212,7 +212,6 @@ private:
     void ApplyTheme(int theme);
     void InitCommands();
     void UpdateTelemetry();
-    void DrawRibbonTabs();
 
     void DrawRibbonSketchTab();
     void DrawRibbonModelTab();

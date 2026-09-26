@@ -1,4 +1,5 @@
 #include "ui/ribbon/Ribbon.h"
+#include "ui/ribbon/RibbonTabs.h"
 
 #include "imgui.h"
 
@@ -21,7 +22,7 @@ void Draw(RibbonContext& ctx) {
     if (ctx.drawQat) ctx.drawQat();
     ImGui::Separator();
 
-    if (ctx.drawTabs) ctx.drawTabs();
+    if (ctx.icons && ctx.state) UI::Ribbon::DrawTabs(*ctx.icons, *ctx.state);
     ImGui::Separator();
 
     // Child с отступом сверху 6 px

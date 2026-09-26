@@ -2,6 +2,8 @@
 
 #include "ui/ribbon/RibbonState.h"
 
+namespace BreezeCAD { class IconManager; }
+
 #include <functional>
 
 namespace BreezeCAD {
@@ -13,6 +15,7 @@ namespace Ribbon {
 // Колбэки — std::function, чтобы модуль не знал про Application.
 struct RibbonContext {
     RibbonState* state = nullptr;
+    IconManager* icons = nullptr;
 
     // Рисование QAT (пока живёт в Application).
     std::function<void()> drawQat;

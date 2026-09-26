@@ -14,6 +14,8 @@
 #include "ui/qat/QuickAccessToolbar.h"
 #include "ui/ribbon/Ribbon.h"
 #include "ui/ribbon/RibbonButton.h"
+#include "ui/ribbon/RibbonGroup.h"
+#include "ui/ribbon/RibbonTabs.h"
 #include "util/Utf8.h"
 #include "util/Geometry2D.h"
 #include "util/LabelName.h"
@@ -494,41 +496,6 @@ void Application::OnRedo() {
     }
 }
 
-void Application::DrawRibbonTabs() {
-    static const char* tabs[] = {
-        "tab.model", "tab.sketch", "tab.assembly", "tab.view"
-    };
-    for (int i = 0; i < 4; i++) {
-        if (i > 0) ImGui::SameLine();
-        bool active = (myRibbonState.activeTab == i);
-        bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
-        if (active) {
-            if (isLight) {
-                // Светлая — серебристый C3
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.698f, 0.714f, 0.737f, 1.0f));
-            } else {
-                // Тёмная — синий accent
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.55f, 0.95f, 1.0f));
-            }
-        } else {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_Button));
-        }
-        if (ImGui::Button(Tr(tabs[i]).c_str(), ImVec2(120, 26))) {
-            myRibbonState.activeTab = i;
-        }
-        ImGui::PopStyleColor();
-    }
-    // Кнопка "+" для подключения модулей
-    ImGui::SameLine();
-    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_Button));
-    if (UI::Widgets::SvgIconBtn(myIcons, "ribbon_plus", "plus", 16, 32, 26, "Подключить модуль")) {
-        // TODO: диалог подключения модуля
-    }
-    ImGui::PopStyleColor();
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Подключить модуль");
-}
-
-
 // Рисует кнопку Ribbon. active=false → красная рамка, "disabled".
 static bool RibbonButton(const char* label, bool active, const char* tooltip = nullptr,
                           float width = 90, float height = 0) {
@@ -558,53 +525,6 @@ static bool RibbonButton(const char* label, bool active, const char* tooltip = n
 
 
 // Универсальная кнопка Ribbon с SVG-иконкой Lucide.
-void Application::RibbonGroupStart() {
-    myRibbonState.groupStartY = ImGui::GetCursorScreenPos().y;
-    ImGui::BeginGroup();
-}
-
-void Application::RibbonGroupEnd(const char* name) {
-    // Подтягиваем группу до общей высоты TARGET_H
-    float curY = ImGui::GetCursorScreenPos().y;
-    float groupH = curY - myRibbonState.groupStartY;
-    const float TARGET_H = 76.0f;
-    if (groupH < TARGET_H) {
-        ImGui::Dummy(ImVec2(1.0f, TARGET_H - groupH));
-    }
-    ImGui::EndGroup();
-
-    ImVec2 pMin = ImGui::GetItemRectMin();
-    ImVec2 pMax = ImGui::GetItemRectMax();
-
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    bool isLight = (ImGui::GetStyleColorVec4(ImGuiCol_WindowBg).x > 0.5f);
-
-    // Фон группы — включает кнопки И подпись
-    ImU32 bg = isLight ? IM_COL32(255, 255, 255, 60)
-                       : IM_COL32(255, 255, 255, 12);
-    dl->AddRectFilled(
-        ImVec2(pMin.x - 6, pMin.y - 4),
-        ImVec2(pMax.x + 6, pMax.y + 18),
-        bg, 4.0f);
-
-    // Вертикальный разделитель справа от группы
-    dl->AddLine(
-        ImVec2(pMax.x + 10, pMin.y - 2),
-        ImVec2(pMax.x + 10, pMax.y + 16),
-        isLight ? IM_COL32(160, 160, 160, 140) : IM_COL32(90, 100, 115, 180),
-        1.0f);
-
-    // Заголовок группы — снизу по центру (без изменения layout)
-    ImVec2 tsz = ImGui::CalcTextSize(name);
-    float cx = (pMin.x + pMax.x) * 0.5f - tsz.x * 0.5f;
-    ImU32 tcol = isLight ? IM_COL32(90, 90, 90, 230)
-                         : IM_COL32(180, 185, 195, 220);
-    dl->AddText(ImVec2(cx, pMax.y + 3), tcol, name);
-
-    // Продолжаем на той же строке
-    ImGui::SameLine(0, 22);
-}
-
 void Application::DrawRibbonSketchTab() {
     bool inSketch = !myActiveSketchLabel.IsNull();
     static int dummy = 0;
@@ -647,7 +567,7 @@ void Application::DrawRibbonSketchTab() {
     // ============================================================
     // СОЗДАТЬ — 6 больших в один ряд
     // ============================================================
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     {
         int r = UI::Ribbon::Button(myIcons, "line", lineOpts, 5, myRibbonState.lineToolIndex, ICON_LINE, inSketch, true,
                              "Отрезок");
@@ -669,29 +589,29 @@ void Application::DrawRibbonSketchTab() {
     UI::Ribbon::Button(myIcons, "text",   textOpt,    2,  dummy,             ICON_TEXT,    inSketch, true, "Текст");
     ImGui::SameLine();
     UI::Ribbon::Button(myIcons, "fillet_2d", fillet2dOpts, 2, dummy, ICON_FILLET, inSketch, true, "Сопряжение");
-    RibbonGroupEnd(Tr("grp.create").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.create").c_str(), myRibbonState);
 
     // ============================================================
     // ПРОЕЦИРОВАТЬ — 2 малые иконки в ряд
     // ============================================================
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::Button(myIcons, "proj_geom", projOpt, 5, projIdx, ICON_PROJECT, inSketch, true, "Проецирование");
-    RibbonGroupEnd(Tr("grp.project").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.project").c_str(), myRibbonState);
 
     // ============================================================
     // МАССИВ — 3 малые иконки в столбик
     // ============================================================
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::Button(myIcons, "pat_rect", pointOpt, 1, dummy, ICON_PATTERN_RECT, inSketch, false, "Прямоугольный массив");
     ImGui::SameLine();
     UI::Ribbon::Button(myIcons, "pat_circ", pointOpt, 1, dummy, ICON_PATTERN_CIRC, inSketch, false, "Круговой массив");
     UI::Ribbon::Button(myIcons, "pat_mirr", pointOpt, 1, dummy, ICON_MIRROR,       inSketch, false, "Зеркало");
-    RibbonGroupEnd(Tr("grp.pattern").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.pattern").c_str(), myRibbonState);
 
     // ============================================================
     // ИЗМЕНИТЬ — 5 кнопок-меню
     // ============================================================
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::Button(myIcons, "move",   moveOpt,   3, myRibbonState.moveToolIndex,   ICON_MOVE,   inSketch, false, "Перенести");
     ImGui::SameLine();
     UI::Ribbon::Button(myIcons, "trim",   trimOpt,   2, myRibbonState.trimToolIndex,   ICON_TRIM,   inSketch, false, "Обрезать");
@@ -702,12 +622,12 @@ void Application::DrawRibbonSketchTab() {
     UI::Ribbon::Button(myIcons, "split",  splitOpt,  1, dummy,             ICON_SPLIT,  inSketch, false, "Разделить");
     ImGui::SameLine();
     UI::Ribbon::Button(myIcons, "copy2d", splitOpt,  1, dummy,             ICON_COPY,   inSketch, false, "Копировать");
-    RibbonGroupEnd(Tr("grp.modify").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.modify").c_str(), myRibbonState);
 
     // ============================================================
     // ОГРАНИЧЕНИЯ — 12 малых, 2 ряда по 6
     // ============================================================
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     // Уплотняем вертикальный отступ между двумя рядами
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, 0.0f));
     // Ряд 1
@@ -735,12 +655,12 @@ void Application::DrawRibbonSketchTab() {
     ImGui::SameLine();
     UI::Ribbon::Button(myIcons, "con_smooth",      pointOpt, 1, dummy, ICON_SMOOTH_G2,     inSketch, false, "Сглаживание G2");
     ImGui::PopStyleVar();
-    RibbonGroupEnd(Tr("grp.constrain").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.constrain").c_str(), myRibbonState);
 
     // ============================================================
     // РАЗМЕРЫ — 5 малых
     // ============================================================
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::Button(myIcons, "dim_linear",   pointOpt, 1, dummy, ICON_DIM_LINEAR,   inSketch, false, "Линейный");
     ImGui::SameLine();
     UI::Ribbon::Button(myIcons, "dim_angle",    pointOpt, 1, dummy, ICON_DIM_ANGLE,    inSketch, false, "Угловой");
@@ -749,23 +669,23 @@ void Application::DrawRibbonSketchTab() {
     UI::Ribbon::Button(myIcons, "dim_diameter", pointOpt, 1, dummy, ICON_DIM_DIAMETER, inSketch, false, "Диаметр");
     ImGui::SameLine();
     UI::Ribbon::Button(myIcons, "dim_ordinate", pointOpt, 1, dummy, ICON_DIM_ORDINATE, inSketch, false, "Ординатный");
-    RibbonGroupEnd(Tr("grp.dimensions").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.dimensions").c_str(), myRibbonState);
 
     // ============================================================
     // ВСТАВКА — 3 малые
     // ============================================================
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::Button(myIcons, "insert_img",    pointOpt, 1, dummy, ICON_INSERT_IMG, inSketch, false, "Изображение");
     ImGui::SameLine();
     UI::Ribbon::Button(myIcons, "insert_points", pointOpt, 1, dummy, ICON_POINT_3D,   inSketch, false, "Точки");
     UI::Ribbon::Button(myIcons, "insert_acad",   pointOpt, 1, dummy, ICON_FILE,       inSketch, false, "ACAD");
-    RibbonGroupEnd(Tr("grp.insert").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.insert").c_str(), myRibbonState);
 
 
     // ============================================================
     // ФОРМАТ — 3 тонкие кнопки в столбик
     // ============================================================
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     {
         struct LSItem { const char* label; const char* tip; LineStyle style; ImU32 bg; };
         LSItem items[] = {
@@ -791,20 +711,20 @@ void Application::DrawRibbonSketchTab() {
             ImGui::PopStyleColor(4);
         }
     }
-    RibbonGroupEnd(Tr("grp.format").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.format").c_str(), myRibbonState);
 
 
     // ============================================================
     // ВЫХОД — 2 большие в ряд
     // ============================================================
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     if (UI::Ribbon::Button(myIcons, "finish", finishOpt, 1, dummy, ICON_FINISH, inSketch, true, "Завершить эскиз"))
         ExitSketch();
     ImGui::SameLine();
     if (UI::Ribbon::Button(myIcons, "show_format", showFormatOpt, 1, dummy, "layout-grid", inSketch, true, "Показать формат")) {
         // TODO: чекбоксы линий / размеров / ограничений
     }
-    RibbonGroupEnd(Tr("grp.exit").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.exit").c_str(), myRibbonState);
 }
 
 void Application::DrawRibbonModelTab() {
@@ -812,12 +732,12 @@ void Application::DrawRibbonModelTab() {
     static const char* oneOpt[] = { "tool.dummy" };
 
     // === Группа: Эскиз ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "newsketch", "tool.newSketch", ICON_SKETCH, true, true);
-    RibbonGroupEnd(Tr("grp.sketch").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.sketch").c_str(), myRibbonState);
 
     // === Группа: Создать ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "extrude", "tool.extrude", ICON_EXTRUDE, true, true);
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "revolve", "tool.revolve", ICON_REVOLVE, true, true);
@@ -827,10 +747,10 @@ void Application::DrawRibbonModelTab() {
     UI::Ribbon::SingleButton(myIcons, "loft",    "tool.loft",    ICON_LOFT,    true, true);
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "spring",  "tool.spring",  "cad/spring", true, true);
-    RibbonGroupEnd(Tr("grp.create").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.create").c_str(), myRibbonState);
 
     // === Группа: Изменить ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "hole",     "tool.hole",    ICON_HOLE,    true, true);
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "fillet",   "tool.fillet",  ICON_FILLET,  true, true);
@@ -846,38 +766,38 @@ void Application::DrawRibbonModelTab() {
         ImGui::SameLine();
         UI::Ribbon::SingleButton(myIcons, "rib",      "tool.rib",     "plus",       true, false);
     ImGui::EndGroup();
-    RibbonGroupEnd(Tr("grp.modify").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.modify").c_str(), myRibbonState);
 
     // === Группа: Массив ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "pattern_rect", "tool.pattern_rect", ICON_PATTERN_RECT, true, false);
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "pattern_circ", "tool.pattern_circ", ICON_PATTERN_CIRC, true, false);
     UI::Ribbon::SingleButton(myIcons, "mirror3d",     "tool.mirror",       ICON_MIRROR,       true, false);
-    RibbonGroupEnd(Tr("grp.pattern").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.pattern").c_str(), myRibbonState);
 
     // === Группа: Рабочие элементы ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "wplane", "tool.plane",    ICON_PLANE,    true, false);
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "waxis",  "tool.axis",     ICON_AXIS,     true, false);
     UI::Ribbon::SingleButton(myIcons, "wpoint", "tool.point",    ICON_POINT_3D, true, false);
-    RibbonGroupEnd(Tr("grp.work").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.work").c_str(), myRibbonState);
 
     // === Группа: Стандартные изделия ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "library", "tool.library", "package", true, true);
-    RibbonGroupEnd(Tr("grp.standards").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.standards").c_str(), myRibbonState);
 
     // === Группа: Диагностика ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "info",       "tool.info",       ICON_INFO,    true, false);
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "measure",    "tool.measure",    ICON_MEASURE, true, false);
     UI::Ribbon::SingleButton(myIcons, "mass",       "tool.mass",       ICON_MASS,    true, false);
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "import_stl", "tool.import_stl", ICON_IMPORT,  true, false);
-    RibbonGroupEnd(Tr("grp.diagnostics").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.diagnostics").c_str(), myRibbonState);
 }
 
 void Application::DrawRibbonAnnotateTab() {
@@ -1038,7 +958,7 @@ void Application::DrawRibbonManageTab() {
 // ============================================================
 void Application::DrawRibbonAssemblyTab() {
     // === Компонент ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "asm_place",   "tool.asm.place",   "package-plus", true, true, "Вставить компонент");
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "asm_create",  "tool.asm.create",  "package",      true, true, "Создать компонент");
@@ -1046,43 +966,43 @@ void Application::DrawRibbonAssemblyTab() {
     UI::Ribbon::SingleButton(myIcons, "asm_replace", "tool.asm.replace", "refresh-cw",   true, true, "Заменить компонент");
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "asm_copy",    "tool.asm.copy",    ICON_COPY,      true, true, "Копировать компонент");
-    RibbonGroupEnd(Tr("grp.component").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.component").c_str(), myRibbonState);
 
     // === Позиционирование ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "asm_joint",      "tool.asm.joint",      "link",    true, true, "Соединение (подвижное)");
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "asm_constraint", "tool.asm.constraint", "pin",     true, true, "Зависимость (статичная)");
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "asm_dof",        "tool.asm.dof",        "move-3d", true, true, "Степени свободы");
-    RibbonGroupEnd(Tr("grp.position").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.position").c_str(), myRibbonState);
 
     // === Массив ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "asm_pat_rect", "tool.pattern_rect", ICON_PATTERN_RECT, true, false, "Прямоуг.");
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "asm_pat_circ", "tool.pattern_circ", ICON_PATTERN_CIRC, true, false, "Круговой");
     UI::Ribbon::SingleButton(myIcons, "asm_mirror",   "tool.mirror",       ICON_MIRROR,       true, false, "Зеркало");
-    RibbonGroupEnd(Tr("grp.pattern").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.pattern").c_str(), myRibbonState);
 
     // === Спецификация ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "asm_bom",  "tool.bom",           "list",      true, true, "Bill of Materials");
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "asm_spec", "tool.specification", ICON_FILE,   true, true, "Спецификация");
-    RibbonGroupEnd(Tr("grp.specification").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.specification").c_str(), myRibbonState);
 
     // === Стандартные изделия ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "asm_library", "tool.library", "package", true, true, "Библиотека");
-    RibbonGroupEnd(Tr("grp.standards").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.standards").c_str(), myRibbonState);
 }
 
 void Application::DrawRibbonViewTab() {
     static int dummy = 0;
 
     // === Навигация (3 кнопки-меню) ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     {
         static const char* panOpts[]  = { "tool.pan", "tool.pan", "tool.pan" };
         UI::Ribbon::Button(myIcons, "nav_pan",   panOpts,  1, dummy, ICON_PAN,   true, true, "Панорамирование");
@@ -1099,11 +1019,11 @@ void Application::DrawRibbonViewTab() {
         int orbIdx = 0;
         UI::Ribbon::Button(myIcons, "nav_orbit", orbOpts, 3, orbIdx, ICON_ORBIT, true, true, "Орбита");
     }
-    RibbonGroupEnd(Tr("grp.navigation").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.navigation").c_str(), myRibbonState);
 
 
     // === Стиль отображения (7, кнопка-меню) ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     {
         static const char* styleOpts[] = {
             "tool.style_realistic", "tool.style_shaded", "tool.style_shaded_edges",
@@ -1122,10 +1042,10 @@ void Application::DrawRibbonViewTab() {
         UI::Ribbon::Button(myIcons, "view_bg", bgOpts, 5, myRibbonState.backgroundIndex, ICON_BACKGROUND, true, true,
                      "Фон вьюпорта");
     }
-    RibbonGroupEnd(Tr("grp.style").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.style").c_str(), myRibbonState);
 
     // === Представление модели (6 малых) ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "mdl_shadows",     "tool.shadows",       ICON_SHADOWS,     true, false, "Тени");
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "mdl_reflections", "tool.reflections",   ICON_REFLECTIONS, true, false, "Отражения");
@@ -1134,20 +1054,20 @@ void Application::DrawRibbonViewTab() {
     UI::Ribbon::SingleButton(myIcons, "mdl_zero_plane",  "tool.zero_plane",    "plus",           true, false, "Нулевая");
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "mdl_refine",      "tool.refine",        ICON_SHOW_ALL,    true, false, "Уточнить");
-    RibbonGroupEnd(Tr("grp.model_view").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.model_view").c_str(), myRibbonState);
 
     // === Видимость (4) ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "hide",        "tool.hide",        ICON_HIDE,        true, false, "Скрыть");
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "show_all",    "tool.show_all",    ICON_SHOW_ALL,    true, false, "Показать всё");
     UI::Ribbon::SingleButton(myIcons, "isolate",     "tool.isolate",     ICON_ISOLATE,     true, false, "Изолировать");
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "show_hidden", "tool.show_hidden", ICON_SHOW_HIDDEN, true, false, "Показать скрытое");
-    RibbonGroupEnd(Tr("grp.visibility").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.visibility").c_str(), myRibbonState);
 
     // === Окна (5 малых) ===
-    RibbonGroupStart();
+    UI::Ribbon::GroupStart(myRibbonState);
     UI::Ribbon::SingleButton(myIcons, "win_ui",    "tool.ui",           "layout-grid", true, false, "Интерфейс");
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "win_clear", "tool.clear_screen", ICON_BACKGROUND,  true, false, "Очистить экран");
@@ -1156,7 +1076,7 @@ void Application::DrawRibbonViewTab() {
     UI::Ribbon::SingleButton(myIcons, "win_new",   "tool.new_window",   "plus",           true, false, "Создать");
     ImGui::SameLine();
     UI::Ribbon::SingleButton(myIcons, "win_tile",  "tool.tile",         ICON_TILE,        true, false, "Упорядочить");
-    RibbonGroupEnd(Tr("grp.windows").c_str());
+    UI::Ribbon::GroupEnd(Tr("grp.windows").c_str(), myRibbonState);
 }
 
 void Application::DrawRibbon() {
@@ -1191,7 +1111,7 @@ void Application::DrawRibbon() {
         UI::Qat::DrawQuickAccessToolbar(qat);
     };
 
-    ctx.drawTabs = [this]() { DrawRibbonTabs(); };
+    ctx.icons    = &myIcons;
 
     ctx.drawContent = [this]() {
         switch (myRibbonState.activeTab) {
