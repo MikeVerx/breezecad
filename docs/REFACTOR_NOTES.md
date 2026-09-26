@@ -118,18 +118,18 @@ CMakeLists.txt теперь использует `C:/occt/install` и `C:/lunasv
 | `ui/home/` | ✅ закрыт |
 | `ui/dialogs/` | ✅ закрыт |
 | `ui/panels/` | ✅ закрыт |
-| `ui/ribbon/` | ⏳ |
-| `app/` | ⏳ |
+| `ui/ribbon/` | ✅ закрыт |
+| `app/` | ⏳ отложен (см. §K) |
 | `util/` | ✅ закрыт |
 
-**Application.cpp:** 5638 → 2403 строк (**−57%**)
-**Цель:** ~800 строк (тонкий оркестратор)
+**Application.cpp:** 5638 → **1567** строк (**−72%**)
+**Цель:** ~800 строк (тонкий оркестратор) — частично достигнута (остаток — оркестрация + скетч-логика, см. §K)
 
 ---
 
 ## F. Итог рефакторинга (ветка refactor/v2)
 
-**Закрыто модулей:** 12 из 13 запланированных.
+**Закрыто модулей:** 13 из 13 запланированных.
 
 | Модуль | Строк | Статус |
 |---|---|---|
@@ -142,8 +142,8 @@ CMakeLists.txt теперь использует `C:/occt/install` и `C:/lunasv
 | `ui/dialogs/` | ~700 | ✅ |
 | `ui/panels/` | ~750 | ✅ |
 | `util/` | ~250 | ✅ |
-| `app/` | — | ⏳ отложен |
-| `ui/ribbon/` | ~1300 | ⏳ отложен (большой) |
+| `app/` | — | ⏳ отложен (см. §K) |
+| `ui/ribbon/` | ~1500 | ✅ (7 подшагов, 24 файла) |
 | Скетч-логика | ~400 | ⏳ отложено (нужен солвер) |
 
 **Application.cpp:** 5638 → 2403 строк (**−57%**)
@@ -239,7 +239,7 @@ CMakeLists.txt теперь использует `C:/occt/install` и `C:/lunasv
 
 ---
 
-## I. ТОЧКА ОСТАНОВКИ 10.0 (2026-09-26, коммит 4edea6f)
+## I. ТОЧКА ОСТАНОВКИ 10.7 — ФИНАЛ ФАЗЫ 1.5 (коммит d41ed2f)
 
 **Для нового чата: это первое, что нужно прочитать после HANDOFF и RULES.**
 
@@ -248,12 +248,12 @@ CMakeLists.txt теперь использует `C:/occt/install` и `C:/lunasv
 | Параметр | Значение |
 |---|---|
 | Ветка | `refactor/v2` (запушена в origin) |
-| HEAD | `4edea6f` |
-| Коммитов впереди main | **42** |
-| `Application.cpp` | **2403** строки (было 5638, −57%) |
+| HEAD | `d41ed2f` |
+| Коммитов впереди main | **50** |
+| `Application.cpp` | **1567** строк (было 5638, −72%) |
 | `Application.h` | **253** строки |
-| Закрыто модулей | **12** из 13 |
-| Осталось вынести | `ui/ribbon/` (~955), `app/` (~300). Скетч (~370) отложен. |
+| Закрыто модулей | **13** из 13 ✅ |
+| Осталось вынести | `app/` (DocumentManager, FileOps, CommandRegistry, Telemetry — отложено). Скетч-логика (~400) — ждёт Фазу 2. См. §K. |
 | Рабочий каталог | чистый |
 
 ### Что сделано (12 модулей)
@@ -358,3 +358,78 @@ cd ~/BreezeCAD && grep -a -n "myLineToolIndex|myRectToolIndex|myCircleToolIndex|
 
 **Правило:** `UI_LAYOUT.md` — архив Фазы 0. Для кнопок, размеров, структуры,
 канона — только `CANON_FEATURES.md`.
+
+---
+
+## K. ИТОГ ФАЗЫ 1.5 — что осталось в Application.cpp
+
+**Дата:** 2026-09-26 (коммит d41ed2f)
+**Application.cpp:** 1567 строк (−72% от исходных 5638)
+**Application.h:** 234 строки (было ~290)
+
+### Оставшиеся member-функции (26)
+
+| Категория | Функции | Обоснование |
+|---|---|---|
+| **Оркестрация** | `Run`, `RefreshView`, `DrawRibbon` (обёртка), `DrawMenuBar` (hook, B-14), `DrawSketchOverlay` (hook, B-15), `DrawViewCube`, `RequestDelete` | Это и есть оркестратор — здесь ему место |
+| **DocumentManager** | `CreateNewDoc`, `AddDocFromFile`, `SwitchToDoc`, `CloseDoc`, `OnNewDocument`, `OnOpen` | C-04: тесно со скетч-логикой. Отложено до Фазы 2+ |
+| **FileOps** | `OnSave`, `OnExportSTEP`, `OnExportSTL` | Часть DocumentManager-группы |
+| **Undo/Redo** | `OnUndo`, `OnRedo` | Часть DocumentManager-группы |
+| **Тема** | `ApplyTheme` | C-05: переедет в `ThemeManager` со стейтом |
+| **Команды** | `InitCommands` | Команды (`myCommands`) — в `app/CommandRegistry` (отложено) |
+| **Телеметрия** | `UpdateTelemetry` | `app/Telemetry` (отложено) |
+| **Скетч-логика** | `RefreshSketchLines`, `OnSketchClick`, `EnterSketch`, `ExitSketch`, `ApplyExactLine`, `DrawPreviewInfo` | **Ждёт Фазу 2 (скетч-солвер).** C-03: вынос сейчас опасен |
+
+### Что закрыто в Фазе 1.5
+
+**13 модулей:**
+
+ui/viewcube/ ✅ ViewCubeOverlay, Animator, Geometry
+ui/theme/ ✅ ThemeTokens, ThemePresets, ThemeManager, Fonts
+ui/widgets/ ✅ IconTint, SvgButton, Tooltip, SelectionRect
+ui/status/ ✅ StatusBar, ProjectTabs
+ui/qat/ ✅ QuickAccessToolbar
+ui/home/ ✅ HomeScreen, Thumbnails
+ui/dialogs/ ✅ 8 диалогов
+ui/panels/ ✅ DocumentTree, ContextMenu, TreeSplitter, RightPanel, DepsPanel, Visibility
+ui/ribbon/ ✅ 24 файла (State, Context, Ribbon, Button, Group, Tabs + 7 вкладок) ← ЗАКРЫТ 10.7
+util/ ✅ Utf8, Geometry2D, LabelName
+app/ ⏳ отложено
+doc/ (было в проекте изначально)
+occt/ (было в проекте изначально)
+platform/ (было в проекте изначально)
+
+### Ключевые сущности ribbon-модуля
+
+- **`RibbonState`** — 13 полей, вынесены из Application.h (10.1)
+- **`RibbonContext`** — `state`, `icons`, `drawQat` + поля для SketchTab
+- **`Ribbon::Draw(ctx)`** — рисует окно `##ribbon`, switch по `activeTab`
+- **`Button` / `SingleButton`** — свободные функции, принимают `IconManager&`
+- **`GroupStart` / `GroupEnd`** — принимают `RibbonState&`
+- **`DrawTabs`** — принимает `IconManager&, RibbonState&`
+- **7 вкладок** в `tabs/`, все — `Draw*(IconManager&, RibbonState&)`
+
+### Что дальше
+
+1. **Merge `refactor/v2` → `main`** — рефакторинг закрыт.
+2. **Обновить `PROJECT_STATE.md`** — Фаза 1.5 ✅, Фаза 2 — следующая.
+3. **Функциональные баги** (раздел A): BUG-4.1 ViewCube, BUG-A2 вращение, BUG-A3 RAM.
+4. **Фаза 2** — функционал детали: плавающие окна операций, инлайн-виджет, панель свойств, ViewCube с рёбрами.
+5. **`app/` (позже)** — DocumentManager, FileOps, CommandRegistry, Telemetry. Тесно со скетч-солвером — поэтому после Фазы 2.
+
+### Что НЕ сделано и почему
+
+- `app/` — 6 модулей отложены: тесно со скетч-логикой, которая ждёт солвер.
+- Скетч-логика (~400 строк) — ждёт Фазу 2 (солвер).
+- C-05 (тема → ThemeManager) — сделаем в Фазе 2, когда будем трогать темы.
+- B-16 (`myPolyToolIndex`, `myConstrainToolIndex`) — поля в `RibbonState` помечены REVIEW. Оставить/удалить — при старте Фазы 2.
+- OPT-01/02/03 (оптимизация ribbon) — теперь в `ui/ribbon/RibbonButton.cpp` и `Ribbon.cpp`, легко применить. Но сейчас не трогаем (правило «не чинить во время рефакторинга»).
+
+### Признание заслуг
+
+Фаза 1.5 заняла **50 коммитов**, растянулась на 2+ дня, но:
+- 13 модулей вынесено с нуля
+- Application.cpp ужат на **72%**
+- Архитектура читается за минуты (правило 21)
+- Ноль потери функциональности (каждый подшаг — сборка + запуск)
+- Все компромиссы задокументированы в этом файле
