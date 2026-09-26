@@ -54,8 +54,7 @@
 | **B-13** | `SetupDarkTheme()` — удалена в `b55fb70` (решение автора: не нужна). Старая версия тёмной темы с синим accent `#338CF2`. Восстановимо из git при необходимости. Задел под мультитематизацию — отдельные варианты стилей добавим позже, чисто. | git: до b55fb70 | ✅ RESOLVED |
 | **B-14** | `Application::DrawMenuBar()` — пустая функция-hook. Классический паттерн «место для будущей логики». Не удалять. | Application.cpp:1409 | ✅ KEEP |
 | **B-15** | `Application::DrawSketchOverlay()` — пустая функция. Комментарий внутри: «весь UI перенесён в Ribbon и Status Bar». Может вернуться для overlay-подсказок эскиза. Не удалять. | Application.cpp:1815 | ✅ KEEP |
-| **B-11** | SettingsDialog: 4 из 6 вкладок — визуальные заглушки (единицы, точность, автосейв, качество, AA, тени, цвета линий эскиза). Все static-локалы, никуда не передаются. | ui/dialogs/SettingsDialog.cpp | TODO |
-| **B-12** | `static bool RibbonButton(const char*, bool, ...)` — мёртвый код, нигде не вызывается. Удалить при выносе `ui/ribbon/`. | Application.cpp:~613 | TODO |
+| **B-16** | `myPolyToolIndex` и `myConstrainToolIndex` объявлены в `Application.h` (строки 163, 167), но **нигде не используются** в `Application.cpp`. Вероятно, заготовки под многоугольник и ограничения (ждут скетч-солвер). Решение — REVIEW. | `Application.h` | REVIEW |
 
 ---
 
@@ -118,7 +117,6 @@ CMakeLists.txt теперь использует `C:/occt/install` и `C:/lunasv
 | `ui/qat/` | ✅ закрыт |
 | `ui/home/` | ✅ закрыт |
 | `ui/dialogs/` | ✅ закрыт |
-
 | `ui/panels/` | ✅ закрыт |
 | `ui/ribbon/` | ⏳ |
 | `app/` | ⏳ |
@@ -148,7 +146,7 @@ CMakeLists.txt теперь использует `C:/occt/install` и `C:/lunasv
 | `ui/ribbon/` | ~1300 | ⏳ отложен (большой) |
 | Скетч-логика | ~400 | ⏳ отложено (нужен солвер) |
 
-**Application.cpp:** 5638 → 2434 строк (**−57%**)
+**Application.cpp:** 5638 → 2403 строк (**−57%**)
 **Файловая структура:** `src/{app,doc,occt,platform,ui/{theme,widgets,viewcube,status,qat,home,dialogs,panels},util}`
 
 **Что не вынесено и почему:**
@@ -241,7 +239,7 @@ CMakeLists.txt теперь использует `C:/occt/install` и `C:/lunasv
 
 ---
 
-## I. ТОЧКА ОСТАНОВКИ (2026-09-26, коммит d9fc870)
+## I. ТОЧКА ОСТАНОВКИ 10.0 (2026-09-26, коммит 4edea6f)
 
 **Для нового чата: это первое, что нужно прочитать после HANDOFF и RULES.**
 
@@ -250,12 +248,13 @@ CMakeLists.txt теперь использует `C:/occt/install` и `C:/lunasv
 | Параметр | Значение |
 |---|---|
 | Ветка | `refactor/v2` (запушена в origin) |
-| Коммит | `d9fc870` |
-| Коммитов впереди main | **40** |
+| HEAD | `4edea6f` |
+| Коммитов впереди main | **42** |
 | `Application.cpp` | **2403** строки (было 5638, −57%) |
 | `Application.h` | **253** строки |
-| Закрыто модулей | **12** |
+| Закрыто модулей | **12** из 13 |
 | Осталось вынести | `ui/ribbon/` (~955), `app/` (~300). Скетч (~370) отложен. |
+| Рабочий каталог | чистый |
 
 ### Что сделано (12 модулей)
 src/
@@ -285,7 +284,7 @@ main.cpp
 |---|---|---|---|
 | **10.1** | **RibbonState + скелет.** 13 полей из Application.h → struct в модуле | ~40 | 🟢 |
 | 10.2 | Ribbon.h/.cpp — оркестратор | ~50 | 🟢 |
-| 10.3 | RibbonButton.h/.cpp + удаление **B-12** (мёртвый static RibbonButton) | ~170 | 🟡 |
+| 10.3 | RibbonButton.h/.cpp — вынос member `Application::RibbonButton` + static debug-helper (B-12: оба **KEEP**) | ~170 | 🟡 |
 | 10.4 | RibbonGroup + RibbonTabs | ~90 | 🟢 |
 | 10.5 | tabs/ModelTab + tabs/ViewTab | ~200 | 🟡 |
 | 10.6 | tabs/SketchTab (большая) | ~250 | 🔴 |
@@ -335,3 +334,27 @@ cd ~/BreezeCAD && grep -a -n "myLineToolIndex|myRectToolIndex|myCircleToolIndex|
 - **H** — оптимизация OPT-01/02/03
 
 **Стартовое сообщение в новом чате:** промт передаётся дословно от MikeVerx.
+
+---
+
+## J. Противоречия Phase 0 архив vs текущий канон
+
+**Для нового ассистента:** знать, но не переписывать старые доки.
+**Разобрать при merge `refactor/v2` → `main` (после закрытия Фазы 1.5).**
+
+Документы Фазы 0 (`UI_LAYOUT.md`, ранние версии `PROJECT_STATE.md`,
+`ARCHITECTURE.md`, `ROADMAP.md`) писались до утверждения канона и не везде
+синхронизированы. При конфликте **авторитет — `CANON_FEATURES.md`**.
+
+| # | Что | Где устарело | Актуально |
+|---|---|---|---|
+| 1 | QAT — 10 кнопок | `CANON_FEATURES.md` §3 | **12** (по CHANGELOG + подтверждено автором, 2026-09-26) |
+| 2 | Расширения | `UI_LAYOUT.md` §17.2 (`.cbf`/`.cba`/`.cbw`) | **`.bzc`** — детали. Сборки / чертежи — свои расширения (в разработке). `.cbf` — текущий OCAF (мост). `.cba`/`.cbw` — идея Фазы 0, не канон. |
+| 3 | `Application.cpp` = 4700 строк | `HANDOFF.md` §7, `ARCHITECTURE.md` §12, `ROADMAP.md` Фаза 1.5, `CHANGELOG_WORK.md`, `TECH_DEBT-006` | **2403** (`wc -l`, актуально). Остальное — исторический срез. |
+| 4 | DeepSColor как отдельная тема | `PROJECT_STATE.md` §UI (4 темы) | **3 темы**: Светлая / Тёмная / Авто |
+| 5 | Ribbon 3D / «Создать» — 12 кнопок | `UI_LAYOUT.md` §4 | `CANON_FEATURES.md` §4: **5 кнопок** (Выдавливание, Вращение, Сдвиг, Лофт, Пружина) |
+| 6 | Стили отображения — 9 | `UI_LAYOUT.md` §7.3 | `CANON_FEATURES.md` §7: **7** (Акварель и Эскизная убраны) |
+| 7 | QAT кнопка «Создать ▼» отсутствует | `UI_LAYOUT.md` §3.4 | **Есть** (CHANGELOG `97bedde`, `CANON_FEATURES.md` §3) |
+
+**Правило:** `UI_LAYOUT.md` — архив Фазы 0. Для кнопок, размеров, структуры,
+канона — только `CANON_FEATURES.md`.
