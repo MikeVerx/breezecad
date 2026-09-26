@@ -305,7 +305,7 @@ Application получит одно поле: `UI::Ribbon::RibbonState myRibbonS
 При замене — массивная правка `myLineToolIndex` → `myRibbonState.lineToolIndex` и т.п.
 
 **Первая команда для нового чата (диагностика):**
-cd ~/BreezeCAD && grep -a -n "myLineToolIndex\|myRectToolIndex\|myCircleToolIndex\|myArcToolIndex\|myPolyToolIndex\|myTrimToolIndex\|myOffsetToolIndex\|myMoveToolIndex\|myConstrainToolIndex\|myDisplayStyleIndex\|myBackgroundIndex\|myActiveRibbonTab\|myRibbonGroupStartY" src/app/Application.cpp | wc -l
+cd ~/BreezeCAD && grep -a -n "myLineToolIndex|myRectToolIndex|myCircleToolIndex|myArcToolIndex|myPolyToolIndex|myTrimToolIndex|myOffsetToolIndex|myMoveToolIndex|myConstrainToolIndex|myDisplayStyleIndex|myBackgroundIndex|myActiveRibbonTab|myRibbonGroupStartY" src/app/Application.cpp | wc -l
 Потом — то же без `| wc -l`, чтобы увидеть все места.
 
 ### Что после ribbon
