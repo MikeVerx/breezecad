@@ -4,6 +4,28 @@
 #include "occt/OcctView.h"
 #include "doc/BreezeDocument.h"
 #include "app/IconManager.h"
+#include "ui/viewcube/ViewCubeOverlay.h"
+#include "ui/theme/ThemeTokens.h"
+#include "ui/widgets/Tooltip.h"
+#include "ui/widgets/SelectionRect.h"
+#include "ui/status/StatusBar.h"            // UI::Status::DrawStatusBar
+#include "ui/status/ProjectTabs.h"
+#include "ui/qat/QuickAccessToolbar.h"
+#include "ui/dialogs/RenameDialog.h"        // UI::Dialogs::RenameState
+#include "ui/dialogs/DeleteConfirmDialog.h" // UI::Dialogs::DeleteConfirmState
+#include "ui/dialogs/AddBoxDialog.h"
+#include "ui/dialogs/PropertiesDialog.h"    // UI::Dialogs::PropertiesState
+#include "ui/dialogs/NotImplementedDialog.h"// UI::Dialogs::NotImplementedState
+#include "ui/dialogs/UnsavedChangesDialog.h"
+#include "ui/dialogs/DependencyDialog.h"
+#include "ui/dialogs/SettingsDialog.h"
+#include "ui/panels/TreeSplitter.h"          // UI::Panels::DrawTreeSplitter
+#include "ui/panels/RightPanel.h"            // UI::Panels::DrawRightPanel
+#include "ui/panels/DependenciesPanel.h"
+#include "ui/panels/DocumentTree.h"
+#include "ui/panels/Visibility.h"          // UI::Panels::ShowAllRespectingDefaults
+#include "ui/panels/ContextMenu.h"           // UI::Panels::DrawContextMenu3D     // UI::Panels::DrawDependenciesPanel
+#include "ui/ribbon/RibbonState.h"          // UI::Ribbon::RibbonState
 
 #include <TDF_Label.hxx>
 #include <gp_Pnt.hxx>
@@ -18,46 +40,8 @@
 
 namespace BreezeCAD {
 
-struct ThemeTokens {
-    // ==== Home Screen / общий UI ====
-    ImU32 bgTitle;
-    ImU32 bgRibbon;
-    ImU32 bgContent;
-    ImU32 bgCardBg;
-    ImU32 border;
-    ImU32 borderStrong;
-    ImU32 textMain;
-    ImU32 textDim;
-    ImU32 homeBtnLabel;
-    ImU32 homeBtnBg;
-    ImU32 homeBtnBgHover;
-    ImU32 homeBtnBgDisabled;
-    ImU32 homeBtnTextDisabled;
-    ImU32 thumbBg;
-    ImU32 accent;
-    ImU32 accentHover;
-
-    // ==== ViewCube ====
-    ImU32 cubeBgCircle;
-    ImU32 cubeFaceTop;
-    ImU32 cubeFaceBottom;
-    ImU32 cubeFaceFront;
-    ImU32 cubeFaceBack;
-    ImU32 cubeFaceRight;
-    ImU32 cubeFaceLeft;
-    ImU32 cubeOutline;
-    ImU32 cubeText;
-    ImU32 cubeHover;
-    ImU32 cubeFaceHover;
-};
 
 
-
-struct VCAnimTarget {
-    int    kind;   // 0 = absolute (dir/up), 1 = roll by angle (angle in dir[0])
-    double dir[3];
-    double up[3];
-};
 
 class Application {
 public:
@@ -69,29 +53,24 @@ public:
 private:
     std::unique_ptr<GlfwWindow>   myWindow;
     std::unique_ptr<OcctView>     myOcctView;
+    UI::ViewCube::ViewCubeOverlay myViewCube;
+    UI::Widgets::TooltipState     myTooltipState;
     IconManager                   myIcons;
+    UI::Ribbon::RibbonState      myRibbonState;
     // === Диалог зависимостей ===
-    bool myDependencyDialogOpen = false;
-    int  myCurrentDependencyType = 0;  // 0=Coincident, 1=Parallel, ...
-    std::vector<TDF_Label> myDependencyBase;       // базовые объекты
-    std::vector<TDF_Label> myDependencyDependent;  // зависимые объекты
-    ImVec2 myDependencyDialogPos = ImVec2(0, 0);   // позиция (запоминается)
-    bool   myDependencyDialogPosSet = false;
+    UI::Dialogs::DependencyState myDependencyState;
 
     // === QAT (Quick Access Toolbar) ===
     char mySearchBuffer[128] = "";
     // === Недавние файлы ===
     std::vector<std::string> myRecentFiles;
-    void AddRecentFile(const std::string& path);
 
     // === Превью проектов ===
     // Для каждого документа — путь к файлу-превью (PNG)
     std::vector<std::string> myThumbnailPaths;
 
     // Сохранить превью текущего активного документа в PNG
-    void CaptureCurrentThumbnail();
     // Возвращает путь к превью для документа (пустой, если нет)
-    std::string GetThumbnailPath(int docIndex) const;
 
     // === Буфер обмена (для копирования объектов) ===
     TDF_Label myClipboardLabel;
@@ -107,59 +86,35 @@ private:
 
     // === Правая панель навигации ===
     bool myRightPanelExpanded = false;
-
-    // --- ViewCube camera animation ---
-    bool   myVCAnimActive = false;
-    float  myVCAnimT      = 0.0f;
-    double myVCAnimFromDir[3] = {0, 0, -1};
-    double myVCAnimToDir[3]   = {0, 0, -1};
-    double myVCAnimFromUp[3]  = {0, 1, 0};
-    double myVCAnimToUp[3]    = {0, 1, 0};
-    float  myVCButtonsTimer   = 0.0f;
-    std::vector<VCAnimTarget> myVCAnimQueue;
+    // ViewCube-состояние переехало в myViewCube (ViewCubeOverlay)
 
     // === ПКМ-меню в 3D-сцене ===
     bool   myPendingContextMenu = false;
     ImVec2 myContextMenuPos = ImVec2(0, 0);
 
     // === Диалог переименования ===
-    TDF_Label myPendingRenameLabel;
-    char      myRenameBuffer[128] = "";
-    bool      myShowRenameDialog = false;
+    UI::Dialogs::RenameState myRenameState;
 
     // === Диалог подтверждения удаления ===
-    bool myShowDeleteConfirm = false;
+    UI::Dialogs::DeleteConfirmState myDeleteConfirmState;
 
     // === Диалог несохранённых изменений ===
-    bool myShowUnsavedDialog = false;
-    int  myPendingCloseDocIndex = -1;   // какой документ закрываем (-1 = не закрывать)
-    bool myPendingWindowClose = false;  // закрытие всего окна
-    char myUnsavedDialogInfo[256] = "";
-    char myDeleteConfirmInfo[256] = "";
-    bool mySkipDeleteConfirm = false;   // «не спрашивать снова» (на сеанс)
+    UI::Dialogs::UnsavedState myUnsavedState;
 
     // === Диалог свойств ===
-    TDF_Label myPendingPropertiesLabel;
-    bool      myShowPropertiesDialog = false;
+    UI::Dialogs::PropertiesState myPropertiesState;
 
-    // === Tooltips (3 уровня задержки) ===
-    std::string myHoveredItemId;
-    double      myHoverStartTime = 0.0;
-    int         myLastTooltipLevel = 0;  // 0=нет, 1=название, 2=краткое, 3=подробное+картинка
 
     // === Splitter (регулировка ширины дерева) ===
     float myTreeWidth = 340.0f;      // текущая ширина
     bool  myIsResizingTree = false;  // идёт перетаскивание
 
     bool myStartExpandedManually = false;  // пользователь развернул Start вручную
-    bool myShowSettingsDialog = false;
-    bool myShowNotImplementedDialog = false;
-    std::string myNotImplementedFeature;
-    int  myActiveSettingsTab  = 0;
+    UI::Dialogs::SettingsState mySettingsState;
+    UI::Dialogs::NotImplementedState myNotImplementedState;
     int  myCurrentTheme       = 1;
     ThemeTokens myTheme;
-    int  myDisplayStyleIndex = 0;   // Стиль отображения (7 вариантов)
-    int  myBackgroundIndex   = 0;   // Фон вьюпорта (5 вариантов)   // 0=light, 1=dark, 2=system
+
     std::vector<std::string> myPinnedCommands;
 
     // === Телеметрия ===
@@ -167,13 +122,7 @@ private:
     int    myLastShapeCount = 0;
 
     // === Команды (для поиска) ===
-    struct CommandEntry {
-        std::string id;
-        std::string name;
-        std::string shortcut;
-        std::function<void()> action;
-    };
-    std::vector<CommandEntry> myCommands;
+    std::vector<UI::Qat::QatCommand> myCommands;
 
     // Активный документ (сырой указатель на один из myDocuments)
     BreezeDocument* myDocument = nullptr;
@@ -187,17 +136,13 @@ private:
     std::vector<std::string> myProjectNames;   // параллельно с myDocuments
     std::vector<std::string> myProjectPaths;   // путь файла (пусто, если не сохранён)
 
-    bool  myShowAddBoxDialog = false;
-    char  myNewBoxName[128]  = "Box";
-    float myNewBoxPos[3]     = { 0.0f, 0.0f, 0.0f };
-    float myNewBoxSize[3]    = { 100.0f, 100.0f, 100.0f };
+    UI::Dialogs::AddBoxState myAddBoxState;
 
     std::string myCurrentPath;
     char        myFilePathBuffer[512] = "D:/test_breezecad/part.cbf";
 
     std::map<std::string, bool> myVisibility;
 
-    TDF_Label myPendingDeleteLabel;
     TDF_Label myPendingCreateSketchLabel;
     TDF_Label myPendingEnterSketchLabel;
 
@@ -209,18 +154,7 @@ private:
     bool myAutoContinue = true;
     bool myOrthoMode    = false;  // Shift — угол кратен 45°
     bool myShowGrid     = true;   // показывать ли сетку в эскизе
-    int  myActiveRibbonTab = 0;
 
-    // Индекс выбранного инструмента в каждой группе (для Ribbon-split)
-    int myLineToolIndex   = 0;
-    int myRectToolIndex   = 0;
-    int myCircleToolIndex = 0;
-    int myArcToolIndex    = 0;
-    int myPolyToolIndex   = 0;
-    int myTrimToolIndex   = 0;
-    int myOffsetToolIndex = 0;
-    int myMoveToolIndex   = 0;
-    int myConstrainToolIndex = 0;  // 3D Model по умолчанию   // 0=Sketch, 1=3D Model, 2=Annotate, 3=Tools, 4=Manage, 5=View
     LineStyle myCurrentLineStyle = LS_Normal;
 
     // === Состояние рисования ===
@@ -239,38 +173,21 @@ private:
     double myMouseX = 0.0;
     double myMouseY = 0.0;
 
-    void DrawDocumentTree();
-    void DrawTreeSplitter();
-    void DrawContextMenu3D();
-    void DrawContextMenuItems(const TDF_Label& label, bool hasOps);
 
     // Логика видимости по умолчанию (учитывает hasOps и myVisibility)
-    bool IsLabelVisibleByDefault(const TDF_Label& label, bool hasOps) const;
 
     // Показать все объекты, уважая правила видимости (для снятия изоляции)
-    void ShowAllRespectingDefaults();
-    void DrawSelectionRect();
-    void DrawRightPanel();
-    void DrawHomeScreen();
     void DrawRenameDialog();
     void DrawDeleteConfirmDialog();
     void DrawUnsavedChangesDialog();
     void DrawPropertiesDialog();
     void RequestDelete(const TDF_Label& label);
-    void DrawAdvancedTooltip(const std::string& id,
-                             const std::string& name,
-                             const std::string& shortDesc,
-                             const std::string& longDesc,
-                             const std::string& imagePath = "");
     void DrawAddBoxDialog();
     void DrawMenuBar();
     void DrawSketchOverlay();
-    void DrawStatusBar();
     void DrawViewCube();
     void DrawDependencyDialog();
     void OpenDependencyDialog(int type);
-    std::string GetLabelName(const TDF_Label& label) const;
-    void DrawDependenciesPanel();
     void DrawPreviewInfo();
     void RefreshView();
     void RefreshSketchLines();
@@ -286,7 +203,6 @@ private:
                         const Handle(TDocStd_Document)& loaded);  // открыть из файла
     void SwitchToDoc(int index);                                  // переключиться
     void CloseDoc(int index);                                     // закрыть (с подтверждением)
-    void DrawProjectTabs();                                       // нижний таб-бар
     void OnUndo();
     void OnRedo();
     void DrawRibbon();
@@ -296,14 +212,6 @@ private:
     void ApplyTheme(int theme);
     void InitCommands();
     void UpdateTelemetry();
-    void DrawRibbonTabs();
-    // Ribbon кнопки (используют SVG через myIcons)
-    int RibbonButton(const char* id, const char* const* opts, int optCount,
-                     int& idx, const char* icon, bool enabled, bool big = true,
-                     const char* tooltip = nullptr, float iconScale = 1.0f);
-    int RibbonSingleButton(const char* id, const char* key, const char* icon,
-                           bool enabled, bool big = true,
-                           const char* tooltip = nullptr, float iconScale = 1.0f);
 
     void DrawRibbonSketchTab();
     void DrawRibbonModelTab();
@@ -315,17 +223,12 @@ private:
 
     // Группы ribbon — блок с рамкой и заголовком снизу по центру
     void RibbonGroupStart();
-    float myRibbonGroupStartY = 0.0f;
     void RibbonGroupEnd(const char* name);
     void EnterSketch(const TDF_Label& sketchLabel);
     void ExitSketch();
     void OnSketchClick(int px, int py);
     void FinishCurrentLine();  // для автопродолжения
     void ApplyExactLine();     // создать линию по введённым Length/Angle
-
-    bool DrawLabelTree(const TDF_Label& label,
-                       const TDF_Label& selectedLabel,
-                       bool hasOps);
 };
 
 } // namespace BreezeCAD

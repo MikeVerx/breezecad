@@ -14,11 +14,14 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -DNDEBUG")
 
 # --- lunasvg ---
-set(LUNASVG_ROOT "$ENV{HOME}/lunasvg/install")
+# C:/lunasvg — junction по той же причине.
+set(LUNASVG_ROOT "C:/lunasvg/install")
 include_directories(${LUNASVG_ROOT}/include)
 
 # --- Поиск OCCT ---
-set(OCCT_ROOT "$ENV{HOME}/occt/install")
+# C:/occt — junction на D:/home/Мишаня/occt (ASCII-путь для Windows-ld,
+# который не понимает кириллицу в путях). См. REFACTOR_NOTES D-05.
+set(OCCT_ROOT "C:/occt/install")
 find_package(OpenCASCADE REQUIRED
     PATHS "${OCCT_ROOT}/cmake"
     NO_DEFAULT_PATH
@@ -51,11 +54,53 @@ add_executable(breezecad
     src/app/Application.cpp
     src/app/IconManager.cpp
     src/app/Localization.cpp
+    src/ui/viewcube/ViewCubeAnimator.cpp
+    src/ui/viewcube/ViewCubeOverlay.cpp
+    src/ui/theme/ThemePresets.cpp
+    src/ui/theme/ThemeManager.cpp
+    src/ui/theme/Fonts.cpp
+    src/ui/widgets/IconTint.cpp
+    src/ui/widgets/SvgButton.cpp
+    src/ui/widgets/Tooltip.cpp
+    src/ui/widgets/SelectionRect.cpp
+    src/ui/status/StatusBar.cpp
+    src/ui/status/ProjectTabs.cpp
+    src/ui/qat/QuickAccessToolbar.cpp
+    src/ui/home/HomeScreen.cpp
+    src/ui/home/Thumbnails.cpp
+    src/ui/dialogs/RenameDialog.cpp
+    src/ui/dialogs/DeleteConfirmDialog.cpp
+    src/ui/dialogs/AddBoxDialog.cpp
+    src/ui/dialogs/PropertiesDialog.cpp
+    src/ui/dialogs/NotImplementedDialog.cpp
+    src/ui/dialogs/UnsavedChangesDialog.cpp
+    src/ui/dialogs/DependencyDialog.cpp
+    src/ui/dialogs/SettingsDialog.cpp
+    src/ui/panels/TreeSplitter.cpp
+    src/ui/panels/RightPanel.cpp
+    src/ui/panels/DependenciesPanel.cpp
+    src/ui/panels/DocumentTree.cpp
+    src/ui/panels/Visibility.cpp
+    src/ui/panels/ContextMenu.cpp
+    src/ui/ribbon/Ribbon.cpp
+    src/ui/ribbon/RibbonButton.cpp
+    src/ui/ribbon/RibbonGroup.cpp
+    src/ui/ribbon/RibbonTabs.cpp
+    src/ui/ribbon/tabs/ModelTab.cpp
+    src/ui/ribbon/tabs/ViewTab.cpp
+    src/ui/ribbon/tabs/SketchTab.cpp
+    src/ui/ribbon/tabs/AnnotateTab.cpp
+    src/ui/ribbon/tabs/ToolsTab.cpp
+    src/ui/ribbon/tabs/ManageTab.cpp
+    src/ui/ribbon/tabs/AssemblyTab.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp
     src/doc/BreezeApplication.cpp
     src/doc/BreezeDocument.cpp
+    src/util/Utf8.cpp
+    src/util/Geometry2D.cpp
+    src/util/LabelName.cpp
     external/stb_image_impl.cpp
 )
 
