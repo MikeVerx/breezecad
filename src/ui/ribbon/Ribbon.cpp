@@ -1,5 +1,7 @@
 #include "ui/ribbon/Ribbon.h"
 #include "ui/ribbon/RibbonTabs.h"
+#include "ui/ribbon/tabs/ModelTab.h"
+#include "ui/ribbon/tabs/ViewTab.h"
 
 #include "imgui.h"
 
@@ -36,7 +38,13 @@ void Draw(RibbonContext& ctx) {
             if (scrollX < 0.0f) scrollX = 0.0f;
             ImGui::SetScrollX(scrollX);
         }
-        if (ctx.drawContent) ctx.drawContent();
+        // Switch по активной вкладке. Model/View уже в модулях, остальные — колбэки.
+        switch (ctx.state->activeTab) {
+            case 0: UI::Ribbon::DrawModelTab(*ctx.icons, *ctx.state); break;
+            case 1: if (ctx.drawSketchTab)   ctx.drawSketchTab();     break;
+            case 2: if (ctx.drawAssemblyTab) ctx.drawAssemblyTab();   break;
+            case 3: UI::Ribbon::DrawViewTab(*ctx.icons, *ctx.state);  break;
+        }
     }
     ImGui::EndChild();
     ImGui::PopStyleVar();

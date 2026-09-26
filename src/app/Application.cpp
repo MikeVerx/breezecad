@@ -16,6 +16,8 @@
 #include "ui/ribbon/RibbonButton.h"
 #include "ui/ribbon/RibbonGroup.h"
 #include "ui/ribbon/RibbonTabs.h"
+#include "ui/ribbon/tabs/ModelTab.h"
+#include "ui/ribbon/tabs/ViewTab.h"
 #include "util/Utf8.h"
 #include "util/Geometry2D.h"
 #include "util/LabelName.h"
@@ -727,79 +729,6 @@ void Application::DrawRibbonSketchTab() {
     UI::Ribbon::GroupEnd(Tr("grp.exit").c_str(), myRibbonState);
 }
 
-void Application::DrawRibbonModelTab() {
-    static int dummy = 0;
-    static const char* oneOpt[] = { "tool.dummy" };
-
-    // === Группа: Эскиз ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "newsketch", "tool.newSketch", ICON_SKETCH, true, true);
-    UI::Ribbon::GroupEnd(Tr("grp.sketch").c_str(), myRibbonState);
-
-    // === Группа: Создать ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "extrude", "tool.extrude", ICON_EXTRUDE, true, true);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "revolve", "tool.revolve", ICON_REVOLVE, true, true);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "sweep",   "tool.sweep",   ICON_SWEEP,   true, true);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "loft",    "tool.loft",    ICON_LOFT,    true, true);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "spring",  "tool.spring",  "cad/spring", true, true);
-    UI::Ribbon::GroupEnd(Tr("grp.create").c_str(), myRibbonState);
-
-    // === Группа: Изменить ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "hole",     "tool.hole",    ICON_HOLE,    true, true);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "fillet",   "tool.fillet",  ICON_FILLET,  true, true);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "thread",   "tool.thread",  ICON_THREAD,  true, true);
-    ImGui::SameLine();
-    // 2x2 малых СПРАВА от больших
-    ImGui::BeginGroup();
-        UI::Ribbon::SingleButton(myIcons, "chamfer",  "tool.chamfer", ICON_CHAMFER, true, false);
-        ImGui::SameLine();
-        UI::Ribbon::SingleButton(myIcons, "shell",    "tool.shell",   ICON_SHELL,   true, false);
-        UI::Ribbon::SingleButton(myIcons, "split",    "tool.split",   "scissors",   true, false);
-        ImGui::SameLine();
-        UI::Ribbon::SingleButton(myIcons, "rib",      "tool.rib",     "plus",       true, false);
-    ImGui::EndGroup();
-    UI::Ribbon::GroupEnd(Tr("grp.modify").c_str(), myRibbonState);
-
-    // === Группа: Массив ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "pattern_rect", "tool.pattern_rect", ICON_PATTERN_RECT, true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "pattern_circ", "tool.pattern_circ", ICON_PATTERN_CIRC, true, false);
-    UI::Ribbon::SingleButton(myIcons, "mirror3d",     "tool.mirror",       ICON_MIRROR,       true, false);
-    UI::Ribbon::GroupEnd(Tr("grp.pattern").c_str(), myRibbonState);
-
-    // === Группа: Рабочие элементы ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "wplane", "tool.plane",    ICON_PLANE,    true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "waxis",  "tool.axis",     ICON_AXIS,     true, false);
-    UI::Ribbon::SingleButton(myIcons, "wpoint", "tool.point",    ICON_POINT_3D, true, false);
-    UI::Ribbon::GroupEnd(Tr("grp.work").c_str(), myRibbonState);
-
-    // === Группа: Стандартные изделия ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "library", "tool.library", "package", true, true);
-    UI::Ribbon::GroupEnd(Tr("grp.standards").c_str(), myRibbonState);
-
-    // === Группа: Диагностика ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "info",       "tool.info",       ICON_INFO,    true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "measure",    "tool.measure",    ICON_MEASURE, true, false);
-    UI::Ribbon::SingleButton(myIcons, "mass",       "tool.mass",       ICON_MASS,    true, false);
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "import_stl", "tool.import_stl", ICON_IMPORT,  true, false);
-    UI::Ribbon::GroupEnd(Tr("grp.diagnostics").c_str(), myRibbonState);
-}
-
 void Application::DrawRibbonAnnotateTab() {
     static int dummy = 0;
     static const char* oneOpt[] = { "tool.dummy" };
@@ -998,87 +927,6 @@ void Application::DrawRibbonAssemblyTab() {
     UI::Ribbon::GroupEnd(Tr("grp.standards").c_str(), myRibbonState);
 }
 
-void Application::DrawRibbonViewTab() {
-    static int dummy = 0;
-
-    // === Навигация (3 кнопки-меню) ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    {
-        static const char* panOpts[]  = { "tool.pan", "tool.pan", "tool.pan" };
-        UI::Ribbon::Button(myIcons, "nav_pan",   panOpts,  1, dummy, ICON_PAN,   true, true, "Панорамирование");
-    }
-    ImGui::SameLine();
-    {
-        static const char* zoomOpts[] = { "tool.zoom_all", "tool.zoom_frame", "tool.zoom_sel", "tool.zoom" };
-        int zoomIdx = 0;
-        UI::Ribbon::Button(myIcons, "nav_zoom",  zoomOpts, 4, zoomIdx, ICON_ZOOM,  true, true, "Зум");
-    }
-    ImGui::SameLine();
-    {
-        static const char* orbOpts[] = { "tool.orbit", "tool.orbit_dep", "tool.orbit_angle" };
-        int orbIdx = 0;
-        UI::Ribbon::Button(myIcons, "nav_orbit", orbOpts, 3, orbIdx, ICON_ORBIT, true, true, "Орбита");
-    }
-    UI::Ribbon::GroupEnd(Tr("grp.navigation").c_str(), myRibbonState);
-
-
-    // === Стиль отображения (7, кнопка-меню) ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    {
-        static const char* styleOpts[] = {
-            "tool.style_realistic", "tool.style_shaded", "tool.style_shaded_edges",
-            "tool.style_shaded_hidden", "tool.style_wireframe",
-            "tool.style_mono", "tool.style_tech"
-        };
-        UI::Ribbon::Button(myIcons, "view_style", styleOpts, 7, myRibbonState.displayStyleIndex, ICON_SHADOWS, true, true,
-                     "Стиль отображения");
-    }
-    ImGui::SameLine();
-    {
-        static const char* bgOpts[] = {
-            "tool.bg_white", "tool.bg_gray", "tool.bg_grad_light",
-            "tool.bg_grad_dark", "tool.bg_custom"
-        };
-        UI::Ribbon::Button(myIcons, "view_bg", bgOpts, 5, myRibbonState.backgroundIndex, ICON_BACKGROUND, true, true,
-                     "Фон вьюпорта");
-    }
-    UI::Ribbon::GroupEnd(Tr("grp.style").c_str(), myRibbonState);
-
-    // === Представление модели (6 малых) ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "mdl_shadows",     "tool.shadows",       ICON_SHADOWS,     true, false, "Тени");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "mdl_reflections", "tool.reflections",   ICON_REFLECTIONS, true, false, "Отражения");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "mdl_textures",    "tool.textures",      ICON_GRID,        true, false, "Текстуры");
-    UI::Ribbon::SingleButton(myIcons, "mdl_zero_plane",  "tool.zero_plane",    "plus",           true, false, "Нулевая");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "mdl_refine",      "tool.refine",        ICON_SHOW_ALL,    true, false, "Уточнить");
-    UI::Ribbon::GroupEnd(Tr("grp.model_view").c_str(), myRibbonState);
-
-    // === Видимость (4) ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "hide",        "tool.hide",        ICON_HIDE,        true, false, "Скрыть");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "show_all",    "tool.show_all",    ICON_SHOW_ALL,    true, false, "Показать всё");
-    UI::Ribbon::SingleButton(myIcons, "isolate",     "tool.isolate",     ICON_ISOLATE,     true, false, "Изолировать");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "show_hidden", "tool.show_hidden", ICON_SHOW_HIDDEN, true, false, "Показать скрытое");
-    UI::Ribbon::GroupEnd(Tr("grp.visibility").c_str(), myRibbonState);
-
-    // === Окна (5 малых) ===
-    UI::Ribbon::GroupStart(myRibbonState);
-    UI::Ribbon::SingleButton(myIcons, "win_ui",    "tool.ui",           "layout-grid", true, false, "Интерфейс");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "win_clear", "tool.clear_screen", ICON_BACKGROUND,  true, false, "Очистить экран");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "win_switch","tool.new_window",   ICON_NEW_WINDOW,  true, false, "Переключение");
-    UI::Ribbon::SingleButton(myIcons, "win_new",   "tool.new_window",   "plus",           true, false, "Создать");
-    ImGui::SameLine();
-    UI::Ribbon::SingleButton(myIcons, "win_tile",  "tool.tile",         ICON_TILE,        true, false, "Упорядочить");
-    UI::Ribbon::GroupEnd(Tr("grp.windows").c_str(), myRibbonState);
-}
-
 void Application::DrawRibbon() {
     // Тонкая обёртка: собираем RibbonContext и вызываем модуль.
     // Логика самого ribbon — в src/ui/ribbon/Ribbon.cpp (подшаг 10.2).
@@ -1113,14 +961,8 @@ void Application::DrawRibbon() {
 
     ctx.icons    = &myIcons;
 
-    ctx.drawContent = [this]() {
-        switch (myRibbonState.activeTab) {
-            case 0: DrawRibbonModelTab();      break;
-            case 1: DrawRibbonSketchTab();     break;
-            case 2: DrawRibbonAssemblyTab();   break;
-            case 3: DrawRibbonViewTab();       break;
-        }
-    };
+    ctx.drawSketchTab   = [this]() { DrawRibbonSketchTab(); };
+    ctx.drawAssemblyTab = [this]() { DrawRibbonAssemblyTab(); };
 
     UI::Ribbon::Draw(ctx);
 }

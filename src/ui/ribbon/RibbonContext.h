@@ -23,8 +23,10 @@ struct RibbonContext {
     // Рисование строки вкладок (DrawRibbonTabs).
     std::function<void()> drawTabs;
 
-    // Рисование содержимого активной вкладки.
-    std::function<void()> drawContent;
+    // Рисование ещё-не-вынесенных вкладок (переходный период 10.5-10.7).
+    // Model и View уже в модулях, зовутся Ribbon.cpp напрямую.
+    std::function<void()> drawSketchTab;
+    std::function<void()> drawAssemblyTab;
 };
 
 }}}
