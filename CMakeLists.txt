@@ -82,6 +82,7 @@ add_executable(breezecad
     src/ui/panels/DocumentTree.cpp
     src/ui/panels/Visibility.cpp
     src/ui/panels/ContextMenu.cpp
+    src/ui/ribbon/Ribbon.cpp
     src/platform/FileDialog.cpp
     src/platform/glfw/GlfwWindow.cpp
     src/occt/OcctView.cpp

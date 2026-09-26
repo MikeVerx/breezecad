@@ -12,6 +12,7 @@
 #include "ui/status/StatusBar.h"            // UI::Status::DrawStatusBar
 #include "ui/status/ProjectTabs.h"
 #include "ui/qat/QuickAccessToolbar.h"
+#include "ui/ribbon/Ribbon.h"
 #include "util/Utf8.h"
 #include "util/Geometry2D.h"
 #include "util/LabelName.h"
@@ -1343,18 +1344,12 @@ void Application::DrawRibbonViewTab() {
 }
 
 void Application::DrawRibbon() {
-    ImGuiIO& io = ImGui::GetIO();
+    // Тонкая обёртка: собираем RibbonContext и вызываем модуль.
+    // Логика самого ribbon — в src/ui/ribbon/Ribbon.cpp (подшаг 10.2).
+    UI::Ribbon::RibbonContext ctx;
+    ctx.state = &myRibbonState;
 
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, 206), ImGuiCond_Always);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 2));
-    ImGui::Begin("##ribbon", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoSavedSettings);
-
-    {
+    ctx.drawQat = [this]() {
         UI::Qat::QatContext qat;
         qat.icons               = &myIcons;
         qat.tooltip             = &myTooltipState;
@@ -1378,33 +1373,20 @@ void Application::DrawRibbon() {
         qat.onMaximize       = [this]() { myWindow->Maximize(); };
         qat.onClose          = [this]() { glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE); };
         UI::Qat::DrawQuickAccessToolbar(qat);
-    }
-    ImGui::Separator();
-    DrawRibbonTabs();
-    ImGui::Separator();
+    };
 
-    // Child с отступом сверху 6 px
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8, 6));
-    if (ImGui::BeginChild("##ribbon_content", ImVec2(0, 0), false,
-                          ImGuiWindowFlags_HorizontalScrollbar)) {
-        // Колесо мыши прокручивает ribbon горизонтально
-        ImGuiIO& ioChild = ImGui::GetIO();
-        if (ioChild.MouseWheel != 0.0f && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows)) {
-            float scrollX = ImGui::GetScrollX() - ioChild.MouseWheel * 60.0f;
-            if (scrollX < 0.0f) scrollX = 0.0f;
-            ImGui::SetScrollX(scrollX);
-        }
+    ctx.drawTabs = [this]() { DrawRibbonTabs(); };
+
+    ctx.drawContent = [this]() {
         switch (myRibbonState.activeTab) {
             case 0: DrawRibbonModelTab();      break;
             case 1: DrawRibbonSketchTab();     break;
             case 2: DrawRibbonAssemblyTab();   break;
             case 3: DrawRibbonViewTab();       break;
         }
-    }
-    ImGui::EndChild();
-    ImGui::PopStyleVar();
-    ImGui::End();
-    ImGui::PopStyleVar();
+    };
+
+    UI::Ribbon::Draw(ctx);
 }
 
 void Application::DrawMenuBar() {
