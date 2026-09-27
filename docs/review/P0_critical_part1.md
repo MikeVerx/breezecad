@@ -741,3 +741,320 @@ if (active) {
 ---
 
 
+
+---
+
+### CR-321. `ThemeTokens` — нет дефолтных значений → UB
+
+**Где:** `src/ui/theme/ThemeTokens.h:12-44`
+
+**Проблема:** все 28 полей — `ImU32` **без инициализации**.
+```
+struct ThemeTokens {
+    ImU32 bgTitle;      // ← мусор
+    ImU32 bgRibbon;     // ← мусор
+    ...
+};
+```
+
+Если создать `ThemeTokens t;` — все поля содержат мусор. Применение до `ApplyTheme` → случайные цвета или краш.
+
+**Фикс:** `= 0` у каждого поля **или** конструктор с дефолтами.
+
+**Оценка:** 5 минут.
+
+---
+
+### CR-322. `ThemeTokens` — нет токенов для ribbon-кнопок
+
+**Где:** `ThemeTokens.h`
+
+**Проблема:** `RibbonButton.cpp` использует **6 захардкоженных цветов** (CR-003):
+- `bgHover`, `bgActive` — светлая/тёмная
+- `arrowBg`, `arrowBgDisabled` — светлая/тёмная
+- `IM_COL32(140, 140, 140, 160)` — fallback-иконка
+
+В `ThemeTokens` — **ни одного** из них.
+
+**Фикс:** добавить:
+```
+// Ribbon кнопки
+ImU32 ribbonBtnHover;
+ImU32 ribbonBtnActive;
+ImU32 ribbonBtnHoverDisabled;
+ImU32 ribbonBtnActiveDisabled;
+ImU32 ribbonArrowBg;
+ImU32 ribbonArrowBgDisabled;
+ImU32 ribbonIconFallback;
+```
+
+**Оценка:** 10 минут (только структура) + 1 час (заполнение в 3 темах + правки RibbonButton).
+
+---
+
+### CR-323. `ThemeTokens` — нет токенов для 3D-геометрии (плоскости, оси)
+
+**Где:** `ThemeTokens.h`
+
+**Проблема:** `OcctView::DisplayShape` (CR-279) хардкодит:
+- `#c28a23` — fill плоскостей
+- `#965b20` — edge плоскостей
+- `(0.55, 0.60, 0.68)` — оси
+- `(0.55, 0.55, 0.55)` — выход из эскиза (CR-282)
+
+В `ThemeTokens` — ничего.
+
+**Фикс:** добавить:
+```
+// 3D viewport
+ImU32 planeFaceFill;
+ImU32 planeFaceEdge;
+ImU32 planeEdgeWidthColor;   // ...
+ImU32 axisColor;
+ImU32 originPointColor;
+ImU32 gridColor;
+ImU32 gridAxisXColor;
+ImU32 gridAxisYColor;
+```
+
+**Оценка:** 20 минут.
+
+---
+
+### CR-324. `ThemeTokens` — нет токенов для стилей линий эскиза
+
+**Где:** `ThemeTokens.h`
+
+**Проблема:** цвета линий эскиза дублируются **в двух местах**:
+- `SketchTab.cpp:200-202` — для кнопок переключателя (CR-046)
+- `OcctView.cpp:626-644` — для отрисовки на 3D (CR-292)
+
+Значения: `#8c33bf` (Normal), `#7378a6` (Construction), `#b36626` (Centerline). Ни в теме, ни в общем хедере.
+
+**Фикс:** добавить:
+```
+ImU32 lineStyleNormal;
+ImU32 lineStyleConstruction;
+ImU32 lineStyleCenterline;
+```
+
+Плюс — **функция** `ImU32 LineStyleColor(LineStyle)` в `util` или `theme`, чтобы UI и OcctView брали из одного источника.
+
+**Оценка:** 20 минут.
+
+---
+
+### CR-325. `ThemeTokens` — нет токенов для preview-окна
+
+**Где:** `ThemeTokens.h`
+
+**Проблема:** `Application::DrawPreviewInfo` (CR-168) хардкодит:
+- `ImVec4(1.0f, 1.0f, 0.3f, 1.0f)` — Length
+- `ImVec4(0.7f, 0.9f, 1.0f, 1.0f)` — Angle
+
+**Фикс:** добавить:
+```
+ImU32 previewLengthText;
+ImU32 previewAngleText;
+ImU32 previewBg;
+```
+
+**Оценка:** 5 минут.
+
+---
+
+### CR-326. `ThemeTokens` — нет токенов для ViewCube (есть, но не полные)
+
+**Где:** `ThemeTokens.h:32-42`
+
+11 полей `cube*` — это **хорошо**, покрытие есть. Но:
+- Нет `cubeCornerHover`, `cubeEdgeHover` — для 12 рёбер / 8 углов (Фаза 2).
+- Нет `cubeHighlight` — для текущего hover.
+
+Пока не критично, **отложить до Фазы 2**.
+
+**WONTFIX** (отложено).
+
+---
+
+### CR-327. `ThemeTokens.h` — комментарий врёт
+
+**Где:** `ThemeTokens.h:1-10`
+
+```
+// namespace — BreezeCAD (без под-namespace, для краткости
+// использования в остальном коде).
+```
+
+Формально верно (`namespace BreezeCAD`), но **другие ui/theme файлы** в `BreezeCAD::UI::Theme`. Несогласовано.
+
+**Фикс:** либо перенести `ThemeTokens` в `BreezeCAD::UI::Theme`, либо обосновать исключение.
+
+**Оценка:** 15 минут (везде переименовать).
+
+---
+
+### CR-328. `ThemeTokens` — поля не задокументированы
+
+**Где:** `ThemeTokens.h:13-42`
+
+`bgTitle`, `bgCardBg`, `homeBtnLabel`, `homeBtnBg` — **что это**? При чтении `RibbonButton.cpp`, где `bgHover = tokens.bgCardBg` — непонятно.
+
+**Фикс:** однострочный комментарий к каждому полю.
+
+**Оценка:** 15 минут.
+
+---
+
+### CR-329. `ThemePresets` — нет `SetupAutoTheme()` в хедере
+
+**Где:** `ThemePresets.h:16-20`
+
+Хедер объявляет только:
+```
+void SetupLightTheme();
+void SetupDeepSTheme();
+```
+
+Но `ThemeManager.h:19` говорит: «theme: 0 = Светлая, 1 = Тёмная, **2 = Авто**, 3 = legacy Dark».
+
+**Где реализация «Авто»?** В `.cpp`? Или Авто = переключение между Light и DeepS?
+
+**Фикс:** либо объявить `SetupAutoTheme()`, либо задокументировать, что Авто = выбор между двумя.
+
+**Оценка:** 5 минут (выяснить) + правки.
+
+---
+
+### CR-330. `ThemePresets.h` — комментарий про DeepSColor устарел
+
+**Где:** `ThemePresets.h:17`
+
+```
+/// Тёмная тема DeepSColor: глубокий океан, акцент — бирюза.
+```
+
+По `PROJECT_STATE.md` и `CHANGELOG_WORK.md` — **DeepSColor переименована в «Тёмную»**. Комментарий остался.
+
+**Фикс:** «Тёмная тема: глубокий океан, акцент — бирюза.»
+
+**Оценка:** 1 минута.
+
+---
+
+### CR-331. Все заголовки — устаревшие комментарии про этапы рефакторинга
+
+**Где:**
+- `ThemePresets.h:10` — «Реализация — на шаге 2.2 рефакторинга»
+- `ThemeManager.h:16` — «Реализация — на шаге 2.4»
+- `Fonts.h:11` — «Реализация — на шаге 2.3»
+
+**Проблема:** рефакторинг **завершён**. Комментарии вводят в заблуждение.
+
+**Фикс:** убрать строки.
+
+**Оценка:** 3 минуты.
+
+---
+
+### CR-332. `ThemeManager` — магические числа 0/1/2/3
+
+**Где:** `ThemeManager.h:15`
+
+```
+// theme: 0 = Светлая, 1 = Тёмная, 2 = Авто, 3 = legacy Dark.
+void ApplyTheme(int theme, ThemeTokens& outTokens, OcctView* view);
+```
+
+**Фикс:** `enum class Theme : uint8_t { Light = 0, Dark = 1, System = 2, LegacyDark = 3 };`
+
+Плюс — в `Application.h` `myCurrentTheme` → `Theme`.
+
+**Связано с CR-089** (тот же magic в Application).
+
+**Оценка:** 30 минут.
+
+---
+
+### CR-333. `ThemeManager` — не подключает `ThemeTokens.h`
+
+**Где:** `ThemeManager.h:11-13`
+
+```
+namespace BreezeCAD {
+class OcctView;
+struct ThemeTokens;   // forward
+}
+```
+
+Формально ок для ссылки в сигнатуре. **Но пользователь** `ApplyTheme(...)` должен видеть `ThemeTokens` целиком, чтобы читать `outTokens.*`. Значит каждый файл, использующий `ApplyTheme`, ещё и подключает `ThemeTokens.h`.
+
+**Фикс:** `#include "ui/theme/ThemeTokens.h"` в `ThemeManager.h` — **один include вместо двух**.
+
+**Оценка:** 2 минуты.
+
+---
+
+### CR-334. `ThemeManager.h` — «legacy Dark» без объяснения
+
+**Где:** `ThemeManager.h:15`
+
+Что такое **legacy Dark**? `SetupDarkTheme` удалена в `b55fb70` (B-13). Зачем оставлять в комментарии? Если это значение совместимо со старым `imgui.ini` — ок, но не задокументировано.
+
+**Фикс:** либо удалить упоминание, либо задокументировать сценарий.
+
+**Оценка:** 5 минут.
+
+---
+
+### CR-335. `Fonts.h` — хардкод пути `assets/fonts/` (RULES п.23)
+
+**Где:** `Fonts.h:6`
+
+```
+// Ищет шрифты в assets/fonts/ относительно CWD или выше.
+```
+
+Прямое нарушение RULES п.23. То же самое, что `IconManager` (CR-219).
+
+**Фикс:** использовать `std::filesystem::path exeDir = ...` + `exeDir / "assets" / "fonts"`. Возможно — **единый helper** для обоих модулей.
+
+**Оценка:** входит в CR-219 (пакет фикса).
+
+---
+
+### CR-336. Все заголовки — namespace-стиль разнобой
+
+**Где:**
+- `ThemeTokens.h` — `namespace BreezeCAD { ... }` (без под-namespace)
+- `ThemePresets.h` — `namespace BreezeCAD::UI::Theme`
+- `ThemeManager.h` — `BreezeCAD::UI::Theme` + внешний `BreezeCAD` для forward
+- `Fonts.h` — `BreezeCAD::UI::Theme`
+
+**3 разных стиля в 4 файлах.** Связано с CR-018.
+
+**Фикс:** унифицировать на `BreezeCAD::UI::Theme::*`.
+
+**Оценка:** входит в CR-018 (массовая унификация).
+
+---
+
+## 🔵 RAM — обновление
+
+**`ThemeTokens` — 28 × `ImU32` × 4 байта = 112 байт на экземпляр.** Если `ApplyTheme` вызывается на каждом кадре (не должен, но...) — накопительно.
+
+**Проверить в `.cpp`:** вызывается ли `ApplyTheme` в hot-path.
+
+**Оценка:** 5 минут.
+
+---
+
+## 📊 Прогресс
+
+| Приоритет | Было | Добавлено | Итого |
+|---|---|---|---|
+| P0 | 190 | 16 | **206** |
+| P1 | 77 | 0 | 77 |
+| P2 | 41 | 0 | 41 |
+| P3 | 16 | 0 | 16 |
+| RAM | 13 | 0 | 13 |
