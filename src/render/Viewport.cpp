@@ -449,7 +449,9 @@ CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, doub
         box.Include(m.bounds->min);
         box.Include(m.bounds->max);
     }
-    if (box.IsEmpty()) box = {{-25, -25, -25}, {25, 25, 25}};   // empty part: a 50 mm cube around the origin
+    // Empty part: frame the origin planes the UI draws (40 mm half-size at
+    // least, see PlaneHalfSize in the viewport panel) with a little air.
+    if (box.IsEmpty()) box = {{-45, -45, -45}, {45, 45, 45}};
     const Vec3 lo = box.min, hi = box.max;
     const Vec3 center = (lo + hi) * 0.5;
     const Vec3 dir = direction.Normalized();
