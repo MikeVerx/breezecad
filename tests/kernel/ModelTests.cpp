@@ -1,3 +1,4 @@
+#include "core/PathText.h"
 #include "../Fixtures.h"
 #include "document/BzcFile.h"
 #include "kernel/Model.h"
@@ -160,17 +161,21 @@ TEST_CASE("export STEP, STL and 3MF") {
 
     const auto dir = std::filesystem::temp_directory_path() / "bz_export_tests";
     std::filesystem::create_directories(dir);
-    REQUIRE(model.ExportStep(dir / "деталь.step").IsOk());
-    REQUIRE(model.ExportStl(dir / "деталь.stl").IsOk());
-    REQUIRE(model.Export3mf(dir / "деталь.3mf").IsOk());
+    const auto step = dir / PathFromUtf8("деталь.step");
+    const auto stl = dir / PathFromUtf8("деталь.stl");
+    const auto mf3 = dir / PathFromUtf8("деталь.3mf");
+    REQUIRE(model.ExportStep(step).IsOk());
+    REQUIRE(model.ExportStl(stl).IsOk());
+    REQUIRE(model.Export3mf(mf3).IsOk());
 
-    std::ifstream step(dir / "деталь.step");
-    std::string header;
-    std::getline(step, header);
-    CHECK(header.find("ISO-10303-21") != std::string::npos);
-    const auto stlSize = std::filesystem::file_size(dir / "деталь.stl");
-    CHECK(stlSize == 84 + 50 * 12);   // a box: 6 faces x 2 triangles
-    CHECK(std::filesystem::file_size(dir / "деталь.3mf") > 200);
+    {   // closed before the folder is removed: Windows cannot delete open files
+        std::ifstream in(step);
+        std::string header;
+        std::getline(in, header);
+        CHECK(header.find("ISO-10303-21") != std::string::npos);
+    }
+    CHECK(std::filesystem::file_size(stl) == 84 + 50 * 12);   // a box: 6 faces x 2 triangles
+    CHECK(std::filesystem::file_size(mf3) > 200);
     std::filesystem::remove_all(dir);
 
     doc::Document empty;
