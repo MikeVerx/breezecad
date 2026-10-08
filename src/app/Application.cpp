@@ -246,7 +246,11 @@ void Application::Frame() {
     myActions.HandleShortcuts(myInput.chords);
     myInput.chords.clear();
     if (Session* s = myWorkspace.Active()) {
-        if (s->RebuildIfNeeded()) myFramesToDraw = std::max(myFramesToDraw, 2);
+        if (s->RebuildIfNeeded()) {
+            myFramesToDraw = std::max(myFramesToDraw, 2);
+            // A changed variable, undo or redo may push the body off screen.
+            if (s->mode == EditMode::Model && !myOps.Active()) myShell.keepModelInView = true;
+        }
         myViewport.Sync(s->model);
         myViewport.SetDisplayStyle(myShell.displayStyle);
         if (myShell.keepModelInView) {   // the model was rebuilt and synced above

@@ -328,8 +328,10 @@ bool CommitInput(Ui& ui, const char* id, const std::string& value, EditState& st
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ToVec4(c.field));
     if (focusNow) ImGui::SetKeyboardFocusHere();
     ImGui::SetNextItemWidth(width);
-    if (hint) ImGui::InputTextWithHint(id, hint, &buffer);
-    else ImGui::InputText(id, &buffer);
+    // Starting to edit selects the whole value: typing replaces it, as in
+    // Inventor's parameter table.
+    if (hint) ImGui::InputTextWithHint(id, hint, &buffer, ImGuiInputTextFlags_AutoSelectAll);
+    else ImGui::InputText(id, &buffer, ImGuiInputTextFlags_AutoSelectAll);
     const bool activated = ImGui::IsItemActivated();
     const bool active = ImGui::IsItemActive();
     const bool deactivated = ImGui::IsItemDeactivated();
