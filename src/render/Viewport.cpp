@@ -1,6 +1,7 @@
 #include "render/Viewport.h"
 
 #include "core/Log.h"
+#include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/ModelImpl.h"
 
 #include <AIS_InteractiveContext.hxx>
@@ -148,6 +149,20 @@ struct Viewport::Impl {
     ObjectId       hovered;
     bool           dirty = true;
 
+    /// Edge picking for fillets and chamfers (see BeginEdgePicking).
+    struct EdgePicking {
+        bool                            active = false;
+        const kernel::Model*            model = nullptr;
+        std::uint64_t                   revision = 0;
+        std::size_t                     featureIndex = 0;
+        std::vector<TopoDS_Shape>       bodies;    ///< the bodies before the operation
+        std::vector<Handle(AIS_Shape)>  targets;   ///< invisible, edge-selectable copies
+        std::vector<doc::EdgeReference> markedRefs;
+        std::vector<Handle(AIS_Shape)>  marked;    ///< chosen edges, drawn thick
+        std::uint64_t                   markedRevision = static_cast<std::uint64_t>(-1);
+        std::uint64_t                   shownRevision = static_cast<std::uint64_t>(-1);
+    } edgePick;
+
     bool        animating = false;
     CameraState animFrom, animTo;
     double      animStart = 0, animDuration = 0;
@@ -237,6 +252,12 @@ bool Viewport::Init(const NativeGlSurface& surface) {
         s->SetColor(ToQuantity(m.colors.hover));
         s->SetDisplayMode(AIS_Shaded);
         s->SetTransparency(0.35f);
+        // A hovered edge (fillet, chamfer) is drawn thick enough to see.
+        const Handle(Prs3d_LineAspect) thick = new Prs3d_LineAspect(ToQuantity(m.colors.hover), Aspect_TOL_SOLID, 3.5);
+        s->SetWireAspect(thick);
+        s->SetLineAspect(thick);
+        s->SetUnFreeBoundaryAspect(thick);
+        s->SetFreeBoundaryAspect(thick);
     }
     for (auto type : {Prs3d_TypeOfHighlight_LocalSelected, Prs3d_TypeOfHighlight_Selected}) {
         Handle(Prs3d_Drawer) s = m.context->HighlightStyle(type);
@@ -295,8 +316,8 @@ void Viewport::Sync(const kernel::Model& model) {
     for (const kernel::Body& body : model.GetImpl().bodies) {
         Handle(AIS_Shape) ais = new AIS_Shape(body.shape);
         m.ApplyStyle(ais, body.id == m.hovered);
-        m.context->Display(ais, AIS_Shaded, -1, false);
-        m.context->Activate(ais, AIS_Shape::SelectionMode(TopAbs_FACE));
+        m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
+        if (m.edgePick.active) m.context->Deactivate(ais);
         m.shown.push_back({body.id, ais});
     }
     m.bounds = model.BoundingBox();
@@ -543,6 +564,96 @@ std::optional<PickResult> Viewport::Pick(Vec2 pixel) {
         !brep.IsNull() && brep->Shape().ShapeType() == TopAbs_FACE)
         result.plane = PlanarFaceFrame(TopoDS::Face(brep->Shape()));
     return result;
+}
+
+// --- edge picking -------------------------------------------------------------
+
+void Viewport::BeginEdgePicking(const kernel::Model& model, std::size_t featureIndex) {
+    Impl& m = *myImpl;
+    Impl::EdgePicking& e = m.edgePick;
+
+    // The result is hidden meanwhile (also after it is rebuilt): the user
+    // picks edges on the body as it was, and sees the result on Готово.
+    if (!e.active || e.shownRevision != m.syncedRevision) {
+        for (const auto& s : m.shown) m.context->Erase(s.shape, false);
+        e.shownRevision = m.syncedRevision;
+    }
+    if (e.active && e.model == &model && e.revision == model.Revision() && e.featureIndex == featureIndex) return;
+
+    for (const auto& t : e.targets) m.context->Remove(t, false);
+    e.targets.clear();
+    e.bodies.clear();
+    const auto& after = model.GetImpl().bodiesAfter;
+    if (featureIndex > 0 && featureIndex <= after.size())
+        for (const kernel::Body& body : after[featureIndex - 1]) e.bodies.push_back(body.shape);
+    for (const TopoDS_Shape& body : e.bodies) {
+        Handle(AIS_Shape) ais = new AIS_Shape(body);
+        m.ApplyStyle(ais, false);
+        m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_EDGE), false);
+        e.targets.push_back(ais);
+    }
+    e.active = true;
+    e.model = &model;
+    e.revision = model.Revision();
+    e.featureIndex = featureIndex;
+    const std::vector<doc::EdgeReference> marked = e.markedRefs;
+    SetMarkedEdges(marked);   // re-resolve against the new bodies
+    m.dirty = true;
+}
+
+void Viewport::EndEdgePicking() {
+    Impl& m = *myImpl;
+    Impl::EdgePicking& e = m.edgePick;
+    if (!e.active) return;
+    for (const auto& t : e.targets) m.context->Remove(t, false);
+    for (const auto& h : e.marked) m.context->Remove(h, false);
+    e = {};
+    for (const auto& s : m.shown) {
+        m.context->Display(s.shape, false);
+        m.context->Activate(s.shape, AIS_Shape::SelectionMode(TopAbs_FACE));
+    }
+    m.hoverPixel.reset();
+    m.dirty = true;
+}
+
+std::optional<doc::EdgeReference> Viewport::PickEdge(Vec2 pixel) {
+    Impl& m = *myImpl;
+    if (!m.edgePick.active) return std::nullopt;
+    const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
+    const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->Pick(px, py, m.view);
+    for (int i = 1; i <= selector->NbPicked(); ++i) {
+        const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
+        if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_EDGE) continue;
+        for (std::size_t b = 0; b < m.edgePick.targets.size(); ++b)
+            if (owner->Selectable() == m.edgePick.targets[b])
+                return kernel::occt::DescribeEdge(TopoDS::Edge(owner->Shape()), m.edgePick.bodies[b]);
+    }
+    return std::nullopt;
+}
+
+void Viewport::SetMarkedEdges(const std::vector<doc::EdgeReference>& edges) {
+    Impl& m = *myImpl;
+    Impl::EdgePicking& e = m.edgePick;
+    const std::uint64_t revision = e.active ? e.revision : 0;
+    if (edges == e.markedRefs && revision == e.markedRevision) return;
+    for (const auto& h : e.marked) m.context->Remove(h, false);
+    e.marked.clear();
+    e.markedRefs = edges;
+    e.markedRevision = revision;
+    if (!e.active || e.bodies.empty()) return;
+    // Chosen edges live on the most recent body (where the operation applies).
+    for (const auto& edge : kernel::occt::ResolveEdges(edges, e.bodies.back())) {
+        if (!edge) continue;
+        Handle(AIS_Shape) ais = new AIS_Shape(*edge);
+        ais->SetColor(ToQuantity(m.colors.selection));
+        ais->SetWidth(3.5);
+        ais->SetZLayer(Graphic3d_ZLayerId_Topmost);
+        m.context->Display(ais, AIS_WireFrame, -1, false);
+        e.marked.push_back(ais);
+    }
+    m.dirty = true;
 }
 
 } // namespace bz::render

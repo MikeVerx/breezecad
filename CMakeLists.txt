@@ -18,9 +18,9 @@ option(BZ_BUILD_APP   "Build the BreezeCAD desktop application" ON)
 option(BZ_BUILD_TESTS "Build unit tests"                          ON)
 
 # All binaries land in one folder so the app finds assets next to itself.
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(CompilerWarnings)
 include(ThirdParty)
 include(OpenCascade)

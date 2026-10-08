@@ -1,6 +1,7 @@
 #pragma once
 // Every operation panel of the app. At most one is open at a time.
 
+#include "app/features/EdgeOperationEditor.h"
 #include "app/features/ExtrudeEditor.h"
 #include "app/features/RevolveEditor.h"
 
@@ -11,8 +12,10 @@ namespace bz::app {
 struct OperationEditors {
     ExtrudeEditor extrude;
     RevolveEditor revolve;
+    FilletEditor  fillet;
+    ChamferEditor chamfer;
 
-    std::array<OperationEditor*, 2> All() { return {&extrude, &revolve}; }
+    std::array<OperationEditor*, 4> All() { return {&extrude, &revolve, &fillet, &chamfer}; }
 
     /// The open operation, or nullptr.
     OperationEditor* Active() {

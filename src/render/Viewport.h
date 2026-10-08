@@ -8,9 +8,11 @@
 #include "core/Math.h"
 #include "core/NativeSurface.h"
 #include "core/ViewProjection.h"
+#include "document/EdgeReference.h"
 
 #include <memory>
 #include <optional>
+#include <vector>
 
 namespace bz::kernel {
 class Model;
@@ -98,6 +100,18 @@ public:
     bool StepAnimation(double now);
 
     std::optional<PickResult> Pick(Vec2 pixel);
+
+    // --- edge picking (fillet, chamfer) ---------------------------------
+    /// Makes the edges of the bodies as they were before feature number
+    /// `featureIndex` hoverable and pickable; the shown result (with the
+    /// operation's preview) is not pickable meanwhile. Cheap to call every
+    /// frame.
+    void BeginEdgePicking(const kernel::Model& model, std::size_t featureIndex);
+    void EndEdgePicking();
+    /// Edge under the cursor while edge picking, described for storing.
+    std::optional<doc::EdgeReference> PickEdge(Vec2 pixel);
+    /// Edges drawn as chosen while edge picking.
+    void SetMarkedEdges(const std::vector<doc::EdgeReference>& edges);
 
     struct Impl;
 

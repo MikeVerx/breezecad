@@ -92,8 +92,8 @@ void FilletFeature::SaveFields(Json& out) const {
 
 Status FilletFeature::LoadFields(const Json& in) {
     FilletFeature f;
-    if (Status s = f.LoadEdges(in, "Скругление"); !s) return s;
-    if (!json_io::ReadMember(in, "radius", f.radius)) return Error{"Скругление: повреждён радиус"};
+    if (Status s = f.LoadEdges(in, "Сопряжение"); !s) return s;
+    if (!json_io::ReadMember(in, "radius", f.radius)) return Error{"Сопряжение: повреждён радиус"};
     edges = std::move(f.edges);
     radius = std::move(f.radius);
     return Status::Ok();

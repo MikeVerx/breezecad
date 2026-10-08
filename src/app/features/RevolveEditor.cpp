@@ -54,7 +54,7 @@ std::unique_ptr<doc::SketchSolidFeature> RevolveEditor::Create(Session& session,
     return f;
 }
 
-void RevolveEditor::LoadTexts(const doc::SketchSolidFeature& feature) {
+void RevolveEditor::LoadTexts(const doc::Feature& feature) {
     myAngle = static_cast<const doc::RevolveFeature&>(feature).angle.expression;
 }
 

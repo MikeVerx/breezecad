@@ -132,6 +132,20 @@ void StartExtrude(AppContext& app) {
     app.ops.extrude.StartNew(app, *s);
 }
 
+void StartFillet(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.fillet.StartNew(app, *s);
+}
+
+void StartChamfer(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.chamfer.StartNew(app, *s);
+}
+
 void StartRevolve(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;

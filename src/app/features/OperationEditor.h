@@ -32,6 +32,9 @@ public:
     /// Overlays and picking in the viewport.
     virtual void DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) = 0;
 
+    /// True when the viewport should let the user pick edges (fillet, chamfer).
+    virtual bool PicksEdges() const { return false; }
+
     virtual const char* Title() const = 0;    ///< "Выдавливание", shown in the status bar
     virtual std::string Hint() const = 0;     ///< what to do, for the status bar
 };

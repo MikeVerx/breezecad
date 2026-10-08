@@ -2,7 +2,7 @@
 # (see third_party/README.md). Nothing is downloaded at configure time,
 # so the project builds offline from a clean clone.
 
-set(BZ_THIRD_PARTY ${CMAKE_SOURCE_DIR}/third_party)
+set(BZ_THIRD_PARTY ${PROJECT_SOURCE_DIR}/third_party)
 
 # nlohmann/json — header-only JSON for the .bzc format.
 add_library(bz_json INTERFACE)
@@ -48,7 +48,7 @@ if(BZ_BUILD_APP)
     set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF)
     set(LUNASVG_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    add_subdirectory(${BZ_THIRD_PARTY}/lunasvg ${CMAKE_BINARY_DIR}/third_party/lunasvg EXCLUDE_FROM_ALL)
+    add_subdirectory(${BZ_THIRD_PARTY}/lunasvg ${PROJECT_BINARY_DIR}/third_party/lunasvg EXCLUDE_FROM_ALL)
     set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED})
 
     # portable-file-dialogs — native open/save dialogs, header-only.

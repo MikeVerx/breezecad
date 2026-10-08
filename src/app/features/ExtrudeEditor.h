@@ -17,7 +17,7 @@ public:
 protected:
     const char* Icon() const override { return "tree-extrude"; }
     std::unique_ptr<doc::SketchSolidFeature> Create(Session& session, ObjectId sketch) const override;
-    void LoadTexts(const doc::SketchSolidFeature& feature) override;
+    void LoadTexts(const doc::Feature& feature) override;
     void DrawOptions(AppContext& app, Session& session, doc::SketchSolidFeature& feature, float width) override;
     void CarryOver(const doc::SketchSolidFeature& previous, doc::SketchSolidFeature& next) const override;
 

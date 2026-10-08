@@ -6,6 +6,7 @@
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
 #include "document/Commands.h"
+#include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/RevolveFeature.h"
 #include "document/Origin.h"
@@ -100,6 +101,8 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::SketchFeature*>(&f)) return "tree-sketch";
     if (dynamic_cast<const doc::ExtrudeFeature*>(&f)) return "tree-extrude";
     if (dynamic_cast<const doc::RevolveFeature*>(&f)) return "tree-revolve";
+    if (dynamic_cast<const doc::FilletFeature*>(&f)) return "tree-fillet";
+    if (dynamic_cast<const doc::ChamferFeature*>(&f)) return "tree-chamfer";
     return "tree-unknown";
 }
 
@@ -108,6 +111,10 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
         if (ex->extent == doc::ExtentType::ThroughAll) return "насквозь";
         return FormatValue(ex->distance.value, Quantity::Length, d.units) + " " + UnitLabel(Quantity::Length, d.units);
     }
+    if (const auto* fillet = dynamic_cast<const doc::FilletFeature*>(&f))
+        return "R" + FormatValue(fillet->radius.value, Quantity::Length, d.units);
+    if (const auto* chamfer = dynamic_cast<const doc::ChamferFeature*>(&f))
+        return FormatValue(chamfer->distance.value, Quantity::Length, d.units) + "\xC3\x97" + "45\xC2\xB0";
     if (const auto* rev = dynamic_cast<const doc::RevolveFeature*>(&f)) {
         if (rev->extent == doc::RevolveExtent::Full) return "360\xC2\xB0";
         return FormatValue(rev->angle.value, Quantity::Angle, d.units) + UnitLabel(Quantity::Angle, d.units);

@@ -56,6 +56,8 @@ void RegisterActions(AppContext& app) {
            "Вытянуть замкнутый контур эскиза в тело (E)", hasDoc, [&app] { StartExtrude(app); }});
     a.Add({"feature.revolve", "Вращение", "revolve", ImGuiKey_R,
            "Повернуть замкнутый контур эскиза вокруг оси (R)", inModel, [&app] { StartRevolve(app); }});
+    a.Add({"feature.fillet", "Сопряжение", "fillet", 0, "Скруглить рёбра тела", inModel, [&app] { StartFillet(app); }});
+    a.Add({"feature.chamfer", "Фаска", "chamfer", 0, "Срезать рёбра тела под 45°", inModel, [&app] { StartChamfer(app); }});
 
     // --- sketch ---
     a.Add({"sketch.finish", "Принять эскиз", "sk-finish", 0, "Выйти из эскиза (Esc при пустом выборе)", inSketch, [&app] {

@@ -23,7 +23,7 @@ std::unique_ptr<doc::SketchSolidFeature> ExtrudeEditor::Create(Session& session,
     return f;
 }
 
-void ExtrudeEditor::LoadTexts(const doc::SketchSolidFeature& feature) {
+void ExtrudeEditor::LoadTexts(const doc::Feature& feature) {
     const auto& f = static_cast<const doc::ExtrudeFeature&>(feature);
     myDistance = f.distance.expression;
     myTaper = f.taper.expression;

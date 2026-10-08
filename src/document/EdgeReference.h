@@ -21,6 +21,8 @@ enum class SurfaceKind : unsigned char { Plane, Cylinder, Cone, Sphere, Torus, O
 struct FaceSignature {
     SurfaceKind kind = SurfaceKind::Other;
     Vec3        direction;   ///< outward normal of a plane, axis of a cylinder/cone; zero otherwise
+
+    bool operator==(const FaceSignature&) const = default;
 };
 
 struct EdgeReference {
@@ -29,6 +31,8 @@ struct EdgeReference {
     double    radius = 0.0;  ///< circles
     Vec3      middle;        ///< point at the middle of the edge, model space
     std::array<FaceSignature, 2> faces;   ///< in a canonical order
+
+    bool operator==(const EdgeReference&) const = default;
 };
 
 } // namespace bz::doc

@@ -219,8 +219,11 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
 
     // Pre-highlight faces under the cursor (not while sketching).
     OperationEditor* operation = app.ops.Active();
-    const bool facesMatter = session.mode != EditMode::Sketch && !operation;
-    app.viewport.Hover(vf.hovered && facesMatter ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);
+    const bool pickingEdges = operation && operation->PicksEdges();
+    if (!pickingEdges) app.viewport.EndEdgePicking();
+    // Pre-highlight the face (or, for fillets, the edge) under the cursor.
+    const bool hoverMatters = session.mode != EditMode::Sketch && (!operation || pickingEdges);
+    app.viewport.Hover(vf.hovered && hoverMatters ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);
 
     // Mode overlays.
     switch (session.mode) {
@@ -236,13 +239,14 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
                 if (app.shell.hoveredTreeItem == id || session.selectedFeature == id || session.doc.FeatureCount() == 0)
                     DrawPlane(app, dl, vf, id, half, app.shell.hoveredTreeItem == id || session.selectedFeature == id);
             // Sketches not used by an operation stay visible, like in Inventor.
+            // (An open sketch operation draws its own sketch.)
             for (std::size_t i = 0; i < session.doc.EndMarker(); ++i) {
                 const auto* sk = dynamic_cast<const doc::SketchFeature*>(session.doc.Features()[i].get());
                 if (!sk || sk->suppressed) continue;
                 bool used = false;
                 for (const auto& f : session.doc.Features())
                     for (ObjectId dep : f->Dependencies()) used = used || dep == sk->id;
-                if (used && !operation) continue;
+                if (used) continue;
                 SketchDrawStyle style;
                 style.passive = true;
                 DrawSketch(ui, dl, *sk, {sk->placement.frame, vf}, session.doc.units, style);

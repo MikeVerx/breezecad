@@ -31,8 +31,8 @@ Expected<TopoDS_Shape> Build(const TopoDS_Shape& body, const std::vector<TopoDS_
 
 Expected<TopoDS_Shape> MakeFillet(const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges, double radius) {
     return Build<BRepFilletAPI_MakeFillet>(
-        body, edges, radius, [radius](BRepFilletAPI_MakeFillet& b, const TopoDS_Edge& e) { b.Add(radius, e); }, "Скругление",
-        "Не удалось построить скругление: радиус слишком большой для этих рёбер?");
+        body, edges, radius, [radius](BRepFilletAPI_MakeFillet& b, const TopoDS_Edge& e) { b.Add(radius, e); }, "Сопряжение",
+        "Не удалось построить сопряжение: радиус слишком большой для этих рёбер?");
 }
 
 Expected<TopoDS_Shape> MakeChamfer(const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges, double distance) {

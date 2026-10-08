@@ -126,10 +126,10 @@ void ModelRibbon(RibbonBuilder& r) {
 
     r.BeginGroup("Изменить");
     r.LargeLater("hole", "Отверстие");
-    r.LargeLater("fillet", "Сопря-\nжение");
+    r.Large("feature.fillet", "Сопря-\nжение");
     r.LargeLater("thread", "Резьба");
     r.BeginColumn();
-    r.SmallLater("chamfer", "Фаска");
+    r.Small("feature.chamfer");
     r.SmallLater("shell", "Оболочка");
     r.SmallLater("draft", "Уклон");
     r.EndColumn();
