@@ -21,7 +21,7 @@
 namespace bz::app {
 
 class SketchEditor;
-class ExtrudeEditor;
+struct OperationEditors;
 
 enum class LeftTab : unsigned char { Tree, Properties, Variables };
 enum class RibbonTab : unsigned char { Model, Sketch, View };
@@ -98,7 +98,7 @@ struct AppContext {
     Autosave&         autosave;
     render::Viewport& viewport;
     SketchEditor&     sketch;
-    ExtrudeEditor&    extrude;
+    OperationEditors& ops;
     ShellState&       shell;
     std::vector<std::function<void()>>& deferred;
     double            now = 0.0;

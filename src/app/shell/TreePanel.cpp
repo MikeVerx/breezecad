@@ -7,6 +7,7 @@
 #include "app/shell/Shell.h"
 #include "document/Commands.h"
 #include "document/ExtrudeFeature.h"
+#include "document/RevolveFeature.h"
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
 #include "ui/Widgets.h"
@@ -98,6 +99,7 @@ RowResult Row(AppContext& app, const char* id, const std::string& name, const Ro
 const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::SketchFeature*>(&f)) return "tree-sketch";
     if (dynamic_cast<const doc::ExtrudeFeature*>(&f)) return "tree-extrude";
+    if (dynamic_cast<const doc::RevolveFeature*>(&f)) return "tree-revolve";
     return "tree-unknown";
 }
 
@@ -105,6 +107,10 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
     if (const auto* ex = dynamic_cast<const doc::ExtrudeFeature*>(&f)) {
         if (ex->extent == doc::ExtentType::ThroughAll) return "насквозь";
         return FormatValue(ex->distance.value, Quantity::Length, d.units) + " " + UnitLabel(Quantity::Length, d.units);
+    }
+    if (const auto* rev = dynamic_cast<const doc::RevolveFeature*>(&f)) {
+        if (rev->extent == doc::RevolveExtent::Full) return "360\xC2\xB0";
+        return FormatValue(rev->angle.value, Quantity::Angle, d.units) + UnitLabel(Quantity::Angle, d.units);
     }
     if (const auto* sk = dynamic_cast<const doc::SketchFeature*>(&f); sk && sk->analysis.degreesOfFreedom > 0)
         return "\xE2\x89\x88" + std::to_string(sk->analysis.degreesOfFreedom);   // ≈N: not fully defined
@@ -116,8 +122,8 @@ void ContextMenu(AppContext& app, Session& session, const doc::Feature& f, std::
     if (!ImGui::BeginPopupContextItem("##feature-menu")) return;
     const ObjectId id = f.id;
     if (ImGui::MenuItem("Редактировать")) app.Later([&app, &session, id] { EditFeature(app, session, id); });
-    if (const auto* ex = dynamic_cast<const doc::ExtrudeFeature*>(&f)) {
-        const ObjectId sk = ex->sketch;
+    if (const auto* op = dynamic_cast<const doc::SketchSolidFeature*>(&f)) {
+        const ObjectId sk = op->sketch;
         if (ImGui::MenuItem("Редактировать эскиз")) app.Later([&app, &session, sk] { EditFeature(app, session, sk); });
     }
     if (ImGui::MenuItem("Переименовать", "F2")) {
@@ -218,8 +224,8 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
     // Which sketch each operation uses: those sketches nest under it.
     std::unordered_map<ObjectId, ObjectId> consumedBy;
     for (const auto& f : d.Features())
-        if (const auto* ex = dynamic_cast<const doc::ExtrudeFeature*>(f.get()))
-            if (!consumedBy.count(ex->sketch)) consumedBy[ex->sketch] = ex->id;
+        if (const auto* op = dynamic_cast<const doc::SketchSolidFeature*>(f.get()))
+            if (!consumedBy.count(op->sketch)) consumedBy[op->sketch] = op->id;
 
     const std::string& filter = app.shell.treeFilter;
     const auto draw = [&](const doc::Feature& f, std::size_t index, int depth, bool hasChildren) {

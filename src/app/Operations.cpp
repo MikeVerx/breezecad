@@ -1,11 +1,10 @@
 #include "app/Operations.h"
 
-#include "app/features/ExtrudeEditor.h"
+#include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
 #include "core/Log.h"
 #include "document/BzcFile.h"
 #include "document/Commands.h"
-#include "document/ExtrudeFeature.h"
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
 #include "platform/FileDialogs.h"
@@ -19,7 +18,7 @@ namespace {
 void EndEditing(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;
-    if (app.extrude.IsOpen()) app.extrude.Cancel(app, *s);
+    if (OperationEditor* open = app.ops.Active()) open->Cancel(app, *s);
     if (s->mode == EditMode::Sketch) app.sketch.Finish(app, *s);
     if (s->mode == EditMode::PickPlane) s->mode = EditMode::Model;
 }
@@ -52,7 +51,7 @@ void OpenDocument(AppContext& app, std::optional<std::filesystem::path> file) {
 void SaveDocument(AppContext& app, bool saveAs) {
     Session* s = app.Doc();
     if (!s) return;
-    if (app.extrude.IsOpen()) app.extrude.Done(app, *s);
+    app.ops.Close(app, *s);
     if (app.workspace.Save(*s, saveAs, app.notes, app.settings)) app.autosave.Discard(*s);
 }
 
@@ -92,12 +91,12 @@ void RecoverDocument(AppContext& app, const RecoverableDocument& rec) {
 
 bool CanUndo(AppContext& app) {
     Session* s = app.Doc();
-    return s && !app.extrude.IsOpen() && s->history.CanUndo();
+    return s && !app.ops.Active() && s->history.CanUndo();
 }
 
 bool CanRedo(AppContext& app) {
     Session* s = app.Doc();
-    return s && !app.extrude.IsOpen() && s->history.CanRedo();
+    return s && !app.ops.Active() && s->history.CanRedo();
 }
 
 void Undo(AppContext& app) {
@@ -116,7 +115,7 @@ void Redo(AppContext& app) {
 void StartSketch(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;
-    if (app.extrude.IsOpen()) app.extrude.Done(app, *s);
+    app.ops.Close(app, *s);
     if (s->mode == EditMode::Sketch) app.sketch.Finish(app, *s);
     // An origin plane selected in the tree: sketch on it right away.
     if (const auto frame = doc::origin::PlaneFrame(s->selectedFeature)) {
@@ -127,22 +126,35 @@ void StartSketch(AppContext& app) {
 }
 
 void StartExtrude(AppContext& app) {
-    if (Session* s = app.Doc()) app.extrude.StartNew(app, *s);
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.extrude.StartNew(app, *s);
+}
+
+void StartRevolve(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.revolve.StartNew(app, *s);
 }
 
 void EditFeature(AppContext& app, Session& session, ObjectId id) {
+    const doc::Feature* f = session.doc.Find(id);
+    if (!f) return;
     if (session.doc.FindAs<doc::SketchFeature>(id)) {
-        if (app.extrude.IsOpen()) app.extrude.Done(app, session);
+        app.ops.Close(app, session);
         app.sketch.Edit(app, session, id);
-    } else if (session.doc.FindAs<doc::ExtrudeFeature>(id)) {
-        app.extrude.EditExisting(app, session, id);
+    } else if (OperationEditor* editor = app.ops.EditorFor(*f)) {
+        app.ops.Close(app, session);
+        editor->EditExisting(app, session, id);
     }
 }
 
 void DeleteFeature(AppContext& app, Session& session, ObjectId id) {
     const doc::Feature* f = session.doc.Find(id);
     if (!f) return;
-    if (app.extrude.IsOpen()) app.extrude.Cancel(app, session);
+    if (OperationEditor* open = app.ops.Active()) open->Cancel(app, session);
     if (session.mode == EditMode::Sketch && session.activeSketch == id) app.sketch.Finish(app, session);
     session.Execute(doc::RemoveFeature(session.doc, id));
     session.selectedFeature = {};
@@ -188,8 +200,8 @@ void EscapePressed(AppContext& app) {
     }
     Session* s = app.Doc();
     if (!s) return;
-    if (app.extrude.IsOpen()) {
-        app.extrude.Cancel(app, *s);
+    if (OperationEditor* open = app.ops.Active()) {
+        open->Cancel(app, *s);
     } else if (s->mode == EditMode::Sketch) {
         app.sketch.Escape(app, *s);
     } else if (s->mode == EditMode::PickPlane) {
@@ -201,12 +213,13 @@ void EscapePressed(AppContext& app) {
 
 void EnterPressed(AppContext& app) {
     Session* s = app.Doc();
-    if (s && app.extrude.IsOpen()) app.extrude.Done(app, *s);
+    if (!s) return;
+    if (OperationEditor* open = app.ops.Active()) open->Done(app, *s);
 }
 
 void DeletePressed(AppContext& app) {
     Session* s = app.Doc();
-    if (!s || app.extrude.IsOpen()) return;
+    if (!s || app.ops.Active()) return;
     if (s->mode == EditMode::Sketch) {
         app.sketch.DeleteSelection(*s);
     } else if (s->selectedFeature && s->doc.Find(s->selectedFeature)) {

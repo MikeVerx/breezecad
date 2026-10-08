@@ -1,7 +1,7 @@
 #include "app/viewport/ViewportPanel.h"
 
 #include "app/Operations.h"
-#include "app/features/ExtrudeEditor.h"
+#include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
 #include "app/shell/Shell.h"
@@ -175,7 +175,7 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Middle)) {
             nav.panning = false;
             // A middle click confirms the operation, like in KOMPAS.
-            if (!nav.moved && app.extrude.IsOpen()) app.Later([&app, &session] { app.extrude.Done(app, session); });
+            if (!nav.moved && app.ops.Active()) app.Later([&app, &session] { EnterPressed(app); });
         }
     }
     if (sceneHovered && io.MouseWheel != 0.0f) app.viewport.ZoomAt(std::pow(1.15, static_cast<double>(io.MouseWheel)), vf.ToLocal(mouse));
@@ -218,7 +218,8 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     vf.hovered = ImGui::IsItemHovered() && !navigating;
 
     // Pre-highlight faces under the cursor (not while sketching).
-    const bool facesMatter = session.mode != EditMode::Sketch && !app.extrude.IsOpen();
+    OperationEditor* operation = app.ops.Active();
+    const bool facesMatter = session.mode != EditMode::Sketch && !operation;
     app.viewport.Hover(vf.hovered && facesMatter ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);
 
     // Mode overlays.
@@ -240,13 +241,13 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
                 if (!sk || sk->suppressed) continue;
                 bool used = false;
                 for (const auto& f : session.doc.Features())
-                    if (const auto* ex = dynamic_cast<const doc::ExtrudeFeature*>(f.get()); ex && ex->sketch == sk->id) used = true;
-                if (used && !(app.extrude.IsOpen())) continue;
+                    for (ObjectId dep : f->Dependencies()) used = used || dep == sk->id;
+                if (used && !operation) continue;
                 SketchDrawStyle style;
                 style.passive = true;
                 DrawSketch(ui, dl, *sk, {sk->placement.frame, vf}, session.doc.units, style);
             }
-            if (app.extrude.IsOpen()) app.extrude.DrawInViewport(app, session, vf);
+            if (operation) operation->DrawInViewport(app, session, vf);
 
             // A friendly start for an empty part.
             if (session.doc.FeatureCount() == 0) {

@@ -130,7 +130,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myShell.recoverable = myAutosave->FindRecoverable();
 
     myContext = std::make_unique<AppContext>(AppContext{*myUi, mySettings, myWorkspace, myActions, myNotes, *myAutosave,
-                                                        myViewport, mySketch, myExtrude, myShell, myDeferred, 0.0, {}});
+                                                        myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}});
     RegisterActions(*myContext);
 
     for (const auto& file : files) myWorkspace.Open(file, myNotes, mySettings);

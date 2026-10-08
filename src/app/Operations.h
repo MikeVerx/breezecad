@@ -26,6 +26,7 @@ bool CanRedo(AppContext& app);
 /// "Начать эскиз": on the selected plane/face, otherwise asks to pick one.
 void StartSketch(AppContext& app);
 void StartExtrude(AppContext& app);
+void StartRevolve(AppContext& app);
 /// Double click in the tree: edit a sketch or an operation.
 void EditFeature(AppContext& app, Session& session, ObjectId id);
 void DeleteFeature(AppContext& app, Session& session, ObjectId id);

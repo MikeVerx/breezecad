@@ -2,7 +2,7 @@
 
 #include "app/Format.h"
 #include "app/Operations.h"
-#include "app/features/ExtrudeEditor.h"
+#include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
 #include "app/shell/Shell.h"
 #include "document/SketchFeature.h"
@@ -98,9 +98,9 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
 
     // Mode and what to do next.
     std::string mode = "Деталь", hint;
-    if (app.extrude.IsOpen()) {
-        mode = "Выдавливание";
-        hint = app.extrude.Hint();
+    if (const OperationEditor* operation = app.ops.Active()) {
+        mode = operation->Title();
+        hint = operation->Hint();
     } else if (s->mode == EditMode::Sketch) {
         mode = std::string("Эскиз: ") + InfoOf(app.sketch.Tool()).label;
         hint = app.sketch.Hint(*s);

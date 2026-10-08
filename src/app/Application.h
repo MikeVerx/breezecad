@@ -2,7 +2,7 @@
 
 #include "app/AppContext.h"
 #include "app/Settings.h"
-#include "app/features/ExtrudeEditor.h"
+#include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
 #include "platform/Window.h"
 #include "render/Viewport.h"
@@ -70,7 +70,7 @@ private:
     std::unique_ptr<Autosave> myAutosave;
     render::Viewport myViewport;
     SketchEditor     mySketch;
-    ExtrudeEditor    myExtrude;
+    OperationEditors myOps;
     ShellState       myShell;
     std::vector<std::function<void()>> myDeferred;
 

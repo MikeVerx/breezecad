@@ -10,6 +10,7 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBndLib.hxx>
 #include <Bnd_Box.hxx>
+#include <GeomAbs_Shape.hxx>
 #include <Graphic3d_Camera.hxx>
 #include <Graphic3d_Mat4d.hxx>
 #include <Graphic3d_Vec2.hxx>
@@ -169,6 +170,12 @@ struct Viewport::Impl {
 
         const bool edges = style == DisplayStyle::ShadedWithEdges || style == DisplayStyle::Transparent;
         drawer->SetFaceBoundaryDraw(edges);
+        // Only sharp edges: no seam line along a cylinder, no lines between
+        // tangent faces (as in Inventor and KOMPAS).
+        drawer->SetFaceBoundaryUpperContinuity(GeomAbs_C0);
+        // Finer tessellation than OCCT's default (20°): round faces look round.
+        drawer->SetDeviationAngle(4.0 * kPi / 180.0);
+        drawer->SetDeviationCoefficient(0.0005);
         drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(colors.edges), Aspect_TOL_SOLID, 1.0));
         drawer->SetWireAspect(new Prs3d_LineAspect(ToQuantity(colors.edges), Aspect_TOL_SOLID, 1.2));
         drawer->SetLineAspect(new Prs3d_LineAspect(ToQuantity(colors.edges), Aspect_TOL_SOLID, 1.2));

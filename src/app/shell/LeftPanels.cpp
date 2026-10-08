@@ -3,7 +3,7 @@
 
 #include "app/Format.h"
 #include "core/Expression.h"
-#include "app/features/ExtrudeEditor.h"
+#include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
 #include "document/Commands.h"
 #include "ui/Widgets.h"
@@ -236,9 +236,9 @@ void DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
         float y = pos.y + ui.S(8);
         for (const auto& t : tabs) {
             ImGui::SetCursorScreenPos({pos.x + (railW - ui.S(36)) / 2, y});
-            const bool active = app.shell.leftTab == t.tab && !app.extrude.IsOpen();
+            const bool active = app.shell.leftTab == t.tab && !app.ops.Active();
             if (ui::IconButton(ui, t.id, t.icon, 36, 20, t.tip, true, active)) {
-                if (app.extrude.IsOpen()) app.Later([&app, &session] { app.extrude.Done(app, session); });
+                if (app.ops.Active()) app.Later([&app, &session] { app.ops.Close(app, session); });
                 app.shell.leftTab = t.tab;
             }
             y += ui.S(40);
@@ -253,8 +253,8 @@ void DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     dl->AddLine({panelPos.x + panelSize.x - 1, panelPos.y}, {panelPos.x + panelSize.x - 1, panelPos.y + panelSize.y},
                 ui::ToU32(c.divider));
     const float width = panelSize.x - 1;
-    if (app.extrude.IsOpen()) {
-        app.extrude.DrawPanel(app, session);
+    if (OperationEditor* operation = app.ops.Active()) {
+        operation->DrawPanel(app, session);
     } else {
         switch (app.shell.leftTab) {
             case LeftTab::Tree:       DrawTreePanel(app, session, width); break;

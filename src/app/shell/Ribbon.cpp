@@ -116,7 +116,7 @@ void ModelRibbon(RibbonBuilder& r) {
 
     r.BeginGroup("Создать");
     r.Large("feature.extrude", "Выдав-\nливание");
-    r.LargeLater("revolve", "Вращение");
+    r.Large("feature.revolve", "Вращение");
     r.BeginColumn();
     r.SmallLater("sweep", "Сдвиг");
     r.SmallLater("loft", "Лофт");

@@ -54,6 +54,8 @@ void RegisterActions(AppContext& app) {
            "Выберите плоскость или плоскую грань и рисуйте профиль", inModel, [&app] { StartSketch(app); }});
     a.Add({"feature.extrude", "Выдавливание", "extrude", ImGuiKey_E,
            "Вытянуть замкнутый контур эскиза в тело (E)", hasDoc, [&app] { StartExtrude(app); }});
+    a.Add({"feature.revolve", "Вращение", "revolve", ImGuiKey_R,
+           "Повернуть замкнутый контур эскиза вокруг оси (R)", inModel, [&app] { StartRevolve(app); }});
 
     // --- sketch ---
     a.Add({"sketch.finish", "Принять эскиз", "sk-finish", 0, "Выйти из эскиза (Esc при пустом выборе)", inSketch, [&app] {

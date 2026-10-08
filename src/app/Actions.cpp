@@ -56,11 +56,14 @@ bool ActionRegistry::Run(std::string_view id) const {
 void ActionRegistry::HandleShortcuts(const std::vector<ImGuiKeyChord>& pressed) const {
     // Typing in a field, or a menu/dialog on top: keys belong to them.
     if (ImGui::GetIO().WantTextInput || ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) return;
+    // One action per key press: the first enabled one with that chord, so a
+    // key can mean different things in different modes (R: rectangle in a
+    // sketch, revolve in the model).
     for (const ImGuiKeyChord chord : pressed) {
         for (const auto& a : myActions) {
-            if (a.chord != chord) continue;
-            if (a.run && a.IsEnabled()) a.run();
-            break;   // one action per key press
+            if (a.chord != chord || !a.run || !a.IsEnabled()) continue;
+            a.run();
+            break;
         }
     }
 }
