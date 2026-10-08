@@ -1,6 +1,6 @@
 #include "ViewCubeOverlay.h"
 #include "occt/OcctView.h"
-#include "app/Application.h"  // ThemeTokens
+#include "ui/theme/ThemeTokens.h"
 
 #include "imgui.h"
 #include "imgui_internal.h"
