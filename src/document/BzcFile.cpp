@@ -1,5 +1,6 @@
 #include "document/BzcFile.h"
 
+#include "core/PathText.h"
 #include "document/FeatureRegistry.h"
 #include "document/JsonIO.h"
 #include "document/UnknownFeature.h"
@@ -151,7 +152,7 @@ Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::stri
     temp += ".saving";
     {
         std::ofstream out(temp, std::ios::binary | std::ios::trunc);
-        if (!out) return Error{"Нет доступа к папке: " + path.parent_path().string()};
+        if (!out) return Error{"Нет доступа к папке: " + ToUtf8(path.parent_path())};
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
         out.flush();
         if (!out) return Error{"Не удалось записать файл (диск заполнен?)"};
@@ -160,7 +161,7 @@ Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::stri
     std::filesystem::rename(temp, path, ec);
     if (ec) {
         std::filesystem::remove(temp, ec);
-        return Error{"Не удалось заменить файл: " + path.string()};
+        return Error{"Не удалось заменить файл: " + ToUtf8(path)};
     }
     return Status::Ok();
 }

@@ -2,17 +2,13 @@
 
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
+#include "core/PathText.h"
 #include "ui/Widgets.h"
 
 #include <filesystem>
 
 namespace bz::app {
 namespace {
-
-std::string Utf8(const std::filesystem::path& p) {
-    const std::u8string s = p.u8string();
-    return {s.begin(), s.end()};
-}
 
 void SectionTitle(ui::Ui& ui, const char* text) {
     ui::FontScope font(ui.fonts.strong);
@@ -64,7 +60,7 @@ void DrawHomeScreen(AppContext& app, ImVec2 pos, ImVec2 size) {
             wdl->AddRect(p, {p.x + column, p.y + h}, ui::ToU32(c.accentSoftBorder), ui.S(10));
             ui.icons.Draw(wdl, "status-warning", {p.x + ui.S(14), p.y + (h - ui.S(18)) / 2}, ui.S(18), {1, 1, 1, 1});
             wdl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(42), p.y + ui.S(10)}, ui::ToU32(c.text), rec.title.c_str());
-            const std::string where = "Автосохранение " + rec.savedAt + (rec.original.empty() ? "" : "  \xC2\xB7  " + Utf8(rec.original));
+            const std::string where = "Автосохранение " + rec.savedAt + (rec.original.empty() ? "" : "  \xC2\xB7  " + ToUtf8(rec.original));
             const ImVec4 clip{p.x + ui.S(42), p.y, p.x + column - ui.S(250), p.y + h};
             wdl->AddText(ui.fonts.caption, ui.S(11), {p.x + ui.S(42), p.y + ui.S(29)}, ui::ToU32(c.textMuted), where.c_str(),
                          nullptr, 0, &clip);
@@ -103,9 +99,9 @@ void DrawHomeScreen(AppContext& app, ImVec2 pos, ImVec2 size) {
         ImDrawList* wdl = ImGui::GetWindowDrawList();
         if (hovered) wdl->AddRectFilled(p, {p.x + column, p.y + h}, ui::ToU32(c.hover), ui.S(8));
         ui.icons.Draw(wdl, "brand-mark", {p.x + ui.S(10), p.y + (h - ui.S(22)) / 2}, ui.S(22), {1, 1, 1, exists ? 1.0f : 0.35f});
-        const std::string name = Utf8(file.stem());
+        const std::string name = ToUtf8(file.stem());
         wdl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(44), p.y + ui.S(6)}, ui::ToU32(exists ? c.text : c.textDisabled), name.c_str());
-        const std::string folder = exists ? Utf8(file.parent_path()) : "Файл не найден";
+        const std::string folder = exists ? ToUtf8(file.parent_path()) : "Файл не найден";
         const ImVec4 clip{p.x + ui.S(44), p.y, p.x + column - ui.S(12), p.y + h};
         wdl->AddText(ui.fonts.caption, ui.S(11), {p.x + ui.S(44), p.y + ui.S(25)}, ui::ToU32(c.textMuted), folder.c_str(), nullptr, 0, &clip);
         if (clicked && exists) app.Later([&app, file] { OpenDocument(app, file); });

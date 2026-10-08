@@ -3,6 +3,7 @@
 #include "app/Notifications.h"
 #include "app/Settings.h"
 #include "core/Log.h"
+#include "core/PathText.h"
 #include "document/BzcFile.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
@@ -13,11 +14,6 @@ namespace bz::app {
 namespace {
 
 constexpr const char* kGenerator = "BreezeCAD 0.2.0";
-
-std::string Utf8(const std::filesystem::path& p) {
-    const std::u8string s = p.u8string();
-    return {s.begin(), s.end()};
-}
 
 } // namespace
 
@@ -58,7 +54,7 @@ bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Se
     doc::LoadReport report;
     Expected<doc::Document> loaded = doc::LoadBzc(file, &report);
     if (!loaded) {
-        notes.Error("Не удалось открыть «" + Utf8(file.filename()) + "»: " + loaded.GetError().message);
+        notes.Error("Не удалось открыть «" + ToUtf8(file.filename()) + "»: " + loaded.GetError().message);
         settings.RemoveRecent(file);
         return false;
     }
@@ -69,7 +65,7 @@ bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Se
     Activate(static_cast<int>(sessions.size()) - 1);
     settings.AddRecent(file);
     for (const auto& w : report.warnings) notes.Info(w);
-    log::Info("Opened {}", Utf8(file));
+    log::Info("Opened {}", ToUtf8(file));
     return true;
 }
 
@@ -95,8 +91,8 @@ bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settin
     session.history.MarkSaved();
     session.unsavedSince = -1.0;
     settings.AddRecent(target);
-    notes.Success("Сохранено: " + Utf8(target.filename()));
-    log::Info("Saved {}", Utf8(target));
+    notes.Success("Сохранено: " + ToUtf8(target.filename()));
+    log::Info("Saved {}", ToUtf8(target));
     return true;
 }
 
@@ -128,7 +124,7 @@ bool Workspace::Export(Session& session, ExportFormat format, Notifications& not
         notes.Error(status.GetError().message);
         return false;
     }
-    notes.Success("Экспортировано: " + Utf8(chosen->filename()));
+    notes.Success("Экспортировано: " + ToUtf8(chosen->filename()));
     return true;
 }
 

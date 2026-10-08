@@ -2,6 +2,7 @@
 
 #include "app/Settings.h"
 #include "core/Log.h"
+#include "core/PathText.h"
 #include "document/BzcFile.h"
 
 #include <nlohmann/json.hpp>
@@ -15,13 +16,6 @@ namespace {
 
 constexpr double kIdleBeforeWrite = 2.5;   // seconds without input
 constexpr int    kCopies          = 3;
-
-std::string Utf8(const std::filesystem::path& p) {
-    const std::u8string s = p.u8string();
-    return {s.begin(), s.end()};
-}
-
-std::filesystem::path FromUtf8(const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); }
 
 std::string NowText() {
     const std::time_t t = std::time(nullptr);
@@ -60,7 +54,7 @@ bool Autosave::Update(Session& session, const Settings& settings, double now, do
         session.unsavedSince = now;   // try again after another interval
         return false;
     }
-    const nlohmann::json info{{"title", session.Title()}, {"original", Utf8(session.path)},
+    const nlohmann::json info{{"title", session.Title()}, {"original", ToUtf8(session.path)},
                               {"slot", slot}, {"savedAt", NowText()}};
     std::ofstream(folder / "info.json", std::ios::trunc) << info.dump(1);
 
@@ -87,7 +81,7 @@ std::vector<RecoverableDocument> Autosave::FindRecoverable() const {
         RecoverableDocument doc;
         doc.folder = entry.path();
         doc.copy = entry.path() / std::format("copy{}.bzc", info.value("slot", 1));
-        doc.original = FromUtf8(info.value("original", ""));
+        doc.original = PathFromUtf8(info.value("original", ""));
         doc.title = info.value("title", "Без имени");
         doc.savedAt = info.value("savedAt", "");
         if (std::filesystem::exists(doc.copy, ec)) found.push_back(std::move(doc));

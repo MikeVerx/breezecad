@@ -4,6 +4,7 @@
 #include "app/shell/Shell.h"
 #include "app/viewport/ViewportPanel.h"
 #include "core/Log.h"
+#include "core/PathText.h"
 #include "platform/Paths.h"
 #include "platform/ProcessInfo.h"
 #include "platform/SystemTheme.h"
@@ -24,11 +25,6 @@ namespace bz::app {
 namespace {
 
 constexpr GLenum kGlFramebufferSrgb = 0x8DB9;   // GL_FRAMEBUFFER_SRGB (OpenGL 3.0, absent from GL 1.1 headers)
-
-std::string Utf8(const std::filesystem::path& p) {
-    const std::u8string s = p.u8string();
-    return {s.begin(), s.end()};
-}
 
 /// Input callbacks installed before ImGui's, which chain to them.
 Application::InputTap* TapOf(GLFWwindow* window) {
@@ -97,10 +93,10 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     glfwSetWindowRefreshCallback(myWindow.Handle(), [](GLFWwindow* w) { OnAnyInput(w); });
 
     const std::filesystem::path assets = platform::AssetsDir();
-    log::Info("Assets: {}", Utf8(assets));
+    log::Info("Assets: {}", ToUtf8(assets));
 
     // Window icon from the brand SVG.
-    if (auto icon = lunasvg::Document::loadFromFile(Utf8(assets / "brand" / "breezecad-app-icon.svg"))) {
+    if (auto icon = lunasvg::Document::loadFromFile(ToUtf8(assets / "brand" / "breezecad-app-icon.svg"))) {
         lunasvg::Bitmap bitmap = icon->renderToBitmap(128, 128);
         bitmap.convertToRGBA();
         myWindow.SetIcon(bitmap.data(), 128);
@@ -348,14 +344,13 @@ void Application::TakeScreenshot(const std::filesystem::path& file) const {
     std::vector<unsigned char> pixels(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 3);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
-    std::FILE* f = std::fopen(Utf8(file).c_str(), "wb");
-    if (!f) return;
-    std::fprintf(f, "P6\n%d %d\n255\n", w, h);
+    std::ofstream out(file, std::ios::binary);
+    if (!out) return;
+    out << "P6\n" << w << ' ' << h << "\n255\n";
+    const auto rowBytes = static_cast<std::streamsize>(w) * 3;
     for (int row = h - 1; row >= 0; --row)
-        std::fwrite(pixels.data() + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 3, 1,
-                    static_cast<std::size_t>(w) * 3, f);
-    std::fclose(f);
-    log::Info("Screenshot saved: {}", Utf8(file));
+        out.write(reinterpret_cast<const char*>(pixels.data()) + static_cast<std::ptrdiff_t>(row) * rowBytes, rowBytes);
+    log::Info("Screenshot saved: {}", ToUtf8(file));
 }
 
 } // namespace bz::app

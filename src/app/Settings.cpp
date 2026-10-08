@@ -1,6 +1,7 @@
 #include "app/Settings.h"
 
 #include "core/Log.h"
+#include "core/PathText.h"
 
 #include <nlohmann/json.hpp>
 
@@ -8,17 +9,6 @@
 #include <fstream>
 
 namespace bz::app {
-namespace {
-
-std::string Utf8(const std::filesystem::path& p) {
-    const std::u8string s = p.u8string();
-    return {s.begin(), s.end()};
-}
-
-std::filesystem::path FromUtf8(const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); }
-
-} // namespace
-
 void Settings::AddRecent(const std::filesystem::path& file) {
     RemoveRecent(file);
     recentFiles.insert(recentFiles.begin(), file);
@@ -46,13 +36,13 @@ Settings Settings::Load(const std::filesystem::path& file) {
     s.pointSnap       = j.value("pointSnap", s.pointSnap);
     s.gridStep        = std::max(0.0, j.value("gridStep", s.gridStep));
     for (const auto& r : j.value("recentFiles", nlohmann::json::array()))
-        if (r.is_string()) s.recentFiles.push_back(FromUtf8(r.get<std::string>()));
+        if (r.is_string()) s.recentFiles.push_back(PathFromUtf8(r.get<std::string>()));
     return s;
 }
 
 bool Settings::Save(const std::filesystem::path& file) const {
     nlohmann::json recent = nlohmann::json::array();
-    for (const auto& r : recentFiles) recent.push_back(Utf8(r));
+    for (const auto& r : recentFiles) recent.push_back(ToUtf8(r));
     const nlohmann::json j{
         {"theme", theme == ThemeChoice::Light ? "light" : theme == ThemeChoice::Dark ? "dark" : "system"},
         {"animations", animations},

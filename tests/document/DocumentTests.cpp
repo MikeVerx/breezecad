@@ -1,3 +1,4 @@
+#include "core/PathText.h"
 #include "document/BzcFile.h"
 #include "document/Commands.h"
 #include "document/ExtrudeFeature.h"
@@ -186,13 +187,16 @@ TEST_CASE("unknown feature types survive open and save") {
 
 TEST_CASE("bzc file round trip and atomic save") {
     Plate plate;
-    const auto dir = std::filesystem::temp_directory_path() / "bz_tests";
+    // Cyrillic folder and file name on purpose: through PathFromUtf8 they are
+    // real Unicode names on Windows too, not text in the ANSI code page.
+    const auto dir = std::filesystem::temp_directory_path() / PathFromUtf8("bz_tests_Документы");
     std::filesystem::create_directories(dir);
-    const auto path = dir / "Плита.bzc";   // non-ASCII name on purpose
+    const auto path = dir / PathFromUtf8("Плита.bzc");
 
     REQUIRE(SaveBzc(plate.doc, path, "BreezeCAD tests").IsOk());
     REQUIRE(SaveBzc(plate.doc, path, "BreezeCAD tests").IsOk());   // overwrite works
-    CHECK_FALSE(std::filesystem::exists(dir / "Плита.bzc.saving"));
+    CHECK(ToUtf8(path.filename()) == "Плита.bzc");
+    CHECK_FALSE(std::filesystem::exists(dir / PathFromUtf8("Плита.bzc.saving")));
 
     Expected<Document> loaded = LoadBzc(path);
     REQUIRE(loaded.HasValue());

@@ -1,5 +1,6 @@
 // STEP, STL and 3MF export of Model bodies.
 
+#include "core/PathText.h"
 #include "kernel/occt/ModelImpl.h"
 
 #include <BRepMesh_IncrementalMesh.hxx>
@@ -70,15 +71,10 @@ std::vector<Triangle> Triangulate(const std::vector<Body>& bodies, MeshQuality q
 
 Status WriteBytes(const std::filesystem::path& path, const std::string& bytes) {
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    if (!out) return Error{"Не удалось создать файл: " + path.string()};
+    if (!out) return Error{"Не удалось создать файл: " + ToUtf8(path)};
     out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     if (!out) return Error{"Не удалось записать файл (диск заполнен?)"};
     return Status::Ok();
-}
-
-std::string Utf8(const std::filesystem::path& path) {
-    const std::u8string u8 = path.u8string();
-    return {u8.begin(), u8.end()};
 }
 
 template <class T>
@@ -99,7 +95,7 @@ Status Model::ExportStep(const std::filesystem::path& path) const {
         if (writer.Transfer(Compound(myImpl->bodies), STEPControl_AsIs) != IFSelect_RetDone)
             return Error{"Не удалось подготовить STEP"};
         // OCCT expects UTF-8 file names on every platform.
-        const std::string utf8 = Utf8(path);
+        const std::string utf8 = ToUtf8(path);
         if (writer.Write(utf8.c_str()) != IFSelect_RetDone) return Error{"Не удалось записать STEP: " + utf8};
     } catch (const Standard_Failure& failure) {
         return Error{std::string("Ошибка экспорта STEP: ") + failure.GetMessageString()};
