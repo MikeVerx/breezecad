@@ -57,12 +57,13 @@ namespace {
 /// Directions are in view space (x right, y up, z towards the viewer) and
 /// point the way the light travels.
 void SetUpLights(const Handle(V3d_Viewer)& viewer) {
-    Handle(V3d_AmbientLight) ambient = new V3d_AmbientLight(Quantity_NOC_WHITE);
-    ambient->SetIntensity(0.55f);
-    Handle(V3d_DirectionalLight) key = new V3d_DirectionalLight(gp_Dir(0.3, -0.75, -0.6), Quantity_NOC_WHITE, true);
-    key->SetIntensity(0.55f);
-    Handle(V3d_DirectionalLight) fill = new V3d_DirectionalLight(gp_Dir(-0.8, 0.1, -0.6), Quantity_NOC_WHITE, true);
-    fill->SetIntensity(0.3f);
+    // Strength is set through the light colour: with sRGB rendering off,
+    // OCCT ignores SetIntensity. Levels were measured and solved so the faces
+    // of an isometric box read as roughly 0.84 / 0.70 / 0.58 (top / right / front).
+    const auto grey = [](double level) { return Quantity_Color(level, level, level, Quantity_TOC_RGB); };
+    Handle(V3d_AmbientLight) ambient = new V3d_AmbientLight(grey(0.75));
+    Handle(V3d_DirectionalLight) key = new V3d_DirectionalLight(gp_Dir(0.3, -0.75, -0.6), grey(0.37), true);
+    Handle(V3d_DirectionalLight) fill = new V3d_DirectionalLight(gp_Dir(-0.8, 0.1, -0.6), grey(0.31), true);
     viewer->AddLight(ambient);
     viewer->AddLight(key);
     viewer->AddLight(fill);
@@ -217,6 +218,10 @@ bool Viewport::Init(void* glfwWindow) {
     Handle(Aspect_DisplayConnection) display = new Aspect_DisplayConnection();
     m.driver = new OpenGl_GraphicDriver(display, false);
     m.driver->ChangeOptions().buffersNoSwap = true;
+    // Render plain sRGB colours into our RGBA8 texture. OCCT's linear-light
+    // pipeline relies on an sRGB-capable output, which the window may not
+    // have (often on Windows); the result would differ per platform.
+    m.driver->ChangeOptions().sRGBDisable = true;
 
     m.viewer = new V3d_Viewer(m.driver);
     SetUpLights(m.viewer);

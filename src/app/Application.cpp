@@ -23,6 +23,8 @@ ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(int keycode, int scancode);
 namespace bz::app {
 namespace {
 
+constexpr GLenum kGlFramebufferSrgb = 0x8DB9;   // GL_FRAMEBUFFER_SRGB (OpenGL 3.0, absent from GL 1.1 headers)
+
 std::string Utf8(const std::filesystem::path& p) {
     const std::u8string s = p.u8string();
     return {s.begin(), s.end()};
@@ -269,6 +271,10 @@ void Application::Frame() {
     int fbW = 0, fbH = 0;
     glfwGetFramebufferSize(myWindow.Handle(), &fbW, &fbH);
     glViewport(0, 0, fbW, fbH);
+    // UI colours are sRGB values meant to be written as they are. OCCT
+    // switches sRGB writes on for its own rendering and does not switch them
+    // off, which would make the whole interface look washed out.
+    glDisable(kGlFramebufferSrgb);
     const Color bg = myTheme.colors.appBackground;
     glClearColor(bg.r, bg.g, bg.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
