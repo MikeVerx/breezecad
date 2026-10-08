@@ -1,0 +1,180 @@
+#include "../Fixtures.h"
+#include "document/BzcFile.h"
+#include "kernel/Model.h"
+
+#include <doctest.h>
+
+#include <filesystem>
+#include <fstream>
+
+using namespace bz;
+using namespace bz::test;
+using doc::BooleanOp;
+using doc::FeatureState;
+
+TEST_CASE("a rectangle extrudes into a box") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddRect(d, sk, {0, 0}, {60, 40});
+    auto& ex = AddExtrude(d, sk.id, "10");
+
+    kernel::Model model;
+    model.Rebuild(d);
+    CHECK(sk.status.state == FeatureState::Ok);
+    CHECK(ex.status.state == FeatureState::Ok);
+    REQUIRE(model.Bodies().size() == 1);
+    CHECK(model.Bodies()[0].name == "Тело1");
+    CHECK(model.Volume() == doctest::Approx(24000.0));
+    const auto box = model.BoundingBox();
+    REQUIRE(box);
+    CHECK(box->max.z == doctest::Approx(10.0).epsilon(1e-3));
+}
+
+TEST_CASE("automatic profile keeps inner circles as holes") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddRect(d, sk, {0, 0}, {60, 40});
+    AddCircle(d, sk, {30, 20}, 8);
+    AddExtrude(d, sk.id, "10");
+
+    kernel::Model model;
+    model.Rebuild(d);
+    const auto* regions = model.Regions(sk.id);
+    REQUIRE(regions);
+    CHECK(regions->size() == 2);   // the plate with a hole, and the disc
+    CHECK(model.Volume() == doctest::Approx(24000.0 - kPi * 64.0 * 10.0).epsilon(1e-4));
+}
+
+TEST_CASE("manual profile picks the region under a point") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddRect(d, sk, {0, 0}, {60, 40});
+    AddCircle(d, sk, {30, 20}, 8);
+    auto& ex = AddExtrude(d, sk.id, "5");
+    ex.profiles.automatic = false;
+    ex.profiles.regions = {{30, 20}};   // the disc only
+
+    kernel::Model model;
+    model.Rebuild(d);
+    CHECK(model.Volume() == doctest::Approx(kPi * 64.0 * 5.0).epsilon(1e-4));
+}
+
+TEST_CASE("a crossing line splits a rectangle into two regions") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddRect(d, sk, {0, 0}, {60, 40});
+    auto& s = sk.sketch;
+    s.AddLine(d.Ids(), s.AddPoint(d.Ids(), {20, -10}), s.AddPoint(d.Ids(), {20, 50}));
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(model.Regions(sk.id));
+    CHECK(model.Regions(sk.id)->size() == 2);
+}
+
+TEST_CASE("cut through all, join and errors") {
+    doc::Document d;
+    auto& base = AddSketch(d);
+    AddRect(d, base, {0, 0}, {60, 40});
+    AddExtrude(d, base.id, "10");
+
+    auto& top = AddSketch(d, doc::origin::kPlaneXY);
+    AddCircle(d, top, {30, 20}, 5);
+    auto& cut = AddExtrude(d, top.id, "1", BooleanOp::Cut);
+    cut.extent = doc::ExtentType::ThroughAll;
+    cut.extent = doc::ExtentType::ThroughAll;
+
+    kernel::Model model;
+    model.Rebuild(d);
+    CHECK(cut.status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(24000.0 - kPi * 25.0 * 10.0).epsilon(1e-4));
+    CHECK(model.Bodies().size() == 1);
+
+    // A boss on top joins the same body.
+    auto& boss = AddSketch(d);
+    AddRect(d, boss, {0, 0}, {10, 10});
+    auto& join = AddExtrude(d, boss.id, "20", BooleanOp::Join);
+    model.Rebuild(d);
+    CHECK(join.status.state == FeatureState::Ok);
+    CHECK(model.Bodies().size() == 1);
+    CHECK(model.Volume() == doctest::Approx(24000.0 - kPi * 250.0 + 1000.0).epsilon(1e-4));
+
+    // Zero distance is an error on that feature only.
+    join.distance.expression = "0";
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(join.id)));
+    model.Rebuild(d);
+    CHECK(join.status.state == FeatureState::Error);
+    CHECK(cut.status.state == FeatureState::Ok);
+    CHECK(model.Bodies().size() == 1);
+}
+
+TEST_CASE("symmetric, reversed and tapered extrusions") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddRect(d, sk, {0, 0}, {20, 20});
+    auto& ex = AddExtrude(d, sk.id, "10");
+    ex.extent = doc::ExtentType::Symmetric;
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(model.BoundingBox());
+    CHECK(model.BoundingBox()->min.z == doctest::Approx(-5.0).epsilon(1e-3));
+
+    ex.extent = doc::ExtentType::Distance;
+    ex.reversed = true;
+    d.MarkChanged(0);
+    model.Rebuild(d);
+    CHECK(model.BoundingBox()->min.z == doctest::Approx(-10.0).epsilon(1e-3));
+
+    ex.reversed = false;
+    ex.taper.expression = "5";
+    d.MarkChanged(0);
+    model.Rebuild(d);
+    CHECK(ex.status.state == FeatureState::Ok);
+    CHECK(model.Volume() < 4000.0);
+    CHECK(model.Volume() > 3000.0);
+}
+
+TEST_CASE("rebuild after reloading gives the same solid") {
+    doc::Document d;
+    auto& sk = AddSketch(d, doc::origin::kPlaneXZ);
+    AddRect(d, sk, {0, 0}, {30, 20});
+    AddCircle(d, sk, {15, 10}, 4);
+    AddExtrude(d, sk.id, "12");
+    kernel::Model a;
+    a.Rebuild(d);
+
+    Expected<doc::Document> loaded = doc::DocumentFromJson(doc::DocumentToJson(d));
+    REQUIRE(loaded.HasValue());
+    kernel::Model b;
+    b.Rebuild(*loaded);
+    CHECK(b.Volume() == doctest::Approx(a.Volume()));
+    CHECK(b.BoundingBox()->min.y == doctest::Approx(-12.0).epsilon(1e-3));   // front plane extrudes toward -Y
+}
+
+TEST_CASE("export STEP, STL and 3MF") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddRect(d, sk, {0, 0}, {20, 10});
+    AddExtrude(d, sk.id, "5");
+    kernel::Model model;
+    model.Rebuild(d);
+
+    const auto dir = std::filesystem::temp_directory_path() / "bz_export_tests";
+    std::filesystem::create_directories(dir);
+    REQUIRE(model.ExportStep(dir / "деталь.step").IsOk());
+    REQUIRE(model.ExportStl(dir / "деталь.stl").IsOk());
+    REQUIRE(model.Export3mf(dir / "деталь.3mf").IsOk());
+
+    std::ifstream step(dir / "деталь.step");
+    std::string header;
+    std::getline(step, header);
+    CHECK(header.find("ISO-10303-21") != std::string::npos);
+    const auto stlSize = std::filesystem::file_size(dir / "деталь.stl");
+    CHECK(stlSize == 84 + 50 * 12);   // a box: 6 faces x 2 triangles
+    CHECK(std::filesystem::file_size(dir / "деталь.3mf") > 200);
+    std::filesystem::remove_all(dir);
+
+    doc::Document empty;
+    kernel::Model none;
+    none.Rebuild(empty);
+    CHECK_FALSE(none.ExportStl(dir / "x.stl").IsOk());
+}

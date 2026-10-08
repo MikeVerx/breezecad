@@ -1,0 +1,192 @@
+#include "kernel/Model.h"
+
+#include "core/Log.h"
+#include "document/ExtrudeFeature.h"
+#include "document/Recompute.h"
+#include "document/SketchFeature.h"
+#include "kernel/occt/Extrude.h"
+#include "kernel/occt/ModelImpl.h"
+
+#include <BRepBndLib.hxx>
+#include <BRepGProp.hxx>
+#include <Bnd_Box.hxx>
+#include <GProp_GProps.hxx>
+#include <Message.hxx>
+#include <Message_Messenger.hxx>
+#include <Message_Printer.hxx>
+
+#include <algorithm>
+#include <cmath>
+#include <mutex>
+
+namespace bz::kernel {
+namespace {
+
+using doc::FeatureState;
+
+/// Length that surely crosses every body, for "through all".
+double ThroughAllLength(const std::vector<Body>& bodies, const Frame& frame) {
+    Bnd_Box box;
+    for (const Body& b : bodies) BRepBndLib::Add(b.shape, box);
+    if (box.IsVoid()) return 1000.0;
+    const double diagonal = std::sqrt(box.SquareExtent());
+    double xmin, ymin, zmin, xmax, ymax, zmax;
+    box.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+    const Vec3 center{(xmin + xmax) / 2, (ymin + ymax) / 2, (zmin + zmax) / 2};
+    return 2.0 * (diagonal + (center - frame.origin).Length()) + 1.0;
+}
+
+std::string NextBodyName(const std::vector<Body>& bodies) {
+    int largest = 0;
+    for (const Body& b : bodies) {
+        const std::string prefix = "Тело";
+        if (b.name.rfind(prefix, 0) == 0) largest = std::max(largest, std::atoi(b.name.c_str() + prefix.size()));
+    }
+    return "Тело" + std::to_string(largest + 1);
+}
+
+void ApplyExtrude(const doc::ExtrudeFeature& f, Model::Impl& impl, std::vector<Body>& bodies,
+                  doc::FeatureStatus& status, const doc::Document& doc) {
+    const auto* sketch = doc.FindAs<doc::SketchFeature>(f.sketch);
+    const auto profile = impl.sketches.find(f.sketch);
+    if (!sketch || profile == impl.sketches.end()) {
+        status = {FeatureState::Error, "Эскиз операции не найден"};
+        return;
+    }
+    if (sketch->status.state == FeatureState::Error || sketch->status.state == FeatureState::NotComputed) {
+        status = {FeatureState::Error, "Эскиз операции содержит ошибки"};
+        return;
+    }
+    if (f.distance.HasError() || f.taper.HasError()) {
+        status = {FeatureState::Error, f.distance.HasError() ? f.distance.error : f.taper.error};
+        return;
+    }
+
+    const std::vector<TopoDS_Face> faces = occt::SelectFaces(profile->second, f.profiles);
+    Expected<TopoDS_Shape> tool =
+        occt::MakeExtrusion(faces, f, profile->second.frame, ThroughAllLength(bodies, profile->second.frame));
+    if (!tool) {
+        status = {FeatureState::Error, tool.GetError().message};
+        return;
+    }
+
+    if (f.operation == doc::BooleanOp::NewBody || bodies.empty()) {
+        if (f.operation == doc::BooleanOp::Cut || f.operation == doc::BooleanOp::Intersect) {
+            status = {FeatureState::Error, "Нет тела, к которому применить операцию"};
+            return;
+        }
+        bodies.push_back({f.id, NextBodyName(bodies), *tool});
+        status = {FeatureState::Ok, {}};
+        return;
+    }
+
+    // Join, Cut and Intersect act on the most recent body.
+    Body& target = bodies.back();
+    Expected<TopoDS_Shape> result = occt::ApplyBoolean(target.shape, *tool, f.operation);
+    if (!result) {
+        status = {FeatureState::Error, result.GetError().message};
+        return;
+    }
+    target.shape = *result;
+    status = {FeatureState::Ok, {}};
+}
+
+/// OCCT prints progress reports (STEP statistics...) to stdout; keep only
+/// warnings and errors, our own log covers the rest.
+void QuietOcctMessages() {
+    static std::once_flag once;
+    std::call_once(once, [] {
+        const Handle(Message_Messenger)& messenger = Message::DefaultMessenger();
+        // Range-for works with both OCCT 7.x and 8.x sequence types.
+        for (const auto& printer : messenger->Printers()) printer->SetTraceLevel(Message_Warning);
+    });
+}
+
+} // namespace
+
+Model::Model() : myImpl(std::make_unique<Impl>()) { QuietOcctMessages(); }
+Model::~Model() = default;
+Model::Model(Model&&) noexcept = default;
+Model& Model::operator=(Model&&) noexcept = default;
+
+void Model::Rebuild(doc::Document& doc) {
+    Impl& impl = *myImpl;
+    doc::RecomputeModel(doc);
+
+    const std::size_t count = doc.FeatureCount();
+    // Reuse cached results up to the first changed feature, as long as the
+    // order of features has not changed before that point.
+    std::size_t start = std::min(doc.DirtyFrom(), count);
+    for (std::size_t i = 0; i < start; ++i) {
+        if (i >= impl.cachedOrder.size() || impl.cachedOrder[i] != doc.Features()[i]->id) {
+            start = i;
+            break;
+        }
+    }
+    impl.cachedOrder.resize(count);
+    impl.bodiesAfter.resize(count);
+
+    std::vector<Body> bodies = start > 0 ? impl.bodiesAfter[start - 1] : std::vector<Body>{};
+    for (std::size_t i = start; i < count; ++i) {
+        doc::Feature& f = *doc.Features()[i];
+        impl.cachedOrder[i] = f.id;
+
+        const bool skip = !doc.IsActive(i) || f.suppressed;
+        if (!skip) {
+            if (auto* sk = dynamic_cast<doc::SketchFeature*>(&f)) {
+                Expected<occt::SketchProfile> profile = occt::BuildProfile(*sk);
+                if (profile) {
+                    impl.sketches[sk->id] = std::move(*profile);
+                } else {
+                    impl.sketches.erase(sk->id);
+                    sk->status = {FeatureState::Error, profile.GetError().message};
+                }
+            } else if (auto* ex = dynamic_cast<doc::ExtrudeFeature*>(&f)) {
+                ApplyExtrude(*ex, impl, bodies, ex->status, doc);
+            } else if (f.status.state == FeatureState::NotComputed) {
+                f.status = {FeatureState::Error, "Операция этого типа не поддерживается"};
+            }
+        }
+        if (f.status.state == FeatureState::Error) log::Warn("{}: {}", f.name, f.status.message);
+        impl.bodiesAfter[i] = bodies;
+    }
+
+    // The visible result is the state at the end-of-part marker.
+    const std::size_t marker = std::min(doc.EndMarker(), count);
+    impl.bodies = marker > 0 ? impl.bodiesAfter[marker - 1] : std::vector<Body>{};
+    impl.infos.clear();
+    for (const Body& b : impl.bodies) impl.infos.push_back({b.id, b.name});
+
+    doc.ClearDirty();
+    ++impl.revision;
+}
+
+std::uint64_t Model::Revision() const { return myImpl->revision; }
+
+const std::vector<BodyInfo>& Model::Bodies() const { return myImpl->infos; }
+
+std::optional<Bounds> Model::BoundingBox() const {
+    Bnd_Box box;
+    for (const Body& b : myImpl->bodies) BRepBndLib::Add(b.shape, box);
+    if (box.IsVoid()) return std::nullopt;
+    double xmin, ymin, zmin, xmax, ymax, zmax;
+    box.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+    return Bounds{{xmin, ymin, zmin}, {xmax, ymax, zmax}};
+}
+
+const std::vector<SketchRegion>* Model::Regions(ObjectId sketchFeature) const {
+    const auto it = myImpl->sketches.find(sketchFeature);
+    return it != myImpl->sketches.end() ? &it->second.regions : nullptr;
+}
+
+double Model::Volume() const {
+    double volume = 0.0;
+    for (const Body& b : myImpl->bodies) {
+        GProp_GProps props;
+        BRepGProp::VolumeProperties(b.shape, props);
+        volume += props.Mass();
+    }
+    return volume;
+}
+
+} // namespace bz::kernel

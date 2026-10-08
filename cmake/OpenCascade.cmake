@@ -10,7 +10,7 @@ add_library(bz_occt_modeling INTERFACE)
 target_include_directories(bz_occt_modeling SYSTEM INTERFACE ${OpenCASCADE_INCLUDE_DIR})
 target_link_libraries(bz_occt_modeling INTERFACE
     TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep TKGeomAlgo TKTopAlgo
-    TKPrim TKBO TKBool TKFillet TKOffset TKShHealing TKMesh)
+    TKPrim TKBO TKBool TKFeat TKFillet TKOffset TKShHealing TKMesh)
 add_library(bz::occt_modeling ALIAS bz_occt_modeling)
 
 # Data exchange: STEP and STL. OCCT 7.8 renamed the toolkits to TKDE*.
