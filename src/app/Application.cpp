@@ -121,7 +121,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myIcons.SetDirectory(assets / "icons");
     myIcons.SetScale(framebufferScale);
 
-    if (!myViewport.Init(myWindow.Handle())) return false;
+    if (!myViewport.Init(myWindow.NativeSurface())) return false;
 
     myUi = std::make_unique<ui::Ui>(ui::Ui{myTheme, myFonts, myIcons, myScale});
     ApplyTheme(true);

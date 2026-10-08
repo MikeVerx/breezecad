@@ -31,20 +31,10 @@
 #include <gp_Pln.hxx>
 #include <gp_Trsf.hxx>
 
-#include <GLFW/glfw3.h>
-#if defined(_WIN32)
-#define GLFW_EXPOSE_NATIVE_WIN32
-#define GLFW_EXPOSE_NATIVE_WGL
-#elif defined(__APPLE__)
-#define GLFW_EXPOSE_NATIVE_COCOA
-#define GLFW_EXPOSE_NATIVE_NSGL
-#else
-#define GLFW_EXPOSE_NATIVE_X11
-#define GLFW_EXPOSE_NATIVE_GLX
-#endif
-#include <GLFW/glfw3native.h>
+#include <GLFW/glfw3.h>   // glfwGetTime for camera animation
 
 #include <algorithm>
+#include <type_traits>
 #include <cmath>
 #include <vector>
 
@@ -73,6 +63,14 @@ void SetUpLights(const Handle(V3d_Viewer)& viewer) {
 // OpenGL sized formats (not declared by every platform's GL 1.1 header).
 constexpr int kGlRgba8           = 0x8058;
 constexpr int kGlDepth24Stencil8 = 0x88F0;
+
+/// Aspect_Drawable is a pointer on Windows and macOS but an integer X11 id
+/// on Linux; converts the stored handle to whichever it is.
+template <class T>
+T HandleAs(std::uintptr_t handle) {
+    if constexpr (std::is_pointer_v<T>) return reinterpret_cast<T>(handle);
+    else return static_cast<T>(handle);
+}
 
 gp_Pnt ToPnt(Vec3 v) { return {v.x, v.y, v.z}; }
 gp_Dir ToDir(Vec3 v) { return {v.x, v.y, v.z}; }
@@ -124,7 +122,6 @@ std::optional<Frame> PlanarFaceFrame(const TopoDS_Face& face) {
 // --- Impl -------------------------------------------------------------------
 
 struct Viewport::Impl {
-    GLFWwindow*                      window = nullptr;
     Handle(OpenGl_GraphicDriver)     driver;
     Handle(V3d_Viewer)               viewer;
     Handle(V3d_View)                 view;
@@ -211,9 +208,8 @@ Viewport::~Viewport() {
     if (!m.fbo.IsNull() && !m.driver.IsNull()) m.fbo->Release(m.GlContext().get());
 }
 
-bool Viewport::Init(void* glfwWindow) {
+bool Viewport::Init(const NativeGlSurface& surface) {
     Impl& m = *myImpl;
-    m.window = static_cast<GLFWwindow*>(glfwWindow);
 
     Handle(Aspect_DisplayConnection) display = new Aspect_DisplayConnection();
     m.driver = new OpenGl_GraphicDriver(display, false);
@@ -253,16 +249,8 @@ bool Viewport::Init(void* glfwWindow) {
     m.occtWindow = new Aspect_NeutralWindow();
     m.occtWindow->SetVirtual(true);
     m.occtWindow->SetSize(m.fbWidth, m.fbHeight);
-#if defined(_WIN32)
-    m.occtWindow->SetNativeHandle(reinterpret_cast<Aspect_Drawable>(glfwGetWin32Window(m.window)));
-    Aspect_RenderingContext glContext = glfwGetWGLContext(m.window);
-#elif defined(__APPLE__)
-    m.occtWindow->SetNativeHandle(reinterpret_cast<Aspect_Drawable>(glfwGetCocoaWindow(m.window)));
-    Aspect_RenderingContext glContext = glfwGetNSGLContext(m.window);
-#else
-    m.occtWindow->SetNativeHandle(static_cast<Aspect_Drawable>(glfwGetX11Window(m.window)));
-    Aspect_RenderingContext glContext = glfwGetGLXContext(m.window);
-#endif
+    m.occtWindow->SetNativeHandle(HandleAs<Aspect_Drawable>(surface.window));
+    const auto glContext = static_cast<Aspect_RenderingContext>(surface.glContext);
     if (!glContext) {
         log::Error("Viewport: no native OpenGL context");
         return false;

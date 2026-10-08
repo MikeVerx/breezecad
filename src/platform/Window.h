@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/NativeSurface.h"
+
 #include <string>
 
 struct GLFWwindow;
@@ -25,6 +27,8 @@ public:
     bool Create(const WindowConfig& config);
 
     GLFWwindow* Handle() const { return myWindow; }
+    /// OS handles of the window and its OpenGL context, for OCCT.
+    NativeGlSurface NativeSurface() const;
     bool  ShouldClose() const;
     void  SetShouldClose(bool close);
     void  SetTitle(const std::string& title);

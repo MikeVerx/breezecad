@@ -10,6 +10,7 @@
 #include <Interface_Static.hxx>
 #include <Poly_Triangulation.hxx>
 #include <STEPControl_Writer.hxx>
+#include <Standard_Version.hxx>
 #include <Standard_Failure.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
@@ -94,9 +95,18 @@ Status Model::ExportStep(const std::filesystem::path& path) const {
         Interface_Static::SetCVal("write.step.unit", "MM");
         if (writer.Transfer(Compound(myImpl->bodies), STEPControl_AsIs) != IFSelect_RetDone)
             return Error{"Не удалось подготовить STEP"};
-        // OCCT expects UTF-8 file names on every platform.
+#if OCC_VERSION_HEX >= 0x070700
+        // Our own stream: opened with the wide path on Windows and closed
+        // here, so the file is never left locked by the writer.
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        if (!out) return Error{"Не удалось создать файл: " + ToUtf8(path)};
+        if (writer.WriteStream(out) != IFSelect_RetDone || !out.flush())
+            return Error{"Не удалось записать STEP: " + ToUtf8(path)};
+#else
+        // Older OCCT writes by name only; it expects UTF-8 on every platform.
         const std::string utf8 = ToUtf8(path);
         if (writer.Write(utf8.c_str()) != IFSelect_RetDone) return Error{"Не удалось записать STEP: " + utf8};
+#endif
     } catch (const Standard_Failure& failure) {
         return Error{std::string("Ошибка экспорта STEP: ") + failure.GetMessageString()};
     }

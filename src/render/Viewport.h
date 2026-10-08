@@ -6,6 +6,7 @@
 #include "core/Color.h"
 #include "core/Id.h"
 #include "core/Math.h"
+#include "core/NativeSurface.h"
 #include "core/ViewProjection.h"
 
 #include <memory>
@@ -50,8 +51,8 @@ public:
     Viewport(const Viewport&) = delete;
     Viewport& operator=(const Viewport&) = delete;
 
-    /// `glfwWindow` must have a current OpenGL 3.3+ context.
-    bool Init(void* glfwWindow);
+    /// Renders with the window's OpenGL 3.3+ context, which must be current.
+    bool Init(const NativeGlSurface& surface);
 
     /// Size of the scene area in logical pixels and the framebuffer scale.
     void SetSize(double width, double height, double pixelScale);

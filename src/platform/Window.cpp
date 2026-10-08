@@ -3,6 +3,17 @@
 #include "core/Log.h"
 
 #include <GLFW/glfw3.h>
+#if defined(_WIN32)
+#define GLFW_EXPOSE_NATIVE_WIN32
+#define GLFW_EXPOSE_NATIVE_WGL
+#elif defined(__APPLE__)
+#define GLFW_EXPOSE_NATIVE_COCOA
+#define GLFW_EXPOSE_NATIVE_NSGL
+#else
+#define GLFW_EXPOSE_NATIVE_X11
+#define GLFW_EXPOSE_NATIVE_GLX
+#endif
+#include <GLFW/glfw3native.h>
 
 namespace bz::platform {
 namespace {
@@ -10,6 +21,23 @@ namespace {
 void OnGlfwError(int code, const char* message) { log::Error("GLFW {}: {}", code, message); }
 
 } // namespace
+
+NativeGlSurface Window::NativeSurface() const {
+    NativeGlSurface surface;
+    if (!myWindow) return surface;
+#if defined(_WIN32)
+    surface.window = reinterpret_cast<std::uintptr_t>(glfwGetWin32Window(myWindow));
+    surface.glContext = glfwGetWGLContext(myWindow);
+#elif defined(__APPLE__)
+    // In C++ (not Objective-C) GLFW declares these as plain pointers.
+    surface.window = reinterpret_cast<std::uintptr_t>(glfwGetCocoaWindow(myWindow));
+    surface.glContext = glfwGetNSGLContext(myWindow);
+#else
+    surface.window = static_cast<std::uintptr_t>(glfwGetX11Window(myWindow));
+    surface.glContext = glfwGetGLXContext(myWindow);
+#endif
+    return surface;
+}
 
 Window::~Window() {
     if (myWindow) glfwDestroyWindow(myWindow);
