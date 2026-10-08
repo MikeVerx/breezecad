@@ -2,7 +2,7 @@
 // Sketch -> OCCT: edges in model space and the closed regions they bound.
 
 #include "core/Expected.h"
-#include "document/ExtrudeFeature.h"
+#include "document/SketchSolidFeature.h"
 #include "document/SketchFeature.h"
 #include "kernel/Model.h"
 

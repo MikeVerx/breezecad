@@ -3,9 +3,11 @@
 #include "core/Log.h"
 #include "document/ExtrudeFeature.h"
 #include "document/Recompute.h"
+#include "document/RevolveFeature.h"
 #include "document/SketchFeature.h"
 #include "kernel/occt/Extrude.h"
 #include "kernel/occt/ModelImpl.h"
+#include "kernel/occt/Revolve.h"
 
 #include <BRepBndLib.hxx>
 #include <BRepGProp.hxx>
@@ -45,8 +47,12 @@ std::string NextBodyName(const std::vector<Body>& bodies) {
     return "Тело" + std::to_string(largest + 1);
 }
 
-void ApplyExtrude(const doc::ExtrudeFeature& f, Model::Impl& impl, std::vector<Body>& bodies,
-                  doc::FeatureStatus& status, const doc::Document& doc) {
+/// Common path of every sketch-to-solid operation: check the sketch, build
+/// the tool solid from the chosen regions with `makeTool`, then add it as a
+/// new body or combine it with the most recent body.
+template <class MakeTool>
+void ApplySketchSolid(const doc::SketchSolidFeature& f, Model::Impl& impl, std::vector<Body>& bodies,
+                      doc::FeatureStatus& status, const doc::Document& doc, MakeTool makeTool) {
     const auto* sketch = doc.FindAs<doc::SketchFeature>(f.sketch);
     const auto profile = impl.sketches.find(f.sketch);
     if (!sketch || profile == impl.sketches.end()) {
@@ -57,14 +63,14 @@ void ApplyExtrude(const doc::ExtrudeFeature& f, Model::Impl& impl, std::vector<B
         status = {FeatureState::Error, "Эскиз операции содержит ошибки"};
         return;
     }
-    if (f.distance.HasError() || f.taper.HasError()) {
-        status = {FeatureState::Error, f.distance.HasError() ? f.distance.error : f.taper.error};
-        return;
-    }
+    for (const Parameter* p : f.Parameters())
+        if (p->HasError()) {
+            status = {FeatureState::Error, p->error};
+            return;
+        }
 
     const std::vector<TopoDS_Face> faces = occt::SelectFaces(profile->second, f.profiles);
-    Expected<TopoDS_Shape> tool =
-        occt::MakeExtrusion(faces, f, profile->second.frame, ThroughAllLength(bodies, profile->second.frame));
+    Expected<TopoDS_Shape> tool = makeTool(faces, *sketch, profile->second.frame);
     if (!tool) {
         status = {FeatureState::Error, tool.GetError().message};
         return;
@@ -142,7 +148,15 @@ void Model::Rebuild(doc::Document& doc) {
                     sk->status = {FeatureState::Error, profile.GetError().message};
                 }
             } else if (auto* ex = dynamic_cast<doc::ExtrudeFeature*>(&f)) {
-                ApplyExtrude(*ex, impl, bodies, ex->status, doc);
+                ApplySketchSolid(*ex, impl, bodies, ex->status, doc,
+                                 [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature&, const Frame& frame) {
+                                     return occt::MakeExtrusion(faces, *ex, frame, ThroughAllLength(bodies, frame));
+                                 });
+            } else if (auto* rev = dynamic_cast<doc::RevolveFeature*>(&f)) {
+                ApplySketchSolid(*rev, impl, bodies, rev->status, doc,
+                                 [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature& sk, const Frame& frame) {
+                                     return occt::MakeRevolution(faces, *rev, sk.sketch, frame);
+                                 });
             } else if (f.status.state == FeatureState::NotComputed) {
                 f.status = {FeatureState::Error, "Операция этого типа не поддерживается"};
             }

@@ -1,6 +1,7 @@
 #include "document/FeatureRegistry.h"
 
 #include "document/ExtrudeFeature.h"
+#include "document/RevolveFeature.h"
 #include "document/SketchFeature.h"
 
 namespace bz::doc {
@@ -10,6 +11,7 @@ FeatureRegistry& FeatureRegistry::Default() {
         FeatureRegistry r;
         r.Register(std::string(SketchFeature::kType), [] { return std::make_unique<SketchFeature>(); });
         r.Register(std::string(ExtrudeFeature::kType), [] { return std::make_unique<ExtrudeFeature>(); });
+        r.Register(std::string(RevolveFeature::kType), [] { return std::make_unique<RevolveFeature>(); });
         return r;
     }();
     return registry;

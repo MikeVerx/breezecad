@@ -2,6 +2,7 @@ add_library(bz_kernel STATIC
     Model.cpp
     occt/Export.cpp
     occt/Extrude.cpp
+    occt/Revolve.cpp
     occt/SketchGeometry.cpp)
 target_link_libraries(bz_kernel
     PUBLIC  bz::document bz::occt_modeling

@@ -4,6 +4,7 @@
 #include "document/Document.h"
 #include "document/ExtrudeFeature.h"
 #include "document/Origin.h"
+#include "document/RevolveFeature.h"
 #include "document/SketchFeature.h"
 
 #include <string>
@@ -49,6 +50,22 @@ inline doc::ExtrudeFeature& AddExtrude(doc::Document& d, ObjectId sketch, const 
     ex->distance.expression = distance;
     auto* raw = ex.get();
     d.Insert(std::move(ex), d.FeatureCount());
+    return *raw;
+}
+
+inline doc::RevolveFeature& AddRevolve(doc::Document& d, ObjectId sketch, doc::RevolveAxis axis,
+                                       doc::RevolveExtent extent = doc::RevolveExtent::Full,
+                                       const std::string& angle = "90") {
+    auto rev = std::make_unique<doc::RevolveFeature>();
+    rev->id = d.Ids().Next();
+    rev->name = d.UniqueFeatureName("Вращение");
+    rev->sketch = sketch;
+    rev->axis = axis;
+    rev->extent = extent;
+    rev->angle.name = d.NextParameterName();
+    rev->angle.expression = angle;
+    auto* raw = rev.get();
+    d.Insert(std::move(rev), d.FeatureCount());
     return *raw;
 }
 

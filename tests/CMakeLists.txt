@@ -3,6 +3,7 @@ add_executable(bz_tests
     core/ExpressionTests.cpp
     document/DocumentTests.cpp
     kernel/ModelTests.cpp
+    kernel/RevolveTests.cpp
     sketch/SolverTests.cpp)
 target_link_libraries(bz_tests PRIVATE bz::core bz::sketch bz::document bz::kernel bz::doctest)
 bz_set_warnings(bz_tests)

@@ -82,8 +82,9 @@ protected:
 };
 
 /// Clones a concrete feature type with its exact type preserved.
-template <class Derived>
-class FeatureBase : public Feature {
+/// `Base` is Feature or an intermediate kind such as SketchSolidFeature.
+template <class Derived, class Base = Feature>
+class FeatureBase : public Base {
 public:
     std::unique_ptr<Feature> Clone() const override {
         return std::make_unique<Derived>(static_cast<const Derived&>(*this));
