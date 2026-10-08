@@ -37,6 +37,8 @@ public:
     /// Changes since the last save (or since the document was opened).
     bool IsModified() const { return myPosition != mySavedPosition; }
     void MarkSaved() { mySavedPosition = myPosition; }
+    /// The document differs from any saved file (e.g. recovered from autosave).
+    void MarkUnsaved() { mySavedPosition = kNever; }
     void Clear();
 
 private:
@@ -70,6 +72,12 @@ std::unique_ptr<Command> SetEndMarker(const Document& doc, std::size_t index);
 
 /// Replaces the whole variables table.
 std::unique_ptr<Command> SetVariables(std::vector<Parameter> variables);
+
+/// Changes the document's display units (values stay the same physically).
+std::unique_ptr<Command> SetUnits(UnitSystem units);
+
+/// Changes the part's name, designation or material.
+std::unique_ptr<Command> SetPartInfo(PartInfo info);
 
 /// Several commands as one undo step.
 std::unique_ptr<Command> Group(std::string label, std::vector<std::unique_ptr<Command>> commands);

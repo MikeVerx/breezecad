@@ -204,4 +204,23 @@ void Sketch::MergePoints(ObjectId from, ObjectId into) {
         EraseIf(points, [from](const Point& pt) { return pt.id == from; });
 }
 
+Box2 Sketch::Extents() const {
+    Box2 box;
+    for (const Point& p : points)
+        if (!p.isOrigin) box.Include(p.pos);
+    for (const Circle& c : circles) box.Include(PositionOf(c.center), c.radius);
+    for (const Arc& a : arcs) box.Include(PositionOf(a.center), RadiusOf(a.id));
+    return box;
+}
+
+void Sketch::ScaleAbout(Vec2 center, double factor) {
+    for (Point& p : points)
+        if (!p.isOrigin) p.pos = center + (p.pos - center) * factor;
+    for (Circle& c : circles) c.radius *= factor;
+    for (Constraint& c : constraints) {
+        if (c.type == ConstraintType::Fix) c.fixedAt = center + (c.fixedAt - center) * factor;
+        c.labelOffset = c.labelOffset * factor;
+    }
+}
+
 } // namespace bz::sketch

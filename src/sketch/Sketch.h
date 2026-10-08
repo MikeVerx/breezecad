@@ -141,6 +141,14 @@ public:
 
     bool IsEmpty() const { return lines.empty() && circles.empty() && arcs.empty(); }
 
+    /// Box around all curves and points (empty for an empty sketch).
+    /// Circles count with their full extent; arcs too, which is a bit generous.
+    Box2 Extents() const;
+
+    /// Scales the whole sketch about `center`: points, radii, fixed positions
+    /// and dimension label offsets. Dimension values are not touched.
+    void ScaleAbout(Vec2 center, double factor);
+
 private:
     bool IsPointUsed(ObjectId pointId) const;
     void RemoveConstraintsReferencing(ObjectId id);

@@ -144,6 +144,7 @@ TEST_CASE("end marker follows inserts and moves") {
 TEST_CASE("json round trip keeps the recipe") {
     Plate plate;
     plate.doc.units.length = LengthUnit::Inch;
+    plate.doc.info = {"Плита", "БРЗ.001", "Сталь 20"};
     plate.doc.Find(plate.extrudeId)->suppressed = true;
     const std::string text = DocumentToJson(plate.doc);
 
@@ -152,6 +153,7 @@ TEST_CASE("json round trip keeps the recipe") {
     REQUIRE(loaded.HasValue());
     CHECK(report.warnings.empty());
     CHECK(loaded->units.length == LengthUnit::Inch);
+    CHECK(loaded->info == PartInfo{"Плита", "БРЗ.001", "Сталь 20"});
     CHECK(loaded->FeatureCount() == 2);
     CHECK(loaded->variables.size() == 1);
     const auto* sk = loaded->FindAs<SketchFeature>(plate.sketchId);

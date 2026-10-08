@@ -251,10 +251,16 @@ SolveResult Solve(Sketch& sketch, const SolveOptions& options) {
     SolveResult result;
 
     EquationSystem sys(sketch);
-    if (options.drag) sys.Pin(options.drag->point, options.drag->target);
+    for (const Drag& d : options.drags) sys.Pin(d.point, d.target);
     bool ok = Iterate(sys, options.maxIterations);
 
-    if (!ok && options.drag) {
+    if (!ok && options.drags.size() > 1) {
+        // The whole group cannot move there; try moving just the grabbed point.
+        sys = EquationSystem(sketch);
+        sys.Pin(options.drags.front().point, options.drags.front().target);
+        ok = Iterate(sys, options.maxIterations);
+    }
+    if (!ok && !options.drags.empty()) {
         // The dragged point cannot go there; keep the sketch consistent instead.
         sys = EquationSystem(sketch);
         ok = Iterate(sys, options.maxIterations);

@@ -152,7 +152,7 @@ TEST_CASE("dragging moves the dragged point and keeps constraints") {
     r.sk.AddConstraint(r.ids, Geo(ConstraintType::Coincident, r.p[0], r.origin));
     REQUIRE(Solve(r.sk).converged);
 
-    const SolveResult res = Solve(r.sk, {.drag = Drag{r.p[2], {80, 50}}});
+    const SolveResult res = Solve(r.sk, {.drags = {Drag{r.p[2], {80, 50}}}});
     REQUIRE(res.converged);
     CHECK(Near(r.sk.PositionOf(r.p[2]), {80, 50}));
     CHECK(Near(r.sk.PositionOf(r.p[0]), {0, 0}));
@@ -167,7 +167,7 @@ TEST_CASE("dragging a fully defined point does not break the sketch") {
     r.sk.AddConstraint(r.ids, Dim(ConstraintType::Length, 40.0, r.l[1]));
     REQUIRE(Solve(r.sk).converged);
 
-    const SolveResult res = Solve(r.sk, {.drag = Drag{r.p[2], {90, 90}}});
+    const SolveResult res = Solve(r.sk, {.drags = {Drag{r.p[2], {90, 90}}}});
     REQUIRE(res.converged);
     CHECK(Near(r.sk.PositionOf(r.p[2]), {60, 40}));
 }
@@ -197,4 +197,26 @@ TEST_CASE("merging points reconnects curves") {
     sk.MergePoints(c, b);
     CHECK(sk.FindPoint(c) == nullptr);
     CHECK(sk.FindLine(second)->start == b);
+}
+
+TEST_CASE("extents cover curves, scaling keeps the shape") {
+    Sketch sk;
+    IdGenerator ids;
+    sk.EnsureOrigin(ids);
+    CHECK(sk.Extents().IsEmpty());
+    const ObjectId a = sk.AddPoint(ids, {2, 1});
+    const ObjectId b = sk.AddPoint(ids, {12, 1});
+    sk.AddLine(ids, a, b);
+    const ObjectId centre = sk.AddPoint(ids, {20, 5});
+    const ObjectId circle = sk.AddCircle(ids, centre, 3);
+
+    Box2 box = sk.Extents();
+    CHECK(Near(box.min, {2, 1}));
+    CHECK(Near(box.max, {23, 8}));
+
+    sk.ScaleAbout({0, 0}, 2.0);
+    CHECK(Near(sk.PositionOf(a), {4, 2}));
+    CHECK(Near(sk.PositionOf(b), {24, 2}));
+    CHECK(sk.RadiusOf(circle) == doctest::Approx(6.0));
+    CHECK(Near(sk.Origin()->pos, {0, 0}));
 }

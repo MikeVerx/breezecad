@@ -15,6 +15,7 @@ add_subdirectory(document)
 add_subdirectory(kernel)
 
 if(BZ_BUILD_APP)
+    add_subdirectory(platform)
     add_subdirectory(render)
     add_subdirectory(ui)
     add_subdirectory(app)

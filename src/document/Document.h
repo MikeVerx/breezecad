@@ -13,6 +13,15 @@
 
 namespace bz::doc {
 
+/// Descriptive properties of a part (the "Свойства" tab).
+struct PartInfo {
+    std::string name;          ///< "Кронштейн"; empty = use the file name
+    std::string designation;   ///< drawing number, e.g. "БРЗ.001.002"
+    std::string material;      ///< free text for now, e.g. "Сталь 20"
+
+    bool operator==(const PartInfo&) const = default;
+};
+
 /// A part: an ordered list of features (the recipe) plus user variables.
 ///
 /// Editing goes through commands (Commands.h) so it can be undone; the
@@ -25,6 +34,7 @@ public:
     Document(const Document&) = delete;
     Document& operator=(const Document&) = delete;
 
+    PartInfo               info;
     UnitSystem             units;
     std::vector<Parameter> variables;   ///< the user variables table
 

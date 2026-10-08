@@ -71,6 +71,7 @@ std::string DocumentToJson(const Document& doc) {
     }
 
     Json root{
+        {"part", {{"name", doc.info.name}, {"designation", doc.info.designation}, {"material", doc.info.material}}},
         {"units", {{"length", ToId(doc.units.length)}, {"angle", ToId(doc.units.angle)}}},
         {"nextId", doc.Ids().Last() + 1},
         {"variables", std::move(variables)},
@@ -85,6 +86,11 @@ Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
     if (root.is_discarded() || !root.is_object()) return Error{"Содержимое документа повреждено (не JSON)"};
 
     Document doc;
+    if (const auto part = root.find("part"); part != root.end() && part->is_object()) {
+        doc.info.name        = part->value("name", "");
+        doc.info.designation = part->value("designation", "");
+        doc.info.material    = part->value("material", "");
+    }
     if (const auto units = root.find("units"); units != root.end()) {
         if (auto l = LengthUnitFromId(units->value("length", "mm"))) doc.units.length = *l;
         if (auto a = AngleUnitFromId(units->value("angle", "deg"))) doc.units.angle = *a;

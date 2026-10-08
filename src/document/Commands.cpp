@@ -137,6 +137,35 @@ private:
     std::vector<Parameter> myOther;
 };
 
+class SetUnitsCommand final : public Command {
+public:
+    explicit SetUnitsCommand(UnitSystem other) : myOther(other) {}
+
+    std::string Label() const override { return "Единицы измерения"; }
+    void Do(Document& doc) override { Swap(doc); }
+    void Undo(Document& doc) override { Swap(doc); }
+
+private:
+    void Swap(Document& doc) {
+        std::swap(doc.units, myOther);
+        doc.MarkChanged(0);   // plain numbers in expressions now mean other units
+    }
+
+    UnitSystem myOther;
+};
+
+class SetPartInfoCommand final : public Command {
+public:
+    explicit SetPartInfoCommand(PartInfo other) : myOther(std::move(other)) {}
+
+    std::string Label() const override { return "Свойства детали"; }
+    void Do(Document& doc) override { std::swap(doc.info, myOther); }
+    void Undo(Document& doc) override { std::swap(doc.info, myOther); }
+
+private:
+    PartInfo myOther;
+};
+
 class GroupCommand final : public Command {
 public:
     GroupCommand(std::string label, std::vector<std::unique_ptr<Command>> commands)
@@ -185,6 +214,14 @@ std::unique_ptr<Command> SetEndMarker(const Document& doc, std::size_t index) {
 
 std::unique_ptr<Command> SetVariables(std::vector<Parameter> variables) {
     return std::make_unique<SetVariablesCommand>(std::move(variables));
+}
+
+std::unique_ptr<Command> SetUnits(UnitSystem units) {
+    return std::make_unique<SetUnitsCommand>(units);
+}
+
+std::unique_ptr<Command> SetPartInfo(PartInfo info) {
+    return std::make_unique<SetPartInfoCommand>(std::move(info));
 }
 
 std::unique_ptr<Command> Group(std::string label, std::vector<std::unique_ptr<Command>> commands) {

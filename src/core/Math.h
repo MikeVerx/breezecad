@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 
 namespace bz {
@@ -47,6 +48,39 @@ struct Vec3 {
     Vec3 Normalized() const {
         const double len = Length();
         return len > 0.0 ? *this * (1.0 / len) : Vec3{};
+    }
+};
+
+/// Axis-aligned 2D box. Starts empty; Include() grows it.
+struct Box2 {
+    Vec2 min{1e300, 1e300};
+    Vec2 max{-1e300, -1e300};
+
+    bool IsEmpty() const { return min.x > max.x; }
+    void Include(Vec2 p) {
+        min = {std::min(min.x, p.x), std::min(min.y, p.y)};
+        max = {std::max(max.x, p.x), std::max(max.y, p.y)};
+    }
+    void Include(Vec2 center, double radius) {
+        Include(center - Vec2{radius, radius});
+        Include(center + Vec2{radius, radius});
+    }
+};
+
+/// Axis-aligned 3D box. Starts empty; Include() grows it.
+struct Box3 {
+    Vec3 min{1e300, 1e300, 1e300};
+    Vec3 max{-1e300, -1e300, -1e300};
+
+    bool IsEmpty() const { return min.x > max.x; }
+    void Include(Vec3 p) {
+        min = {std::min(min.x, p.x), std::min(min.y, p.y), std::min(min.z, p.z)};
+        max = {std::max(max.x, p.x), std::max(max.y, p.y), std::max(max.z, p.z)};
+    }
+    void Include(const Box3& b) {
+        if (b.IsEmpty()) return;
+        Include(b.min);
+        Include(b.max);
     }
 };
 

@@ -36,9 +36,10 @@ if(BZ_BUILD_APP)
         ${IMGUI_DIR}/imgui_draw.cpp
         ${IMGUI_DIR}/imgui_tables.cpp
         ${IMGUI_DIR}/imgui_widgets.cpp
+        ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp
         ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
         ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
-    target_include_directories(bz_imgui SYSTEM PUBLIC ${IMGUI_DIR} ${IMGUI_DIR}/backends)
+    target_include_directories(bz_imgui SYSTEM PUBLIC ${IMGUI_DIR} ${IMGUI_DIR}/backends ${IMGUI_DIR}/misc/cpp)
     target_compile_definitions(bz_imgui PUBLIC IMGUI_DISABLE_OBSOLETE_FUNCTIONS)
     target_link_libraries(bz_imgui PUBLIC glfw OpenGL::GL)
     add_library(bz::imgui ALIAS bz_imgui)

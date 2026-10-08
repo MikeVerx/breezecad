@@ -16,7 +16,9 @@ struct Drag {
 };
 
 struct SolveOptions {
-    std::optional<Drag> drag;
+    /// Points being dragged. Several points move together (dragging a
+    /// whole line); if that is impossible only the first one is tried.
+    std::vector<Drag> drags;
     int                 maxIterations = 60;
 };
 
