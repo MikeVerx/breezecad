@@ -1,0 +1,86 @@
+# Builds and tests BreezeCAD on Windows, macOS and Linux.
+# The Windows job also publishes a ready-to-run archive (exe + DLLs + assets)
+# as a workflow artifact: Actions → the run → Artifacts → BreezeCAD-windows.
+name: build
+
+on:
+  push:
+    branches: [next, main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-glfw
+            mingw-w64-x86_64-opencascade
+            mingw-w64-x86_64-binutils
+            zip
+      - name: Versions
+        run: |
+          g++ --version | head -1
+          cmake --version | head -1
+          grep -h "define OCC_VERSION_COMPLETE" /mingw64/include/opencascade/Standard_Version.hxx
+      - name: Configure
+        run: OCCT_DIR=/mingw64/lib/cmake/opencascade cmake --preset windows-mingw
+      - name: Build
+        run: cmake --build --preset windows-mingw
+      - name: Test
+        run: ctest --preset windows-mingw
+      - name: Package
+        run: |
+          mkdir -p dist/BreezeCAD
+          cp -r build/windows-mingw/bin/breezecad.exe build/windows-mingw/bin/assets dist/BreezeCAD/
+          bash scripts/deploy-runtime.sh dist/BreezeCAD breezecad.exe /mingw64/bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BreezeCAD-windows
+          path: dist/BreezeCAD
+          retention-days: 30
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: brew install ninja glfw opencascade
+      - name: Configure
+        run: cmake --preset macos -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+      - name: Build
+        run: cmake --build --preset macos
+      - name: Test
+        run: ctest --preset macos
+
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build libglfw3-dev libgl1-mesa-dev \
+            libocct-foundation-dev libocct-modeling-data-dev libocct-modeling-algorithms-dev \
+            libocct-visualization-dev libocct-data-exchange-dev libocct-ocaf-dev
+      - name: Configure
+        run: cmake --preset linux-release
+      - name: Build
+        run: cmake --build --preset linux-release
+      - name: Test
+        run: ctest --preset linux-release

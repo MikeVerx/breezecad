@@ -8,6 +8,9 @@ message(STATUS "OpenCASCADE ${OpenCASCADE_VERSION}: ${OpenCASCADE_INCLUDE_DIR}")
 # Modeling: everything the geometry kernel needs, no visualization.
 add_library(bz_occt_modeling INTERFACE)
 target_include_directories(bz_occt_modeling SYSTEM INTERFACE ${OpenCASCADE_INCLUDE_DIR})
+# OCCT headers use M_PI. With strict C++20 (no GNU extensions) MinGW and MSVC
+# declare it only when _USE_MATH_DEFINES is set; OCCT's own build sets it too.
+target_compile_definitions(bz_occt_modeling INTERFACE _USE_MATH_DEFINES)
 target_link_libraries(bz_occt_modeling INTERFACE
     TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep TKGeomAlgo TKTopAlgo
     TKPrim TKBO TKBool TKFeat TKFillet TKOffset TKShHealing TKMesh)
