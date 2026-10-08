@@ -1,5 +1,6 @@
 #include "document/FeatureRegistry.h"
 
+#include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/RevolveFeature.h"
 #include "document/SketchFeature.h"
@@ -12,6 +13,8 @@ FeatureRegistry& FeatureRegistry::Default() {
         r.Register(std::string(SketchFeature::kType), [] { return std::make_unique<SketchFeature>(); });
         r.Register(std::string(ExtrudeFeature::kType), [] { return std::make_unique<ExtrudeFeature>(); });
         r.Register(std::string(RevolveFeature::kType), [] { return std::make_unique<RevolveFeature>(); });
+        r.Register(std::string(FilletFeature::kType), [] { return std::make_unique<FilletFeature>(); });
+        r.Register(std::string(ChamferFeature::kType), [] { return std::make_unique<ChamferFeature>(); });
         return r;
     }();
     return registry;

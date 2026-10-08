@@ -2,6 +2,7 @@ add_library(bz_document STATIC
     BzcFile.cpp
     Commands.cpp
     Document.cpp
+    EdgeFeature.cpp
     ExtrudeFeature.cpp
     FeatureRegistry.cpp
     JsonIO.cpp

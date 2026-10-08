@@ -1,11 +1,14 @@
 #include "kernel/Model.h"
 
 #include "core/Log.h"
+#include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/Recompute.h"
 #include "document/RevolveFeature.h"
 #include "document/SketchFeature.h"
+#include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Extrude.h"
+#include "kernel/occt/Fillet.h"
 #include "kernel/occt/ModelImpl.h"
 #include "kernel/occt/Revolve.h"
 
@@ -97,6 +100,41 @@ void ApplySketchSolid(const doc::SketchSolidFeature& f, Model::Impl& impl, std::
     status = {FeatureState::Ok, {}};
 }
 
+/// Fillet and chamfer: find the referenced edges on the most recent body
+/// and modify it. Edges that no longer exist are reported, not fatal while
+/// at least one is still there.
+template <class MakeShape>
+void ApplyEdgeFeature(const doc::EdgeFeature& f, std::vector<Body>& bodies, doc::FeatureStatus& status, MakeShape make) {
+    if (bodies.empty()) {
+        status = {FeatureState::Error, "Нет тела, к которому применить операцию"};
+        return;
+    }
+    for (const Parameter* p : f.Parameters())
+        if (p->HasError()) {
+            status = {FeatureState::Error, p->error};
+            return;
+        }
+    Body& target = bodies.back();
+    std::vector<TopoDS_Edge> edges;
+    std::size_t lost = 0;
+    for (const auto& edge : occt::ResolveEdges(f.edges, target.shape)) {
+        if (edge) edges.push_back(*edge);
+        else ++lost;
+    }
+    if (edges.empty() && !f.edges.empty()) {
+        status = {FeatureState::Error, "Рёбра операции не найдены: модель изменилась слишком сильно"};
+        return;
+    }
+    Expected<TopoDS_Shape> result = make(target.shape, edges);
+    if (!result) {
+        status = {FeatureState::Error, result.GetError().message};
+        return;
+    }
+    target.shape = *result;
+    status = lost == 0 ? doc::FeatureStatus{FeatureState::Ok, {}}
+                       : doc::FeatureStatus{FeatureState::Warning, "Не найдено рёбер: " + std::to_string(lost)};
+}
+
 /// OCCT prints progress reports (STEP statistics...) to stdout; keep only
 /// warnings and errors, our own log covers the rest.
 void QuietOcctMessages() {
@@ -157,6 +195,14 @@ void Model::Rebuild(doc::Document& doc) {
                                  [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature& sk, const Frame& frame) {
                                      return occt::MakeRevolution(faces, *rev, sk.sketch, frame);
                                  });
+            } else if (auto* fillet = dynamic_cast<doc::FilletFeature*>(&f)) {
+                ApplyEdgeFeature(*fillet, bodies, fillet->status, [&](const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges) {
+                    return occt::MakeFillet(body, edges, fillet->radius.value);
+                });
+            } else if (auto* chamfer = dynamic_cast<doc::ChamferFeature*>(&f)) {
+                ApplyEdgeFeature(*chamfer, bodies, chamfer->status, [&](const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges) {
+                    return occt::MakeChamfer(body, edges, chamfer->distance.value);
+                });
             } else if (f.status.state == FeatureState::NotComputed) {
                 f.status = {FeatureState::Error, "Операция этого типа не поддерживается"};
             }

@@ -1,7 +1,9 @@
 add_library(bz_kernel STATIC
     Model.cpp
+    occt/EdgeMatch.cpp
     occt/Export.cpp
     occt/Extrude.cpp
+    occt/Fillet.cpp
     occt/Revolve.cpp
     occt/SketchGeometry.cpp)
 target_link_libraries(bz_kernel

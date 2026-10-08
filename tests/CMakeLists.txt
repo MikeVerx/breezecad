@@ -2,6 +2,7 @@ add_executable(bz_tests
     main.cpp
     core/ExpressionTests.cpp
     document/DocumentTests.cpp
+    kernel/FilletTests.cpp
     kernel/ModelTests.cpp
     kernel/RevolveTests.cpp
     sketch/SolverTests.cpp)
