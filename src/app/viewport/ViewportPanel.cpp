@@ -41,9 +41,14 @@ std::optional<double> HitPlane(const ViewportFrame& vf, ImVec2 mouse, const Fram
     return t;
 }
 
-void DrawPlane(AppContext& app, ImDrawList* dl, const ViewportFrame& vf, ObjectId id, double half, bool hot) {
+void DrawPlane(AppContext& app, ImDrawList* dl, const ViewportFrame& vf, ObjectId id, double half, bool hot,
+               bool faint = false) {
     const Frame frame = *doc::origin::PlaneFrame(id);
-    const ui::ThemeColors& c = app.ui.C();
+    ui::ThemeColors c = app.ui.C();
+    if (faint) {
+        c.planeFill = c.planeFill.WithAlpha(c.planeFill.a * 0.35f);
+        c.planeEdge = c.planeEdge.WithAlpha(c.planeEdge.a * 0.45f);
+    }
     const ImVec2 q[4] = {vf.Project(frame.ToWorld({-half, -half})), vf.Project(frame.ToWorld({half, -half})),
                          vf.Project(frame.ToWorld({half, half})), vf.Project(frame.ToWorld({-half, half}))};
     dl->AddConvexPolyFilled(q, 4, ui::ToU32(hot ? c.regionFill : c.planeFill));
@@ -65,16 +70,16 @@ void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDra
                 hotDistance = *t;
                 hotPlane = id;
             }
-    // A model face in front of the planes wins.
+    // A flat face of the model under the cursor wins over the origin planes,
+    // even where a plane sticks out in front of it: pointing at the body
+    // means the body (as in Inventor).
     std::optional<render::PickResult> face;
     if (vf.hovered) face = app.viewport.Pick(vf.ToLocal(mouse));
-    if (face && face->plane) {
-        Vec3 origin, dir;
-        vf.projection.Unproject(vf.ToLocal(mouse), origin, dir);
-        if ((face->point - origin).Length() < hotDistance) hotPlane = {};
-    }
+    if (face && face->plane) hotPlane = {};
+    // With a body in the part the planes step back, so the body stays readable.
+    const bool faint = !session.model.Bodies().empty();
     for (ObjectId id : {doc::origin::kPlaneXY, doc::origin::kPlaneXZ, doc::origin::kPlaneYZ})
-        DrawPlane(app, dl, vf, id, half, id == hotPlane);
+        DrawPlane(app, dl, vf, id, half, id == hotPlane, faint && id != hotPlane);
 
     // Prompt at the top of the viewport.
     const char* prompt = "Выберите плоскость или плоскую грань для эскиза";

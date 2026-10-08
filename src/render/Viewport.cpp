@@ -251,7 +251,7 @@ bool Viewport::Init(const NativeGlSurface& surface) {
         Handle(Prs3d_Drawer) s = m.context->HighlightStyle(type);
         s->SetColor(ToQuantity(m.colors.hover));
         s->SetDisplayMode(AIS_Shaded);
-        s->SetTransparency(0.35f);
+        s->SetTransparency(0.6f);   // a soft tint: the body colour shows through
         // A hovered edge (fillet, chamfer) is drawn thick enough to see.
         const Handle(Prs3d_LineAspect) thick = new Prs3d_LineAspect(ToQuantity(m.colors.hover), Aspect_TOL_SOLID, 3.5);
         s->SetWireAspect(thick);
