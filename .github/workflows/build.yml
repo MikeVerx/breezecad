@@ -41,15 +41,21 @@ jobs:
       - name: Configure
         run: OCCT_DIR=/mingw64/lib/cmake/opencascade cmake --preset windows-mingw
       - name: Build
-        run: cmake --build --preset windows-mingw
+        id: build
+        run: cmake --build --preset windows-mingw 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Test
-        run: ctest --preset windows-mingw
+        run: ctest --preset windows-mingw 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+      - name: Report failures
+        if: failure()
+        run: bash scripts/ci-annotate.sh build.log test.log
       - name: Package
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: |
           mkdir -p dist/BreezeCAD
           cp -r build/windows-mingw/bin/breezecad.exe build/windows-mingw/bin/assets dist/BreezeCAD/
           bash scripts/deploy-runtime.sh dist/BreezeCAD breezecad.exe /mingw64/bin
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         with:
           name: BreezeCAD-windows
           path: dist/BreezeCAD
@@ -64,9 +70,12 @@ jobs:
       - name: Configure
         run: cmake --preset macos -DCMAKE_PREFIX_PATH="$(brew --prefix)"
       - name: Build
-        run: cmake --build --preset macos
+        run: cmake --build --preset macos 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Test
-        run: ctest --preset macos
+        run: ctest --preset macos 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+      - name: Report failures
+        if: failure()
+        run: bash scripts/ci-annotate.sh build.log test.log
 
   linux:
     runs-on: ubuntu-24.04
@@ -77,10 +86,14 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ninja-build libglfw3-dev libgl1-mesa-dev \
             libocct-foundation-dev libocct-modeling-data-dev libocct-modeling-algorithms-dev \
-            libocct-visualization-dev libocct-data-exchange-dev libocct-ocaf-dev
+            libocct-visualization-dev libocct-data-exchange-dev libocct-ocaf-dev \
+            libfreetype-dev libfontconfig1-dev
       - name: Configure
         run: cmake --preset linux-release
       - name: Build
-        run: cmake --build --preset linux-release
+        run: cmake --build --preset linux-release 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Test
-        run: ctest --preset linux-release
+        run: ctest --preset linux-release 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+      - name: Report failures
+        if: failure()
+        run: bash scripts/ci-annotate.sh build.log test.log
