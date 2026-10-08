@@ -11,7 +11,8 @@
 
 add_subdirectory(core)
 add_subdirectory(sketch)
-# document, kernel: added as they are written
+add_subdirectory(document)
+# kernel: added next
 
 if(BZ_BUILD_APP)
     add_subdirectory(render)
