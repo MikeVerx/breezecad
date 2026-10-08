@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <!-- Плоскость (вид справа) -->
-  <rect x="3" y="3" width="4" height="18" rx="0.5" fill="currentColor" opacity="0.25"/>
-  <rect x="3" y="3" width="4" height="18" rx="0.5"/>
-  <!-- Стрелка справа налево -->
-  <line x1="21" y1="12" x2="10" y2="12"/>
-  <path d="M 14 8 L 10 12 L 14 16"/>
-</svg>

@@ -1,0 +1,207 @@
+#include "sketch/Sketch.h"
+
+#include <algorithm>
+
+namespace bz::sketch {
+namespace {
+
+template <class T>
+T* FindIn(std::vector<T>& items, ObjectId id) {
+    for (auto& item : items)
+        if (item.id == id) return &item;
+    return nullptr;
+}
+
+template <class T>
+const T* FindIn(const std::vector<T>& items, ObjectId id) {
+    for (const auto& item : items)
+        if (item.id == id) return &item;
+    return nullptr;
+}
+
+template <class T, class Pred>
+void EraseIf(std::vector<T>& items, Pred pred) {
+    items.erase(std::remove_if(items.begin(), items.end(), pred), items.end());
+}
+
+} // namespace
+
+bool IsDimensional(ConstraintType type) {
+    switch (type) {
+        case ConstraintType::Distance:
+        case ConstraintType::DistanceX:
+        case ConstraintType::DistanceY:
+        case ConstraintType::Length:
+        case ConstraintType::PointLineDistance:
+        case ConstraintType::Radius:
+        case ConstraintType::Diameter:
+        case ConstraintType::Angle:
+            return true;
+        default:
+            return false;
+    }
+}
+
+ObjectId Sketch::AddPoint(IdGenerator& ids, Vec2 pos) {
+    const ObjectId id = ids.Next();
+    points.push_back({id, pos, false});
+    return id;
+}
+
+ObjectId Sketch::AddLine(IdGenerator& ids, ObjectId start, ObjectId end, bool construction) {
+    const ObjectId id = ids.Next();
+    lines.push_back({id, start, end, construction});
+    return id;
+}
+
+ObjectId Sketch::AddCircle(IdGenerator& ids, ObjectId center, double radius, bool construction) {
+    const ObjectId id = ids.Next();
+    circles.push_back({id, center, radius, construction});
+    return id;
+}
+
+ObjectId Sketch::AddArc(IdGenerator& ids, ObjectId center, ObjectId start, ObjectId end, bool construction) {
+    const ObjectId id = ids.Next();
+    arcs.push_back({id, center, start, end, construction});
+    return id;
+}
+
+ObjectId Sketch::AddConstraint(IdGenerator& ids, Constraint constraint) {
+    constraint.id = ids.Next();
+    constraints.push_back(std::move(constraint));
+    return constraints.back().id;
+}
+
+ObjectId Sketch::EnsureOrigin(IdGenerator& ids) {
+    if (const Point* origin = Origin()) return origin->id;
+    const ObjectId id = ids.Next();
+    points.push_back({id, {0.0, 0.0}, true});
+    return id;
+}
+
+EntityKind Sketch::KindOf(ObjectId id) const {
+    if (FindIn(points, id))      return EntityKind::Point;
+    if (FindIn(lines, id))       return EntityKind::Line;
+    if (FindIn(circles, id))     return EntityKind::Circle;
+    if (FindIn(arcs, id))        return EntityKind::Arc;
+    if (FindIn(constraints, id)) return EntityKind::Constraint;
+    return EntityKind::None;
+}
+
+Point*            Sketch::FindPoint(ObjectId id)            { return FindIn(points, id); }
+const Point*      Sketch::FindPoint(ObjectId id) const      { return FindIn(points, id); }
+Line*             Sketch::FindLine(ObjectId id)             { return FindIn(lines, id); }
+const Line*       Sketch::FindLine(ObjectId id) const       { return FindIn(lines, id); }
+Circle*           Sketch::FindCircle(ObjectId id)           { return FindIn(circles, id); }
+const Circle*     Sketch::FindCircle(ObjectId id) const     { return FindIn(circles, id); }
+const Arc*        Sketch::FindArc(ObjectId id) const        { return FindIn(arcs, id); }
+Constraint*       Sketch::FindConstraint(ObjectId id)       { return FindIn(constraints, id); }
+const Constraint* Sketch::FindConstraint(ObjectId id) const { return FindIn(constraints, id); }
+
+const Point* Sketch::Origin() const {
+    for (const auto& p : points)
+        if (p.isOrigin) return &p;
+    return nullptr;
+}
+
+Vec2 Sketch::PositionOf(ObjectId pointId) const {
+    const Point* p = FindPoint(pointId);
+    return p ? p->pos : Vec2{};
+}
+
+double Sketch::RadiusOf(ObjectId curveId) const {
+    if (const Circle* c = FindCircle(curveId)) return c->radius;
+    if (const Arc* a = FindArc(curveId)) return (PositionOf(a->start) - PositionOf(a->center)).Length();
+    return 0.0;
+}
+
+bool Sketch::IsPointUsed(ObjectId pointId) const {
+    for (const auto& l : lines)
+        if (l.start == pointId || l.end == pointId) return true;
+    for (const auto& c : circles)
+        if (c.center == pointId) return true;
+    for (const auto& a : arcs)
+        if (a.center == pointId || a.start == pointId || a.end == pointId) return true;
+    return false;
+}
+
+void Sketch::RemoveConstraintsReferencing(ObjectId id) {
+    EraseIf(constraints, [id](const Constraint& c) { return c.refs[0] == id || c.refs[1] == id; });
+}
+
+void Sketch::Remove(ObjectId id) {
+    switch (KindOf(id)) {
+        case EntityKind::None:
+            return;
+        case EntityKind::Constraint:
+            EraseIf(constraints, [id](const Constraint& c) { return c.id == id; });
+            return;
+        case EntityKind::Point: {
+            const Point* p = FindPoint(id);
+            if (p->isOrigin) return;
+            // Curves that use the point go first, they take their constraints.
+            std::vector<ObjectId> curves;
+            for (const auto& l : lines)
+                if (l.start == id || l.end == id) curves.push_back(l.id);
+            for (const auto& c : circles)
+                if (c.center == id) curves.push_back(c.id);
+            for (const auto& a : arcs)
+                if (a.center == id || a.start == id || a.end == id) curves.push_back(a.id);
+            for (ObjectId curve : curves) Remove(curve);
+            RemoveConstraintsReferencing(id);
+            EraseIf(points, [id](const Point& pt) { return pt.id == id; });
+            return;
+        }
+        case EntityKind::Line:
+        case EntityKind::Circle:
+        case EntityKind::Arc: {
+            std::vector<ObjectId> ownPoints;
+            if (const Line* l = FindLine(id)) ownPoints = {l->start, l->end};
+            if (const Circle* c = FindCircle(id)) ownPoints = {c->center};
+            if (const Arc* a = FindArc(id)) ownPoints = {a->center, a->start, a->end};
+
+            RemoveConstraintsReferencing(id);
+            EraseIf(lines, [id](const Line& l) { return l.id == id; });
+            EraseIf(circles, [id](const Circle& c) { return c.id == id; });
+            EraseIf(arcs, [id](const Arc& a) { return a.id == id; });
+
+            for (ObjectId pid : ownPoints) {
+                const Point* p = FindPoint(pid);
+                if (p && !p->isOrigin && !IsPointUsed(pid)) {
+                    RemoveConstraintsReferencing(pid);
+                    EraseIf(points, [pid](const Point& pt) { return pt.id == pid; });
+                }
+            }
+            return;
+        }
+    }
+}
+
+void Sketch::MergePoints(ObjectId from, ObjectId into) {
+    if (from == into) return;
+    const auto remap = [&](ObjectId& ref) {
+        if (ref == from) ref = into;
+    };
+    for (auto& l : lines) {
+        remap(l.start);
+        remap(l.end);
+    }
+    for (auto& c : circles) remap(c.center);
+    for (auto& a : arcs) {
+        remap(a.center);
+        remap(a.start);
+        remap(a.end);
+    }
+    for (auto& c : constraints) {
+        remap(c.refs[0]);
+        remap(c.refs[1]);
+    }
+    // A constraint between a point and itself is now meaningless.
+    EraseIf(constraints, [](const Constraint& c) {
+        return c.type == ConstraintType::Coincident && c.refs[0] == c.refs[1];
+    });
+    if (const Point* p = FindPoint(from); p && !p->isOrigin)
+        EraseIf(points, [from](const Point& pt) { return pt.id == from; });
+}
+
+} // namespace bz::sketch
