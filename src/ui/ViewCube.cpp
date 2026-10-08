@@ -157,7 +157,7 @@ ViewCubeAction DrawViewCube(Ui& ui, const ViewProjection& view, ImVec2 topLeft, 
         dl->AddPolyline(outer, 4, ToU32(c.cubeStroke), ImDrawFlags_Closed, ui.S(1.2f));
 
         // Face label: text drawn flat, then its vertices mapped onto the face.
-        if (f.n.Dot(v) < 0.18) continue;
+        if (f.n.Dot(v) < 0.32) continue;   // too oblique to read
         ImFont* font = ui.fonts.strong;
         const float fs = ui.S(11);
         const ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0, f.text);
