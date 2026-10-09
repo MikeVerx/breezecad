@@ -107,7 +107,7 @@ void SketchEditor::CreateAndEdit(AppContext& app, Session& session, const doc::S
     const ObjectId id = feature->id;
     session.Execute(doc::AddFeature(std::move(feature), session.doc.EndMarker()));
     Edit(app, session, id);
-    myTool = SketchTool::Line;   // a new sketch starts with drawing
+    myTool = SketchTool::Select;   // the user picks the tool
 }
 
 void SketchEditor::Edit(AppContext& app, Session& session, ObjectId sketch) {
@@ -210,13 +210,33 @@ void SketchEditor::ToggleConstruction(Session& session) {
     if (!f || mySelection.empty()) return;
     auto before = f->Clone();
     for (ObjectId id : mySelection) {
-        if (sketch::Line* l = f->sketch.FindLine(id)) l->construction = !l->construction;
+        if (sketch::Line* l = f->sketch.FindLine(id)) {
+            l->construction = !l->construction;
+            l->centerline = false;
+        }
         if (sketch::Circle* c = f->sketch.FindCircle(id)) c->construction = !c->construction;
         for (auto& a : f->sketch.arcs)
             if (a.id == id) a.construction = !a.construction;
     }
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
     session.CommitInPlaceEdit(std::move(before), "Вспомогательная геометрия");
+}
+
+void SketchEditor::ToggleCenterline(Session& session) {
+    doc::SketchFeature* f = Active(session);
+    if (!f || mySelection.empty()) return;
+    // All chosen lines become осевые, unless all already are: then back to normal.
+    bool all = true;
+    for (ObjectId id : mySelection)
+        if (const sketch::Line* l = f->sketch.FindLine(id); l && !l->centerline) all = false;
+    auto before = f->Clone();
+    for (ObjectId id : mySelection)
+        if (sketch::Line* l = f->sketch.FindLine(id); l && !l->projected) {
+            l->centerline = !all;
+            l->construction = false;
+        }
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), "Осевая линия");
 }
 
 // --- per frame ----------------------------------------------------------------

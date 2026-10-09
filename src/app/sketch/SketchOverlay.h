@@ -31,6 +31,10 @@ void DrawSnapMarker(ui::Ui& ui, ImDrawList* dl, ImVec2 at, const Snap& snap);
 /// Dashed lines to the points the snapped position is lined up with.
 void DrawSnapGuides(ui::Ui& ui, ImDrawList* dl, const SketchView& view, const Snap& snap);
 
+enum class LinePattern : unsigned char { Solid, Dashed, DashDot };
+
+void DrawSketchSegment(ui::Ui& ui, ImDrawList* dl, const SketchView& view, Vec2 a, Vec2 b, Color color, float width,
+                       LinePattern pattern);
 void DrawSketchSegment(ui::Ui& ui, ImDrawList* dl, const SketchView& view, Vec2 a, Vec2 b, Color color, float width,
                        bool dashed = false);
 void DrawSketchArc(ui::Ui& ui, ImDrawList* dl, const SketchView& view, Vec2 center, double radius, double a0, double a1,

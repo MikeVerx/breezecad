@@ -103,6 +103,10 @@ void RegisterActions(AppContext& app) {
            "Сделать выбранное вспомогательной геометрией: она не образует контуров (G)",
            [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasSelection(); },
            [&app] { app.sketch.ToggleConstruction(*app.Doc()); }});
+    a.Add({"sketch.centerline", "Осевая", "sk-centerline", 0,
+           "Сделать выбранные отрезки осевыми: ось для вращения и пружины, в контуры не входят",
+           [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasSelection(); },
+           [&app] { app.sketch.ToggleCenterline(*app.Doc()); }});
     const struct {
         SketchTool  tool;
         const char* id;

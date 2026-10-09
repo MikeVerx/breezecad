@@ -98,6 +98,19 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         return;
     }
 
+    // Line type: осевая only for lines, the others take основная / вспомогательная.
+    if (myTool != SketchTool::Move && myTool != SketchTool::Rotate) {
+        const bool lines = myTool == SketchTool::Line;
+        if (!lines && myOptions.style == LineStyle::Centerline) myOptions.style = LineStyle::Normal;
+        ui::FieldLabel(ui, "Тип линии");
+        ImGui::Dummy({0, ui.S(2)});
+        static constexpr std::array<const char*, 3> styles{"Основная", "Вспомогат.", "Осевая"};
+        const int current = static_cast<int>(myOptions.style);
+        const int chosen = ui::Segmented(ui, "line-style", styles, current, 3, inner, lines ? 0 : 0b100);
+        if (chosen != current) myOptions.style = static_cast<LineStyle>(chosen);
+        ImGui::Dummy({0, ui.S(14)});
+    }
+
     // Ways to draw.
     switch (myTool) {
         case SketchTool::Rectangle: {

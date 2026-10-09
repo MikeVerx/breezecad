@@ -32,9 +32,14 @@ enum class RectangleMode : unsigned char { Corners, Centre, ThreePoints };
 enum class CircleMode : unsigned char { CentreRadius, ThreePoints, Polygon };
 enum class ArcMode : unsigned char { CentreEnds, ThreePoints };
 
+/// Line type of what is drawn: основная (makes profiles), вспомогательная
+/// (helps, makes nothing), осевая (an axis for revolve and coil; lines only).
+enum class LineStyle : unsigned char { Normal, Construction, Centerline };
+
 /// The tool panel's settings. Typed sizes lock the cursor while drawing
 /// and become dimensions of what is drawn.
 struct DrawOptions {
+    LineStyle     style = LineStyle::Normal;
     RectangleMode rectangle = RectangleMode::Corners;
     CircleMode    circle = CircleMode::CentreRadius;
     ArcMode       arc = ArcMode::CentreEnds;
@@ -81,6 +86,8 @@ public:
     void Escape(AppContext& app, Session& session);
     void DeleteSelection(Session& session);
     void ToggleConstruction(Session& session);
+    /// Makes the selected lines осевые (or normal again).
+    void ToggleCenterline(Session& session);
     bool HasSelection() const { return !mySelection.empty(); }
 
     /// A drawing tool is active: the left area shows its panel.

@@ -484,6 +484,7 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
     sketch::Sketch& sk = f->sketch;
     IdGenerator& ids = d.Ids();
     const char* label = InfoOf(myTool).label;
+    const std::size_t linesBefore = sk.lines.size(), circlesBefore = sk.circles.size(), arcsBefore = sk.arcs.size();
     std::optional<PointRef> continueFrom;
     std::vector<TypedDimension> dims;
     const auto refuse = [&](const char* why) {
@@ -583,6 +584,15 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
             break;
     }
 
+    // The chosen line type goes to what was drawn (helper lines of a shape,
+    // such as a centred rectangle's diagonal, stay helpers).
+    if (myOptions.style != LineStyle::Normal) {
+        const bool centre = myOptions.style == LineStyle::Centerline;
+        for (std::size_t i = linesBefore; i < sk.lines.size(); ++i)
+            if (!sk.lines[i].construction) (centre ? sk.lines[i].centerline : sk.lines[i].construction) = true;
+        for (std::size_t i = circlesBefore; i < sk.circles.size(); ++i) sk.circles[i].construction = true;
+        for (std::size_t i = arcsBefore; i < sk.arcs.size(); ++i) sk.arcs[i].construction = true;
+    }
     AddTypedDimensions(d, sk, dims);
     if (!sketch::Solve(sk).converged) {
         f->sketch = static_cast<const doc::SketchFeature&>(*before).sketch;

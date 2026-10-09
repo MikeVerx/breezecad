@@ -82,6 +82,26 @@ public:
 
     void EndColumn() { myX = myColumnX + myColumnWidth + myUi.S(2); }
 
+    /// Icon-only buttons in rows of `columns`, as Inventor's constraint grid.
+    void BeginGrid(int columns) {
+        myGridColumns = columns;
+        myGridIndex = 0;
+        myColumnX = myX;
+        myColumnY = myTop + myUi.S(8);
+    }
+
+    void Icon(const char* actionId, bool active = false) {
+        const Action* a = myApp.actions.Find(actionId);
+        const float cell = myUi.S(26);
+        const int col = myGridIndex % myGridColumns, row = myGridIndex / myGridColumns;
+        ImGui::SetCursorScreenPos({myColumnX + static_cast<float>(col) * cell, myColumnY + static_cast<float>(row) * myUi.S(24)});
+        const std::string tip = Tooltip(*a);
+        if (ui::IconButton(myUi, actionId, a->icon, 24, 18, tip.c_str(), a->IsEnabled(), active)) Run(actionId);
+        ++myGridIndex;
+    }
+
+    void EndGrid() { myX = myColumnX + myUi.S(26) * static_cast<float>(myGridColumns) + myUi.S(2); }
+
 private:
     void NextRow() {
         myColumnWidth = std::max(myColumnWidth, ImGui::GetItemRectSize().x);
@@ -107,6 +127,8 @@ private:
     float       myHeight;
     float       myX = 0;
     float       myGroupStart = 0;
+    int         myGridColumns = 1;
+    int         myGridIndex = 0;
     const char* myCaption = "";
     float       myColumnX = 0, myColumnY = 0, myColumnWidth = 0;
 };
@@ -190,23 +212,13 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
         r.Large("sketch.start", "Начать\nэскиз");
         r.EndGroup();
     }
-    r.BeginGroup("Рисование");
+    r.BeginGroup("Создать");
     r.Large("sketch.line", "Отрезок", active(SketchTool::Line));
-    r.Large("sketch.rectangle", "Прямо-\nугольник", active(SketchTool::Rectangle));
     r.Large("sketch.circle", "Окруж-\nность", active(SketchTool::Circle));
     r.Large("sketch.arc", "Дуга", active(SketchTool::Arc));
+    r.Large("sketch.rectangle", "Прямо-\nугольник", active(SketchTool::Rectangle));
     r.BeginColumn();
     r.Small("sketch.point", nullptr, active(SketchTool::Point));
-    r.Small("sketch.construction");
-    r.Small("edit.delete");
-    r.EndColumn();
-    r.EndGroup();
-
-    r.BeginGroup("Правка");
-    r.Large("sketch.trim", "Обрезка", active(SketchTool::Trim));
-    r.BeginColumn();
-    r.Small("sketch.move", nullptr, active(SketchTool::Move));
-    r.Small("sketch.rotate", nullptr, active(SketchTool::Rotate));
     r.EndColumn();
     r.EndGroup();
 
@@ -214,37 +226,48 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.Large("sketch.project", "Проеци-\nровать", active(SketchTool::Project));
     r.EndGroup();
 
-    r.BeginGroup("Ограничения");
+    r.BeginGroup("Изменить");
     r.BeginColumn();
-    r.Small("sketch.coincident", nullptr, active(SketchTool::Coincident));
-    r.Small("sketch.horizontal", nullptr, active(SketchTool::Horizontal));
-    r.Small("sketch.vertical", nullptr, active(SketchTool::Vertical));
+    r.Small("sketch.move", nullptr, active(SketchTool::Move));
+    r.Small("sketch.rotate", nullptr, active(SketchTool::Rotate));
     r.EndColumn();
     r.BeginColumn();
-    r.Small("sketch.parallel", nullptr, active(SketchTool::Parallel));
-    r.Small("sketch.perpendicular", nullptr, active(SketchTool::Perpendicular));
-    r.Small("sketch.equal", nullptr, active(SketchTool::Equal));
+    r.Small("sketch.trim", nullptr, active(SketchTool::Trim));
+    r.Small("edit.delete");
     r.EndColumn();
-    r.BeginColumn();
-    r.Small("sketch.tangent", nullptr, active(SketchTool::Tangent));
-    r.Small("sketch.midpoint", nullptr, active(SketchTool::Midpoint));
-    r.Small("sketch.concentric", nullptr, active(SketchTool::Concentric));
-    r.EndColumn();
-    r.BeginColumn();
-    r.Small("sketch.fix", nullptr, active(SketchTool::Fix));
-    r.EndColumn();
+    r.EndGroup();
+
+    r.BeginGroup("Зависимости");
+    r.BeginGrid(4);
+    r.Icon("sketch.coincident", active(SketchTool::Coincident));
+    r.Icon("sketch.horizontal", active(SketchTool::Horizontal));
+    r.Icon("sketch.vertical", active(SketchTool::Vertical));
+    r.Icon("sketch.fix", active(SketchTool::Fix));
+    r.Icon("sketch.parallel", active(SketchTool::Parallel));
+    r.Icon("sketch.perpendicular", active(SketchTool::Perpendicular));
+    r.Icon("sketch.equal", active(SketchTool::Equal));
+    r.Icon("sketch.midpoint", active(SketchTool::Midpoint));
+    r.Icon("sketch.tangent", active(SketchTool::Tangent));
+    r.Icon("sketch.concentric", active(SketchTool::Concentric));
+    r.EndGrid();
     r.EndGroup();
 
     r.BeginGroup("Размеры");
     r.Large("sketch.dimension", "Размер", active(SketchTool::Dimension));
     r.EndGroup();
 
-    r.BeginGroup("Вид");
-    r.Large("sketch.lookAt", "Смотреть\nна эскиз");
+    r.BeginGroup("Формат");
+    r.BeginColumn();
+    r.Small("sketch.construction");
+    r.Small("sketch.centerline");
+    r.EndColumn();
     r.EndGroup();
 
     r.BeginGroup("Выход");
     r.Large("sketch.finish", "Принять\nэскиз");
+    r.BeginColumn();
+    r.Small("sketch.lookAt", "На эскиз");
+    r.EndColumn();
     r.EndGroup();
 }
 

@@ -100,7 +100,8 @@ void SketchFeature::SaveFields(Json& out) const {
     Json curves = Json::array();
     for (const auto& l : sketch.lines)
         curves.push_back({{"id", ToJson(l.id)}, {"type", "line"}, {"start", ToJson(l.start)},
-                          {"end", ToJson(l.end)}, {"construction", l.construction}, {"projected", l.projected}});
+                          {"end", ToJson(l.end)}, {"construction", l.construction}, {"centerline", l.centerline},
+                          {"projected", l.projected}});
     for (const auto& c : sketch.circles)
         curves.push_back({{"id", ToJson(c.id)}, {"type", "circle"}, {"center", ToJson(c.center)},
                           {"radius", c.radius}, {"construction", c.construction}, {"projected", c.projected}});
@@ -150,7 +151,8 @@ Status SketchFeature::LoadFields(const Json& in) {
         if (type == "line") {
             sketch::Line l;
             ok = ReadMember(j, "id", l.id) && ReadMember(j, "start", l.start) && ReadMember(j, "end", l.end) &&
-                 ReadMember(j, "construction", l.construction) && ReadMember(j, "projected", l.projected);
+                 ReadMember(j, "construction", l.construction) && ReadMember(j, "centerline", l.centerline) &&
+                 ReadMember(j, "projected", l.projected);
             sk.lines.push_back(l);
         } else if (type == "circle") {
             sketch::Circle c;

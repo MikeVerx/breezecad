@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <span>
 
 namespace bz::app {
 namespace {
@@ -14,23 +15,31 @@ bool Contains(const std::unordered_set<ObjectId>* set, ObjectId id) { return set
 
 bool Contains(const std::vector<ObjectId>& v, ObjectId id) { return std::find(v.begin(), v.end(), id) != v.end(); }
 
-/// Polyline in screen space, optionally dashed (6 px on, 4 px off).
-void Polyline(ImDrawList* dl, const std::vector<ImVec2>& pts, ImU32 color, float width, bool dashed) {
+/// Polyline in screen space: solid, dashed (6 on, 4 off) or dash-dot
+/// (14 on, 3 off, 2 on, 3 off — the drafting centre line).
+void Polyline(ImDrawList* dl, const std::vector<ImVec2>& pts, ImU32 color, float width, LinePattern pattern) {
     if (pts.size() < 2) return;
-    if (!dashed) {
+    if (pattern == LinePattern::Solid) {
         dl->AddPolyline(pts.data(), static_cast<int>(pts.size()), color, ImDrawFlags_None, width);
         return;
     }
-    constexpr float on = 6.0f, off = 4.0f;
+    static constexpr float dashes[] = {6.0f, 4.0f};
+    static constexpr float dashDot[] = {14.0f, 3.0f, 2.0f, 3.0f};
+    const std::span<const float> marks = pattern == LinePattern::Dashed ? std::span<const float>(dashes) : std::span<const float>(dashDot);
+    float period = 0.0f;
+    for (float m : marks) period += m;
     float phase = 0.0f;
     for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
         const ImVec2 a = pts[i], b = pts[i + 1];
         const float len = std::hypot(b.x - a.x, b.y - a.y);
         float t = 0.0f;
         while (t < len) {
-            const float cycle = std::fmod(phase, on + off);
-            const bool drawing = cycle < on;
-            const float step = std::min(len - t, drawing ? on - cycle : on + off - cycle);
+            // Which mark of the pattern the phase is in, and how much of it is left.
+            float cycle = std::fmod(phase, period);
+            std::size_t k = 0;
+            while (cycle >= marks[k]) cycle -= marks[k++];
+            const bool drawing = k % 2 == 0;
+            const float step = std::min(len - t, std::max(marks[k] - cycle, 1e-3f));
             if (drawing) {
                 const ImVec2 p0{a.x + (b.x - a.x) * t / len, a.y + (b.y - a.y) * t / len};
                 const ImVec2 p1{a.x + (b.x - a.x) * (t + step) / len, a.y + (b.y - a.y) * (t + step) / len};
@@ -82,13 +91,19 @@ const char* GlyphIcon(ConstraintType t) {
 } // namespace
 
 void DrawSketchSegment(ui::Ui& ui, ImDrawList* dl, const SketchView& view, Vec2 a, Vec2 b, Color color, float width,
+                       LinePattern pattern) {
+    Polyline(dl, {view.ToScreen(a), view.ToScreen(b)}, ui::ToU32(color), ui.S(width), pattern);
+}
+
+void DrawSketchSegment(ui::Ui& ui, ImDrawList* dl, const SketchView& view, Vec2 a, Vec2 b, Color color, float width,
                        bool dashed) {
-    Polyline(dl, {view.ToScreen(a), view.ToScreen(b)}, ui::ToU32(color), ui.S(width), dashed);
+    DrawSketchSegment(ui, dl, view, a, b, color, width, dashed ? LinePattern::Dashed : LinePattern::Solid);
 }
 
 void DrawSketchArc(ui::Ui& ui, ImDrawList* dl, const SketchView& view, Vec2 center, double radius, double a0, double a1,
                    Color color, float width, bool dashed) {
-    Polyline(dl, ArcPoints(view, center, radius, a0, a1), ui::ToU32(color), ui.S(width), dashed);
+    Polyline(dl, ArcPoints(view, center, radius, a0, a1), ui::ToU32(color), ui.S(width),
+             dashed ? LinePattern::Dashed : LinePattern::Solid);
 }
 
 void DrawSketchGrid(ui::Ui& ui, ImDrawList* dl, const SketchView& view, double step) {
@@ -298,9 +313,12 @@ void DrawSketch(ui::Ui& ui, ImDrawList* dl, const doc::SketchFeature& feature, c
         return construction ? 1.3f : 2.0f;
     };
 
-    for (const auto& l : sk.lines)
-        DrawSketchSegment(ui, dl, view, sk.PositionOf(l.start), sk.PositionOf(l.end), curveColor(l.id, l.construction, l.projected),
-                          curveWidth(l.id, l.construction), l.construction);
+    for (const auto& l : sk.lines) {
+        const bool thin = l.construction || l.centerline;
+        DrawSketchSegment(ui, dl, view, sk.PositionOf(l.start), sk.PositionOf(l.end), curveColor(l.id, thin, l.projected),
+                          curveWidth(l.id, thin),
+                          l.centerline ? LinePattern::DashDot : l.construction ? LinePattern::Dashed : LinePattern::Solid);
+    }
     for (const auto& ci : sk.circles)
         DrawSketchArc(ui, dl, view, sk.PositionOf(ci.center), ci.radius, 0, 2 * kPi, curveColor(ci.id, ci.construction, ci.projected),
                       curveWidth(ci.id, ci.construction), ci.construction);
