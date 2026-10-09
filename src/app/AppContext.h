@@ -38,6 +38,7 @@ struct ShellState {
     std::optional<int> closeRequest;   ///< tab waiting for "save changes?" answer
     bool               quitRequested = false;
     bool               showAbout = false;
+    bool               showMassProperties = false;   ///< the "МЦХ" window
 
     render::DisplayStyle displayStyle = render::DisplayStyle::ShadedWithEdges;
 

@@ -184,3 +184,32 @@ TEST_CASE("export STEP, STL and 3MF") {
     none.Rebuild(empty);
     CHECK_FALSE(none.ExportStl(dir / "x.stl").IsOk());
 }
+
+TEST_CASE("mass properties of two separate bodies") {
+    doc::Document d;
+    auto& a = AddSketch(d);
+    AddRect(d, a, {0, 0}, {20, 10});
+    AddExtrude(d, a.id, "5");
+    auto& b = AddSketch(d);
+    AddRect(d, b, {40, 0}, {50, 10});
+    AddExtrude(d, b.id, "5").operation = doc::BooleanOp::NewBody;
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(model.Bodies().size() == 2);
+
+    const auto p = model.Properties();
+    REQUIRE(p);
+    CHECK(p->volume == doctest::Approx(1000.0 + 500.0));
+    CHECK(p->area == doctest::Approx(2 * (200 + 100 + 50) + 2 * (100 + 50 + 50)));
+    // Centre of volume: weighted by volume along X.
+    CHECK(p->centre.x == doctest::Approx((1000.0 * 10 + 500.0 * 45) / 1500.0));
+    CHECK(p->centre.z == doctest::Approx(2.5));
+    CHECK(p->bounds.min.x == doctest::Approx(0.0));
+    CHECK(p->bounds.max.x == doctest::Approx(50.0));   // exact, not padded by tolerance
+    CHECK(p->bounds.max.z == doctest::Approx(5.0));
+
+    kernel::Model none;
+    doc::Document empty;
+    none.Rebuild(empty);
+    CHECK_FALSE(none.Properties());
+}

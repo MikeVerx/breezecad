@@ -258,6 +258,31 @@ const std::vector<SketchRegion>* Model::Regions(ObjectId sketchFeature) const {
     return it != myImpl->sketches.end() ? &it->second.regions : nullptr;
 }
 
+std::optional<MassProperties> Model::Properties() const {
+    if (myImpl->bodies.empty()) return std::nullopt;
+    GProp_GProps volume, surface;
+    Bnd_Box box;
+    for (const Body& b : myImpl->bodies) {
+        // BRepGProp overwrites its output, so each body is measured alone
+        // and added to the totals.
+        GProp_GProps bodyVolume, bodySurface;
+        BRepGProp::VolumeProperties(b.shape, bodyVolume);
+        BRepGProp::SurfaceProperties(b.shape, bodySurface);
+        volume.Add(bodyVolume);
+        surface.Add(bodySurface);
+        BRepBndLib::AddOptimal(b.shape, box, false);      // exact, not padded by tolerances
+    }
+    MassProperties p;
+    p.volume = volume.Mass();
+    p.area = surface.Mass();
+    const gp_Pnt c = volume.CentreOfMass();
+    p.centre = {c.X(), c.Y(), c.Z()};
+    double xmin, ymin, zmin, xmax, ymax, zmax;
+    box.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+    p.bounds = {{xmin, ymin, zmin}, {xmax, ymax, zmax}};
+    return p;
+}
+
 double Model::Volume() const {
     double volume = 0.0;
     for (const Body& b : myImpl->bodies) {

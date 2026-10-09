@@ -32,6 +32,14 @@ struct Bounds {
     Vec3 max;
 };
 
+/// What "МЦХ" shows. Mass is volume times the density the user picks.
+struct MassProperties {
+    double volume = 0.0;   ///< mm^3
+    double area = 0.0;     ///< surface, mm^2
+    Vec3   centre;         ///< centre of volume (of mass for a uniform material), mm
+    Bounds bounds;         ///< tight box around the bodies
+};
+
 /// Mesh quality for STL and 3MF export.
 struct MeshQuality {
     double chordal = 0.02;   ///< max distance between mesh and surface, mm
@@ -66,6 +74,8 @@ public:
 
     /// Volume of all bodies, mm^3 (status bar, tests).
     double Volume() const;
+    /// Volume, area, centre and exact size of all bodies; nullopt without bodies.
+    std::optional<MassProperties> Properties() const;
 
     struct Impl;
     const Impl& GetImpl() const { return *myImpl; }

@@ -15,6 +15,15 @@ std::string FormatNumber(double value, int decimals) {
     return s;
 }
 
+std::string FormatGrouped(double value, int decimals) {
+    std::string s = FormatNumber(value, decimals);
+    const std::size_t sign = !s.empty() && s[0] == '-' ? 1 : 0;
+    std::size_t point = s.find('.');
+    if (point == std::string::npos) point = s.size();
+    for (std::size_t i = point; i > sign + 3; i -= 3) s.insert(i - 3, " ");
+    return s;
+}
+
 std::string FormatValue(double internal, Quantity quantity, const UnitSystem& units, int decimals) {
     return FormatNumber(units.ToDisplay(internal, quantity), decimals);
 }

@@ -169,7 +169,7 @@ void ModelRibbon(RibbonBuilder& r) {
     r.SmallLater("section", "Сечение");
     r.EndColumn();
     r.BeginColumn();
-    r.SmallLater("mass-properties", "МЦХ");
+    r.Small("tools.massProperties");
     r.SmallLater("interference", "Коллизии");
     r.EndColumn();
     r.EndGroup();
