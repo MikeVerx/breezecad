@@ -7,6 +7,7 @@ add_library(bz_document STATIC
     FeatureRegistry.cpp
     FaceReference.cpp
     HoleFeature.cpp
+    LoftFeature.cpp
     PatternFeature.cpp
     ShellFeature.cpp
     WorkPlaneFeature.cpp

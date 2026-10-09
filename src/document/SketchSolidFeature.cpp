@@ -7,6 +7,8 @@ namespace {
 
 using json_io::Json;
 
+} // namespace
+
 bool BooleanOpFromId(std::string_view id, BooleanOp& out) {
     for (BooleanOp op : {BooleanOp::NewBody, BooleanOp::Join, BooleanOp::Cut, BooleanOp::Intersect})
         if (BooleanOpId(op) == id) {
@@ -15,8 +17,6 @@ bool BooleanOpFromId(std::string_view id, BooleanOp& out) {
         }
     return false;
 }
-
-} // namespace
 
 std::string_view BooleanOpId(BooleanOp op) {
     switch (op) {

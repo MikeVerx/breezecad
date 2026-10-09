@@ -4,6 +4,7 @@
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
+#include "document/LoftFeature.h"
 #include "document/Origin.h"
 #include "document/PatternFeature.h"
 #include "document/Recompute.h"
@@ -227,6 +228,7 @@ TEST_CASE("every feature type survives a file round trip") {
     made.push_back(std::make_unique<doc::WorkPlaneFeature>());
     made.push_back(std::make_unique<doc::PatternFeature>());
     made.push_back(std::make_unique<doc::MirrorFeature>());
+    made.push_back(std::make_unique<doc::LoftFeature>());
     std::vector<std::pair<ObjectId, std::string_view>> expected;
     for (auto& f : made) {
         f->id = d.Ids().Next();

@@ -3,6 +3,7 @@
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
+#include "document/LoftFeature.h"
 #include "document/PatternFeature.h"
 #include "document/RevolveFeature.h"
 #include "document/ShellFeature.h"
@@ -20,6 +21,7 @@ FeatureRegistry& FeatureRegistry::Default() {
         r.Register(std::string(FilletFeature::kType), [] { return std::make_unique<FilletFeature>(); });
         r.Register(std::string(ChamferFeature::kType), [] { return std::make_unique<ChamferFeature>(); });
         r.Register(std::string(HoleFeature::kType), [] { return std::make_unique<HoleFeature>(); });
+        r.Register(std::string(LoftFeature::kType), [] { return std::make_unique<LoftFeature>(); });
         r.Register(std::string(PatternFeature::kType), [] { return std::make_unique<PatternFeature>(); });
         r.Register(std::string(MirrorFeature::kType), [] { return std::make_unique<MirrorFeature>(); });
         r.Register(std::string(ShellFeature::kType), [] { return std::make_unique<ShellFeature>(); });

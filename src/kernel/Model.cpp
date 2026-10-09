@@ -7,6 +7,7 @@
 #include "document/Recompute.h"
 #include "document/RevolveFeature.h"
 #include "document/ShellFeature.h"
+#include "document/LoftFeature.h"
 #include "document/Origin.h"
 #include "document/PatternFeature.h"
 #include "document/SketchFeature.h"
@@ -16,12 +17,14 @@
 #include "kernel/occt/FaceMatch.h"
 #include "kernel/occt/Fillet.h"
 #include "kernel/occt/Hole.h"
+#include "kernel/occt/Loft.h"
 #include "kernel/occt/ModelImpl.h"
 #include "kernel/occt/Revolve.h"
 #include "kernel/occt/Shell.h"
 
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
+#include <BRepTools.hxx>
 #include <BRepGProp.hxx>
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
@@ -62,6 +65,63 @@ std::string NextBodyName(const std::vector<Body>& bodies) {
     return "Тело" + std::to_string(largest + 1);
 }
 
+/// The last step of every operation that makes a solid: keep it as a new
+/// body, or join, cut or intersect the most recent body with it. The solid
+/// is also kept as the operation's tool for patterns and mirrors.
+void CombineSolid(ObjectId id, doc::BooleanOp op, const TopoDS_Shape& tool, Model::Impl& impl, std::vector<Body>& bodies,
+                  doc::FeatureStatus& status) {
+    // A new body copied by a pattern joins the body it started.
+    if (op != doc::BooleanOp::Intersect) impl.tools[id] = {tool, op == doc::BooleanOp::Cut ? doc::BooleanOp::Cut : doc::BooleanOp::Join};
+
+    if (op == doc::BooleanOp::NewBody || bodies.empty()) {
+        if (op == doc::BooleanOp::Cut || op == doc::BooleanOp::Intersect) {
+            status = {FeatureState::Error, "Нет тела, к которому применить операцию"};
+            return;
+        }
+        bodies.push_back({id, NextBodyName(bodies), tool});
+        status = {FeatureState::Ok, {}};
+        return;
+    }
+    // Join, Cut and Intersect act on the most recent body.
+    Body& target = bodies.back();
+    Expected<TopoDS_Shape> result = occt::ApplyBoolean(target.shape, tool, op);
+    if (!result) {
+        status = {FeatureState::Error, result.GetError().message};
+        return;
+    }
+    target.shape = *result;
+    status = {FeatureState::Ok, {}};
+}
+
+/// A loft through the sections' outlines, then combined like any solid.
+void ApplyLoft(doc::LoftFeature& f, Model::Impl& impl, std::vector<Body>& bodies, const doc::Document& doc) {
+    if (f.sections.size() < 2) {
+        f.status = {FeatureState::Error, "Выберите хотя бы два эскиза-сечения"};
+        return;
+    }
+    std::vector<TopoDS_Wire> outlines;
+    for (ObjectId id : f.sections) {
+        const auto* sketch = doc.FindAs<doc::SketchFeature>(id);
+        const auto profile = impl.sketches.find(id);
+        if (!sketch || profile == impl.sketches.end() || sketch->status.state == FeatureState::Error) {
+            f.status = {FeatureState::Error, "Сечение лофта не найдено или содержит ошибки"};
+            return;
+        }
+        const std::vector<TopoDS_Face> faces = occt::SelectFaces(profile->second, {});
+        if (faces.size() != 1) {
+            f.status = {FeatureState::Error, "В «" + sketch->name + "» должен быть ровно один замкнутый контур"};
+            return;
+        }
+        outlines.push_back(BRepTools::OuterWire(faces.front()));
+    }
+    Expected<TopoDS_Shape> solid = occt::MakeLoft(outlines, f.ruled);
+    if (!solid) {
+        f.status = {FeatureState::Error, solid.GetError().message};
+        return;
+    }
+    CombineSolid(f.id, f.operation, *solid, impl, bodies, f.status);
+}
+
 /// Common path of every sketch-to-solid operation: check the sketch, build
 /// the tool solid from the chosen regions with `makeTool`, then add it as a
 /// new body or combine it with the most recent body.
@@ -90,29 +150,7 @@ void ApplySketchSolid(const doc::SketchSolidFeature& f, Model::Impl& impl, std::
         status = {FeatureState::Error, tool.GetError().message};
         return;
     }
-    // A new body copied by a pattern joins the body it started.
-    if (f.operation != doc::BooleanOp::Intersect)
-        impl.tools[f.id] = {*tool, f.operation == doc::BooleanOp::Cut ? doc::BooleanOp::Cut : doc::BooleanOp::Join};
-
-    if (f.operation == doc::BooleanOp::NewBody || bodies.empty()) {
-        if (f.operation == doc::BooleanOp::Cut || f.operation == doc::BooleanOp::Intersect) {
-            status = {FeatureState::Error, "Нет тела, к которому применить операцию"};
-            return;
-        }
-        bodies.push_back({f.id, NextBodyName(bodies), *tool});
-        status = {FeatureState::Ok, {}};
-        return;
-    }
-
-    // Join, Cut and Intersect act on the most recent body.
-    Body& target = bodies.back();
-    Expected<TopoDS_Shape> result = occt::ApplyBoolean(target.shape, *tool, f.operation);
-    if (!result) {
-        status = {FeatureState::Error, result.GetError().message};
-        return;
-    }
-    target.shape = *result;
-    status = {FeatureState::Ok, {}};
+    CombineSolid(f.id, f.operation, *tool, impl, bodies, status);
 }
 
 /// Fillet and chamfer: find the referenced edges on the most recent body
@@ -374,6 +412,8 @@ void Model::Rebuild(doc::Document& doc) {
                     ApplyCopies(*mirror, {*placement}, impl, bodies, mirror->status, doc);
                 else
                     mirror->status = {FeatureState::Error, placement.GetError().message};
+            } else if (auto* loft = dynamic_cast<doc::LoftFeature*>(&f)) {
+                ApplyLoft(*loft, impl, bodies, doc);
             } else if (auto* wp = dynamic_cast<doc::WorkPlaneFeature*>(&f)) {
                 PlaceWorkPlane(*wp, doc, bodies);
             } else if (auto* shell = dynamic_cast<doc::ShellFeature*>(&f)) {

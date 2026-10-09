@@ -42,6 +42,8 @@ protected:
     Status LoadSolidFields(const nlohmann::json& in, const std::string& what);
 };
 
+/// Names of the operations in files ("join").
 std::string_view BooleanOpId(BooleanOp op);
+bool             BooleanOpFromId(std::string_view id, BooleanOp& out);
 
 } // namespace bz::doc
