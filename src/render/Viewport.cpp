@@ -372,7 +372,7 @@ bool Viewport::Init(const NativeGlSurface& surface) {
     m.viewer = new V3d_Viewer(m.driver);
     SetUpLights(m.viewer);
     m.context = new AIS_InteractiveContext(m.viewer);
-    m.context->SetPixelTolerance(4);
+    m.context->SetPixelTolerance(7);   // edges are thin: give the cursor a few pixels
 
     // Pre-highlight (hover) and selection styles: a light-blue tint.
     for (auto type : {Prs3d_TypeOfHighlight_LocalDynamic, Prs3d_TypeOfHighlight_Dynamic}) {
