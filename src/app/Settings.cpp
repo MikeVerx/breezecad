@@ -32,6 +32,10 @@ Settings Settings::Load(const std::filesystem::path& file) {
     s.theme = theme == "light" ? ThemeChoice::Light : theme == "dark" ? ThemeChoice::Dark : ThemeChoice::System;
     s.animations      = j.value("animations", s.animations);
     s.showTriad       = j.value("showTriad", s.showTriad);
+    s.reopenLast      = j.value("reopenLast", s.reopenLast);
+    s.newPartLength   = std::clamp(j.value("newPartLength", s.newPartLength), 0, 3);
+    s.orbitSpeed      = std::clamp(j.value("orbitSpeed", s.orbitSpeed), 0.25, 4.0);
+    s.invertOrbit     = j.value("invertOrbit", s.invertOrbit);
     s.autosaveMinutes = std::clamp(j.value("autosaveMinutes", s.autosaveMinutes), 0, 120);
     s.gridSnap        = j.value("gridSnap", s.gridSnap);
     s.pointSnap       = j.value("pointSnap", s.pointSnap);
@@ -91,6 +95,10 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"gridStep", gridStep},
         {"uiScale", uiScale},
         {"showTriad", showTriad},
+        {"reopenLast", reopenLast},
+        {"newPartLength", newPartLength},
+        {"orbitSpeed", orbitSpeed},
+        {"invertOrbit", invertOrbit},
         {"language", language},
         {"window", {{"x", windowX}, {"y", windowY}, {"width", windowW}, {"height", windowH}, {"maximized", windowMaximized}}},
         {"shortcuts", ShortcutsJson(shortcuts)},

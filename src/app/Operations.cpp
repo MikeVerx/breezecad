@@ -29,7 +29,8 @@ void EndEditing(AppContext& app) {
 
 void NewDocument(AppContext& app) {
     EndEditing(app);
-    app.workspace.NewPart();
+    Session& s = app.workspace.NewPart();
+    s.doc.units.length = static_cast<LengthUnit>(app.settings.newPartLength);
     app.shell.ribbonTab = RibbonTab::Model;
 }
 

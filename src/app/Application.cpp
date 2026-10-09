@@ -149,6 +149,12 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     for (const auto& [id, chord] : mySettings.shortcuts) myActions.SetChord(id, ActionRegistry::ParseChord(chord));
 
     for (const auto& file : files) myWorkspace.Open(file, myNotes, mySettings);
+    // Nothing asked for: the last file, if the user wants it (and it is still there).
+    if (files.empty() && mySettings.reopenLast && !mySettings.recentFiles.empty()) {
+        std::error_code ec;
+        const std::filesystem::path last = mySettings.recentFiles.front();
+        if (std::filesystem::exists(last, ec)) myWorkspace.Open(last, myNotes, mySettings);
+    }
     if (myShell.crashedLastTime && !myShell.recoverable.empty())
         myNotes.Info(Tr("Прошлый сеанс завершился неожиданно. Несохранённую работу можно восстановить на главной странице."));
     return true;

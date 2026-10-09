@@ -163,7 +163,10 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
     if (nav.orbiting || nav.panning || nav.zooming) {
         if (ImGui::IsMouseDragging(nav.button, 3.0f)) nav.moved = true;
         if (nav.moved && (io.MouseDelta.x != 0 || io.MouseDelta.y != 0)) {
-            if (nav.orbiting) app.viewport.Orbit(io.MouseDelta.x * kOrbitPerPixel, io.MouseDelta.y * kOrbitPerPixel, nav.pivot);
+            if (nav.orbiting) {
+                const double k = kOrbitPerPixel * app.settings.orbitSpeed;
+                app.viewport.Orbit(io.MouseDelta.x * k, io.MouseDelta.y * k * (app.settings.invertOrbit ? -1.0 : 1.0), nav.pivot);
+            }
             if (nav.panning) app.viewport.Pan(io.MouseDelta.x, io.MouseDelta.y);
             if (nav.zooming) app.viewport.ZoomAt(std::pow(1.01, static_cast<double>(-io.MouseDelta.y)), vf.ToLocal(nav.zoomAt));
         }

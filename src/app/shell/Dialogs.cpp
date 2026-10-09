@@ -232,6 +232,21 @@ void DrawMouseSettings(AppContext& app, float width) {
         s.mouse.invertWheel = nw == 1;
         s.mouseCustom = true;
     }
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Скорость вращения"));
+    {
+        static constexpr std::array<const char*, 4> speeds{N_("Медленно"), N_("Обычно"), N_("Быстро"), N_("Очень быстро")};
+        static constexpr std::array<double, 4> values{0.5, 1.0, 1.5, 2.0};
+        int current = 1;
+        for (std::size_t i = 0; i < values.size(); ++i)
+            if (std::abs(values[i] - s.orbitSpeed) < 1e-6) current = static_cast<int>(i);
+        if (const int n = ui::Segmented(ui, "orbit-speed", speeds, current, 4, width); n != current)
+            s.orbitSpeed = values[static_cast<std::size_t>(n)];
+        static constexpr std::array<const char*, 2> vertical{N_("Как тянешь"), N_("Наоборот")};
+        const int inv = s.invertOrbit ? 1 : 0;
+        ui::FieldLabel(ui, Tr("Вращение по вертикали"));
+        if (const int n = ui::Segmented(ui, "orbit-invert", vertical, inv, 2, width); n != inv) s.invertOrbit = n == 1;
+    }
     {
         ui::FontScope font(ui.fonts.caption);
         ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
@@ -252,8 +267,8 @@ void DrawSettings(AppContext& app) {
         ImGui::TextUnformatted(Tr("Настройки"));
     }
     const float width = ImGui::GetContentRegionAvail().x;
-    static constexpr std::array<const char*, 3> tabs{N_("Интерфейс"), N_("Клавиши"), N_("Мышь")};
-    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 3, width);
+    static constexpr std::array<const char*, 4> tabs{N_("Интерфейс"), N_("Клавиши"), N_("Мышь"), N_("Общие")};
+    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 4, width);
     ImGui::Dummy({0, ui.S(6)});
 
     if (app.shell.settingsTab == 0) {
@@ -291,8 +306,27 @@ void DrawSettings(AppContext& app) {
         static constexpr std::array<const char*, 2> triad{N_("Показывать"), N_("Скрыть")};
         const int t = app.settings.showTriad ? 0 : 1;
         if (const int n = ui::Segmented(ui, "triad", triad, t, 2, width); n != t) app.settings.showTriad = n == 0;
+
     } else if (app.shell.settingsTab == 2) {
         DrawMouseSettings(app, width);
+    } else if (app.shell.settingsTab == 3) {
+        ui::FieldLabel(ui, Tr("При запуске"));
+        static constexpr std::array<const char*, 2> start{N_("Главная страница"), N_("Последний файл")};
+        const int st = app.settings.reopenLast ? 1 : 0;
+        if (const int n = ui::Segmented(ui, "start", start, st, 2, width); n != st) app.settings.reopenLast = n == 1;
+        ImGui::Dummy({0, ui.S(6)});
+        ui::FieldLabel(ui, Tr("Единицы новой детали"));
+        static constexpr std::array<const char*, 4> units{N_("мм"), N_("см"), N_("м"), N_("дюйм")};
+        if (const int n = ui::Segmented(ui, "new-units", units, app.settings.newPartLength, 4, width); n != app.settings.newPartLength)
+            app.settings.newPartLength = n;
+        ImGui::Dummy({0, ui.S(6)});
+        ui::FieldLabel(ui, Tr("Шаг сетки эскиза, мм"));
+        static constexpr std::array<const char*, 5> grids{N_("Авто"), "0.5", "1", "5", "10"};
+        static constexpr std::array<double, 5> steps{0.0, 0.5, 1.0, 5.0, 10.0};
+        int g = 0;
+        for (std::size_t i = 0; i < steps.size(); ++i)
+            if (std::abs(steps[i] - app.settings.gridStep) < 1e-9) g = static_cast<int>(i);
+        if (const int n = ui::Segmented(ui, "grid", grids, g, 5, width); n != g) app.settings.gridStep = steps[static_cast<std::size_t>(n)];
     } else {
         // The set of shortcuts: a ready-made one, or "Свой" once changed by hand.
         ui::FieldLabel(ui, Tr("Набор сочетаний"));

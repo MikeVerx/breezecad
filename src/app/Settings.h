@@ -15,6 +15,10 @@ struct Settings {
     ThemeChoice theme          = ThemeChoice::System;
     bool        animations     = true;    ///< smooth camera moves
     bool        showTriad      = true;    ///< axis triad in the corner of the view
+    bool        reopenLast     = false;   ///< open the most recent file at start
+    int         newPartLength  = 0;       ///< length unit of new parts: LengthUnit as int (0 = mm)
+    double      orbitSpeed     = 1.0;     ///< view rotation sensitivity, 0.5..2
+    bool        invertOrbit    = false;   ///< drag up turns the model down
     int         autosaveMinutes = 5;      ///< 0 turns autosave off
     bool        gridSnap       = true;
     bool        pointSnap      = true;
