@@ -91,3 +91,5 @@ the project; your own modules built on top can stay closed.
 
 Created by **MikeVerx**. Geometry by [Open CASCADE Technology](https://dev.opencascade.org),
 interface by [Dear ImGui](https://github.com/ocornut/imgui).
+
+<sub>Autodesk Inventor is a trademark of Autodesk, Inc.; КОМПАС-3D is a trademark of ASCON. They are mentioned only to describe familiar workflows; BreezeCAD is an independent project, not affiliated with or endorsed by them, and uses none of their code, icons or files.</sub>

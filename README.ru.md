@@ -85,3 +85,5 @@ Windows — MSYS2 / MinGW64, точные шаги в
 
 Автор — **MikeVerx**. Геометрия — [Open CASCADE Technology](https://dev.opencascade.org),
 интерфейс — [Dear ImGui](https://github.com/ocornut/imgui).
+
+<sub>Autodesk Inventor — товарный знак Autodesk, Inc.; КОМПАС-3D — товарный знак АСКОН. Они упомянуты только для описания привычных приёмов работы; BreezeCAD — независимый проект, не связан с ними и не одобрен ими, не использует их код, иконки и файлы.</sub>
