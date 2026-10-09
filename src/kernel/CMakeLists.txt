@@ -4,6 +4,7 @@ add_library(bz_kernel STATIC
     occt/Export.cpp
     occt/Extrude.cpp
     occt/Fillet.cpp
+    occt/Hole.cpp
     occt/Revolve.cpp
     occt/SketchGeometry.cpp)
 target_link_libraries(bz_kernel

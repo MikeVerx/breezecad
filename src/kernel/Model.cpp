@@ -2,6 +2,7 @@
 
 #include "core/Log.h"
 #include "document/EdgeFeature.h"
+#include "document/HoleFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/Recompute.h"
 #include "document/RevolveFeature.h"
@@ -9,6 +10,7 @@
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Extrude.h"
 #include "kernel/occt/Fillet.h"
+#include "kernel/occt/Hole.h"
 #include "kernel/occt/ModelImpl.h"
 #include "kernel/occt/Revolve.h"
 
@@ -135,6 +137,21 @@ void ApplyEdgeFeature(const doc::EdgeFeature& f, std::vector<Body>& bodies, doc:
                        : doc::FeatureStatus{FeatureState::Warning, "Не найдено рёбер: " + std::to_string(lost)};
 }
 
+/// Holes are cut from the most recent body.
+void ApplyHole(const doc::HoleFeature& f, std::vector<Body>& bodies, doc::FeatureStatus& status) {
+    if (bodies.empty()) {
+        status = {FeatureState::Error, "Нет тела, в котором делать отверстие"};
+        return;
+    }
+    Expected<TopoDS_Shape> result = occt::DrillHoles(bodies.back().shape, f);
+    if (!result) {
+        status = {FeatureState::Error, result.GetError().message};
+        return;
+    }
+    bodies.back().shape = *result;
+    status = {FeatureState::Ok, {}};
+}
+
 /// OCCT prints progress reports (STEP statistics...) to stdout; keep only
 /// warnings and errors, our own log covers the rest.
 void QuietOcctMessages() {
@@ -203,6 +220,8 @@ void Model::Rebuild(doc::Document& doc) {
                 ApplyEdgeFeature(*chamfer, bodies, chamfer->status, [&](const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges) {
                     return occt::MakeChamfer(body, edges, chamfer->distance.value);
                 });
+            } else if (auto* hole = dynamic_cast<doc::HoleFeature*>(&f)) {
+                ApplyHole(*hole, bodies, hole->status);
             } else if (f.status.state == FeatureState::NotComputed) {
                 f.status = {FeatureState::Error, "Операция этого типа не поддерживается"};
             }
