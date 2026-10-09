@@ -2,13 +2,17 @@
 
 #include "app/Format.h"
 #include "app/shell/Shell.h"
+#include "app/viewport/Planes.h"
 #include "app/sketch/SketchEditor.h"
 #include "document/Commands.h"
 #include "document/LoftFeature.h"
+#include "document/Origin.h"
 #include "document/SketchSolidFeature.h"
+#include "document/WorkPlaneFeature.h"
 #include "ui/Widgets.h"
 
 #include <algorithm>
+#include <array>
 
 namespace bz::app {
 
@@ -180,6 +184,58 @@ bool FeatureOperationEditor::FeatureChecklist(AppContext& app, Session& session,
     if (!any) Caption(app, emptyText, width);
     if (changed) Changed(session);
     return changed;
+}
+
+bool FeatureOperationEditor::PickOriginalFaces(AppContext& app, Session& session, std::vector<doc::FaceReference>& faces,
+                                               const ViewportFrame& vf) {
+    const int index = session.doc.IndexOf(myFeature);
+    if (index < 0) return false;
+    app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Faces);
+    app.viewport.SetMarkedFaces(faces);
+    if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return false;
+    const auto picked = app.viewport.PickFace(vf.ToLocal(ImGui::GetMousePos()));
+    if (!picked) return false;
+    const auto existing =
+        std::ranges::find_if(faces, [&](const doc::FaceReference& r) { return app.viewport.SameOriginalFace(r, *picked); });
+    if (existing != faces.end()) faces.erase(existing);
+    else faces.push_back(*picked);
+    Changed(session);
+    return true;
+}
+
+void FeatureOperationEditor::PlaneChoice(AppContext& app, Session& session, ObjectId& plane, float width) {
+    static constexpr std::array<const char*, 3> labels{"XY", "XZ", "YZ"};
+    static constexpr std::array<ObjectId, 3> ids{doc::origin::kPlaneXY, doc::origin::kPlaneXZ, doc::origin::kPlaneYZ};
+    const auto at = std::ranges::find(ids, plane);
+    const int current = at != ids.end() ? static_cast<int>(at - ids.begin()) : -1;
+    const int chosen = ui::Segmented(app.ui, "plane", labels, current, 3, width);
+    if (chosen != current && chosen >= 0) {
+        plane = ids[static_cast<std::size_t>(chosen)];
+        Changed(session);
+    }
+    if (const auto* wp = session.doc.FindAs<doc::WorkPlaneFeature>(plane)) {
+        const std::string text = "Рабочая плоскость: " + wp->name;
+        Caption(app, text.c_str(), width);
+    } else {
+        Caption(app, "Или щёлкните рабочую плоскость в окне модели.", width);
+    }
+}
+
+void FeatureOperationEditor::PickPlane(AppContext& app, Session& session, ObjectId& plane, const ViewportFrame& vf) {
+    const int index = session.doc.IndexOf(myFeature);
+    if (index < 0) return;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    std::vector<ShownPlane> planes = OriginPlanes(session);
+    const std::vector<ShownPlane> work = WorkPlanes(session, static_cast<std::size_t>(index));
+    planes.insert(planes.end(), work.begin(), work.end());
+    const ShownPlane* hot = vf.hovered ? PlaneUnderCursor(vf, ImGui::GetMousePos(), planes) : nullptr;
+    // Only the chosen plane and the one under the cursor: the rest would hide the preview.
+    for (const ShownPlane& p : planes)
+        if (&p == hot || p.id == plane) DrawPlane(app, dl, vf, p, true);
+    if (hot && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        plane = hot->id;
+        Changed(session);
+    }
 }
 
 bool FeatureOperationEditor::ParameterField(AppContext& app, Session& session, const char* id, std::string& text,

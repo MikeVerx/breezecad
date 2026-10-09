@@ -6,6 +6,7 @@
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
 #include "document/Commands.h"
+#include "document/DraftFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
@@ -386,6 +387,7 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::MirrorFeature*>(&f)) return "tree-mirror";
     if (dynamic_cast<const doc::LoftFeature*>(&f)) return "tree-loft";
     if (dynamic_cast<const doc::SweepFeature*>(&f)) return "tree-sweep";
+    if (dynamic_cast<const doc::DraftFeature*>(&f)) return "tree-draft";
     return "tree-unknown";
 }
 

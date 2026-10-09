@@ -2,7 +2,6 @@
 
 #include "ui/Widgets.h"
 
-#include <algorithm>
 #include <array>
 
 namespace bz::app {
@@ -29,22 +28,7 @@ void ShellEditor::LoadTexts(const doc::Feature& feature) {
 }
 
 void ShellEditor::DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) {
-    auto* f = dynamic_cast<doc::ShellFeature*>(Edited(session));
-    if (!f) return;
-    const int index = session.doc.IndexOf(f->id);
-    if (index < 0) return;
-    app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Faces);
-    app.viewport.SetMarkedFaces(f->openFaces);
-
-    if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
-    const auto picked = app.viewport.PickFace(vf.ToLocal(ImGui::GetMousePos()));
-    if (!picked) return;
-    const auto existing = std::ranges::find_if(f->openFaces, [&](const doc::FaceReference& r) {
-        return app.viewport.SameOriginalFace(r, *picked);
-    });
-    if (existing != f->openFaces.end()) f->openFaces.erase(existing);
-    else f->openFaces.push_back(*picked);
-    Changed(session);
+    if (auto* f = dynamic_cast<doc::ShellFeature*>(Edited(session))) PickOriginalFaces(app, session, f->openFaces, vf);
 }
 
 void ShellEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {

@@ -6,6 +6,7 @@
 // undo step; Отмена removes it (or restores the edited original).
 
 #include "app/features/OperationEditor.h"
+#include "document/FaceReference.h"
 
 #include <functional>
 #include <memory>
@@ -66,6 +67,15 @@ protected:
     /// when there are none. Returns true when the choice changed.
     bool FeatureChecklist(AppContext& app, Session& session, std::vector<ObjectId>& chosen,
                           const std::function<bool(const doc::Feature&)>& eligible, float width, const char* emptyText);
+
+    /// Flat faces of the body as it was before this feature: a click adds a
+    /// face to `faces` or drops it. Call from DrawInViewport. True when changed.
+    bool PickOriginalFaces(AppContext& app, Session& session, std::vector<doc::FaceReference>& faces, const ViewportFrame& vf);
+
+    /// An origin or work plane before this feature: XY/XZ/YZ in the panel
+    /// (PlaneChoice), any of them by a click in the viewport (PickPlane).
+    void PlaneChoice(AppContext& app, Session& session, ObjectId& plane, float width);
+    void PickPlane(AppContext& app, Session& session, ObjectId& plane, const ViewportFrame& vf);
 
     bool myFocusFirstField = false;   ///< focus the main value when the panel opens
 

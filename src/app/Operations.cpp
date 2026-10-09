@@ -198,6 +198,13 @@ void StartSweep(AppContext& app) {
     app.ops.sweep.StartNew(app, *s);
 }
 
+void StartDraft(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.draft.StartNew(app, *s);
+}
+
 void StartRevolve(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;

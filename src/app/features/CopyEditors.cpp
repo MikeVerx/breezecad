@@ -1,10 +1,8 @@
 #include "app/features/CopyEditors.h"
 
-#include "app/viewport/Planes.h"
 #include "document/HoleFeature.h"
 #include "document/Origin.h"
 #include "document/SketchSolidFeature.h"
-#include "document/WorkPlaneFeature.h"
 #include "ui/Widgets.h"
 
 #include <algorithm>
@@ -191,22 +189,7 @@ void MirrorEditor::StartNew(AppContext& app, Session& session) {
 }
 
 void MirrorEditor::DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) {
-    auto* f = dynamic_cast<doc::MirrorFeature*>(Edited(session));
-    if (!f) return;
-    const int index = session.doc.IndexOf(f->id);
-    if (index < 0) return;
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    std::vector<ShownPlane> planes = OriginPlanes(session);
-    const std::vector<ShownPlane> work = WorkPlanes(session, static_cast<std::size_t>(index));
-    planes.insert(planes.end(), work.begin(), work.end());
-    const ShownPlane* hot = vf.hovered ? PlaneUnderCursor(vf, ImGui::GetMousePos(), planes) : nullptr;
-    // Only the chosen plane and the one under the cursor: the rest would hide the preview.
-    for (const ShownPlane& p : planes)
-        if (&p == hot || p.id == f->plane) DrawPlane(app, dl, vf, p, &p == hot || p.id == f->plane);
-    if (hot && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        f->plane = hot->id;
-        Changed(session);
-    }
+    if (auto* f = dynamic_cast<doc::MirrorFeature*>(Edited(session))) PickPlane(app, session, f->plane, vf);
 }
 
 void MirrorEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
@@ -214,21 +197,7 @@ void MirrorEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
     DrawSources(app, session, f, width);
     Gap(app);
     Section(app, "Плоскость симметрии");
-    static constexpr std::array<const char*, 3> labels{"XY", "XZ", "YZ"};
-    static constexpr std::array<ObjectId, 3> ids{doc::origin::kPlaneXY, doc::origin::kPlaneXZ, doc::origin::kPlaneYZ};
-    const auto at = std::ranges::find(ids, f.plane);
-    const int current = at != ids.end() ? static_cast<int>(at - ids.begin()) : -1;
-    const int chosen = ui::Segmented(app.ui, "plane", labels, current, 3, width);
-    if (chosen != current && chosen >= 0) {
-        f.plane = ids[static_cast<std::size_t>(chosen)];
-        Changed(session);
-    }
-    if (const auto* wp = session.doc.FindAs<doc::WorkPlaneFeature>(f.plane)) {
-        const std::string text = "Рабочая плоскость: " + wp->name;
-        Caption(app, text.c_str(), width);
-    } else {
-        Caption(app, "Или щёлкните рабочую плоскость в окне модели.", width);
-    }
+    PlaneChoice(app, session, f.plane, width);
 }
 
 } // namespace bz::app

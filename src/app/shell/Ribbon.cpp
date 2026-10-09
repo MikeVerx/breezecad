@@ -133,7 +133,7 @@ void ModelRibbon(RibbonBuilder& r) {
     r.BeginColumn();
     r.Small("feature.chamfer");
     r.Small("feature.shell");
-    r.SmallLater("draft", "Уклон");
+    r.Small("feature.draft");
     r.EndColumn();
     r.EndGroup();
 

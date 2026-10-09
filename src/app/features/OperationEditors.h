@@ -2,6 +2,7 @@
 // Every operation panel of the app. At most one is open at a time.
 
 #include "app/features/CopyEditors.h"
+#include "app/features/DraftEditor.h"
 #include "app/features/EdgeOperationEditor.h"
 #include "app/features/ExtrudeEditor.h"
 #include "app/features/HoleEditor.h"
@@ -27,9 +28,10 @@ struct OperationEditors {
     MirrorEditor    mirror;
     LoftEditor      loft;
     SweepEditor     sweep;
+    DraftEditor     draft;
 
-    std::array<OperationEditor*, 11> All() {
-        return {&extrude, &revolve, &fillet, &chamfer, &hole, &shell, &workPlane, &pattern, &mirror, &loft, &sweep};
+    std::array<OperationEditor*, 12> All() {
+        return {&extrude, &revolve, &fillet, &chamfer, &hole, &shell, &workPlane, &pattern, &mirror, &loft, &sweep, &draft};
     }
 
     /// The open operation, or nullptr.
