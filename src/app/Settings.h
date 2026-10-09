@@ -17,6 +17,12 @@ struct Settings {
     bool        pointSnap      = true;
     bool        showAllConstraints = false;   ///< sketch: every constraint glyph, or only those of the selection (F8 / F9)
     double      gridStep       = 0.0;     ///< mm; 0 = adaptive to zoom
+    double      uiScale        = 0.0;     ///< interface scale; 0 = automatic (screen density and size)
+    /// The window as last left (windowed size and place; maximized flag).
+    int         windowX = -1, windowY = -1, windowW = 0, windowH = 0;
+    bool        windowMaximized = true;
+    /// Shortcuts changed by the user: action id -> chord text ("Ctrl+Shift+E"; empty: none).
+    std::vector<std::pair<std::string, std::string>> shortcuts;
     std::vector<std::filesystem::path> recentFiles;   ///< most recent first
 
     static constexpr std::size_t kMaxRecent = 12;

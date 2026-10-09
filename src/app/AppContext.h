@@ -30,6 +30,8 @@ enum class RibbonTab : unsigned char { Model, Sketch, View };
 struct ShellState {
     LeftTab   leftTab   = LeftTab::Tree;
     RibbonTab ribbonTab = RibbonTab::Model;
+    float     ribbonScroll = 0.0f;   ///< sideways scroll of a ribbon wider than the window
+    float     ribbonContent = 0.0f;  ///< the ribbon's laid-out width in the last frame
 
     bool        paletteOpen = false;   ///< command search (Ctrl+K)
     std::string paletteQuery;
@@ -38,6 +40,11 @@ struct ShellState {
     std::optional<int> closeRequest;   ///< tab waiting for "save changes?" answer
     bool               quitRequested = false;
     bool               showAbout = false;
+    bool               showSettings = false;
+    int                settingsTab = 0;          ///< 0 interface, 1 keys
+    std::string        captureShortcut;          ///< action whose new shortcut is being pressed
+    std::string        shortcutFilter;
+    std::string        shortcutNote;             ///< "taken from …" after a reassignment
     bool               showMassProperties = false;   ///< the "МЦХ" window
 
     render::DisplayStyle displayStyle = render::DisplayStyle::ShadedWithEdges;
@@ -133,6 +140,7 @@ struct AppContext {
     std::vector<std::function<void()>>& deferred;
     double            now = 0.0;
     FrameStats        stats;
+    std::vector<ImGuiKeyChord> pressedChords;    ///< key chords pressed this frame (for shortcut capture)
 
     Session* Doc() { return workspace.Active(); }
 

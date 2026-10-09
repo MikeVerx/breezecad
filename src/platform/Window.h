@@ -11,6 +11,7 @@ namespace bz::platform {
 struct WindowConfig {
     int         width     = 1440;
     int         height    = 900;
+    int         x = -1, y = -1;   ///< -1: centred on the primary monitor
     bool        maximized = true;
     std::string title     = "BreezeCAD";
 };
@@ -37,6 +38,10 @@ public:
     void  SwapBuffers();
     /// UI scale of the monitor the window is on (1.0 = 96 dpi).
     float ContentScale() const;
+    /// Usable area of the monitor the window is on (without the taskbar), in screen coordinates.
+    void  MonitorWorkArea(int& x, int& y, int& width, int& height) const;
+    /// The windowed place and size, and whether it is maximized now.
+    void  Geometry(int& x, int& y, int& width, int& height, bool& maximized) const;
     bool  IsMinimized() const;
 
     /// Waits for input; returns early after `timeoutSeconds`.

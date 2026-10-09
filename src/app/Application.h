@@ -47,6 +47,10 @@ public:
 
 private:
     void Frame();
+    /// The interface scale: the setting, or one from the screen's density and size.
+    float ChooseScale() const;
+    /// Rebuilds fonts and sizes when the scale setting changed.
+    void ApplyScaleIfChanged();
     void DrawRoot();
     void ApplyTheme(bool force);
     void UpdateTitle();
@@ -81,6 +85,9 @@ private:
     int    myFramesToDraw = 3;
     double myLastFrameTime = 0.0;
     float  myFps = 0.0f;
+    float  myFramebufferScale = 1.0f;
+    double myAppliedScaleSetting = 0.0;
+    std::filesystem::path myAssets;
     FrameStats myStats;
     int    mySceneFramesThisSecond = 0;
     double mySecondStart = 0.0;

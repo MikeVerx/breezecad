@@ -65,6 +65,7 @@ void MainMenu(AppContext& app) {
         ImGui::EndMenu();
     }
     ImGui::Separator();
+    MenuAction(app, "app.settings");
     if (ui::BeginSubmenu(ui, "Оформление", "theme")) {
         if (ui::MenuItem(ui, "Как в системе", nullptr, {}, app.settings.theme == ThemeChoice::System)) SetTheme(app, ThemeChoice::System);
         if (ui::MenuItem(ui, "Светлая", nullptr, {}, app.settings.theme == ThemeChoice::Light)) SetTheme(app, ThemeChoice::Light);

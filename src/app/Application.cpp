@@ -80,7 +80,15 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     std::ofstream(config / "running.lock") << "running";
 
     mySettings = Settings::Load(config / "settings.json");
-    if (!myWindow.Create({})) return false;
+    platform::WindowConfig windowConfig;
+    if (mySettings.windowW > 0 && mySettings.windowH > 0) {
+        windowConfig.width = mySettings.windowW;
+        windowConfig.height = mySettings.windowH;
+        windowConfig.x = mySettings.windowX;
+        windowConfig.y = mySettings.windowY;
+    }
+    windowConfig.maximized = mySettings.windowMaximized;
+    if (!myWindow.Create(windowConfig)) return false;
 
     glfwSetWindowUserPointer(myWindow.Handle(), &myInput);
     glfwSetCursorPosCallback(myWindow.Handle(), [](GLFWwindow* w, double, double) { OnAnyInput(w); });
@@ -115,7 +123,10 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     glfwGetWindowSize(myWindow.Handle(), &winW, &h);
     glfwGetFramebufferSize(myWindow.Handle(), &fbW, &h);
     const float framebufferScale = winW > 0 ? static_cast<float>(fbW) / static_cast<float>(winW) : 1.0f;
-    myScale = std::max(1.0f, myWindow.ContentScale() / framebufferScale);
+    myFramebufferScale = framebufferScale;
+    myAssets = assets;
+    myScale = ChooseScale();
+    myAppliedScaleSetting = mySettings.uiScale;
     myFonts.Load(assets, myScale * framebufferScale);
     io.FontGlobalScale = 1.0f / framebufferScale;
     myIcons.SetDirectory(assets / "icons");
@@ -130,8 +141,9 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myShell.recoverable = myAutosave->FindRecoverable();
 
     myContext = std::make_unique<AppContext>(AppContext{*myUi, mySettings, myWorkspace, myActions, myNotes, *myAutosave,
-                                                        myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}});
+                                                        myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}});
     RegisterActions(*myContext);
+    for (const auto& [id, chord] : mySettings.shortcuts) myActions.SetChord(id, ActionRegistry::ParseChord(chord));
 
     for (const auto& file : files) myWorkspace.Open(file, myNotes, mySettings);
     if (myShell.crashedLastTime && !myShell.recoverable.empty())
@@ -188,6 +200,7 @@ int Application::Run() {
         }
         if (myScreenshotFrame >= 0 && myFrameIndex > myScreenshotFrame) break;
     }
+    myWindow.Geometry(mySettings.windowX, mySettings.windowY, mySettings.windowW, mySettings.windowH, mySettings.windowMaximized);
     mySettings.Save(platform::ConfigDir() / "settings.json");
     log::Info("BreezeCAD exits normally");
     return 0;
@@ -228,7 +241,34 @@ void Application::UpdateTitle() {
     }
 }
 
+float Application::ChooseScale() const {
+    if (mySettings.uiScale > 0) return static_cast<float>(mySettings.uiScale);
+    // The screen's density, then small enough that the layout (about
+    // 1280 x 720 design pixels) fits a small screen such as 1366 x 768.
+    float scale = myWindow.ContentScale() / myFramebufferScale;
+    int x = 0, y = 0, w = 0, h = 0;
+    myWindow.MonitorWorkArea(x, y, w, h);
+    if (w > 0 && h > 0) scale = std::min({scale, static_cast<float>(w) / 1280.0f, static_cast<float>(h) / 700.0f});
+    return std::clamp(scale, 0.75f, 3.0f);
+}
+
+void Application::ApplyScaleIfChanged() {
+    if (mySettings.uiScale == myAppliedScaleSetting) return;
+    myAppliedScaleSetting = mySettings.uiScale;
+    const float scale = ChooseScale();
+    if (std::abs(scale - myScale) < 1e-3f) return;
+    // Fonts are rasterised for one size: build them again, then the texture.
+    myScale = scale;
+    myFonts.Load(myAssets, myScale * myFramebufferScale);
+    ImGui_ImplOpenGL3_DestroyFontsTexture();
+    ImGui_ImplOpenGL3_CreateFontsTexture();
+    myUi->scale = myScale;
+    ui::ApplyToImGui(myTheme, myScale);
+    myFramesToDraw = std::max(myFramesToDraw, 3);
+}
+
 void Application::Frame() {
+    ApplyScaleIfChanged();
     const double now = glfwGetTime();
     const double dt = now - myLastFrameTime;
     myLastFrameTime = now;
@@ -245,7 +285,8 @@ void Application::Frame() {
     myStats.hoverMs = app.stats.hoverMs;
     app.stats = myStats;
 
-    myActions.HandleShortcuts(myInput.chords);
+    app.pressedChords = myInput.chords;
+    if (myShell.captureShortcut.empty()) myActions.HandleShortcuts(myInput.chords);
     myInput.chords.clear();
     if (Session* s = myWorkspace.Active()) {
         if (s->RebuildIfNeeded()) {

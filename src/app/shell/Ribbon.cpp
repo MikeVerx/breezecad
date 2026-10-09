@@ -20,6 +20,8 @@ public:
     }
 
     AppContext& App() const { return myApp; }
+    /// Right edge of what was laid out so far.
+    float End() const { return myX; }
 
     void BeginGroup(const char* caption) {
         myCaption = caption;
@@ -361,12 +363,43 @@ float DrawRibbon(AppContext& app, Session& session, ImVec2 pos, float width) {
     dl->AddLine(pos, {pos.x + width, pos.y}, ui::ToU32(c.dividerSoft));
     dl->AddLine({pos.x, pos.y + h - 1}, {pos.x + width, pos.y + h - 1}, ui::ToU32(c.divider));
 
-    RibbonBuilder builder(app, pos, h);
+    // On a narrow window (a 1366-pixel laptop) the ribbon scrolls sideways:
+    // mouse wheel over it, or the arrows at its edges. The arrows go first
+    // (sized by the last frame's layout) so the buttons under them do not
+    // take their clicks.
+    float& scroll = app.shell.ribbonScroll;
+    const float overflow = std::max(0.0f, app.shell.ribbonContent - width);
+    scroll = std::clamp(scroll, 0.0f, overflow);
+    const float aw = ui.S(22);
+    const bool leftArrow = overflow > 0 && scroll > 0, rightArrow = overflow > 0 && scroll < overflow;
+    const auto arrow = [&](bool right) {
+        const ImVec2 a0{right ? pos.x + width - aw : pos.x, pos.y + 1}, a1{right ? pos.x + width : pos.x + aw, pos.y + h - 1};
+        ImGui::SetCursorScreenPos(a0);
+        ImGui::PushID(right ? "##ribbon-right" : "##ribbon-left");
+        if (ImGui::InvisibleButton("##arrow", {aw, h - 2})) scroll += right ? width * 0.5f : -width * 0.5f;
+        const bool hot = ImGui::IsItemHovered();
+        ImGui::PopID();
+        dl->AddRectFilled(a0, a1, ui::ToU32(hot ? c.hover : c.ribbon));
+        dl->AddLine({right ? a0.x : a1.x, a0.y}, {right ? a0.x : a1.x, a1.y}, ui::ToU32(c.divider));
+        const ImVec2 mid{(a0.x + a1.x) / 2, (a0.y + a1.y) / 2};
+        const float s = ui.S(5);
+        if (right) dl->AddTriangleFilled({mid.x - s / 2, mid.y - s}, {mid.x - s / 2, mid.y + s}, {mid.x + s / 2, mid.y}, ui::ToU32(c.textSecondary));
+        else dl->AddTriangleFilled({mid.x + s / 2, mid.y - s}, {mid.x + s / 2, mid.y + s}, {mid.x - s / 2, mid.y}, ui::ToU32(c.textSecondary));
+    };
+    if (leftArrow) arrow(false);
+    if (rightArrow) arrow(true);
+
+    RibbonBuilder builder(app, {pos.x - scroll, pos.y}, h);
+    ImGui::PushClipRect({pos.x + (leftArrow ? aw : 0), pos.y}, {pos.x + width - (rightArrow ? aw : 0), pos.y + h}, true);
     switch (app.shell.ribbonTab) {
         case RibbonTab::Model:  ModelRibbon(builder); break;
         case RibbonTab::Sketch: SketchRibbon(app, builder); break;
         case RibbonTab::View:   ViewRibbon(app, builder); break;
     }
+    ImGui::PopClipRect();
+    app.shell.ribbonContent = builder.End() + scroll - pos.x + ui.S(8);
+    if (overflow > 0 && ImGui::IsMouseHoveringRect(pos, {pos.x + width, pos.y + h}))
+        scroll -= (ImGui::GetIO().MouseWheel + ImGui::GetIO().MouseWheelH) * ui.S(60);
     EndArea();
     return h;
 }

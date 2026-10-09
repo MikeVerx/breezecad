@@ -38,7 +38,10 @@ std::string Lower(std::string_view text) {
 
 } // namespace
 
-void ActionRegistry::Add(Action action) { myActions.push_back(std::move(action)); }
+void ActionRegistry::Add(Action action) {
+    action.defaultChord = action.chord;
+    myActions.push_back(std::move(action));
+}
 
 const Action* ActionRegistry::Find(std::string_view id) const {
     for (const auto& a : myActions)
@@ -82,6 +85,38 @@ std::string ActionRegistry::ChordText(ImGuiKeyChord chord) {
         default:              out += ImGui::GetKeyName(key); break;
     }
     return out;
+}
+
+ImGuiKeyChord ActionRegistry::ParseChord(std::string_view text) {
+    if (text.empty()) return 0;
+    ImGuiKeyChord mods = 0;
+    // ChordText writes Ctrl, Shift, Alt in this order; any order is read.
+    for (int pass = 0; pass < 3; ++pass)
+        for (const auto& [prefix, mod] : {std::pair<std::string_view, ImGuiKeyChord>{"Ctrl+", ImGuiMod_Ctrl},
+                                          {"Shift+", ImGuiMod_Shift}, {"Alt+", ImGuiMod_Alt}})
+            if (text.starts_with(prefix)) {
+                mods |= mod;
+                text.remove_prefix(prefix.size());
+            }
+    for (int k = ImGuiKey_NamedKey_BEGIN; k < ImGuiKey_NamedKey_END; ++k)
+        if (ChordText(static_cast<ImGuiKeyChord>(k)) == text) return mods | k;
+    return 0;
+}
+
+std::string ActionRegistry::SetChord(std::string_view id, ImGuiKeyChord chord) {
+    std::string taken;
+    for (Action& a : myActions) {
+        if (a.id == id) a.chord = chord;
+        else if (chord != 0 && a.chord == chord) {
+            a.chord = 0;
+            taken = a.id;
+        }
+    }
+    return taken;
+}
+
+void ActionRegistry::ResetChords() {
+    for (Action& a : myActions) a.chord = a.defaultChord;
 }
 
 std::vector<const Action*> ActionRegistry::Search(std::string_view query) const {

@@ -49,6 +49,8 @@ void RegisterActions(AppContext& app) {
     a.Add({"tools.massProperties", "МЦХ", "mass-properties", 0, "Масса, объём, площадь, центр масс и габариты детали",
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { app.shell.showMassProperties = true; }});
+    a.Add({"app.settings", "Настройки", "ui-sliders", 0, "Масштаб интерфейса, оформление, сочетания клавиш", {},
+           [&app] { app.shell.showSettings = true; }});
     a.Add({"app.about", "О программе", "ui-info", 0, {}, {}, [&app] { app.shell.showAbout = true; }});
 
     // --- edit ---
