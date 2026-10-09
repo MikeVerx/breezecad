@@ -17,7 +17,7 @@ inline doc::SketchFeature& AddSketch(doc::Document& d, ObjectId plane = doc::ori
     sk->id = d.Ids().Next();
     sk->name = d.UniqueFeatureName("Эскиз");
     // A work plane id gets its frame on the first rebuild.
-    sk->placement = {plane, doc::origin::PlaneFrame(plane).value_or(Frame{}), false};
+    sk->placement = {plane, doc::origin::PlaneFrame(plane).value_or(Frame{}), false, {}};
     sk->sketch.EnsureOrigin(d.Ids());
     auto* raw = sk.get();
     d.Insert(std::move(sk), d.FeatureCount());

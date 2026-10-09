@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Math.h"
+#include "document/FaceReference.h"
 #include "document/Feature.h"
 #include "sketch/Sketch.h"
 
@@ -9,13 +10,15 @@
 
 namespace bz::doc {
 
-/// Where a sketch lies. Origin planes are exact; a sketch on a model face
-/// keeps the face's frame from the moment it was created and is moved
-/// along with the face on recompute when the face can be found again.
+/// Where a sketch lies. Origin planes are exact; a sketch on a work plane
+/// follows it; a sketch on a model face keeps the face's frame from the
+/// moment it was created and is moved along with the face on rebuild when
+/// the face can be found again (by `face`).
 struct SketchPlacement {
-    ObjectId support;      ///< origin plane id, or the feature that produced the face
-    Frame    frame;        ///< plane in model space; sketch coordinates live in it
-    bool     onFace = false;
+    ObjectId      support;   ///< origin plane, work plane, or the feature that produced the face
+    Frame         frame;     ///< plane in model space; sketch coordinates live in it
+    bool          onFace = false;
+    FaceReference face;      ///< onFace: the face as picked
 };
 
 class SketchFeature final : public FeatureBase<SketchFeature> {

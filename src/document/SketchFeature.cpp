@@ -79,6 +79,7 @@ void SketchFeature::SaveFields(Json& out) const {
     out["placement"] = Json{{"support", ToJson(placement.support)},
                             {"frame", ToJson(placement.frame)},
                             {"onFace", placement.onFace}};
+    if (placement.face.IsSet()) out["placement"]["face"] = json_io::ToJson(placement.face);
 
     Json points = Json::array();
     for (const auto& p : sketch.points) {
@@ -120,7 +121,7 @@ Status SketchFeature::LoadFields(const Json& in) {
     SketchPlacement pl;
     if (const auto it = in.find("placement"); it != in.end()) {
         if (!ReadMember(*it, "support", pl.support) || !ReadMember(*it, "frame", pl.frame) ||
-            !ReadMember(*it, "onFace", pl.onFace))
+            !ReadMember(*it, "onFace", pl.onFace) || !ReadMember(*it, "face", pl.face))
             return Bad("placement");
     }
 

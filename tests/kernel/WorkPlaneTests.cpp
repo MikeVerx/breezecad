@@ -101,3 +101,26 @@ TEST_CASE("work plane errors and file round trip") {
     CHECK(w->offset.expression == "7");
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("a sketch on a face moves with the face") {
+    doc::Document d;
+    auto& base = AddSketch(d);
+    AddRect(d, base, {0, 0}, {40, 40});
+    auto& plate = AddExtrude(d, base.id, "10");
+    // A boss sketched on the top face (as picked at (20, 20, 10)).
+    auto& top = AddSketch(d);
+    top.placement = {plate.id, {{0, 0, 10}, {1, 0, 0}, {0, 0, 1}}, true, {{0, 0, 1}, {20, 20, 10}}};
+    AddRect(d, top, {10, 10}, {20, 20});
+    AddExtrude(d, top.id, "5", doc::BooleanOp::Join);
+    kernel::Model model;
+    model.Rebuild(d);
+    CHECK(model.BoundingBox()->max.z == doctest::Approx(15.0).epsilon(1e-4));
+
+    plate.distance.expression = "25";
+    d.MarkChanged(1);
+    model.Rebuild(d);
+    CHECK(top.status.state == FeatureState::Ok);
+    CHECK(top.placement.frame.origin.z == doctest::Approx(25.0));
+    CHECK(model.BoundingBox()->max.z == doctest::Approx(30.0).epsilon(1e-4));
+    CHECK(model.Volume() == doctest::Approx(40.0 * 40 * 25 + 10.0 * 10 * 5));
+}

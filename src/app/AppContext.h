@@ -70,6 +70,7 @@ struct ShellState {
         bool                 moved = false;
         Vec3                 pivot;
         std::optional<Frame> facePlane;   ///< planar face under the cursor at the right click
+        ObjectId             faceBody;    ///< and the body it belongs to
     } nav;
     const Session* viewportSession = nullptr;   ///< whose camera the viewport shows
     ImVec2         viewportMax{0, 0};           ///< bottom-right of the scene, for notifications

@@ -7,6 +7,7 @@
 #include "document/Commands.h"
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
+#include "document/WorkPlaneFeature.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
 #include "ui/ViewCube.h"
@@ -117,9 +118,11 @@ void StartSketch(AppContext& app) {
     if (!s) return;
     app.ops.Close(app, *s);
     if (s->mode == EditMode::Sketch) app.sketch.Finish(app, *s);
-    // An origin plane selected in the tree: sketch on it right away.
-    if (const auto frame = doc::origin::PlaneFrame(s->selectedFeature)) {
-        app.sketch.CreateAndEdit(app, *s, {s->selectedFeature, *frame, false});
+    // An origin or work plane selected in the tree: sketch on it right away.
+    std::optional<Frame> frame = doc::origin::PlaneFrame(s->selectedFeature);
+    if (const auto* wp = s->doc.FindAs<doc::WorkPlaneFeature>(s->selectedFeature); wp && wp->frame) frame = wp->frame;
+    if (frame) {
+        app.sketch.CreateAndEdit(app, *s, {s->selectedFeature, *frame, false, {}});
         return;
     }
     s->mode = EditMode::PickPlane;

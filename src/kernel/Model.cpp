@@ -263,10 +263,25 @@ void PlaceWorkPlane(doc::WorkPlaneFeature& wp, const doc::Document& doc, const s
     wp.status = {FeatureState::Ok, {}};
 }
 
-/// A sketch on a work plane moves with it (sketch coordinates stay the same).
-void FollowWorkPlane(doc::SketchFeature& sk, const doc::Document& doc) {
-    if (const auto* wp = doc.FindAs<doc::WorkPlaneFeature>(sk.placement.support); wp && wp->frame)
-        sk.placement.frame = *wp->frame;
+/// A sketch on a work plane moves with it; a sketch on a face moves along
+/// the face's normal when the face moved. Sketch coordinates stay the same.
+/// Returns false when the face is gone (the sketch then stays where it was).
+bool FollowSupport(doc::SketchFeature& sk, const doc::Document& doc, const std::vector<Body>& bodies) {
+    doc::SketchPlacement& p = sk.placement;
+    if (const auto* wp = doc.FindAs<doc::WorkPlaneFeature>(p.support); wp && wp->frame) {
+        p.frame = *wp->frame;
+        return true;
+    }
+    if (!p.onFace || !p.face.IsSet()) return true;
+    for (auto it = bodies.rbegin(); it != bodies.rend(); ++it)
+        if (const auto plane = occt::ResolvePlaneFrame(it->shape, p.face)) {
+            const Vec3 n = p.frame.normal;
+            const double shift = (plane->origin - p.frame.origin).Dot(n);
+            p.frame.origin = p.frame.origin + n * shift;
+            p.face.point = p.face.point + n * shift;   // keep the reference on the face as it is now
+            return true;
+        }
+    return false;
 }
 
 /// OCCT prints progress reports (STEP statistics...) to stdout; keep only
@@ -313,7 +328,7 @@ void Model::Rebuild(doc::Document& doc) {
         const bool skip = !doc.IsActive(i) || f.suppressed;
         if (!skip) {
             if (auto* sk = dynamic_cast<doc::SketchFeature*>(&f)) {
-                FollowWorkPlane(*sk, doc);
+                const bool placed = FollowSupport(*sk, doc, bodies);
                 Expected<occt::SketchProfile> profile = occt::BuildProfile(*sk);
                 if (profile) {
                     impl.sketches[sk->id] = std::move(*profile);
@@ -321,6 +336,8 @@ void Model::Rebuild(doc::Document& doc) {
                     impl.sketches.erase(sk->id);
                     sk->status = {FeatureState::Error, profile.GetError().message};
                 }
+                if (!placed && sk->status.state == FeatureState::Ok)
+                    sk->status = {FeatureState::Warning, "Грань эскиза не найдена: эскиз остался на прежнем месте"};
             } else if (auto* ex = dynamic_cast<doc::ExtrudeFeature*>(&f)) {
                 ApplySketchSolid(*ex, impl, bodies, ex->status, doc,
                                  [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature&, const Frame& frame) {

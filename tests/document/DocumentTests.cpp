@@ -25,7 +25,7 @@ struct Plate {
         auto sk = std::make_unique<SketchFeature>();
         sk->id = doc.Ids().Next();
         sk->name = doc.UniqueFeatureName("Эскиз");
-        sk->placement = {origin::kPlaneXY, *origin::PlaneFrame(origin::kPlaneXY), false};
+        sk->placement = {origin::kPlaneXY, *origin::PlaneFrame(origin::kPlaneXY), false, {}};
         auto& s = sk->sketch;
         IdGenerator& ids = doc.Ids();
         const ObjectId o = s.EnsureOrigin(ids);

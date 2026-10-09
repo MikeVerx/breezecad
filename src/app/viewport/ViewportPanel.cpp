@@ -49,10 +49,10 @@ void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDra
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
     if (hot) {
-        const doc::SketchPlacement placement{hot->id, hot->frame, false};
+        const doc::SketchPlacement placement{hot->id, hot->frame, false, {}};
         app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
     } else if (face && face->plane) {
-        const doc::SketchPlacement placement{face->body, *face->plane, true};
+        const doc::SketchPlacement placement{face->body, *face->plane, true, {face->plane->normal, face->point}};
         app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
     }
 }
@@ -85,7 +85,8 @@ void ContextMenu(AppContext& app, Session& session) {
         } else {
             if (app.shell.nav.facePlane) {
                 if (ImGui::MenuItem("Эскиз на этой грани")) {
-                    const doc::SketchPlacement placement{{}, *app.shell.nav.facePlane, true};
+                    const doc::SketchPlacement placement{app.shell.nav.faceBody, *app.shell.nav.facePlane, true,
+                                                         {app.shell.nav.facePlane->normal, app.shell.nav.pivot}};
                     app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
                 }
             }
@@ -117,6 +118,7 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
         const auto hit = app.viewport.Pick(vf.ToLocal(mouse));
         nav.pivot = hit ? hit->point : app.viewport.ModelCenter();
         nav.facePlane = hit ? hit->plane : std::nullopt;
+        nav.faceBody = hit ? hit->body : ObjectId{};
     }
     if (sceneHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
         nav.panning = true;
