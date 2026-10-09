@@ -2,6 +2,7 @@ add_executable(bz_tests
     main.cpp
     core/ExpressionTests.cpp
     document/DocumentTests.cpp
+    kernel/BracketTests.cpp
     kernel/FilletTests.cpp
     kernel/HoleTests.cpp
     kernel/MeasureTests.cpp

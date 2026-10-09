@@ -1,10 +1,16 @@
 #include "core/PathText.h"
 #include "document/BzcFile.h"
 #include "document/Commands.h"
+#include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
+#include "document/HoleFeature.h"
 #include "document/Origin.h"
+#include "document/PatternFeature.h"
 #include "document/Recompute.h"
+#include "document/RevolveFeature.h"
+#include "document/ShellFeature.h"
 #include "document/SketchFeature.h"
+#include "document/WorkPlaneFeature.h"
 
 #include <doctest.h>
 
@@ -204,4 +210,42 @@ TEST_CASE("bzc file round trip and atomic save") {
 
     CHECK_FALSE(LoadBzc(dir / "missing.bzc").HasValue());
     std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("every feature type survives a file round trip") {
+    // Each operation with its default settings: saved, opened, same type and
+    // no warnings. Catches a feature that writes over the common keys.
+    doc::Document d;
+    std::vector<std::unique_ptr<doc::Feature>> made;
+    made.push_back(std::make_unique<doc::SketchFeature>());
+    made.push_back(std::make_unique<doc::ExtrudeFeature>());
+    made.push_back(std::make_unique<doc::RevolveFeature>());
+    made.push_back(std::make_unique<doc::FilletFeature>());
+    made.push_back(std::make_unique<doc::ChamferFeature>());
+    made.push_back(std::make_unique<doc::HoleFeature>());
+    made.push_back(std::make_unique<doc::ShellFeature>());
+    made.push_back(std::make_unique<doc::WorkPlaneFeature>());
+    made.push_back(std::make_unique<doc::PatternFeature>());
+    made.push_back(std::make_unique<doc::MirrorFeature>());
+    std::vector<std::pair<ObjectId, std::string_view>> expected;
+    for (auto& f : made) {
+        f->id = d.Ids().Next();
+        f->name = d.UniqueFeatureName("Операция");
+        expected.emplace_back(f->id, f->Type());
+        d.Insert(std::move(f), d.FeatureCount());
+    }
+    const auto dir = std::filesystem::temp_directory_path() / "bz_all_types";
+    std::filesystem::create_directories(dir);
+    REQUIRE(doc::SaveBzc(d, dir / "all.bzc", "tests").IsOk());
+    doc::LoadReport report;
+    auto loaded = doc::LoadBzc(dir / "all.bzc", &report);
+    std::filesystem::remove_all(dir);
+    REQUIRE(loaded);
+    for (const std::string& w : report.warnings) MESSAGE(w);
+    CHECK(report.warnings.empty());
+    for (const auto& [id, type] : expected) {
+        const doc::Feature* f = loaded->Find(id);
+        REQUIRE(f);
+        CHECK(f->Type() == type);
+    }
 }

@@ -30,7 +30,7 @@ void HoleFeature::SaveFields(Json& out) const {
     const std::string_view typeId = json_io::IdOf(kTypeIds, type);
     out["face"]         = json_io::ToJson(face);
     out["centres"]      = std::move(centreList);
-    out["type"]         = typeId;
+    out["holeType"]     = typeId;
     out["throughAll"]   = throughAll;
     out["diameter"]     = json_io::ToJson(diameter);
     out["depth"]        = json_io::ToJson(depth);
@@ -42,8 +42,8 @@ void HoleFeature::SaveFields(Json& out) const {
 Status HoleFeature::LoadFields(const Json& in) {
     HoleFeature f;
     std::string typeId = "simple";
-    if (!ReadMember(in, "face", f.face) || !ReadMember(in, "type", typeId) || !ReadMember(in, "throughAll", f.throughAll) || !ReadMember(in, "diameter", f.diameter) ||
-        !ReadMember(in, "depth", f.depth) || !ReadMember(in, "headDiameter", f.headDiameter) ||
+    if (!ReadMember(in, "face", f.face) || !ReadMember(in, "holeType", typeId) || !ReadMember(in, "throughAll", f.throughAll) ||
+        !ReadMember(in, "diameter", f.diameter) || !ReadMember(in, "depth", f.depth) || !ReadMember(in, "headDiameter", f.headDiameter) ||
         !ReadMember(in, "headDepth", f.headDepth) || !ReadMember(in, "sinkDiameter", f.sinkDiameter))
         return Error{"Отверстие: повреждены параметры"};
     if (!json_io::FromId(kTypeIds, typeId, f.type)) return Error{"Отверстие: неизвестный тип «" + typeId + "»"};

@@ -7,6 +7,8 @@
 
 #include <miniz.h>
 
+#include <cassert>
+
 #include <chrono>
 #include <format>
 #include <fstream>
@@ -67,7 +69,13 @@ std::string DocumentToJson(const Document& doc) {
     for (const auto& f : doc.Features()) {
         Json j{{"id", f->id.value}, {"type", f->Type()}, {"name", f->name}};
         if (f->suppressed) j["suppressed"] = true;
-        f->SaveFields(j);
+        // A feature's own fields must not reuse the common keys (a hole once
+        // wrote its kind as "type" and could not be opened again).
+        Json fields = Json::object();
+        f->SaveFields(fields);
+        for (const char* reserved : {"id", "type", "name", "suppressed"})
+            assert(!fields.contains(reserved) && "SaveFields wrote a reserved key");
+        j.update(fields);
         features.push_back(std::move(j));
     }
 
