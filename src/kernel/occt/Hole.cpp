@@ -1,18 +1,15 @@
 #include "kernel/occt/Hole.h"
 
 #include "kernel/occt/Extrude.h"   // ApplyBoolean
+#include "kernel/occt/FaceMatch.h"
 
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
-#include <BRepGProp_Face.hxx>
 #include <BRepPrimAPI_MakeCone.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
-#include <BRepTools.hxx>
 #include <Bnd_Box.hxx>
 #include <Standard_Failure.hxx>
-#include <TopExp_Explorer.hxx>
-#include <TopoDS.hxx>
 #include <gp_Ax2.hxx>
 
 #include <cmath>
@@ -64,38 +61,17 @@ Status CheckSizes(const doc::HoleFeature& f) {
 
 } // namespace
 
-std::optional<Vec3> FindPlanarFace(const TopoDS_Shape& body, const doc::FaceReference& ref) {
-    const Vec3 n = ref.normal.Normalized();
-    std::optional<Vec3> best;
-    double bestOffset = 1e300;
-    for (TopExp_Explorer e(body, TopAbs_FACE); e.More(); e.Next()) {
-        const TopoDS_Face& face = TopoDS::Face(e.Current());
-        if (BRepAdaptor_Surface(face).GetType() != GeomAbs_Plane) continue;
-        double u1, u2, v1, v2;
-        BRepTools::UVBounds(face, u1, u2, v1, v2);
-        gp_Pnt p;
-        gp_Vec normal;
-        BRepGProp_Face(face).Normal((u1 + u2) / 2, (v1 + v2) / 2, p, normal);
-        const Vec3 fn = Vec3{normal.X(), normal.Y(), normal.Z()}.Normalized();
-        if (fn.Dot(n) < 0.999) continue;
-        // Distance of the stored point from this face's plane.
-        const Vec3 onFace{p.X(), p.Y(), p.Z()};
-        const double offset = std::abs((onFace - ref.point).Dot(n));
-        if (offset < bestOffset) {
-            bestOffset = offset;
-            best = ref.point + n * (onFace - ref.point).Dot(n);   // the stored point moved onto this plane
-        }
-    }
-    return best;
-}
-
 Expected<TopoDS_Shape> DrillHoles(const TopoDS_Shape& body, const doc::HoleFeature& f) {
     if (Status s = CheckSizes(f); !s) return s.GetError();
     if (f.centres.empty()) return Error{"Укажите центр отверстия на грани"};
-    const std::optional<Vec3> onFace = FindPlanarFace(body, f.face);
-    if (!onFace) return Error{"Грань отверстия не найдена: модель изменилась слишком сильно"};
+    const std::optional<TopoDS_Face> face = ResolveFace(body, f.face);
+    if (!face) return Error{"Грань отверстия не найдена: модель изменилась слишком сильно"};
+    // The stored point moved onto the face's plane as it is now.
+    const Vec3 n = f.face.normal.Normalized();
+    const gp_XYZ location = BRepAdaptor_Surface(*face).Plane().Location().XYZ();
+    const Vec3 onFace = f.face.point + n * (Vec3{location.X(), location.Y(), location.Z()} - f.face.point).Dot(n);
 
-    const Frame frame = doc::HolePlaneFrame({f.face.normal, *onFace});
+    const Frame frame = doc::HolePlaneFrame({f.face.normal, onFace});
     const Vec3 down = -frame.normal;
     const double depth = f.throughAll ? Diagonal(body) : f.depth.value;
     try {

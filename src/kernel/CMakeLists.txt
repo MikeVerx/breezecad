@@ -3,6 +3,7 @@ add_library(bz_kernel STATIC
     occt/EdgeMatch.cpp
     occt/Export.cpp
     occt/Extrude.cpp
+    occt/FaceMatch.cpp
     occt/Fillet.cpp
     occt/Hole.cpp
     occt/Revolve.cpp

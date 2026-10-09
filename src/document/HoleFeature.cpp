@@ -39,9 +39,9 @@ void HoleFeature::SaveFields(Json& out) const {
     Json centreList = Json::array();
     for (Vec2 c : centres) centreList.push_back(json_io::ToJson(c));
     std::string_view typeId = "simple";
-    for (const auto& [t, id] : kTypeIds)
-        if (t == type) typeId = id;
-    out["face"]         = Json{{"normal", json_io::ToJson(face.normal)}, {"point", json_io::ToJson(face.point)}};
+    for (const auto& [t, key] : kTypeIds)
+        if (t == type) typeId = key;
+    out["face"]         = json_io::ToJson(face);
     out["centres"]      = std::move(centreList);
     out["type"]         = typeId;
     out["throughAll"]   = throughAll;
@@ -55,15 +55,13 @@ void HoleFeature::SaveFields(Json& out) const {
 Status HoleFeature::LoadFields(const Json& in) {
     HoleFeature f;
     std::string typeId = "simple";
-    const auto faceIt = in.find("face");
-    if (faceIt == in.end() || !ReadMember(*faceIt, "normal", f.face.normal) || !ReadMember(*faceIt, "point", f.face.point) ||
-        !ReadMember(in, "type", typeId) || !ReadMember(in, "throughAll", f.throughAll) || !ReadMember(in, "diameter", f.diameter) ||
+    if (!ReadMember(in, "face", f.face) || !ReadMember(in, "type", typeId) || !ReadMember(in, "throughAll", f.throughAll) || !ReadMember(in, "diameter", f.diameter) ||
         !ReadMember(in, "depth", f.depth) || !ReadMember(in, "headDiameter", f.headDiameter) ||
         !ReadMember(in, "headDepth", f.headDepth) || !ReadMember(in, "sinkDiameter", f.sinkDiameter))
         return Error{"Отверстие: повреждены параметры"};
     bool known = false;
-    for (const auto& [t, id] : kTypeIds)
-        if (id == typeId) {
+    for (const auto& [t, key] : kTypeIds)
+        if (key == typeId) {
             f.type = t;
             known = true;
         }

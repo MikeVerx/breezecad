@@ -16,7 +16,7 @@ using doc::HoleType;
 
 constexpr float kCentrePickRadius = 9.0f;   ///< design px around a centre that hit it
 
-bool HasFace(const doc::HoleFeature& f) { return f.face.normal.Length() > 0.5; }
+bool HasFace(const doc::HoleFeature& f) { return f.face.IsSet(); }
 
 /// True when a picked planar face lies in the plane of the hole's face.
 bool OnSamePlane(const doc::FaceReference& face, const Frame& plane, Vec3 point) {

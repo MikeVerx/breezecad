@@ -1,0 +1,21 @@
+#pragma once
+// Finding a referenced flat face again on a rebuilt body (see doc::FaceReference).
+
+#include "document/FaceReference.h"
+
+#include <TopoDS_Face.hxx>
+#include <TopoDS_Shape.hxx>
+
+#include <optional>
+
+namespace bz::kernel::occt {
+
+/// The flat face of `body` with the reference's outward normal whose plane is
+/// nearest the stored point; among faces in that same plane, the one nearest
+/// the point. nullopt when no flat face faces that way.
+std::optional<TopoDS_Face> ResolveFace(const TopoDS_Shape& body, const doc::FaceReference& ref);
+
+/// Outward unit normal of a flat face (nullopt for a curved one).
+std::optional<Vec3> PlanarNormal(const TopoDS_Face& face);
+
+} // namespace bz::kernel::occt

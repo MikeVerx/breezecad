@@ -8,16 +8,12 @@
 // its normal, e.g. when the part gets thicker.
 
 #include "core/Math.h"
+#include "document/FaceReference.h"
 #include "document/Feature.h"
 
 #include <vector>
 
 namespace bz::doc {
-
-struct FaceReference {
-    Vec3 normal;   ///< outward, unit
-    Vec3 point;    ///< a point of the face when it was picked
-};
 
 enum class HoleType : unsigned char { Simple, Counterbore, Countersink };
 

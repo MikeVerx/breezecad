@@ -29,6 +29,11 @@ bool Read(const Json& j, Vec2& out) {
     return true;
 }
 
+bool Read(const Json& j, FaceReference& out) {
+    return j.is_object() && j.contains("normal") && j.contains("point") && Read(j["normal"], out.normal) &&
+           Read(j["point"], out.point);
+}
+
 bool Read(const Json& j, Vec3& out) {
     if (!j.is_array() || j.size() != 3) return false;
     for (const auto& e : j)

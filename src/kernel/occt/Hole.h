@@ -11,8 +11,4 @@ namespace bz::kernel::occt {
 /// `body` by its normal and point (doc::FaceReference).
 Expected<TopoDS_Shape> DrillHoles(const TopoDS_Shape& body, const doc::HoleFeature& feature);
 
-/// The plane of the face `ref` points at on `body`: same outward normal,
-/// nearest to the stored point. Returns a point on it (nullopt: no such face).
-std::optional<Vec3> FindPlanarFace(const TopoDS_Shape& body, const doc::FaceReference& ref);
-
 } // namespace bz::kernel::occt

@@ -6,6 +6,7 @@
 #include "core/Id.h"
 #include "core/Math.h"
 #include "core/Parameter.h"
+#include "document/FaceReference.h"
 
 #include <nlohmann/json.hpp>
 
@@ -27,6 +28,7 @@ std::string_view QuantityId(Quantity q);
 Quantity         QuantityFromId(std::string_view id);
 
 Json ToJson(const Parameter& p);
+inline Json ToJson(const FaceReference& f) { return Json{{"normal", ToJson(f.normal)}, {"point", ToJson(f.point)}}; }
 
 // Readers return false (and leave `out` unchanged) on malformed input.
 bool Read(const Json& j, Vec2& out);
@@ -34,6 +36,7 @@ bool Read(const Json& j, Vec3& out);
 bool Read(const Json& j, ObjectId& out);
 bool Read(const Json& j, Frame& out);
 bool Read(const Json& j, Parameter& out);
+bool Read(const Json& j, FaceReference& out);
 
 /// Reads an optional member; missing keeps the default, malformed fails.
 template <class T>
