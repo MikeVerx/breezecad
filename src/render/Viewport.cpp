@@ -20,6 +20,7 @@
 #include <OpenGl_GraphicDriver.hxx>
 #include <OpenGl_Texture.hxx>
 #include <Prs3d_Drawer.hxx>
+#include <Prs3d_IsoAspect.hxx>
 #include <Prs3d_LineAspect.hxx>
 #include <Prs3d_ShadingAspect.hxx>
 #include <SelectMgr_EntityOwner.hxx>
@@ -192,8 +193,17 @@ struct Viewport::Impl {
         drawer->SetDeviationAngle(4.0 * kPi / 180.0);
         drawer->SetDeviationCoefficient(0.0005);
         drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(colors.edges), Aspect_TOL_SOLID, 1.0));
-        drawer->SetWireAspect(new Prs3d_LineAspect(ToQuantity(colors.edges), Aspect_TOL_SOLID, 1.2));
-        drawer->SetLineAspect(new Prs3d_LineAspect(ToQuantity(colors.edges), Aspect_TOL_SOLID, 1.2));
+        // Wireframe and hidden-line styles draw edges in the edge colour (not
+        // the body colour SetColor gave them) and no isolines.
+        const Quantity_Color ink = ToQuantity(colors.edges);
+        drawer->SetWireAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
+        drawer->SetLineAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
+        drawer->SetFreeBoundaryAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
+        drawer->SetUnFreeBoundaryAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
+        drawer->SetUIsoAspect(new Prs3d_IsoAspect(ink, Aspect_TOL_SOLID, 1.0, 0));
+        drawer->SetVIsoAspect(new Prs3d_IsoAspect(ink, Aspect_TOL_SOLID, 1.0, 0));
+        // "Скрытые линии": only the visible edges, in the edge colour.
+        drawer->SetSeenLineAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
         ais->SetTransparency(style == DisplayStyle::Transparent ? 0.55 : 0.0);
 
         const bool wire = style == DisplayStyle::Wireframe || style == DisplayStyle::HiddenLines;

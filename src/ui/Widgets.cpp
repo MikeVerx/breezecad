@@ -74,7 +74,8 @@ bool RibbonLargeButton(Ui& ui, const char* id, std::string_view icon, const char
     if (bg.a > 0) dl->AddRectFilled(pos, Add(pos, {width, height}), ToU32(bg), ui.S(ui.theme.metrics.radius));
 
     const float iconSize = ui.S(32);
-    const Color alpha{1, 1, 1, enabled ? 1.0f : 0.38f};
+    // Colour icons keep their own colours; monochrome ones take the text colour.
+    const Color alpha = ui.C().textSecondary.WithAlpha(enabled ? 1.0f : 0.38f);
     ui.icons.Draw(dl, icon, Add(pos, {(width - iconSize) / 2, ui.S(6)}), iconSize, alpha);
 
     const Color textColor = enabled ? ui.C().text : ui.C().textDisabled;
@@ -105,7 +106,8 @@ bool RibbonSmallButton(Ui& ui, const char* id, std::string_view icon, const char
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const Color bg = FlatBackground(ui, hovered, held, active);
     if (bg.a > 0) dl->AddRectFilled(pos, Add(pos, {width, height}), ToU32(bg), ui.S(ui.theme.metrics.radiusSmall));
-    const Color alpha{1, 1, 1, enabled ? 1.0f : 0.38f};
+    // Colour icons keep their own colours; monochrome ones take the text colour.
+    const Color alpha = ui.C().textSecondary.WithAlpha(enabled ? 1.0f : 0.38f);
     ui.icons.Draw(dl, icon, Add(pos, {ui.S(4), ui.S(2)}), ui.S(20), alpha);
     dl->AddText(font, fontSize, {pos.x + ui.S(32), pos.y + (height - ts.y) / 2},
                 ToU32(enabled ? ui.C().text : ui.C().textDisabled), caption);
