@@ -23,6 +23,8 @@ enum class EqKind : unsigned char {
     EqualLength,     ///< |D1| - |D2|
     Angle,           ///< wrap(atan2(cross(D1,D2), dot(D1,D2)) - value)
     CircleTangent,   ///< |C1 - C2| - (k0 * x[v4] + k1 * x[v5])    C1=(v0,v1) C2=(v2,v3)
+    SymmetricMid,    ///< cross(B - A, (P + Q) / 2 - A) / |B - A|  P=(v0,v1) Q=(v2,v3) A=(v4,v5) B=(v6,v7)
+    SymmetricPerp,   ///< dot(Q - P, B - A) / |B - A|
 };
 
 struct Equation {

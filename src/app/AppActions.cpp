@@ -126,6 +126,8 @@ void RegisterActions(AppContext& app) {
         {SketchTool::Equal, "sketch.equal", ImGuiKey_None},     {SketchTool::Tangent, "sketch.tangent", ImGuiKey_None},
         {SketchTool::Fix, "sketch.fix", ImGuiKey_None},         {SketchTool::Midpoint, "sketch.midpoint", ImGuiKey_None},
         {SketchTool::Concentric, "sketch.concentric", ImGuiKey_None},
+        {SketchTool::Symmetric, "sketch.symmetric", ImGuiKey_None},
+        {SketchTool::Mirror, "sketch.mirror", ImGuiKey_None},
     };
     for (const auto& t : tools) {
         const SketchToolInfo& info = InfoOf(t.tool);

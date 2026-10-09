@@ -5,6 +5,7 @@
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
 #include "core/Expression.h"
+#include "sketch/Mirror.h"
 #include "sketch/Shapes.h"
 #include "sketch/Trim.h"
 #include "sketch/Solver.h"
@@ -172,6 +173,18 @@ std::optional<sketch::Constraint> ConstraintFromPicks(SketchTool tool, const ske
             if (picks.size() < 2) { needMore = IsRound(k0); return std::nullopt; }
             if (IsRound(k0) && IsRound(k1)) return Make(ConstraintType::Concentric, a, b);
             return std::nullopt;
+        case SketchTool::Symmetric: {
+            // Two points (or two lines, handled by the caller), then the line of symmetry.
+            const bool pair = (k0 == EntityKind::Point && (picks.size() < 2 || k1 == EntityKind::Point)) ||
+                              (k0 == EntityKind::Line && (picks.size() < 2 || k1 == EntityKind::Line));
+            if (picks.size() < 3) { needMore = pair; return std::nullopt; }
+            if (k0 == EntityKind::Point && k1 == EntityKind::Point && sk.KindOf(picks[2]) == EntityKind::Line) {
+                sketch::Constraint c = Make(ConstraintType::Symmetric, a, b);
+                c.refs[2] = picks[2];
+                return c;
+            }
+            return std::nullopt;
+        }
         default:
             return std::nullopt;
     }
@@ -542,6 +555,38 @@ void SketchEditor::HandleMotion(AppContext& app, Session& session, const SketchV
     myClicks.clear();
 }
 
+void SketchEditor::HandleMirror(AppContext& app, Session& session, const SketchView& view) {
+    doc::SketchFeature* f = Active(session);
+    if (!view.vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
+    if (!myHover || myHover.kind == EntityKind::Constraint) return;
+    if (!myMirrorAxisStep) {   // choosing what to mirror
+        if (!mySelection.erase(myHover.id)) mySelection.insert(myHover.id);
+        return;
+    }
+    if (myHover.kind != EntityKind::Line) {
+        app.notes.Info("Линия зеркала — это отрезок: щёлкните отрезок (обычно осевую)");
+        return;
+    }
+    const std::vector<ObjectId> chosen(mySelection.begin(), mySelection.end());
+    sketch::Sketch trial = f->sketch;
+    const std::vector<ObjectId> created = sketch::MirrorEntities(trial, session.doc.Ids(), chosen, myHover.id);
+    if (created.empty()) {
+        app.notes.Info(mySelection.contains(myHover.id) ? "Линия зеркала не может быть среди отражаемых элементов"
+                                                        : "Среди выбранного нет кривых для отражения");
+        return;
+    }
+    if (!sketch::Solve(trial).converged) {
+        app.notes.Error("Отражение противоречит ограничениям эскиза");
+        return;
+    }
+    auto before = f->Clone();
+    f->sketch = std::move(trial);
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), "Зеркальное отражение");
+    mySelection.clear();
+    myMirrorAxisStep = false;
+}
+
 void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Snap& snap) {
     doc::SketchFeature* f = Active(session);
     doc::Document& d = session.doc;
@@ -783,6 +828,26 @@ void SketchEditor::HandleConstraint(AppContext& app, Session& session, const Ske
         return;
     }
     myPicks.push_back(myHover.id);
+
+    // Two lines symmetric: their ends pair up, nearest to each other's mirror image.
+    if (myTool == SketchTool::Symmetric && myPicks.size() == 3) {
+        const sketch::Sketch& sk = f->sketch;
+        const sketch::Line* l1 = sk.FindLine(myPicks[0]);
+        const sketch::Line* l2 = sk.FindLine(myPicks[1]);
+        const sketch::Line* axis = sk.FindLine(myPicks[2]);
+        if (l1 && l2 && axis) {
+            const Vec2 a = sk.PositionOf(axis->start), b = sk.PositionOf(axis->end);
+            const Vec2 image = sketch::Reflect(sk.PositionOf(l1->start), a, b);
+            const bool straight = (sk.PositionOf(l2->start) - image).Length() <= (sk.PositionOf(l2->end) - image).Length();
+            const ObjectId line = myPicks[2];
+            sketch::Constraint first = Make(ConstraintType::Symmetric, l1->start, straight ? l2->start : l2->end);
+            sketch::Constraint second = Make(ConstraintType::Symmetric, l1->end, straight ? l2->end : l2->start);
+            first.refs[2] = second.refs[2] = line;
+            myPicks.clear();
+            if (AddConstraint(app, session, first, "Симметрия")) AddConstraint(app, session, second, "Симметрия");
+            return;
+        }
+    }
 
     bool needMore = false;
     const auto c = ConstraintFromPicks(myTool, f->sketch, myPicks, needMore);

@@ -23,8 +23,8 @@
 namespace bz::app {
 
 enum class SketchTool : unsigned char {
-    Select, Line, Rectangle, Circle, Arc, Point, Project, Trim, Move, Rotate, Dimension,
-    Coincident, Horizontal, Vertical, Parallel, Perpendicular, Equal, Tangent, Fix, Midpoint, Concentric,
+    Select, Line, Rectangle, Circle, Arc, Point, Project, Trim, Move, Rotate, Mirror, Dimension,
+    Coincident, Horizontal, Vertical, Parallel, Perpendicular, Equal, Tangent, Fix, Midpoint, Concentric, Symmetric,
 };
 
 /// Ways to draw with one tool, chosen in the tool panel.
@@ -123,6 +123,8 @@ private:
     void HandleTrim(AppContext& app, Session& session, const SketchView& view);
     /// "Перенос" / "Поворот": the selection follows two (three) clicks.
     void HandleMotion(AppContext& app, Session& session, const SketchView& view);
+    /// "Зеркало": clicks pick the elements, then (step two) the mirror line.
+    void HandleMirror(AppContext& app, Session& session, const SketchView& view);
     /// The motion the clicks so far and the cursor describe; nullopt when not ready.
     std::optional<sketch::Motion> PendingMotion(const UnitSystem& units, bool withCursor) const;
     /// Moves the selection as one undo step.
@@ -171,6 +173,7 @@ private:
 
     // drawing tools
     DrawOptions           myOptions;
+    bool                  myMirrorAxisStep = false;   ///< Зеркало: the next click picks the mirror line
     std::string           mySidesError;          ///< polygon side count that is not a whole number
     double                myMmPerPixel = 0.1;   ///< of the last frame, to place automatic dimension labels
     std::vector<PointRef> myClicks;

@@ -15,7 +15,7 @@
 namespace bz::app {
 namespace {
 
-constexpr std::array<SketchToolInfo, 21> kTools{{
+constexpr std::array<SketchToolInfo, 23> kTools{{
     {SketchTool::Select, "Выбор", "ui-check", "Выберите или перетащите элементы эскиза"},
     {SketchTool::Line, "Отрезок", "sk-line", "Укажите начальную точку отрезка"},
     {SketchTool::Rectangle, "Прямоугольник", "sk-rectangle", "Укажите первый угол прямоугольника"},
@@ -26,6 +26,7 @@ constexpr std::array<SketchToolInfo, 21> kTools{{
     {SketchTool::Trim, "Обрезка", "sk-trim", "Щёлкните лишний кусок кривой — он удалится до ближайших пересечений"},
     {SketchTool::Move, "Перенос", "sk-move", "Выберите элементы (Ctrl+щелчок), затем укажите базовую точку"},
     {SketchTool::Rotate, "Поворот", "sk-rotate", "Выберите элементы (Ctrl+щелчок), затем укажите центр поворота"},
+    {SketchTool::Mirror, "Зеркало", "sk-mirror", "Выберите элементы, затем «Линия зеркала» и щёлкните линию"},
     {SketchTool::Dimension, "Размер", "sk-dimension", "Выберите отрезок, окружность или две точки"},
     {SketchTool::Coincident, "Совпадение", "c-coincident", "Выберите две точки или точку и кривую"},
     {SketchTool::Horizontal, "Горизонтальность", "c-horizontal", "Выберите отрезок или две точки"},
@@ -37,6 +38,7 @@ constexpr std::array<SketchToolInfo, 21> kTools{{
     {SketchTool::Fix, "Фиксация", "c-fix", "Выберите точку, которую нужно закрепить"},
     {SketchTool::Midpoint, "Середина", "c-midpoint", "Выберите точку и отрезок"},
     {SketchTool::Concentric, "Концентричность", "c-concentric", "Выберите две окружности или дуги"},
+    {SketchTool::Symmetric, "Симметрия", "c-symmetric", "Выберите две точки или два отрезка, затем линию симметрии"},
 }};
 
 /// Sketch geometry plus dimension labels, in sketch coordinates.
@@ -175,6 +177,7 @@ void SketchEditor::SetTool(AppContext& app, Session& session, SketchTool tool) {
     myClicks.clear();
     myPicks.clear();
     myTool = tool;
+    myMirrorAxisStep = tool == SketchTool::Mirror && !mySelection.empty();   // chosen beforehand: go to the line
     if (tool >= SketchTool::Coincident) TryApplyToSelection(app, session);
 }
 
@@ -232,7 +235,7 @@ void SketchEditor::UpdateShownGlyphs(const sketch::Sketch& sk, bool all) {
     };
     for (const sketch::Constraint& c : sk.constraints) {
         if (sketch::IsDimensional(c.type)) continue;
-        bool related = shown(c.id) || shown(c.refs[0]) || shown(c.refs[1]);
+        bool related = shown(c.id) || shown(c.refs[0]) || shown(c.refs[1]) || shown(c.refs[2]);
         // A point's constraints show with its curve.
         for (const sketch::Line& l : sk.lines)
             if (shown(l.id) && (c.refs[0] == l.start || c.refs[0] == l.end || c.refs[1] == l.start || c.refs[1] == l.end)) related = true;
@@ -313,6 +316,7 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
         case SketchTool::Trim:      HandleTrim(app, session, view); break;
         case SketchTool::Move:
         case SketchTool::Rotate:    HandleMotion(app, session, view); break;
+        case SketchTool::Mirror:    HandleMirror(app, session, view); break;
         default:                    HandleConstraint(app, session, view); break;
     }
     if (doc::SketchFeature* still = Active(session)) DrawPreview(app, view, still->sketch, session.doc.units);

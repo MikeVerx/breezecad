@@ -14,7 +14,7 @@ using json_io::ReadMember;
 using json_io::ToJson;
 using sketch::ConstraintType;
 
-constexpr std::array<std::pair<ConstraintType, std::string_view>, 19> kConstraintIds{{
+constexpr std::array<std::pair<ConstraintType, std::string_view>, 20> kConstraintIds{{
     {ConstraintType::Coincident, "coincident"},
     {ConstraintType::Horizontal, "horizontal"},
     {ConstraintType::Vertical, "vertical"},
@@ -26,6 +26,7 @@ constexpr std::array<std::pair<ConstraintType, std::string_view>, 19> kConstrain
     {ConstraintType::Midpoint, "midpoint"},
     {ConstraintType::Tangent, "tangent"},
     {ConstraintType::Concentric, "concentric"},
+    {ConstraintType::Symmetric, "symmetric"},
     {ConstraintType::Distance, "distance"},
     {ConstraintType::DistanceX, "distanceX"},
     {ConstraintType::DistanceY, "distanceY"},
@@ -175,7 +176,7 @@ Status SketchFeature::LoadFields(const Json& in) {
         if (!ConstraintTypeFromId(type, c.type)) continue;   // newer constraint type
         if (!ReadMember(j, "id", c.id)) return Bad("constraints");
         const Json refs = j.value("refs", Json::array());
-        for (std::size_t i = 0; i < refs.size() && i < 2; ++i)
+        for (std::size_t i = 0; i < refs.size() && i < 3; ++i)
             if (!json_io::Read(refs[i], c.refs[i])) return Bad("constraints.refs");
         if (!ReadMember(j, "parameter", c.parameter) || !ReadMember(j, "labelOffset", c.labelOffset) ||
             !ReadMember(j, "reference", c.reference) || !ReadMember(j, "fixedAt", c.fixedAt))

@@ -126,7 +126,7 @@ bool Sketch::IsPointUsed(ObjectId pointId) const {
 }
 
 void Sketch::RemoveConstraintsReferencing(ObjectId id) {
-    EraseIf(constraints, [id](const Constraint& c) { return c.refs[0] == id || c.refs[1] == id; });
+    EraseIf(constraints, [id](const Constraint& c) { return c.References(id); });
 }
 
 void Sketch::Remove(ObjectId id) {
@@ -195,6 +195,7 @@ void Sketch::MergePoints(ObjectId from, ObjectId into) {
     for (auto& c : constraints) {
         remap(c.refs[0]);
         remap(c.refs[1]);
+        remap(c.refs[2]);
     }
     // A constraint between a point and itself is now meaningless.
     EraseIf(constraints, [](const Constraint& c) {

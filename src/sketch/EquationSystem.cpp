@@ -147,6 +147,14 @@ void EquationSystem::AddConstraint(const Sketch& sk, const Constraint& c) {
             }
             return;
         }
+        case ConstraintType::Symmetric: {
+            const int p = P(a), q = P(b);
+            const auto [s, e] = lineEnds(c.refs[2]);
+            if (p < 0 || q < 0 || s < 0 || e < 0) return;
+            Add(MakeEq(EqKind::SymmetricMid, {p, p + 1, q, q + 1, s, s + 1, e, e + 1}, 0, src));
+            Add(MakeEq(EqKind::SymmetricPerp, {p, p + 1, q, q + 1, s, s + 1, e, e + 1}, 0, src));
+            return;
+        }
         case ConstraintType::Fix: {
             const int p = P(a);
             if (p < 0) return;
@@ -276,6 +284,13 @@ double EquationSystem::Residual(const Equation& eq, const std::vector<double>& x
         }
         case EqKind::CircleTangent:
             return (V(0) - V(2)).Length() - (eq.k[0] * X(4) + eq.k[1] * X(5));
+        case EqKind::SymmetricMid:
+        case EqKind::SymmetricPerp: {
+            const Vec2 p = V(0), q = V(2), a = V(4), b = V(6);
+            const double len = std::max((b - a).Length(), kTiny);
+            if (eq.kind == EqKind::SymmetricMid) return (b - a).Cross((p + q) * 0.5 - a) / len;
+            return (q - p).Dot(b - a) / len;
+        }
     }
     return 0.0;
 }

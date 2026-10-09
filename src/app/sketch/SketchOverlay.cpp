@@ -82,6 +82,7 @@ const char* GlyphIcon(ConstraintType t) {
         case ConstraintType::Fix:           return "c-fix";
         case ConstraintType::Midpoint:      return "c-midpoint";
         case ConstraintType::Concentric:    return "c-concentric";
+        case ConstraintType::Symmetric:     return "c-symmetric";
         case ConstraintType::Coincident:
         case ConstraintType::PointOnCurve:  return "c-coincident";
         default:                            return nullptr;
@@ -279,7 +280,7 @@ std::vector<GlyphPlacement> LayoutGlyphs(const sketch::Sketch& sk, const SketchV
         // Coincidences show as a dot at the point; the others beside each entity.
         const bool both = c.type == ConstraintType::Parallel || c.type == ConstraintType::Perpendicular ||
                           c.type == ConstraintType::Equal || c.type == ConstraintType::Tangent ||
-                          c.type == ConstraintType::Concentric;
+                          c.type == ConstraintType::Concentric || c.type == ConstraintType::Symmetric;
         if (const auto p = place(c.refs[0])) out.push_back({c.id, *p, icon});
         if (both && c.refs[1])
             if (const auto p = place(c.refs[1])) out.push_back({c.id, *p, icon});
@@ -295,7 +296,7 @@ void DrawSketch(ui::Ui& ui, ImDrawList* dl, const doc::SketchFeature& feature, c
     const auto failing = [&](ObjectId id) {
         if (!style.analysis) return false;
         for (ObjectId f : style.analysis->failing)
-            if (const sketch::Constraint* con = sk.FindConstraint(f); con && (con->refs[0] == id || con->refs[1] == id))
+            if (const sketch::Constraint* con = sk.FindConstraint(f); con && con->References(id))
                 return true;
         return false;
     };

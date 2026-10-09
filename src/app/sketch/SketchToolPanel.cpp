@@ -57,7 +57,7 @@ std::optional<double> PlainValue(const std::string& text, Quantity quantity, con
 bool SketchEditor::HasToolPanel() const {
     if (myTool >= SketchTool::Coincident) return true;   // constraints: the picked elements
     return myTool == SketchTool::Line || myTool == SketchTool::Rectangle || myTool == SketchTool::Circle ||
-           myTool == SketchTool::Arc || myTool == SketchTool::Move || myTool == SketchTool::Rotate;
+           myTool == SketchTool::Arc || myTool == SketchTool::Move || myTool == SketchTool::Rotate || myTool == SketchTool::Mirror;
 }
 
 void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width) {
@@ -102,7 +102,7 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
     }
 
     // Line type: осевая only for lines, the others take основная / вспомогательная.
-    if (myTool != SketchTool::Move && myTool != SketchTool::Rotate) {
+    if (myTool != SketchTool::Move && myTool != SketchTool::Rotate && myTool != SketchTool::Mirror) {
         const bool lines = myTool == SketchTool::Line;
         if (!lines && myOptions.style == LineStyle::Centerline) myOptions.style = LineStyle::Normal;
         ui::FieldLabel(ui, "Тип линии");
@@ -200,6 +200,23 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         case SketchTool::Arc:
             if (myOptions.arc == ArcMode::CentreEnds) field("Радиус", "##r", myOptions.size, Quantity::Length);
             break;
+        case SketchTool::Mirror: {
+            const std::string chosen = mySelection.empty() ? std::string("Ничего не выбрано")
+                                                           : "Выбрано элементов: " + std::to_string(mySelection.size());
+            ui::FieldLabel(ui, chosen.c_str());
+            ImGui::Dummy({0, ui.S(6)});
+            static constexpr std::array<const char*, 2> steps{"Элементы", "Линия зеркала"};
+            const int current = myMirrorAxisStep ? 1 : 0;
+            const int chosenStep = ui::Segmented(ui, "mirror-step", steps, current, 2, inner, mySelection.empty() ? 0b10 : 0);
+            if (chosenStep != current) myMirrorAxisStep = chosenStep == 1;
+            ImGui::Dummy({0, ui.S(10)});
+            Caption(ui,
+                    myMirrorAxisStep ? "Щёлкните отрезок — линию зеркала. Копии останутся симметричны оригиналу."
+                                     : "Щёлкайте элементы, которые нужно отразить (повторный щелчок убирает), затем «Линия зеркала».",
+                    inner);
+            ImGui::EndGroup();
+            return;
+        }
         case SketchTool::Move:
         case SketchTool::Rotate: {
             const std::string chosen = mySelection.empty() ? std::string("Ничего не выбрано")

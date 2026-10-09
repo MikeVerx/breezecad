@@ -200,7 +200,7 @@ bool Trim(Sketch& sk, IdGenerator& ids, const TrimSpan& span) {
     // Shape constraints carry over to the pieces; sizes and positions do not.
     std::vector<Constraint> kept;
     for (const Constraint& c : sk.constraints)
-        if ((c.refs[0] == span.curve || c.refs[1] == span.curve) &&
+        if (c.References(span.curve) &&
             (c.type == ConstraintType::Horizontal || c.type == ConstraintType::Vertical ||
              c.type == ConstraintType::Parallel || c.type == ConstraintType::Perpendicular ||
              c.type == ConstraintType::Concentric || c.type == ConstraintType::Radius || c.type == ConstraintType::Diameter))

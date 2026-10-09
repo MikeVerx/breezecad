@@ -224,6 +224,12 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.Large("sketch.project", "Проеци-\nровать", active(SketchTool::Project));
     r.EndGroup();
 
+    r.BeginGroup("Массив");
+    r.BeginColumn();
+    r.Small("sketch.mirror", nullptr, active(SketchTool::Mirror));
+    r.EndColumn();
+    r.EndGroup();
+
     r.BeginGroup("Изменить");
     r.BeginColumn();
     r.Small("sketch.move", nullptr, active(SketchTool::Move));
@@ -236,7 +242,7 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.EndGroup();
 
     r.BeginGroup("Зависимости");
-    r.BeginGrid(4);
+    r.BeginGrid(5);
     r.Icon("sketch.coincident", active(SketchTool::Coincident));
     r.Icon("sketch.horizontal", active(SketchTool::Horizontal));
     r.Icon("sketch.vertical", active(SketchTool::Vertical));
@@ -247,6 +253,7 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.Icon("sketch.midpoint", active(SketchTool::Midpoint));
     r.Icon("sketch.tangent", active(SketchTool::Tangent));
     r.Icon("sketch.concentric", active(SketchTool::Concentric));
+    r.Icon("sketch.symmetric", active(SketchTool::Symmetric));
     r.Icon("sketch.showConstraints", r.App().settings.showAllConstraints);
     r.Icon("sketch.hideConstraints", !r.App().settings.showAllConstraints);
     r.EndGrid();

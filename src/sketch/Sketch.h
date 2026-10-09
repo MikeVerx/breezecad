@@ -70,6 +70,7 @@ enum class ConstraintType : unsigned char {
     Midpoint,        ///< point, line
     Tangent,         ///< line, circle/arc  |  circle/arc, circle/arc
     Concentric,      ///< circle/arc, circle/arc
+    Symmetric,       ///< point, point, line — mirror images across the line
     // dimensional
     Distance,        ///< point, point        — straight distance
     DistanceX,       ///< point, point        — horizontal distance
@@ -86,7 +87,11 @@ bool IsDimensional(ConstraintType type);
 struct Constraint {
     ObjectId                id;
     ConstraintType          type = ConstraintType::Coincident;
-    std::array<ObjectId, 2> refs{};          ///< entities, see ConstraintType
+    std::array<ObjectId, 3> refs{};          ///< entities, see ConstraintType (the third: Symmetric's line)
+
+    bool References(ObjectId entity) const {
+        return entity && (refs[0] == entity || refs[1] == entity || refs[2] == entity);
+    }
     Parameter               parameter;       ///< dimensional constraints only
     Vec2                    fixedAt;         ///< Fix only
     Vec2                    labelOffset;     ///< where the dimension text sits, relative to its anchor
