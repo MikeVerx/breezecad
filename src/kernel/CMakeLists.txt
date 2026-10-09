@@ -10,7 +10,8 @@ add_library(bz_kernel STATIC
     occt/Measure.cpp
     occt/Revolve.cpp
     occt/Shell.cpp
-    occt/SketchGeometry.cpp)
+    occt/SketchGeometry.cpp
+    occt/Sweep.cpp)
 target_link_libraries(bz_kernel
     PUBLIC  bz::document bz::occt_modeling
     PRIVATE bz::occt_exchange bz::miniz)

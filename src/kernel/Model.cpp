@@ -11,6 +11,7 @@
 #include "document/Origin.h"
 #include "document/PatternFeature.h"
 #include "document/SketchFeature.h"
+#include "document/SweepFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Extrude.h"
@@ -21,6 +22,7 @@
 #include "kernel/occt/ModelImpl.h"
 #include "kernel/occt/Revolve.h"
 #include "kernel/occt/Shell.h"
+#include "kernel/occt/Sweep.h"
 
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
@@ -412,6 +414,17 @@ void Model::Rebuild(doc::Document& doc) {
                     ApplyCopies(*mirror, {*placement}, impl, bodies, mirror->status, doc);
                 else
                     mirror->status = {FeatureState::Error, placement.GetError().message};
+            } else if (auto* sweep = dynamic_cast<doc::SweepFeature*>(&f)) {
+                const auto* pathSketch = doc.FindAs<doc::SketchFeature>(sweep->path);
+                const Expected<TopoDS_Wire> path =
+                    pathSketch ? occt::BuildPath(*pathSketch) : Expected<TopoDS_Wire>(Error{"Выберите эскиз траектории"});
+                if (!path)
+                    sweep->status = {FeatureState::Error, path.GetError().message};
+                else
+                    ApplySketchSolid(*sweep, impl, bodies, sweep->status, doc,
+                                     [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature&, const Frame&) {
+                                         return occt::MakeSweep(faces, *path);
+                                     });
             } else if (auto* loft = dynamic_cast<doc::LoftFeature*>(&f)) {
                 ApplyLoft(*loft, impl, bodies, doc);
             } else if (auto* wp = dynamic_cast<doc::WorkPlaneFeature*>(&f)) {

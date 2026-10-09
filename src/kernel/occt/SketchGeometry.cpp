@@ -17,6 +17,8 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Wire.hxx>
+#include <ShapeAnalysis_FreeBounds.hxx>
+#include <TopTools_HSequenceOfShape.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Circ.hxx>
 #include <gp_Pln.hxx>
@@ -115,6 +117,22 @@ bool TouchesBox(const TopoDS_Face& face, const Frame& frame, double limit) {
 }
 
 } // namespace
+
+Expected<TopoDS_Wire> BuildPath(const doc::SketchFeature& feature) {
+    try {
+        const std::vector<TopoDS_Edge> edges = MakeEdges(feature);
+        if (edges.empty()) return Error{"В эскизе траектории нет линий"};
+        Handle(TopTools_HSequenceOfShape) loose = new TopTools_HSequenceOfShape();
+        for (const TopoDS_Edge& e : edges) loose->Append(e);
+        Handle(TopTools_HSequenceOfShape) wires;
+        ShapeAnalysis_FreeBounds::ConnectEdgesToWires(loose, 1e-6, false, wires);
+        if (wires.IsNull() || wires->Length() != 1)
+            return Error{"Траектория должна быть одной цепочкой линий и дуг без разветвлений"};
+        return TopoDS::Wire(wires->Value(1));
+    } catch (const Standard_Failure& failure) {
+        return Error{std::string("Ошибка траектории: ") + failure.GetMessageString()};
+    }
+}
 
 Expected<SketchProfile> BuildProfile(const doc::SketchFeature& feature) {
     SketchProfile profile;

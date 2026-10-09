@@ -7,6 +7,7 @@
 #include "kernel/Model.h"
 
 #include <TopoDS_Face.hxx>
+#include <TopoDS_Wire.hxx>
 
 #include <vector>
 
@@ -24,6 +25,10 @@ struct SketchProfile {
 /// curves, including regions with holes. Intersecting curves are split, so a
 /// line across a rectangle makes two regions.
 Expected<SketchProfile> BuildProfile(const doc::SketchFeature& sketch);
+
+/// The sketch's (non-construction) curves joined into one chain, open or
+/// closed, for a sweep path. An error when they do not form a single chain.
+Expected<TopoDS_Wire> BuildPath(const doc::SketchFeature& sketch);
 
 /// Faces chosen by a profile selection: the automatic set, or the regions
 /// that contain the selection's sample points.

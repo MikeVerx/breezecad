@@ -16,6 +16,7 @@ add_library(bz_document STATIC
     RevolveFeature.cpp
     SketchFeature.cpp
     SketchSolidFeature.cpp
+    SweepFeature.cpp
     UnknownFeature.cpp)
 target_link_libraries(bz_document
     PUBLIC  bz::core bz::sketch bz::json
