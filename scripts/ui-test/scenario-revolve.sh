@@ -1,6 +1,6 @@
 #!/bin/bash
-# Smoke scenario at 1440x900: a rectangle beside the sketch Y axis turned
-# into a tube with "Вращение". Saves the result to /tmp/tube.bzc.
+# Smoke scenario at 1440x900: a rectangle beside a line along the sketch Y
+# axis, turned into a tube around that line with "Вращение".
 set -e
 UI="$(dirname "$0")/ui.sh"
 "$UI" start
@@ -13,10 +13,16 @@ sleep 1.5
 "$UI" clk 950 420
 "$UI" mousemove 1000 500; sleep 0.3
 "$UI" clk 1080 600
+"$UI" key Escape
+"$UI" key l                    # Отрезок вдоль оси Y — ось вращения
+"$UI" clk 880 300
+"$UI" clk 880 700
 "$UI" key Escape Escape Escape   # Принять эскиз: Esc снимает инструмент, выбор, затем выходит
 sleep 1.5
-"$UI" clk 215 115            # Вращение (полный оборот вокруг оси Y эскиза)
+"$UI" clk 215 115            # Вращение
 sleep 1.5
+"$UI" clk 730 413            # щелчок по отрезку: это ось (полный оборот)
+sleep 1
 "$UI" clk 288 821            # Готово
 "$UI" mousemove 900 820
 "$UI" shot tube 2

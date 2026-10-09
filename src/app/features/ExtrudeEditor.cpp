@@ -46,29 +46,17 @@ bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::Sketc
         myArrow.Release();
         return false;
     }
-    // The arrow starts in the middle of the chosen profile.
-    const auto* regions = session.model.Regions(f.sketch);
-    Vec2 middle{};
-    int count = 0;
-    if (regions)
-        for (const kernel::SketchRegion& r : *regions) {
-            const bool chosen = f.profiles.automatic ? r.automatic : std::any_of(f.profiles.regions.begin(), f.profiles.regions.end(),
-                                                                                  [&](Vec2 p) { return (p - r.sample).Length() < 1e-9; });
-            if (!chosen || r.loops.empty()) continue;
-            for (Vec2 p : r.loops[0]) middle = middle + p;
-            count += static_cast<int>(r.loops[0].size());
-        }
-    if (count == 0) {
+    const std::optional<Vec2> middle = ProfileMiddle(session, f);
+    if (!middle) {
         myArrow.Release();
         return false;
     }
-    middle = middle * (1.0 / count);
     const bool symmetric = f.extent == ExtentType::Symmetric;
     const Vec3 dir = view.frame.normal * (f.reversed ? -1.0 : 1.0);
     const double reach = symmetric ? f.distance.value / 2 : f.distance.value;
     const std::string label = FormatValue(f.distance.value, Quantity::Length, session.doc.units, 2) + " " +
                               UnitLabel(Quantity::Length, session.doc.units);
-    if (auto along = myArrow.Update(app, view.vf, view.frame.ToWorld(middle), dir, reach, label)) {
+    if (auto along = myArrow.Update(app, view.vf, view.frame.ToWorld(*middle), dir, reach, label)) {
         // Dragged past the sketch plane: the other direction.
         if (*along < 0 && !symmetric) {
             f.reversed = !f.reversed;

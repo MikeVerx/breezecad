@@ -43,4 +43,35 @@ private:
     double myLast = 0.0;     ///< last reported length, so unchanged frames report nothing
 };
 
+/// An arc around an axis with a round handle at its end (Вращение): the
+/// user drags the handle around the axis to change the angle.
+class DragAngle {
+public:
+    /// The arc goes around the axis through `axisPoint` along `axis` (unit;
+    /// angles turn right-handed about it), at the distance of `start`, from
+    /// `from` to `to` radians, measured from `start`. The handle is at `to`.
+    /// Returns the new `to`, in whole degrees, on the frames it changed; it
+    /// follows the cursor past ±180° without jumping.
+    std::optional<double> Update(AppContext& app, const ViewportFrame& vf, Vec3 axisPoint, Vec3 axis, Vec3 start, double from,
+                                 double to, const std::string& label);
+
+    /// The caller turned the axis around (negative angle): keep the grab
+    /// point under the cursor.
+    void Flipped() {
+        myOffset = -myOffset;
+        myRaw = -myRaw;
+        myLast = -myLast;
+    }
+    void Release() { myDragging = false; }
+    bool Dragging() const { return myDragging; }
+    bool Hot() const { return myHot; }
+
+private:
+    bool   myDragging = false;
+    bool   myHot = false;
+    double myOffset = 0.0;   ///< handle angle minus the grabbed angle
+    double myRaw = 0.0;      ///< cursor angle, unwrapped, last frame
+    double myLast = 0.0;     ///< last reported angle
+};
+
 } // namespace bz::app

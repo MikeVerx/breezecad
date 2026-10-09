@@ -54,6 +54,35 @@ doc::SketchSolidFeature* SketchOperationEditor::Feature(Session& session) const 
     return dynamic_cast<doc::SketchSolidFeature*>(Edited(session));
 }
 
+std::optional<Vec2> SketchOperationEditor::ProfileMiddle(const Session& session, const doc::SketchSolidFeature& f) {
+    const auto* regions = session.model.Regions(f.sketch);
+    if (!regions) return std::nullopt;
+    std::vector<bool> chosen(regions->size(), false);
+    for (std::size_t i = 0; i < regions->size(); ++i) chosen[i] = f.profiles.automatic && (*regions)[i].automatic;
+    if (!f.profiles.automatic)
+        for (const Vec2 p : f.profiles.regions)
+            if (const int r = RegionOf(*regions, p); r >= 0) chosen[static_cast<std::size_t>(r)] = true;
+    // Area centroid of the outer loops (shoelace), so dense arcs do not pull it.
+    double area = 0.0;
+    Vec2 moment{};
+    for (std::size_t i = 0; i < regions->size(); ++i) {
+        if (!chosen[i] || (*regions)[i].loops.empty()) continue;
+        const auto& loop = (*regions)[i].loops[0];
+        double a = 0.0;
+        Vec2 m{};
+        for (std::size_t k = 0, j = loop.size() - 1; k < loop.size(); j = k++) {
+            const double cross = loop[j].x * loop[k].y - loop[k].x * loop[j].y;
+            a += cross;
+            m = m + (loop[j] + loop[k]) * cross;
+        }
+        const double sign = a < 0 ? -1.0 : 1.0;   // loops may wind either way
+        area += a * sign;
+        moment = moment + m * sign;
+    }
+    if (std::abs(area) < 1e-12) return std::nullopt;
+    return moment * (1.0 / (3.0 * area));
+}
+
 void SketchOperationEditor::StartNew(AppContext& app, Session& session, ObjectId sketch) {
     if (session.mode == EditMode::Sketch && !sketch) sketch = session.activeSketch;
     if (!sketch && session.doc.FindAs<doc::SketchFeature>(session.selectedFeature)) sketch = session.selectedFeature;

@@ -2,6 +2,7 @@
 // The "Вращение" operation panel: turns sketch regions around an axis. The
 // axis is a sketch line picked in the viewport or one of the sketch axes.
 
+#include "app/features/DragArrow.h"
 #include "app/features/SketchOperationEditor.h"
 #include "document/RevolveFeature.h"
 
@@ -23,6 +24,7 @@ protected:
 
 private:
     std::string myAngle;
+    DragAngle   myAngleHandle;
 };
 
 } // namespace bz::app

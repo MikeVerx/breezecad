@@ -32,6 +32,9 @@ protected:
     virtual bool PickInViewport(AppContext& app, Session& session, doc::SketchSolidFeature& feature, const SketchView& view);
 
     doc::SketchSolidFeature* Feature(Session& session) const;
+    /// Middle of the chosen profile regions, sketch coordinates (nullopt:
+    /// nothing chosen). Where drag handles start.
+    static std::optional<Vec2> ProfileMiddle(const Session& session, const doc::SketchSolidFeature& f);
 
 private:
     void DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) final;
