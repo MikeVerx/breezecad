@@ -12,9 +12,9 @@ using namespace bz::kernel;
 
 namespace {
 
-/// The sub-shape of `type` (a face by default) nearest the point `near`.
-TopoDS_Shape Nearest(const TopoDS_Shape& shape, gp_Pnt near, TopAbs_ShapeEnum type = TopAbs_FACE) {
-    const TopoDS_Shape probe = BRepBuilderAPI_MakeVertex(near).Shape();
+/// The sub-shape of `type` (a face by default) nearest the point `target`.
+TopoDS_Shape Nearest(const TopoDS_Shape& shape, gp_Pnt target, TopAbs_ShapeEnum type = TopAbs_FACE) {
+    const TopoDS_Shape probe = BRepBuilderAPI_MakeVertex(target).Shape();
     TopoDS_Shape best;
     double bestDistance = 1e300;
     for (TopExp_Explorer e(shape, type); e.More(); e.Next()) {
