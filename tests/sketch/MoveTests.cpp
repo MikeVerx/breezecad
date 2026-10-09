@@ -70,3 +70,19 @@ TEST_CASE("scaling a circle and a line about a point") {
     CHECK(sk.PositionOf(sk.FindCircle(circle)->center).x == doctest::Approx(20.0));
     CHECK(sk.PositionOf(sk.FindLine(line)->end).x == doctest::Approx(8.0));
 }
+
+TEST_CASE("a spline moves and copies with its points") {
+    Sketch sk;
+    IdGenerator ids;
+    std::vector<ObjectId> pts;
+    for (const Vec2 p : {Vec2{0, 0}, Vec2{10, 5}, Vec2{20, 0}}) pts.push_back(sk.AddPoint(ids, p));
+    pts.push_back(pts.front());
+    const ObjectId spline = sk.AddSpline(ids, pts, true);
+    const std::vector<ObjectId> chosen{spline};
+    CHECK(MovedPoints(sk, chosen).size() == 3);
+    CopyEntities(sk, ids, chosen, Motion{{}, 0, {100, 0}});
+    REQUIRE(sk.splines.size() == 2);
+    const Spline& copy = sk.splines.back();
+    CHECK(copy.Closed());
+    CHECK(sk.PositionOf(copy.points[1]).x == doctest::Approx(110.0));
+}

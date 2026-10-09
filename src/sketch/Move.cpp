@@ -25,6 +25,7 @@ std::vector<ObjectId> MovedPoints(const Sketch& sk, std::span<const ObjectId> en
         else if (const Line* l = sk.FindLine(id)) { add(l->start); add(l->end); }
         else if (const Circle* c = sk.FindCircle(id)) add(c->center);
         else if (const Arc* a = sk.FindArc(id)) { add(a->center); add(a->start); add(a->end); }
+        else if (const Spline* s = sk.FindSpline(id)) for (const ObjectId p : s->points) add(p);
     }
     return out;
 }
@@ -84,7 +85,9 @@ std::vector<ObjectId> CopyEntities(Sketch& sk, IdGenerator& ids, std::span<const
     std::vector<Line> lines;
     std::vector<Circle> circles;
     std::vector<Arc> arcs;
+    std::vector<Spline> splines;
     for (ObjectId id : entities) {
+        if (const Spline* s = sk.FindSpline(id)) splines.push_back(*s);
         if (const Line* l = sk.FindLine(id)) lines.push_back(*l);
         else if (const Circle* c = sk.FindCircle(id)) circles.push_back(*c);
         else if (const Arc* a = sk.FindArc(id)) arcs.push_back(*a);
@@ -104,6 +107,13 @@ std::vector<ObjectId> CopyEntities(Sketch& sk, IdGenerator& ids, std::span<const
     for (const Arc& a : arcs) {
         const ObjectId c = sk.AddArc(ids, copyPoint(a.center), copyPoint(a.start), copyPoint(a.end), a.construction);
         curveCopy[a.id] = c;
+        created.push_back(c);
+    }
+    for (const Spline& s : splines) {
+        std::vector<ObjectId> pts;
+        for (const ObjectId p : s.points) pts.push_back(copyPoint(p));   // a closed one repeats its first point: one copy
+        const ObjectId c = sk.AddSpline(ids, std::move(pts), s.interpolate, s.construction);
+        curveCopy[s.id] = c;
         created.push_back(c);
     }
     // Constraints wholly inside the copied set come along; a size becomes
