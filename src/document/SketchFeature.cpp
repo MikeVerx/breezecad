@@ -75,28 +75,39 @@ void SketchFeature::ReserveIds(IdGenerator& ids) const {
     for (const auto& c : sketch.constraints) ids.Reserve(c.id);
 }
 
+void SketchFeature::PruneProjections() {
+    std::erase_if(projections, [&](const Projection& p) { return sketch.KindOf(p.curve) == sketch::EntityKind::None; });
+}
+
 void SketchFeature::SaveFields(Json& out) const {
     out["placement"] = Json{{"support", ToJson(placement.support)},
                             {"frame", ToJson(placement.frame)},
                             {"onFace", placement.onFace}};
     if (placement.face.IsSet()) out["placement"]["face"] = json_io::ToJson(placement.face);
+    if (!projections.empty()) {
+        Json list = Json::array();
+        for (const Projection& p : projections) list.push_back({{"edge", json_io::ToJson(p.edge)}, {"curve", ToJson(p.curve)}});
+        out["projections"] = std::move(list);
+    }
 
     Json points = Json::array();
     for (const auto& p : sketch.points) {
         Json j{{"id", ToJson(p.id)}, {"pos", ToJson(p.pos)}};
         if (p.isOrigin) j["origin"] = true;
+        if (p.projected) j["projected"] = true;
         points.push_back(std::move(j));
     }
     Json curves = Json::array();
     for (const auto& l : sketch.lines)
         curves.push_back({{"id", ToJson(l.id)}, {"type", "line"}, {"start", ToJson(l.start)},
-                          {"end", ToJson(l.end)}, {"construction", l.construction}});
+                          {"end", ToJson(l.end)}, {"construction", l.construction}, {"projected", l.projected}});
     for (const auto& c : sketch.circles)
         curves.push_back({{"id", ToJson(c.id)}, {"type", "circle"}, {"center", ToJson(c.center)},
-                          {"radius", c.radius}, {"construction", c.construction}});
+                          {"radius", c.radius}, {"construction", c.construction}, {"projected", c.projected}});
     for (const auto& a : sketch.arcs)
         curves.push_back({{"id", ToJson(a.id)}, {"type", "arc"}, {"center", ToJson(a.center)},
-                          {"start", ToJson(a.start)}, {"end", ToJson(a.end)}, {"construction", a.construction}});
+                          {"start", ToJson(a.start)}, {"end", ToJson(a.end)}, {"construction", a.construction},
+                          {"projected", a.projected}});
 
     Json constraints = Json::array();
     for (const auto& c : sketch.constraints) {
@@ -128,7 +139,8 @@ Status SketchFeature::LoadFields(const Json& in) {
     sketch::Sketch sk;
     for (const Json& j : in.value("points", Json::array())) {
         sketch::Point p;
-        if (!ReadMember(j, "id", p.id) || !ReadMember(j, "pos", p.pos) || !ReadMember(j, "origin", p.isOrigin))
+        if (!ReadMember(j, "id", p.id) || !ReadMember(j, "pos", p.pos) || !ReadMember(j, "origin", p.isOrigin) ||
+            !ReadMember(j, "projected", p.projected))
             return Bad("points");
         sk.points.push_back(p);
     }
@@ -138,17 +150,18 @@ Status SketchFeature::LoadFields(const Json& in) {
         if (type == "line") {
             sketch::Line l;
             ok = ReadMember(j, "id", l.id) && ReadMember(j, "start", l.start) && ReadMember(j, "end", l.end) &&
-                 ReadMember(j, "construction", l.construction);
+                 ReadMember(j, "construction", l.construction) && ReadMember(j, "projected", l.projected);
             sk.lines.push_back(l);
         } else if (type == "circle") {
             sketch::Circle c;
             ok = ReadMember(j, "id", c.id) && ReadMember(j, "center", c.center) && ReadMember(j, "radius", c.radius) &&
-                 ReadMember(j, "construction", c.construction);
+                 ReadMember(j, "construction", c.construction) && ReadMember(j, "projected", c.projected);
             sk.circles.push_back(c);
         } else if (type == "arc") {
             sketch::Arc a;
             ok = ReadMember(j, "id", a.id) && ReadMember(j, "center", a.center) && ReadMember(j, "start", a.start) &&
-                 ReadMember(j, "end", a.end) && ReadMember(j, "construction", a.construction);
+                 ReadMember(j, "end", a.end) && ReadMember(j, "construction", a.construction) &&
+                 ReadMember(j, "projected", a.projected);
             sk.arcs.push_back(a);
         }
         // Unknown curve types from newer versions are skipped, not fatal.
@@ -168,7 +181,16 @@ Status SketchFeature::LoadFields(const Json& in) {
         sk.constraints.push_back(std::move(c));
     }
 
+    std::vector<Projection> projected;
+    for (const Json& j : in.value("projections", Json::array())) {
+        Projection p;
+        const auto edge = j.find("edge");
+        if (edge == j.end() || !json_io::Read(*edge, p.edge) || !ReadMember(j, "curve", p.curve)) return Bad("projections");
+        projected.push_back(p);
+    }
+
     placement = pl;
+    projections = std::move(projected);
     sketch    = std::move(sk);
     return Status::Ok();
 }

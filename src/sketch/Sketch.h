@@ -20,6 +20,7 @@ struct Point {
     ObjectId id;
     Vec2     pos;
     bool     isOrigin = false;   ///< the projected origin: fixed, not deletable
+    bool     projected = false;  ///< belongs to projected model geometry: placed by the model, fixed for the solver
 };
 
 struct Line {
@@ -27,6 +28,7 @@ struct Line {
     ObjectId start;
     ObjectId end;
     bool     construction = false;
+    bool     projected = false;   ///< a model edge projected into the sketch (see doc::SketchFeature)
 };
 
 struct Circle {
@@ -34,6 +36,7 @@ struct Circle {
     ObjectId center;
     double   radius = 1.0;
     bool     construction = false;
+    bool     projected = false;   ///< a model edge projected into the sketch: its radius is fixed too
 };
 
 /// Counter-clockwise arc from `start` to `end` around `center`.
@@ -44,6 +47,7 @@ struct Arc {
     ObjectId start;
     ObjectId end;
     bool     construction = false;
+    bool     projected = false;   ///< a model edge projected into the sketch: its radius is fixed too
 };
 
 // ---------------------------------------------------------------------------

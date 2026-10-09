@@ -48,18 +48,19 @@ EquationSystem::EquationSystem(const Sketch& sketch, ObjectId skip, const Constr
         indexOf[p.id] = static_cast<int>(x.size());
         x.push_back(p.pos.x);
         x.push_back(p.pos.y);
-        isFree.push_back(!p.isOrigin);
-        isFree.push_back(!p.isOrigin);
+        // The origin and projected model geometry are held where they are.
+        isFree.push_back(!p.isOrigin && !p.projected);
+        isFree.push_back(!p.isOrigin && !p.projected);
     }
     for (const Circle& c : sketch.circles) {
         indexOf[c.id] = static_cast<int>(x.size());
         x.push_back(c.radius);
-        isFree.push_back(true);
+        isFree.push_back(!c.projected);
     }
     for (const Arc& a : sketch.arcs) {
         indexOf[a.id] = static_cast<int>(x.size());
         x.push_back(sketch.RadiusOf(a.id));
-        isFree.push_back(true);
+        isFree.push_back(!a.projected);
         // Both ends stay on the arc's circle.
         const int c = PointIndex(a.center);
         const int r = RadiusIndex(a.id);

@@ -20,6 +20,7 @@
 #include "kernel/occt/Hole.h"
 #include "kernel/occt/Loft.h"
 #include "kernel/occt/ModelImpl.h"
+#include "kernel/occt/Project.h"
 #include "kernel/occt/Revolve.h"
 #include "kernel/occt/Shell.h"
 #include "kernel/occt/Sweep.h"
@@ -303,6 +304,57 @@ void PlaceWorkPlane(doc::WorkPlaneFeature& wp, const doc::Document& doc, const s
     wp.status = {FeatureState::Ok, {}};
 }
 
+/// Puts a projected sketch curve where its edge projects now. False when the
+/// curve is gone or the edge now projects as a different kind of curve.
+bool PlaceProjected(sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& pc) {
+    const auto move = [&](ObjectId point, Vec2 to) {
+        if (sketch::Point* p = sk.FindPoint(point)) p->pos = to;
+    };
+    switch (pc.kind) {
+        case ProjectedCurve::Kind::Line:
+            if (const sketch::Line* l = sk.FindLine(curve)) {
+                move(l->start, pc.start);
+                move(l->end, pc.end);
+                return true;
+            }
+            return false;
+        case ProjectedCurve::Kind::Circle:
+            if (sketch::Circle* c = sk.FindCircle(curve)) {
+                move(c->center, pc.centre);
+                c->radius = pc.radius;
+                return true;
+            }
+            return false;
+        case ProjectedCurve::Kind::Arc:
+            if (const sketch::Arc* a = sk.FindArc(curve)) {
+                move(a->center, pc.centre);
+                move(a->start, pc.start);
+                move(a->end, pc.end);
+                return true;
+            }
+            return false;
+    }
+    return false;
+}
+
+/// Projected model edges follow the model: each is found again on the most
+/// recent body and its curve moved, then the sketch is solved again so what
+/// is constrained to them follows too. Returns false when an edge is lost
+/// (its curve then stays where it was).
+bool UpdateProjections(doc::SketchFeature& sk, const std::vector<Body>& bodies) {
+    if (sk.projections.empty()) return true;
+    bool allFound = true;
+    for (const doc::Projection& p : sk.projections) {
+        std::optional<TopoDS_Edge> edge;
+        if (!bodies.empty()) edge = occt::ResolveEdges({p.edge}, bodies.back().shape).front();
+        const Expected<ProjectedCurve> projected =
+            edge ? occt::ProjectEdge(*edge, sk.placement.frame) : Expected<ProjectedCurve>(Error{"ребро не найдено"});
+        allFound = projected && PlaceProjected(sk.sketch, p.curve, *projected) && allFound;
+    }
+    doc::SolveSketch(sk);
+    return allFound;
+}
+
 /// A sketch on a work plane moves with it; a sketch on a face moves along
 /// the face's normal when the face moved. Sketch coordinates stay the same.
 /// Returns false when the face is gone (the sketch then stays where it was).
@@ -369,6 +421,7 @@ void Model::Rebuild(doc::Document& doc) {
         if (!skip) {
             if (auto* sk = dynamic_cast<doc::SketchFeature*>(&f)) {
                 const bool placed = FollowSupport(*sk, doc, bodies);
+                const bool projectedFound = UpdateProjections(*sk, bodies);
                 Expected<occt::SketchProfile> profile = occt::BuildProfile(*sk);
                 if (profile) {
                     impl.sketches[sk->id] = std::move(*profile);
@@ -378,6 +431,8 @@ void Model::Rebuild(doc::Document& doc) {
                 }
                 if (!placed && sk->status.state == FeatureState::Ok)
                     sk->status = {FeatureState::Warning, "Грань эскиза не найдена: эскиз остался на прежнем месте"};
+                if (!projectedFound && sk->status.state == FeatureState::Ok)
+                    sk->status = {FeatureState::Warning, "Часть проецированных рёбер не найдена: они остались на прежнем месте"};
             } else if (auto* ex = dynamic_cast<doc::ExtrudeFeature*>(&f)) {
                 ApplySketchSolid(*ex, impl, bodies, ex->status, doc,
                                  [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature&, const Frame& frame) {
@@ -466,6 +521,14 @@ std::optional<Bounds> Model::BoundingBox() const {
 const std::vector<SketchRegion>* Model::Regions(ObjectId sketchFeature) const {
     const auto it = myImpl->sketches.find(sketchFeature);
     return it != myImpl->sketches.end() ? &it->second.regions : nullptr;
+}
+
+Expected<ProjectedCurve> Model::ProjectEdge(const doc::EdgeReference& edge, const Frame& plane, std::size_t featureIndex) const {
+    const auto& after = myImpl->bodiesAfter;
+    if (featureIndex == 0 || featureIndex > after.size() || after[featureIndex - 1].empty()) return Error{"Нет тела, с которого проецировать"};
+    const std::optional<TopoDS_Edge> found = occt::ResolveEdges({edge}, after[featureIndex - 1].back().shape).front();
+    if (!found) return Error{"Ребро не найдено"};
+    return occt::ProjectEdge(*found, plane);
 }
 
 std::optional<MassProperties> Model::Properties() const {

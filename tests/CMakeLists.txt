@@ -9,6 +9,7 @@ add_executable(bz_tests
     kernel/MeasureTests.cpp
     kernel/ModelTests.cpp
     kernel/PatternTests.cpp
+    kernel/ProjectionTests.cpp
     kernel/RevolveTests.cpp
     kernel/ShellTests.cpp
     kernel/SweepTests.cpp

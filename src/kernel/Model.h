@@ -6,6 +6,8 @@
 #include "core/Id.h"
 #include "core/Math.h"
 #include "document/Document.h"
+#include "document/EdgeReference.h"
+#include "kernel/Projection.h"
 
 #include <filesystem>
 #include <memory>
@@ -74,6 +76,10 @@ public:
 
     /// Volume of all bodies, mm^3 (status bar, tests).
     double Volume() const;
+    /// A model edge as it would appear on `plane`, taken from the bodies as
+    /// they were before feature number `featureIndex` (a sketch projecting it).
+    Expected<ProjectedCurve> ProjectEdge(const doc::EdgeReference& edge, const Frame& plane, std::size_t featureIndex) const;
+
     /// Volume, area, centre and exact size of all bodies; nullopt without bodies.
     std::optional<MassProperties> Properties() const;
 

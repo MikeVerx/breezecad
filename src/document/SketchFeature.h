@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Math.h"
+#include "document/EdgeReference.h"
 #include "document/FaceReference.h"
 #include "document/Feature.h"
 #include "sketch/Sketch.h"
@@ -21,12 +22,25 @@ struct SketchPlacement {
     FaceReference face;      ///< onFace: the face as picked
 };
 
+/// A model edge projected into the sketch ("Проецировать геометрию"): the
+/// edge it shows and the sketch curve that shows it. The curve and its points
+/// are marked `projected` (fixed for the solver); on every rebuild the kernel
+/// finds the edge again and puts the curve where the edge projects now.
+struct Projection {
+    EdgeReference edge;
+    ObjectId      curve;
+};
+
 class SketchFeature final : public FeatureBase<SketchFeature> {
 public:
     static constexpr std::string_view kType = "sketch";
 
-    SketchPlacement placement;
-    sketch::Sketch  sketch;
+    SketchPlacement         placement;
+    sketch::Sketch          sketch;
+    std::vector<Projection> projections;
+
+    /// Drops projections whose curve was deleted from the sketch.
+    void PruneProjections();
 
     /// Runtime analysis from the last solve, never saved.
     struct Analysis {
