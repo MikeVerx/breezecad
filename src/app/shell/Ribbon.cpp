@@ -121,7 +121,7 @@ void ModelRibbon(RibbonBuilder& r) {
     r.Large("feature.revolve", "Вращение");
     r.BeginColumn();
     r.SmallLater("sweep", "Сдвиг");
-    r.SmallLater("loft", "Лофт");
+    r.Small("feature.loft");
     r.SmallLater("coil", "Пружина");
     r.EndColumn();
     r.EndGroup();

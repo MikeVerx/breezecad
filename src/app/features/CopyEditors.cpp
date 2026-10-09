@@ -1,6 +1,5 @@
 #include "app/features/CopyEditors.h"
 
-#include "app/shell/Shell.h"
 #include "app/viewport/Planes.h"
 #include "document/HoleFeature.h"
 #include "document/Origin.h"
@@ -67,51 +66,9 @@ void CopyEditor::ChooseDefaultSource(const Session& session, doc::CopyFeature& f
 }
 
 bool CopyEditor::DrawSources(AppContext& app, Session& session, doc::CopyFeature& f, float width) {
-    ui::Ui& ui = app.ui;
-    const ui::ThemeColors& c = ui.C();
     Section(app, "Что копировать");
-    const int self = session.doc.IndexOf(f.id);
-    bool changed = false;
-    bool any = false;
-    for (int i = 0; i < self; ++i) {
-        const doc::Feature& source = *session.doc.Features()[static_cast<std::size_t>(i)];
-        if (!IsCopyable(source) || source.suppressed) continue;
-        any = true;
-        const auto it = std::ranges::find(f.sources, source.id);
-        const bool on = it != f.sources.end();
-
-        ImGui::PushID(static_cast<int>(source.id.value));
-        const ImVec2 p = ImGui::GetCursorScreenPos();
-        const float h = ui.S(30);
-        if (ImGui::InvisibleButton("##source", {width, h})) {
-            if (on) {
-                f.sources.erase(it);
-            } else {
-                // Keep document order: copies are applied in the order the originals were.
-                f.sources.push_back(source.id);
-                std::ranges::sort(f.sources, {}, [&](ObjectId id) { return session.doc.IndexOf(id); });
-            }
-            changed = true;
-        }
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        if (ImGui::IsItemHovered()) dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.hoverRow), ui.S(6));
-        // Check box.
-        const float box = ui.S(16);
-        const ImVec2 b{p.x + ui.S(8), p.y + (h - box) / 2};
-        if (on) {
-            dl->AddRectFilled(b, {b.x + box, b.y + box}, ui::ToU32(c.accent), ui.S(4));
-            ui.icons.Draw(dl, "ui-check", {b.x + ui.S(2), b.y + ui.S(2)}, ui.S(12), c.textOnAccent);
-        } else {
-            dl->AddRect(b, {b.x + box, b.y + box}, ui::ToU32(c.fieldBorder), ui.S(4), 0, ui.S(1.2f));
-        }
-        ui.icons.Draw(dl, FeatureIcon(source), {p.x + ui.S(34), p.y + (h - ui.S(18)) / 2}, ui.S(18), {1, 1, 1, 1});
-        dl->AddText(ui.fonts.body, ui.S(13), {p.x + ui.S(60), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text),
-                    source.name.c_str());
-        ImGui::PopID();
-    }
-    if (!any) Caption(app, "Нет операций, которые можно скопировать: выдавливание, вращение или отверстие.", width);
-    if (changed) Changed(session);
-    return changed;
+    return FeatureChecklist(app, session, f.sources, IsCopyable, width,
+                            "Нет операций, которые можно скопировать: выдавливание, вращение или отверстие.");
 }
 
 // --- PatternEditor --------------------------------------------------------------

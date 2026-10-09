@@ -9,6 +9,7 @@
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
+#include "document/LoftFeature.h"
 #include "document/PatternFeature.h"
 #include "document/RevolveFeature.h"
 #include "document/ShellFeature.h"
@@ -382,6 +383,7 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (const auto* p = dynamic_cast<const doc::PatternFeature*>(&f))
         return p->kind == doc::PatternKind::Circular ? "tree-pattern-circular" : "tree-pattern-rect";
     if (dynamic_cast<const doc::MirrorFeature*>(&f)) return "tree-mirror";
+    if (dynamic_cast<const doc::LoftFeature*>(&f)) return "tree-loft";
     return "tree-unknown";
 }
 

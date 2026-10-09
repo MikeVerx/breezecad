@@ -46,14 +46,6 @@ ObjectId LastUnusedSketch(const doc::Document& d) {
     return {};
 }
 
-/// True when an active solid operation comes before `index`: only then can
-/// a new one join, cut or intersect.
-bool HasBodyBefore(const doc::Document& d, std::size_t index) {
-    for (std::size_t i = 0; i < index && i < d.FeatureCount(); ++i)
-        if (dynamic_cast<const doc::SketchSolidFeature*>(d.Features()[i].get()) && d.IsActive(i)) return true;
-    return false;
-}
-
 } // namespace
 
 // --- lifecycle --------------------------------------------------------------
@@ -72,7 +64,7 @@ void SketchOperationEditor::StartNew(AppContext& app, Session& session, ObjectId
     }
     std::unique_ptr<doc::SketchSolidFeature> f = Create(session, sketch);
     f->sketch = sketch;
-    f->operation = HasBodyBefore(session.doc, session.doc.EndMarker()) ? BooleanOp::Join : BooleanOp::NewBody;
+    f->operation = HasSolidBefore(session.doc, session.doc.EndMarker()) ? BooleanOp::Join : BooleanOp::NewBody;
     myHoveredRegion = -1;
     OpenNew(app, session, std::move(f));
 }
@@ -199,7 +191,7 @@ void SketchOperationEditor::DrawBody(AppContext& app, Session& session, doc::Fea
     auto& f = static_cast<doc::SketchSolidFeature&>(feature);
     // Operation: a new body, or combined with the body before it.
     Section(app, "Операция");
-    const bool bodyBefore = HasBodyBefore(session.doc, static_cast<std::size_t>(session.doc.IndexOf(f.id)));
+    const bool bodyBefore = HasSolidBefore(session.doc, static_cast<std::size_t>(session.doc.IndexOf(f.id)));
     static constexpr std::array<const char*, 4> labels{"Новое тело", "Добавить", "Вырезать", "Пересечь"};
     const int current = static_cast<int>(f.operation);
     const int chosen = ui::Segmented(app.ui, "op", labels, current, 2, width, bodyBefore ? 0 : 0b1110);

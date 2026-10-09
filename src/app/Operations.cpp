@@ -184,6 +184,13 @@ void StartMirror(AppContext& app) {
     app.ops.mirror.StartNew(app, *s);
 }
 
+void StartLoft(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.loft.StartNew(app, *s);
+}
+
 void StartRevolve(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;

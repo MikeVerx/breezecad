@@ -10,8 +10,6 @@ sleep 1
 "$UI" shot workplane-preview 1.5
 "$UI" key Return             # Готово
 sleep 1.5
-"$UI" key s                  # Начать эскиз
-sleep 1
-"$UI" clk 1250 400           # на рабочей плоскости, мимо тела
+"$UI" key s                  # Начать эскиз: плоскость выбрана в дереве — эскиз сразу на ней
 sleep 2
 "$UI" shot workplane-sketch 1

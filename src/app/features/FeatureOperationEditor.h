@@ -7,10 +7,16 @@
 
 #include "app/features/OperationEditor.h"
 
+#include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace bz::app {
+
+/// True when an active operation that makes a solid comes before `index`:
+/// only then can a new one join, cut or intersect.
+bool HasSolidBefore(const doc::Document& d, std::size_t index);
 
 class FeatureOperationEditor : public OperationEditor {
 public:
@@ -54,6 +60,12 @@ protected:
     /// finishes the operation. Returns true when the expression changed.
     bool ParameterField(AppContext& app, Session& session, const char* id, std::string& text, Parameter& parameter,
                         float width, bool focus, bool showFx = true);
+
+    /// A list of the features before this one that `eligible` accepts, each
+    /// with a check box; `chosen` keeps document order. Shows `emptyText`
+    /// when there are none. Returns true when the choice changed.
+    bool FeatureChecklist(AppContext& app, Session& session, std::vector<ObjectId>& chosen,
+                          const std::function<bool(const doc::Feature&)>& eligible, float width, const char* emptyText);
 
     bool myFocusFirstField = false;   ///< focus the main value when the panel opens
 

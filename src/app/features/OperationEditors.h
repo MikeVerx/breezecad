@@ -5,6 +5,7 @@
 #include "app/features/EdgeOperationEditor.h"
 #include "app/features/ExtrudeEditor.h"
 #include "app/features/HoleEditor.h"
+#include "app/features/LoftEditor.h"
 #include "app/features/RevolveEditor.h"
 #include "app/features/ShellEditor.h"
 #include "app/features/WorkPlaneEditor.h"
@@ -23,9 +24,10 @@ struct OperationEditors {
     WorkPlaneEditor workPlane;
     PatternEditor   pattern;
     MirrorEditor    mirror;
+    LoftEditor      loft;
 
-    std::array<OperationEditor*, 9> All() {
-        return {&extrude, &revolve, &fillet, &chamfer, &hole, &shell, &workPlane, &pattern, &mirror};
+    std::array<OperationEditor*, 10> All() {
+        return {&extrude, &revolve, &fillet, &chamfer, &hole, &shell, &workPlane, &pattern, &mirror, &loft};
     }
 
     /// The open operation, or nullptr.
