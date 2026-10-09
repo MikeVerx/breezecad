@@ -36,6 +36,7 @@ jobs:
             mingw-w64-x86_64-glfw
             mingw-w64-x86_64-opencascade
             mingw-w64-x86_64-binutils
+            mingw-w64-x86_64-gdb
             zip
       - name: Versions
         run: |
@@ -55,7 +56,10 @@ jobs:
           # A crash prints no failed check: run again, naming each finished test case.
           if [ $status -ne 0 ]; then
             exe=$(find build/windows-mingw -name bz_tests.exe | head -1)
-            "$exe" -d 2>&1 | grep -vE "WARN|INFO" | tail -15 | sed 's/^/last cases: /' | tee -a test.log
+            "$exe" -d 2>&1 | grep -vE "WARN|INFO|^$|^=+$" | tail -12 | sed 's/^/last cases: /' | tee -a test.log
+            # And once more under gdb for the backtrace of the crash.
+            gdb -batch -ex run -ex bt -ex "info registers rip" --args "$exe" 2>&1 \
+              | grep -vE "WARN|INFO|^\[New Thread|^\[Thread" | tail -50 | sed 's/^/gdb: /' | tee -a test.log
           fi
           exit $status
       - name: Report failures
