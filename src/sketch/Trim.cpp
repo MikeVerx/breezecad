@@ -279,4 +279,40 @@ void Extend(Sketch& sk, IdGenerator& ids, const Extension& e) {
     sk.AddConstraint(ids, Make(ConstraintType::PointOnCurve, e.end, e.target));
 }
 
+std::optional<Vec2> SplitPoint(const Sketch& sk, ObjectId curve, Vec2 pick) {
+    const Shape s = ShapeOf(sk, curve);
+    if (s.kind != EntityKind::Line && s.kind != EntityKind::Arc) return std::nullopt;
+    if (s.kind == EntityKind::Line) {
+        const Vec2 d = s.b - s.a;
+        const double t = (pick - s.a).Dot(d) / std::max(d.Dot(d), 1e-18);
+        if (t < 0.01 || t > 0.99) return std::nullopt;
+        return s.a + d * t;
+    }
+    const double angle = Normalize(std::atan2(pick.y - s.centre.y, pick.x - s.centre.x) - s.start);
+    if (angle < 0.01 * s.sweep || angle > 0.99 * s.sweep) return std::nullopt;
+    return PointAt(s, angle);
+}
+
+std::optional<ObjectId> Split(Sketch& sk, IdGenerator& ids, ObjectId curve, Vec2 pick) {
+    const std::optional<Vec2> at = SplitPoint(sk, curve, pick);
+    if (!at) return std::nullopt;
+    const ObjectId point = sk.AddPoint(ids, *at);
+    if (Line* l = sk.FindLine(curve)) {
+        const ObjectId end = l->end;
+        const bool construction = l->construction, centerline = l->centerline;
+        l->end = point;
+        std::erase_if(sk.constraints, [&](const Constraint& c) { return c.type == ConstraintType::Length && c.refs[0] == curve; });
+        const ObjectId second = sk.AddLine(ids, point, end, construction);
+        sk.FindLine(second)->centerline = centerline;
+        sk.AddConstraint(ids, Make(ConstraintType::Parallel, curve, second));
+        return point;
+    }
+    const Arc* a = sk.FindArc(curve);
+    const Arc copy = *a;
+    for (Arc& arc : sk.arcs)
+        if (arc.id == curve) arc.end = point;
+    sk.AddArc(ids, copy.center, point, copy.end, copy.construction);
+    return point;
+}
+
 } // namespace bz::sketch

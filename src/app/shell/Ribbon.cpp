@@ -254,6 +254,7 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.Small("sketch.offset", nullptr, active(SketchTool::Offset));
     r.EndColumn();
     r.BeginColumn();
+    r.Small("sketch.split", nullptr, active(SketchTool::Split));
     r.Small("edit.delete");
     r.EndColumn();
     r.EndGroup();

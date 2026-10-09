@@ -121,6 +121,7 @@ void RegisterActions(AppContext& app) {
         {SketchTool::Point, "sketch.point", ImGuiKey_P},        {SketchTool::Dimension, "sketch.dimension", ImGuiKey_D},
         {SketchTool::Project, "sketch.project", ImGuiKey_None}, {SketchTool::Trim, "sketch.trim", ImGuiKey_T},
         {SketchTool::Extend, "sketch.extend", ImGuiKey_None},
+        {SketchTool::Split, "sketch.split", ImGuiKey_None},
         {SketchTool::Fillet, "sketch.fillet", ImGuiKey_None},
         {SketchTool::Offset, "sketch.offset", ImGuiKey_O},
         {SketchTool::Spline, "sketch.spline", ImGuiKey_None},

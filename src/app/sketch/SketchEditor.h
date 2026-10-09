@@ -23,7 +23,7 @@
 namespace bz::app {
 
 enum class SketchTool : unsigned char {
-    Select, Line, Rectangle, Circle, Arc, Point, Spline, Project, Trim, Extend, Fillet, Offset, Move, Rotate, Copy, Scale, Mirror, PatternRect, PatternCircular, Dimension,
+    Select, Line, Rectangle, Circle, Arc, Point, Spline, Project, Trim, Extend, Split, Fillet, Offset, Move, Rotate, Copy, Scale, Mirror, PatternRect, PatternCircular, Dimension,
     Coincident, Horizontal, Vertical, Parallel, Perpendicular, Equal, Tangent, Fix, Midpoint, Concentric, Symmetric,
 };
 
@@ -132,6 +132,7 @@ private:
     /// "Обрезка": the piece under the cursor is shown, a click removes it.
     void HandleTrim(AppContext& app, Session& session, const SketchView& view);
     void HandleExtend(AppContext& app, Session& session, const SketchView& view);
+    void HandleSplit(AppContext& app, Session& session, const SketchView& view);
     void HandleOffset(AppContext& app, Session& session, const SketchView& view);
     void HandleSpline(AppContext& app, Session& session, const SketchView& view);
 

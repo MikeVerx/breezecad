@@ -615,6 +615,37 @@ void SketchEditor::FinishSpline(AppContext& app, Session& session, bool closed) 
     session.CommitInPlaceEdit(std::move(before), Tr("Сплайн"));
 }
 
+void SketchEditor::HandleSplit(AppContext& app, Session& session, const SketchView& view) {
+    doc::SketchFeature* f = Active(session);
+    if (!f || !myHover || !myCursor) return;
+    if (myHover.kind != EntityKind::Line && myHover.kind != EntityKind::Arc) return;
+    const sketch::Line* line = f->sketch.FindLine(myHover.id);
+    const sketch::Arc* arc = f->sketch.FindArc(myHover.id);
+    if ((line && line->projected) || (arc && arc->projected)) return;   // projections belong to the model
+    const std::optional<Vec2> at = sketch::SplitPoint(f->sketch, myHover.id, *myCursor);
+    if (!at) return;
+    // Where it will split: a cross on the curve.
+    const ImVec2 p = view.ToScreen(*at);
+    const float r = app.ui.S(6);
+    const ImU32 ink = ui::ToU32(app.ui.C().danger);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddLine({p.x - r, p.y - r}, {p.x + r, p.y + r}, ink, app.ui.S(2));
+    dl->AddLine({p.x - r, p.y + r}, {p.x + r, p.y - r}, ink, app.ui.S(2));
+
+    if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
+    auto before = f->Clone();
+    sketch::Sketch trial = f->sketch;
+    if (!sketch::Split(trial, session.doc.Ids(), myHover.id, *myCursor)) return;
+    if (!sketch::Solve(trial).converged) {
+        app.notes.Error(Tr("После разбиения эскиз не решается"));
+        return;
+    }
+    f->sketch = std::move(trial);
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), Tr("Разбить"));
+    myHover = {};
+}
+
 void SketchEditor::HandleFillet(AppContext& app, Session& session, const SketchView& view) {
     doc::SketchFeature* f = Active(session);
     if (!f || !myHover || !myCursor) return;

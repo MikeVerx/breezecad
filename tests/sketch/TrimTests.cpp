@@ -95,3 +95,24 @@ TEST_CASE("extend a line end to the nearest curve ahead") {
 
     CHECK_FALSE(FindExtension(sk, line, {0.5, 0}));   // nothing behind the start
 }
+
+TEST_CASE("split a line and an arc where clicked") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId line = AddSegment(sk, ids, {0, 0}, {30, 0});
+    CHECK_FALSE(Split(sk, ids, line, {0.1, 0}));   // at an end: nothing
+    const auto p = Split(sk, ids, line, {10, 0.5});
+    REQUIRE(p);
+    CHECK(sk.lines.size() == 2);
+    CHECK((sk.PositionOf(*p) - Vec2{10, 0}).Length() == doctest::Approx(0.0));
+    REQUIRE(Solve(sk).converged);
+    CHECK(LengthOf(sk, sk.lines[0]) + LengthOf(sk, sk.lines[1]) == doctest::Approx(30.0));
+
+    const ObjectId c = sk.AddPoint(ids, {100, 0});
+    const ObjectId arc = sk.AddArc(ids, c, sk.AddPoint(ids, {110, 0}), sk.AddPoint(ids, {90, 0}));   // the upper half
+    const auto q = Split(sk, ids, arc, {100, 12});
+    REQUIRE(q);
+    CHECK(sk.arcs.size() == 2);
+    CHECK((sk.PositionOf(*q) - Vec2{100, 10}).Length() == doctest::Approx(0.0));
+    CHECK(Solve(sk).converged);
+}

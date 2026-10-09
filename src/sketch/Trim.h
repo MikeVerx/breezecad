@@ -56,4 +56,16 @@ std::optional<Extension> FindExtension(const Sketch& sk, ObjectId line, Vec2 pic
 /// Moves the end and ties it to the target (PointOnCurve).
 void Extend(Sketch& sk, IdGenerator& ids, const Extension& extension);
 
+// --- "Разбить" -------------------------------------------------------------
+
+/// Where a click at `pick` would split `curve` (a line or an arc): the point
+/// on it, nullopt at or near its ends or for other curves.
+std::optional<Vec2> SplitPoint(const Sketch& sk, ObjectId curve, Vec2 pick);
+
+/// Splits the line or arc there into two sharing a new point: the halves of
+/// a line stay in one line (parallel through a common point), the halves of
+/// an arc share its centre. A length on the line goes (it no longer fits).
+/// Returns the new point.
+std::optional<ObjectId> Split(Sketch& sk, IdGenerator& ids, ObjectId curve, Vec2 pick);
+
 } // namespace bz::sketch
