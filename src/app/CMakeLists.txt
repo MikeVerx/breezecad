@@ -11,6 +11,7 @@ add_executable(breezecad WIN32
     Settings.cpp
     Workspace.cpp
     features/EdgeOperationEditor.cpp
+    features/HoleEditor.cpp
     features/ExtrudeEditor.cpp
     features/FeatureOperationEditor.cpp
     features/RevolveEditor.cpp

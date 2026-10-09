@@ -227,7 +227,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const bool pickingEdges = operation && operation->PicksEdges();
     if (!pickingEdges) app.viewport.EndEdgePicking();
     // Pre-highlight the face (or, for fillets, the edge) under the cursor.
-    const bool hoverMatters = session.mode != EditMode::Sketch && (!operation || pickingEdges);
+    const bool hoverMatters = session.mode != EditMode::Sketch && (!operation || pickingEdges || operation->PicksFaces());
     app.viewport.Hover(vf.hovered && hoverMatters ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);
 
     // Mode overlays.

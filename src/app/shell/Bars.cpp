@@ -120,8 +120,11 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
         dl->AddText(font, fs, {right, ty}, ui::ToU32(color), s2.c_str());
         right -= ui.S(18);
     };
+    // The open operation's own error is shown in its panel, not counted here.
+    const OperationEditor* operation = app.ops.Active();
+    const ObjectId editing = operation ? operation->EditedFeature() : ObjectId{};
     int errors = 0;
-    for (const auto& f : s->doc.Features()) errors += f->status.state == doc::FeatureState::Error ? 1 : 0;
+    for (const auto& f : s->doc.Features()) errors += f->status.state == doc::FeatureState::Error && f->id != editing ? 1 : 0;
     rightText(errors ? std::format("Ошибок: {}", errors) : "Готово", errors ? c.danger : c.success);
     rightText(UnitLabel(Quantity::Length, s->doc.units), c.textSecondary);
     if (s->mode == EditMode::Sketch) {

@@ -209,8 +209,8 @@ void Model::Rebuild(doc::Document& doc) {
                                  });
             } else if (auto* rev = dynamic_cast<doc::RevolveFeature*>(&f)) {
                 ApplySketchSolid(*rev, impl, bodies, rev->status, doc,
-                                 [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature& sk, const Frame& frame) {
-                                     return occt::MakeRevolution(faces, *rev, sk.sketch, frame);
+                                 [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature& profile, const Frame& frame) {
+                                     return occt::MakeRevolution(faces, *rev, profile.sketch, frame);
                                  });
             } else if (auto* fillet = dynamic_cast<doc::FilletFeature*>(&f)) {
                 ApplyEdgeFeature(*fillet, bodies, fillet->status, [&](const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges) {

@@ -81,6 +81,11 @@ void FeatureOperationEditor::StartNext(AppContext& app, Session& session, const 
     (void)previous;
 }
 
+bool FeatureOperationEditor::ShowStatus(const doc::Feature& feature) const {
+    (void)feature;
+    return true;
+}
+
 void FeatureOperationEditor::Done(AppContext& app, Session& session) {
     if (!Commit(app, session)) return;
     Reset();
@@ -184,7 +189,7 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
     DrawBody(app, session, *f, inner);
     myFocusFirstField = false;
 
-    if (f->status.state == doc::FeatureState::Error || f->status.state == doc::FeatureState::Warning) {
+    if ((f->status.state == doc::FeatureState::Error || f->status.state == doc::FeatureState::Warning) && ShowStatus(*f)) {
         if (!f->status.message.empty()) {
             Gap(app);
             ui::FontScope font(ui.fonts.bodySmall);

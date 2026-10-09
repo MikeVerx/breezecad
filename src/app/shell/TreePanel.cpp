@@ -8,6 +8,7 @@
 #include "document/Commands.h"
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
+#include "document/HoleFeature.h"
 #include "document/RevolveFeature.h"
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
@@ -103,6 +104,7 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::RevolveFeature*>(&f)) return "tree-revolve";
     if (dynamic_cast<const doc::FilletFeature*>(&f)) return "tree-fillet";
     if (dynamic_cast<const doc::ChamferFeature*>(&f)) return "tree-chamfer";
+    if (dynamic_cast<const doc::HoleFeature*>(&f)) return "tree-hole";
     return "tree-unknown";
 }
 
@@ -115,6 +117,11 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
         return "R" + FormatValue(fillet->radius.value, Quantity::Length, d.units);
     if (const auto* chamfer = dynamic_cast<const doc::ChamferFeature*>(&f))
         return FormatValue(chamfer->distance.value, Quantity::Length, d.units) + "\xC3\x97" + "45\xC2\xB0";
+    if (const auto* hole = dynamic_cast<const doc::HoleFeature*>(&f)) {
+        std::string meta = "\xC3\x98" + FormatValue(hole->diameter.value, Quantity::Length, d.units);   // Ø6.6
+        if (hole->centres.size() > 1) meta += " \xC3\x97" + std::to_string(hole->centres.size());
+        return meta;
+    }
     if (const auto* rev = dynamic_cast<const doc::RevolveFeature*>(&f)) {
         if (rev->extent == doc::RevolveExtent::Full) return "360\xC2\xB0";
         return FormatValue(rev->angle.value, Quantity::Angle, d.units) + UnitLabel(Quantity::Angle, d.units);

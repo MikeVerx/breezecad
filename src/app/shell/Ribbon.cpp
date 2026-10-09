@@ -125,7 +125,7 @@ void ModelRibbon(RibbonBuilder& r) {
     r.EndGroup();
 
     r.BeginGroup("Изменить");
-    r.LargeLater("hole", "Отверстие");
+    r.Large("feature.hole", "Отверстие");
     r.Large("feature.fillet", "Сопря-\nжение");
     r.LargeLater("thread", "Резьба");
     r.BeginColumn();

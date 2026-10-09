@@ -14,7 +14,8 @@ namespace bz::app {
 
 class FeatureOperationEditor : public OperationEditor {
 public:
-    bool IsOpen() const override { return myFeature.IsValid(); }
+    bool     IsOpen() const override { return myFeature.IsValid(); }
+    ObjectId EditedFeature() const override { return myFeature; }
     void EditExisting(AppContext& app, Session& session, ObjectId feature) override;
 
     void Apply(AppContext& app, Session& session) override;
@@ -34,13 +35,15 @@ protected:
     /// After Применить committed `previous`: open the next operation of the
     /// same kind. The default just closes the panel.
     virtual void StartNext(AppContext& app, Session& session, const doc::Feature& previous);
+    /// False hides the feature's error under the panel, for errors that only
+    /// say what to do next (the panel already says it).
+    virtual bool ShowStatus(const doc::Feature& feature) const;
 
     /// Puts a new feature at the end of the part as a live preview (not yet
     /// an undo step) and opens the panel on it. Sets its id.
     void OpenNew(AppContext& app, Session& session, std::unique_ptr<doc::Feature> feature);
     /// The feature being edited (nullptr when it vanished).
     doc::Feature* Edited(Session& session) const;
-    ObjectId      EditedId() const { return myFeature; }
     /// Marks the feature changed so the model rebuilds.
     void Changed(Session& session) const;
 

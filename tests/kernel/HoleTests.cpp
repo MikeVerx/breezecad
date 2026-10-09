@@ -107,3 +107,14 @@ TEST_CASE("hole survives a json round trip") {
     REQUIRE(loaded.HasValue());
     CHECK(doc::DocumentToJson(*loaded) == json);
 }
+
+TEST_CASE("a hole on a side face goes into the body") {
+    Plate p;
+    auto& hole = p.AddHole(HoleType::Simple, false);
+    hole.face = {{1, 0, 0}, {60, -6.75, 10.8}};   // as picked in the viewport
+    hole.centres = {{15, 10}};   // model y = 15, z = 10
+    kernel::Model model;
+    model.Rebuild(p.d);
+    REQUIRE(hole.status.state == FeatureState::Ok);
+    CHECK(Cut(model) == doctest::Approx(kPi * 25 * 10).epsilon(1e-4));
+}

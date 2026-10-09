@@ -19,6 +19,8 @@ public:
     virtual ~OperationEditor() = default;
 
     virtual bool IsOpen() const = 0;
+    /// The feature being created or edited (its errors show in the panel).
+    virtual ObjectId EditedFeature() const = 0;
     /// True when this editor edits features like `f` (double click, "Редактировать").
     virtual bool CanEdit(const doc::Feature& f) const = 0;
     virtual void EditExisting(AppContext& app, Session& session, ObjectId feature) = 0;
@@ -34,6 +36,8 @@ public:
 
     /// True when the viewport should let the user pick edges (fillet, chamfer).
     virtual bool PicksEdges() const { return false; }
+    /// True when the viewport should pre-highlight faces under the cursor (hole).
+    virtual bool PicksFaces() const { return false; }
 
     virtual const char* Title() const = 0;    ///< "Выдавливание", shown in the status bar
     virtual std::string Hint() const = 0;     ///< what to do, for the status bar
