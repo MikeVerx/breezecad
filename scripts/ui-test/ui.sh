@@ -12,13 +12,15 @@
 # Screenshots come from the app (BZ_SHOT_DIR hook): an X grab of a Mesa
 # GL window on Xvfb is black. Needs: xvfb xdotool python3-pil.
 set -e
-export DISPLAY=:99
+# UI_DISPLAY / UI_SCREEN / UI_SIZE: another display, e.g. a 2x one for
+# sharp screenshots (UI_SCREEN=2880x1800 UI_SIZE="2880 1800", uiScale 2).
+export DISPLAY="${UI_DISPLAY:-:99}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BIN="${BZ_BIN:-$ROOT/build/linux-debug/bin}"
 SHOTS="${SHOTS:-/tmp/shots}"
 case "$1" in
   start)
-    pgrep Xvfb >/dev/null || (Xvfb :99 -screen 0 1600x1000x24 >/dev/null 2>&1 &)
+    pgrep -f "Xvfb $DISPLAY " >/dev/null || (Xvfb "$DISPLAY" -screen 0 "${UI_SCREEN:-1600x1000}x24" >/dev/null 2>&1 &)
     sleep 0.5
     pkill -x breezecad || true
     sleep 0.3
@@ -28,6 +30,7 @@ case "$1" in
     sleep 4
     W=$(xdotool search --name BreezeCAD | head -1)
     xdotool windowmove "$W" 0 0
+    if [ -n "$UI_SIZE" ]; then xdotool windowsize "$W" $UI_SIZE; sleep 1; fi
     ;;
   stop) pkill -x breezecad || true ;;
   shot)
