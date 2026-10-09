@@ -13,6 +13,7 @@
 #include <ShapeUpgrade_UnifySameDomain.hxx>
 #include <Standard_Failure.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopTools_ListOfShape.hxx>
 #include <TopoDS.hxx>
 #include <gp_Trsf.hxx>
 #include <gp_Vec.hxx>
@@ -79,6 +80,21 @@ Expected<TopoDS_Shape> MakeExtrusion(const std::vector<TopoDS_Face>& faces, cons
     }
 }
 
+namespace {
+
+/// What every boolean result goes through: not empty, cleaned, valid.
+Expected<TopoDS_Shape> FinishBoolean(const TopoDS_Shape& raw, doc::BooleanOp op) {
+    if (IsEmpty(raw)) {
+        return Error{op == doc::BooleanOp::Intersect ? "Пересечение пустое: тела не перекрываются"
+                                                     : "После операции не осталось материала"};
+    }
+    const TopoDS_Shape result = Clean(raw);
+    if (!BRepCheck_Analyzer(result).IsValid()) return Error{"Результат операции некорректен"};
+    return result;
+}
+
+} // namespace
+
 Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const TopoDS_Shape& tool, doc::BooleanOp op) {
     try {
         TopoDS_Shape result;
@@ -88,13 +104,36 @@ Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const TopoDS_Sha
             case doc::BooleanOp::Cut:       result = BRepAlgoAPI_Cut(target, tool).Shape(); break;
             case doc::BooleanOp::Intersect: result = BRepAlgoAPI_Common(target, tool).Shape(); break;
         }
-        if (IsEmpty(result)) {
-            return Error{op == doc::BooleanOp::Intersect ? "Пересечение пустое: тела не перекрываются"
-                                                         : "После операции не осталось материала"};
+        return FinishBoolean(result, op);
+    } catch (const Standard_Failure& failure) {
+        return Error{std::string("Ошибка булевой операции: ") + failure.GetMessageString()};
+    }
+}
+
+Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const std::vector<TopoDS_Shape>& tools, doc::BooleanOp op) {
+    if (tools.empty()) return target;
+    if (op != doc::BooleanOp::Join && op != doc::BooleanOp::Cut) return Error{"Копировать можно только добавление и вырезание"};
+    try {
+        TopTools_ListOfShape arguments, toolList;
+        arguments.Append(target);
+        for (const TopoDS_Shape& t : tools) toolList.Append(t);
+        TopoDS_Shape result;
+        if (op == doc::BooleanOp::Join) {
+            BRepAlgoAPI_Fuse fuse;
+            fuse.SetArguments(arguments);
+            fuse.SetTools(toolList);
+            fuse.Build();
+            if (!fuse.IsDone()) return Error{"Ошибка булевой операции"};
+            result = fuse.Shape();
+        } else {
+            BRepAlgoAPI_Cut cut;
+            cut.SetArguments(arguments);
+            cut.SetTools(toolList);
+            cut.Build();
+            if (!cut.IsDone()) return Error{"Ошибка булевой операции"};
+            result = cut.Shape();
         }
-        result = Clean(result);
-        if (!BRepCheck_Analyzer(result).IsValid()) return Error{"Результат операции некорректен"};
-        return result;
+        return FinishBoolean(result, op);
     } catch (const Standard_Failure& failure) {
         return Error{std::string("Ошибка булевой операции: ") + failure.GetMessageString()};
     }

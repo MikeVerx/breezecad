@@ -19,6 +19,9 @@ Expected<TopoDS_Shape> MakeExtrusion(const std::vector<TopoDS_Face>& faces,
 
 /// Applies a boolean of `tool` to `target`. Returns the new body shape.
 Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const TopoDS_Shape& tool, doc::BooleanOp op);
+/// Joins or cuts several tools at once (they may overlap each other), as
+/// patterns need. NewBody and Intersect are not accepted here.
+Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const std::vector<TopoDS_Shape>& tools, doc::BooleanOp op);
 
 /// Merges coplanar faces and collinear edges left by booleans, so the model
 /// keeps a clean topology (one face per flat side).

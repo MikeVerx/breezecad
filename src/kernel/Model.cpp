@@ -8,6 +8,7 @@
 #include "document/RevolveFeature.h"
 #include "document/ShellFeature.h"
 #include "document/Origin.h"
+#include "document/PatternFeature.h"
 #include "document/SketchFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "kernel/occt/EdgeMatch.h"
@@ -20,12 +21,16 @@
 #include "kernel/occt/Shell.h"
 
 #include <BRepBndLib.hxx>
+#include <BRepBuilderAPI_Transform.hxx>
 #include <BRepGProp.hxx>
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
 #include <Message.hxx>
 #include <Message_Messenger.hxx>
 #include <Message_Printer.hxx>
+#include <gp_Ax1.hxx>
+#include <gp_Ax2.hxx>
+#include <gp_Trsf.hxx>
 
 #include <algorithm>
 #include <cmath>
@@ -85,6 +90,9 @@ void ApplySketchSolid(const doc::SketchSolidFeature& f, Model::Impl& impl, std::
         status = {FeatureState::Error, tool.GetError().message};
         return;
     }
+    // A new body copied by a pattern joins the body it started.
+    if (f.operation != doc::BooleanOp::Intersect)
+        impl.tools[f.id] = {*tool, f.operation == doc::BooleanOp::Cut ? doc::BooleanOp::Cut : doc::BooleanOp::Join};
 
     if (f.operation == doc::BooleanOp::NewBody || bodies.empty()) {
         if (f.operation == doc::BooleanOp::Cut || f.operation == doc::BooleanOp::Intersect) {
@@ -158,6 +166,72 @@ void ApplyToLastBody(std::vector<Body>& bodies, doc::FeatureStatus& status, cons
     }
     bodies.back().shape = *result;
     status = {FeatureState::Ok, {}};
+}
+
+/// Patterns and mirrors: the tools of the source operations, moved by each
+/// of `placements`, joined to or cut from the most recent body.
+void ApplyCopies(const doc::CopyFeature& f, const std::vector<gp_Trsf>& placements, const Model::Impl& impl,
+                 std::vector<Body>& bodies, doc::FeatureStatus& status, const doc::Document& doc) {
+    if (bodies.empty()) {
+        status = {FeatureState::Error, "Нет тела, к которому применить копии"};
+        return;
+    }
+    if (f.sources.empty()) {
+        status = {FeatureState::Error, "Выберите операции, которые нужно скопировать"};
+        return;
+    }
+    std::vector<TopoDS_Shape> joins, cuts;
+    for (ObjectId source : f.sources) {
+        const auto tool = impl.tools.find(source);
+        if (tool == impl.tools.end()) {
+            const doc::Feature* sf = doc.Find(source);
+            status = {FeatureState::Error, "«" + (sf ? sf->name : std::string("?")) + "» нельзя скопировать: копируются "
+                                           "только выдавливание, вращение и отверстия без ошибок"};
+            return;
+        }
+        for (const gp_Trsf& t : placements) {
+            const TopoDS_Shape copy = BRepBuilderAPI_Transform(tool->second.shape, t, true).Shape();
+            (tool->second.op == doc::BooleanOp::Cut ? cuts : joins).push_back(copy);
+        }
+    }
+    Body& target = bodies.back();
+    for (auto [tools, op] : {std::pair{&joins, doc::BooleanOp::Join}, {&cuts, doc::BooleanOp::Cut}}) {
+        Expected<TopoDS_Shape> result = occt::ApplyBoolean(target.shape, *tools, op);
+        if (!result) {
+            status = {FeatureState::Error, result.GetError().message};
+            return;
+        }
+        target.shape = *result;
+    }
+    status = {FeatureState::Ok, {}};
+}
+
+/// Placements of a pattern's copies.
+Expected<std::vector<gp_Trsf>> PatternPlacements(const doc::PatternFeature& f) {
+    const auto copies = f.Copies();
+    if (!copies) return copies.GetError();
+    const Vec3 a = doc::AxisDirection(f.axis);
+    const gp_Ax1 axis(gp_Pnt(0, 0, 0), gp_Dir(a.x, a.y, a.z));
+    std::vector<gp_Trsf> placements;
+    for (const doc::PatternFeature::Copy& c : *copies) {
+        gp_Trsf turn, move;
+        turn.SetRotation(axis, c.turn);
+        move.SetTranslation(gp_Vec(c.offset.x, c.offset.y, c.offset.z));
+        placements.push_back(move * turn);   // turn first, then move
+    }
+    return placements;
+}
+
+/// The reflection of a mirror, about an origin plane or a work plane.
+Expected<gp_Trsf> MirrorPlacement(const doc::MirrorFeature& f, const doc::Document& doc) {
+    std::optional<Frame> plane = doc::origin::PlaneFrame(f.plane);
+    if (!plane)
+        if (const auto* wp = doc.FindAs<doc::WorkPlaneFeature>(f.plane); wp && wp->frame) plane = wp->frame;
+    if (!plane) return Error{"Выберите плоскость зеркала"};
+    gp_Trsf mirror;
+    mirror.SetMirror(gp_Ax2(gp_Pnt(plane->origin.x, plane->origin.y, plane->origin.z),
+                            gp_Dir(plane->normal.x, plane->normal.y, plane->normal.z)));
+    return mirror;
 }
 
 /// Puts a work plane where its base (origin plane, work plane or face of a
@@ -234,6 +308,7 @@ void Model::Rebuild(doc::Document& doc) {
     for (std::size_t i = start; i < count; ++i) {
         doc::Feature& f = *doc.Features()[i];
         impl.cachedOrder[i] = f.id;
+        impl.tools.erase(f.id);   // set again below if the operation succeeds
 
         const bool skip = !doc.IsActive(i) || f.suppressed;
         if (!skip) {
@@ -266,7 +341,22 @@ void Model::Rebuild(doc::Document& doc) {
                 });
             } else if (auto* hole = dynamic_cast<doc::HoleFeature*>(&f)) {
                 ApplyToLastBody(bodies, hole->status, "Нет тела, в котором делать отверстие",
-                                [&](const TopoDS_Shape& body) { return occt::DrillHoles(body, *hole); });
+                                [&](const TopoDS_Shape& body) -> Expected<TopoDS_Shape> {
+                                    const Expected<TopoDS_Shape> tools = occt::HoleTools(body, *hole);
+                                    if (!tools) return tools.GetError();
+                                    impl.tools[hole->id] = {*tools, doc::BooleanOp::Cut};
+                                    return occt::ApplyBoolean(body, *tools, doc::BooleanOp::Cut);
+                                });
+            } else if (auto* pattern = dynamic_cast<doc::PatternFeature*>(&f)) {
+                if (const auto placements = PatternPlacements(*pattern))
+                    ApplyCopies(*pattern, *placements, impl, bodies, pattern->status, doc);
+                else
+                    pattern->status = {FeatureState::Error, placements.GetError().message};
+            } else if (auto* mirror = dynamic_cast<doc::MirrorFeature*>(&f)) {
+                if (const auto placement = MirrorPlacement(*mirror, doc))
+                    ApplyCopies(*mirror, {*placement}, impl, bodies, mirror->status, doc);
+                else
+                    mirror->status = {FeatureState::Error, placement.GetError().message};
             } else if (auto* wp = dynamic_cast<doc::WorkPlaneFeature*>(&f)) {
                 PlaceWorkPlane(*wp, doc, bodies);
             } else if (auto* shell = dynamic_cast<doc::ShellFeature*>(&f)) {

@@ -60,7 +60,7 @@ Status CheckSizes(const doc::HoleFeature& f) {
 
 } // namespace
 
-Expected<TopoDS_Shape> DrillHoles(const TopoDS_Shape& body, const doc::HoleFeature& f) {
+Expected<TopoDS_Shape> HoleTools(const TopoDS_Shape& body, const doc::HoleFeature& f) {
     if (Status s = CheckSizes(f); !s) return s.GetError();
     if (f.centres.empty()) return Error{"Укажите центр отверстия на грани"};
     const std::optional<Frame> plane = ResolvePlaneFrame(body, f.face);
@@ -74,10 +74,16 @@ Expected<TopoDS_Shape> DrillHoles(const TopoDS_Shape& body, const doc::HoleFeatu
             const TopoDS_Shape tool = HoleTool(f, frame.ToWorld(c), down, depth);
             tools = tools.IsNull() ? tool : BRepAlgoAPI_Fuse(tools, tool).Shape();
         }
-        return ApplyBoolean(body, tools, doc::BooleanOp::Cut);
+        return tools;
     } catch (const Standard_Failure& failure) {
         return Error{std::string("Ошибка отверстия: ") + failure.GetMessageString()};
     }
+}
+
+Expected<TopoDS_Shape> DrillHoles(const TopoDS_Shape& body, const doc::HoleFeature& f) {
+    const Expected<TopoDS_Shape> tools = HoleTools(body, f);
+    if (!tools) return tools.GetError();
+    return ApplyBoolean(body, *tools, doc::BooleanOp::Cut);
 }
 
 } // namespace bz::kernel::occt

@@ -11,4 +11,8 @@ namespace bz::kernel::occt {
 /// `body` by its normal and point (doc::FaceReference).
 Expected<TopoDS_Shape> DrillHoles(const TopoDS_Shape& body, const doc::HoleFeature& feature);
 
+/// The cutting tools of all holes of `feature` on `body`, fused (what
+/// DrillHoles cuts out; patterns copy it).
+Expected<TopoDS_Shape> HoleTools(const TopoDS_Shape& body, const doc::HoleFeature& feature);
+
 } // namespace bz::kernel::occt
