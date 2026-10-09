@@ -53,6 +53,8 @@ std::string WorkPlaneEditor::Hint() const {
             return Tr("Щёлкните плоскость или грань, затем прямое ребро на ней, введите угол. Enter — готово, Esc — отмена");
         case WorkPlaneMethod::ThreePoints:
             return Tr("Щёлкните три вершины тела. Enter — готово, Esc — отмена");
+        case WorkPlaneMethod::Tangent:
+            return Tr("Щёлкните цилиндрическую грань там, где плоскость должна её касаться. Enter — готово, Esc — отмена");
         case WorkPlaneMethod::Offset: break;
     }
     return Tr("Щёлкните плоскость или плоскую грань, от которой строить, введите смещение. Enter — готово, Esc — отмена");
@@ -88,6 +90,21 @@ void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const Vi
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 mouse = ImGui::GetMousePos();
     const Vec2 local = vf.ToLocal(mouse);
+    // Touching a cylinder: the faces of the body before this plane.
+    if (f->method == WorkPlaneMethod::Tangent) {
+        app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Faces);
+        for (const ShownPlane& p : WorkPlanes(session, static_cast<std::size_t>(index) + 1))
+            if (p.id == f->id) DrawPlane(app, dl, vf, p, true);
+        myArrow.Release();
+        if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
+        if (const auto c = app.viewport.PickCylinder(local)) {
+            f->cylinder = doc::CylinderTouch{c->axisPoint, c->axisDir, c->radius, c->radial};
+            Changed(session);
+        } else {
+            app.notes.Info(Tr("Нужна цилиндрическая грань"));
+        }
+        return;
+    }
     // Through vertices: only the vertices of the body before this plane.
     if (f->method == WorkPlaneMethod::ThreePoints) {
         app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Vertices);
@@ -193,7 +210,8 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
 
     Section(app, Tr("Способ"));
     {
-        static constexpr std::array<const char*, 4> methods{N_("Смещение"), N_("Посередине"), N_("Под углом"), N_("По 3 точкам")};
+        static constexpr std::array<const char*, 5> methods{N_("Смещение"), N_("Посередине"), N_("Под углом"), N_("По 3 точкам"),
+                                                            N_("Касательно к цилиндру")};
         const int current = static_cast<int>(f.method);
         if (const int chosen = ui::Segmented(ui, "method", methods, current, 2, width); chosen != current) {
             f.method = static_cast<WorkPlaneMethod>(chosen);
@@ -231,6 +249,11 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
             Gap(app);
             Section(app, Tr("Угол"));
             ParameterField(app, session, "angle", myAngle, f.angle, width, myFocusFirstField);
+            break;
+        case WorkPlaneMethod::Tangent:
+            Section(app, Tr("Касательно"));
+            Chip(ui, "##cylinder", Tr("Цилиндр"), f.cylinder ? std::string(Tr("выбран")) : std::string(), true, width);
+            Caption(app, Tr("Щёлкните цилиндрическую грань: плоскость коснётся её в этом месте и пойдёт вдоль оси."), width);
             break;
         case WorkPlaneMethod::ThreePoints: {
             Section(app, Tr("Через вершины"));

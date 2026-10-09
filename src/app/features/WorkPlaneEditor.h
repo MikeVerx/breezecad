@@ -21,7 +21,8 @@ public:
     bool        DrawsPlanes() const override { return true; }
     /// Through an edge: the edges of the body before the plane are picked.
     bool        PicksOriginal() const override {
-        return myMethod == doc::WorkPlaneMethod::Angle || myMethod == doc::WorkPlaneMethod::ThreePoints;
+        return myMethod == doc::WorkPlaneMethod::Angle || myMethod == doc::WorkPlaneMethod::ThreePoints ||
+               myMethod == doc::WorkPlaneMethod::Tangent;
     }
 
     void DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;

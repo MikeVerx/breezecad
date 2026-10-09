@@ -2,6 +2,7 @@
 // Finding a referenced flat face again on a rebuilt body (see doc::FaceReference).
 
 #include "document/FaceReference.h"
+#include "document/WorkPlaneFeature.h"
 
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
@@ -22,5 +23,9 @@ std::optional<Frame> ResolvePlaneFrame(const TopoDS_Shape& body, const doc::Face
 
 /// Outward unit normal of a flat face (nullopt for a curved one).
 std::optional<Vec3> PlanarNormal(const TopoDS_Face& face);
+
+/// The cylindrical face of `body` matching `ref` (parallel axis, nearest),
+/// as it is now; nullopt when none is near.
+std::optional<doc::CylinderTouch> ResolveCylinder(const TopoDS_Shape& body, const doc::CylinderTouch& ref);
 
 } // namespace bz::kernel::occt

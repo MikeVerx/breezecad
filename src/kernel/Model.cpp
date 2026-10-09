@@ -340,6 +340,20 @@ void PlaceWorkPlane(doc::WorkPlaneFeature& wp, const doc::Document& doc, const s
         if (const auto* other = doc.FindAs<doc::WorkPlaneFeature>(base); other && other->frame) return other->frame;
         return std::nullopt;
     };
+    if (wp.method == WorkPlaneMethod::Tangent) {
+        if (!wp.cylinder) return fail("Щёлкните цилиндрическую грань");
+        std::optional<doc::CylinderTouch> now;
+        for (auto it = bodies.rbegin(); it != bodies.rend() && !now; ++it) now = occt::ResolveCylinder(it->shape, *wp.cylinder);
+        if (!now) return fail("Цилиндрическая грань не найдена: модель изменилась слишком сильно");
+        const Vec3 n = (now->radial * (wp.reversed ? -1.0 : 1.0)).Normalized();
+        Frame f;
+        f.origin = now->axisPoint + now->radial * now->radius;
+        f.normal = n;
+        f.xDir = now->axisDir.Normalized();
+        wp.frame = f;
+        wp.status = {FeatureState::Ok, {}};
+        return;
+    }
     if (wp.method == WorkPlaneMethod::ThreePoints) {
         if (wp.points.size() < 3) return fail("Выберите три вершины");
         const Vec3 a = wp.points[0], u = wp.points[1] - a, v = wp.points[2] - a;
@@ -373,7 +387,8 @@ void PlaceWorkPlane(doc::WorkPlaneFeature& wp, const doc::Document& doc, const s
             wp.frame = doc::OffsetFrame(*first, gap / 2);
             break;
         }
-        case WorkPlaneMethod::ThreePoints: break;   // handled above
+        case WorkPlaneMethod::ThreePoints:
+        case WorkPlaneMethod::Tangent: break;   // handled above
         case WorkPlaneMethod::Angle: {
             if (!wp.edge) return fail("Выберите прямое ребро — ось поворота плоскости");
             if (wp.angle.HasError()) return fail("Угол задан с ошибкой");

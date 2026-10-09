@@ -196,3 +196,24 @@ TEST_CASE("work plane through three points") {
     model.Rebuild(d);
     CHECK(wp.status.state == FeatureState::Error);
 }
+
+TEST_CASE("work plane tangent to a cylinder follows its radius") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    sk.sketch.AddCircle(d.Ids(), sk.sketch.AddPoint(d.Ids(), {0, 0}), 10.0);
+    AddExtrude(d, sk.id, "20");
+    auto& wp = AddWorkPlane(d, "0");
+    wp.method = doc::WorkPlaneMethod::Tangent;
+    wp.cylinder = doc::CylinderTouch{{0, 0, 0}, {0, 0, 1}, 10.0, {1, 0, 0}};
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(wp.status.state == FeatureState::Ok);
+    CHECK(wp.frame->origin.x == doctest::Approx(10.0));
+    CHECK(std::abs(wp.frame->normal.x) == doctest::Approx(1.0));
+
+    sk.sketch.circles[0].radius = 15.0;
+    d.MarkChanged(0);
+    model.Rebuild(d);
+    REQUIRE(wp.status.state == FeatureState::Ok);
+    CHECK(wp.frame->origin.x == doctest::Approx(15.0));
+}

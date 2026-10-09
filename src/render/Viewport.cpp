@@ -9,6 +9,7 @@
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>
 #include <BRep_Tool.hxx>
+#include <gp_Cylinder.hxx>
 #include <Aspect_DisplayConnection.hxx>
 #include <Aspect_NeutralWindow.hxx>
 #include <BRepAdaptor_Surface.hxx>
@@ -923,6 +924,29 @@ std::vector<doc::EdgeReference> Viewport::PickFaceEdges(Vec2 pixel) {
             out.push_back(kernel::occt::DescribeEdge(TopoDS::Edge(edges(i)), m.original.bodies[b]));
     }
     return out;
+}
+
+std::optional<Viewport::CylinderPick> Viewport::PickCylinder(Vec2 pixel) {
+    Impl& m = *myImpl;
+    if (!m.original.active || m.original.target != PickTarget::Faces) return std::nullopt;
+    const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
+    const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->Pick(px, py, m.view);
+    for (int i = 1; i <= selector->NbPicked(); ++i) {
+        const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
+        if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_FACE) continue;
+        const BRepAdaptor_Surface surface(TopoDS::Face(owner->Shape()));
+        if (surface.GetType() != GeomAbs_Cylinder) return std::nullopt;   // the nearest face is not a cylinder
+        const gp_Cylinder cyl = surface.Cylinder();
+        const gp_Ax1 axis = cyl.Axis();
+        const gp_Pnt hit = selector->PickedPoint(i);
+        const Vec3 base = ToVec(axis.Location().XYZ()), dir = ToVec(axis.Direction().XYZ()), p = ToVec(hit.XYZ());
+        Vec3 radial = (p - base) - dir * (p - base).Dot(dir);
+        if (radial.Length() < 1e-9) return std::nullopt;
+        return CylinderPick{base, dir, radial.Normalized(), cyl.Radius()};
+    }
+    return std::nullopt;
 }
 
 std::optional<Vec3> Viewport::PickVertex(Vec2 pixel) {

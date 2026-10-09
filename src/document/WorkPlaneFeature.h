@@ -6,7 +6,8 @@
 //   Angle     through a straight edge, turned from the start by an angle
 //             (the edge must lie parallel to the start);
 //   ThreePoints through three vertices of the body (kept where they were
-//             picked: the plane does not follow later changes of the part).
+//             picked: the plane does not follow later changes of the part);
+//   Tangent   touching a cylindrical face where it was clicked.
 // Sketches placed on it follow it when it moves.
 
 #include "document/EdgeReference.h"
@@ -18,7 +19,15 @@
 
 namespace bz::doc {
 
-enum class WorkPlaneMethod : unsigned char { Offset, Midplane, Angle, ThreePoints };
+enum class WorkPlaneMethod : unsigned char { Offset, Midplane, Angle, ThreePoints, Tangent };
+
+/// A cylindrical face and a side of it, kept by its shape: found again on
+/// the rebuilt body as the cylinder with a parallel axis nearest this one.
+struct CylinderTouch {
+    Vec3   axisPoint, axisDir;
+    double radius = 0;
+    Vec3   radial;   ///< from the axis toward where the plane touches (unit, across the axis)
+};
 
 class WorkPlaneFeature final : public FeatureBase<WorkPlaneFeature> {
 public:
@@ -40,6 +49,8 @@ public:
     Parameter angle{.name = "", .expression = "90", .quantity = Quantity::Angle, .value = kPi / 2, .error = {}};
     /// ThreePoints: the picked vertices, model space (up to three).
     std::vector<Vec3> points;
+    /// Tangent: the cylinder.
+    std::optional<CylinderTouch> cylinder;
 
     /// Where the plane is after the last rebuild (runtime, never saved).
     std::optional<Frame> frame;

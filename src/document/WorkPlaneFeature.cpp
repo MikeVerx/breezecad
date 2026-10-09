@@ -14,11 +14,12 @@ using json_io::ReadMember;
 
 namespace {
 
-constexpr std::array<std::pair<WorkPlaneMethod, std::string_view>, 4> kMethodIds{{
+constexpr std::array<std::pair<WorkPlaneMethod, std::string_view>, 5> kMethodIds{{
     {WorkPlaneMethod::Offset, "offset"},
     {WorkPlaneMethod::Midplane, "midplane"},
     {WorkPlaneMethod::Angle, "angle"},
     {WorkPlaneMethod::ThreePoints, "points"},
+    {WorkPlaneMethod::Tangent, "tangent"},
 }};
 
 } // namespace
@@ -45,6 +46,11 @@ void WorkPlaneFeature::SaveFields(Json& out) const {
     if (method == WorkPlaneMethod::Midplane) {
         out["base2"] = json_io::ToJson(base2);
         if (face2.IsSet()) out["face2"] = json_io::ToJson(face2);
+    }
+    if (method == WorkPlaneMethod::Tangent && cylinder) {
+        const auto v = [](Vec3 p) { return Json{p.x, p.y, p.z}; };
+        out["cylinder"] = {{"point", v(cylinder->axisPoint)}, {"axis", v(cylinder->axisDir)}, {"radius", cylinder->radius},
+                           {"radial", v(cylinder->radial)}};
     }
     if (method == WorkPlaneMethod::ThreePoints) {
         Json pts = Json::array();
@@ -84,6 +90,23 @@ Status WorkPlaneFeature::LoadFields(const Json& in) {
                 return Error{"Рабочая плоскость: повреждены точки"};
             pts.push_back({p[0].get<double>(), p[1].get<double>(), p[2].get<double>()});
         }
+    std::optional<CylinderTouch> cyl;
+    if (const auto it = in.find("cylinder"); it != in.end()) {
+        const auto vec = [&](const char* key, Vec3& out) {
+            const auto v = it->find(key);
+            if (v == it->end() || !v->is_array() || v->size() != 3) return false;
+            for (const auto& x : *v)
+                if (!x.is_number()) return false;
+            out = {(*v)[0].get<double>(), (*v)[1].get<double>(), (*v)[2].get<double>()};
+            return true;
+        };
+        CylinderTouch t;
+        if (!it->is_object() || !vec("point", t.axisPoint) || !vec("axis", t.axisDir) || !vec("radial", t.radial) ||
+            !it->contains("radius") || !(*it)["radius"].is_number())
+            return Error{"Рабочая плоскость: повреждён цилиндр"};
+        t.radius = (*it)["radius"].get<double>();
+        cyl = t;
+    }
     WorkPlaneMethod m;
     if (!json_io::FromId(kMethodIds, methodId, m)) return Error{std::format("Рабочая плоскость: неизвестный способ «{}»", methodId)};
     // Only the type's own fields: id, name and suppressed are already read.
@@ -97,6 +120,7 @@ Status WorkPlaneFeature::LoadFields(const Json& in) {
     angle = std::move(ang);
     edge = e;
     points = std::move(pts);
+    cylinder = cyl;
     return Status::Ok();
 }
 

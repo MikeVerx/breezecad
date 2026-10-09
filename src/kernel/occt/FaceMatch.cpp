@@ -1,5 +1,6 @@
 #include "kernel/occt/FaceMatch.h"
 
+#include <gp_Cylinder.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
@@ -61,6 +62,29 @@ std::optional<Frame> ResolvePlaneFrame(const TopoDS_Shape& body, const doc::Face
     const Vec3 location = ToVec(BRepAdaptor_Surface(*face).Plane().Location().XYZ());
     const Vec3 onFace = ref.point + n * (location - ref.point).Dot(n);
     return doc::PlaneFrame({ref.normal, onFace});
+}
+
+std::optional<doc::CylinderTouch> ResolveCylinder(const TopoDS_Shape& body, const doc::CylinderTouch& ref) {
+    std::optional<doc::CylinderTouch> best;
+    double bestScore = 0;
+    for (TopExp_Explorer e(body, TopAbs_FACE); e.More(); e.Next()) {
+        const BRepAdaptor_Surface surface(TopoDS::Face(e.Current()));
+        if (surface.GetType() != GeomAbs_Cylinder) continue;
+        const gp_Cylinder cyl = surface.Cylinder();
+        const gp_Pnt o = cyl.Axis().Location();
+        const gp_Dir d = cyl.Axis().Direction();
+        const Vec3 dir{d.X(), d.Y(), d.Z()}, base{o.X(), o.Y(), o.Z()};
+        if (dir.Cross(ref.axisDir).Length() > 1e-6) continue;   // not parallel
+        const Vec3 off = base - ref.axisPoint;
+        const double axisGap = (off - ref.axisDir * off.Dot(ref.axisDir)).Length();
+        const double score = axisGap + std::abs(cyl.Radius() - ref.radius);
+        if (axisGap > std::max(ref.radius, 1.0)) continue;   // another cylinder, not this one moved
+        if (!best || score < bestScore) {
+            best = doc::CylinderTouch{base, ref.axisDir, cyl.Radius(), ref.radial};
+            bestScore = score;
+        }
+    }
+    return best;
 }
 
 } // namespace bz::kernel::occt

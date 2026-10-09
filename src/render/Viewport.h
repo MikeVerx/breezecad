@@ -153,6 +153,13 @@ public:
     /// Every edge of the face under the cursor (PickTarget::EdgesAndFaces,
     /// when no edge is nearer), described for storing.
     std::vector<doc::EdgeReference> PickFaceEdges(Vec2 pixel);
+    /// A cylindrical face under the cursor (PickTarget::Faces): its axis,
+    /// radius and the direction from the axis to the picked point.
+    struct CylinderPick {
+        Vec3   axisPoint, axisDir, radial;
+        double radius = 0;
+    };
+    std::optional<CylinderPick> PickCylinder(Vec2 pixel);
     /// Vertex under the cursor (PickTarget::Vertices), model space.
     std::optional<Vec3> PickVertex(Vec2 pixel);
     /// Flat face under the cursor (PickTarget::Faces); nullopt for a curved one.
