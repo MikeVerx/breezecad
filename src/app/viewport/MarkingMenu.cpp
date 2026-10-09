@@ -41,7 +41,7 @@ Items ItemsFor(AppContext& app, const Session& session) {
                  {"sketch.circle"},
                  {"sketch.arc"},
                  {"sketch.dimension"},
-                 {"sketch.project"},
+                 {"sketch.trim"},
                  {"sketch.construction"},
                  {"sketch.finish"}}};
     return {{{"sketch.start"},

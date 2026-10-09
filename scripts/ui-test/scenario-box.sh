@@ -24,7 +24,7 @@ sleep 1
 "$UI" clk 510 600
 "$UI" key ctrl+a; "$UI" type 80; "$UI" key Return
 sleep 1
-"$UI" clk 1224 115           # Принять эскиз
+"$UI" clk 1313 115           # Принять эскиз
 sleep 1.5
 "$UI" clk 140 115            # Выдавливание
 sleep 1.5

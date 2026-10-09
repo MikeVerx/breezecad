@@ -6,6 +6,7 @@
 #include "app/sketch/SketchOverlay.h"
 #include "core/Expression.h"
 #include "sketch/Shapes.h"
+#include "sketch/Trim.h"
 #include "sketch/Solver.h"
 
 #include <algorithm>
@@ -333,6 +334,39 @@ void SketchEditor::AddTypedDimensions(doc::Document& doc, sketch::Sketch& sk, co
         // Each one gets a fresh name: NextParameterName looks at the sketch.
         doc.EvaluateParameters();
     }
+}
+
+void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchView& view) {
+    doc::SketchFeature* f = Active(session);
+    const bool onCurve = myHover && IsCurve(myHover.kind);
+    if (!onCurve || !myCursor) return;
+    // Projected geometry belongs to the model.
+    const sketch::Sketch& sk = f->sketch;
+    const sketch::Line* line = sk.FindLine(myHover.id);
+    const sketch::Circle* circle = sk.FindCircle(myHover.id);
+    const sketch::Arc* arc = sk.FindArc(myHover.id);
+    if ((line && line->projected) || (circle && circle->projected) || (arc && arc->projected)) return;
+    const std::optional<sketch::TrimSpan> span = sketch::FindTrimSpan(f->sketch, myHover.id, *myCursor);
+    if (!span) return;
+
+    // The piece that would go: thick and dashed in the warning colour.
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const std::vector<Vec2> pts = sketch::SpanPolyline(f->sketch, *span);
+    for (std::size_t i = 0; i + 1 < pts.size(); ++i)
+        DrawSketchSegment(app.ui, dl, view, pts[i], pts[i + 1], app.ui.C().danger, 3.0f, true);
+
+    if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
+    auto before = f->Clone();
+    sketch::Sketch trial = f->sketch;
+    if (!sketch::Trim(trial, session.doc.Ids(), *span)) return;
+    if (!sketch::Solve(trial).converged) {
+        app.notes.Error("После обрезки эскиз не решается — кусок оставлен");
+        return;
+    }
+    f->sketch = std::move(trial);
+    f->PruneProjections();
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), "Обрезка");
 }
 
 void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Snap& snap) {

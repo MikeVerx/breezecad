@@ -22,7 +22,7 @@
 namespace bz::app {
 
 enum class SketchTool : unsigned char {
-    Select, Line, Rectangle, Circle, Arc, Point, Project, Dimension,
+    Select, Line, Rectangle, Circle, Arc, Point, Project, Trim, Dimension,
     Coincident, Horizontal, Vertical, Parallel, Perpendicular, Equal, Tangent, Fix, Midpoint, Concentric,
 };
 
@@ -103,6 +103,8 @@ private:
     void HandleDrawing(AppContext& app, Session& session, const SketchView& view);
     /// "Проецировать": a click on a model edge adds its projection.
     void HandleProject(AppContext& app, Session& session, const SketchView& view);
+    /// "Обрезка": the piece under the cursor is shown, a click removes it.
+    void HandleTrim(AppContext& app, Session& session, const SketchView& view);
     void HandleDimension(AppContext& app, Session& session, const SketchView& view);
     void HandleConstraint(AppContext& app, Session& session, const SketchView& view);
     void HandleInlineEdit(AppContext& app, Session& session, const SketchView& view);

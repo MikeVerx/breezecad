@@ -15,7 +15,7 @@
 namespace bz::app {
 namespace {
 
-constexpr std::array<SketchToolInfo, 18> kTools{{
+constexpr std::array<SketchToolInfo, 19> kTools{{
     {SketchTool::Select, "Выбор", "ui-check", "Выберите или перетащите элементы эскиза"},
     {SketchTool::Line, "Отрезок", "sk-line", "Укажите начальную точку отрезка"},
     {SketchTool::Rectangle, "Прямоугольник", "sk-rectangle", "Укажите первый угол прямоугольника"},
@@ -23,6 +23,7 @@ constexpr std::array<SketchToolInfo, 18> kTools{{
     {SketchTool::Arc, "Дуга", "sk-arc", "Укажите центр дуги"},
     {SketchTool::Point, "Точка", "sk-point", "Укажите положение точки"},
     {SketchTool::Project, "Проецировать", "sk-project", "Щёлкните рёбра модели — их проекции появятся в эскизе и будут следовать за моделью"},
+    {SketchTool::Trim, "Обрезка", "sk-trim", "Щёлкните лишний кусок кривой — он удалится до ближайших пересечений"},
     {SketchTool::Dimension, "Размер", "sk-dimension", "Выберите отрезок, окружность или две точки"},
     {SketchTool::Coincident, "Совпадение", "c-coincident", "Выберите две точки или точку и кривую"},
     {SketchTool::Horizontal, "Горизонтальность", "c-horizontal", "Выберите отрезок или две точки"},
@@ -266,6 +267,7 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
         case SketchTool::Arc:
         case SketchTool::Point:     HandleDrawing(app, session, view); break;
         case SketchTool::Project:   HandleProject(app, session, view); break;
+        case SketchTool::Trim:      HandleTrim(app, session, view); break;
         default:                    HandleConstraint(app, session, view); break;
     }
     if (doc::SketchFeature* still = Active(session)) DrawPreview(app, view, still->sketch, session.doc.units);
