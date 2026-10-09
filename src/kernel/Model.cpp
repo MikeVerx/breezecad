@@ -6,6 +6,7 @@
 #include "document/ExtrudeFeature.h"
 #include "document/Recompute.h"
 #include "document/RevolveFeature.h"
+#include "document/ShellFeature.h"
 #include "document/SketchFeature.h"
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Extrude.h"
@@ -13,6 +14,7 @@
 #include "kernel/occt/Hole.h"
 #include "kernel/occt/ModelImpl.h"
 #include "kernel/occt/Revolve.h"
+#include "kernel/occt/Shell.h"
 
 #include <BRepBndLib.hxx>
 #include <BRepGProp.hxx>
@@ -138,12 +140,15 @@ void ApplyEdgeFeature(const doc::EdgeFeature& f, std::vector<Body>& bodies, doc:
 }
 
 /// Holes are cut from the most recent body.
-void ApplyHole(const doc::HoleFeature& f, std::vector<Body>& bodies, doc::FeatureStatus& status) {
+/// Operations that change the most recent body (hole, shell): `make` turns
+/// its shape into the new one.
+template <class Make>
+void ApplyToLastBody(std::vector<Body>& bodies, doc::FeatureStatus& status, const char* noBody, Make&& make) {
     if (bodies.empty()) {
-        status = {FeatureState::Error, "Нет тела, в котором делать отверстие"};
+        status = {FeatureState::Error, noBody};
         return;
     }
-    Expected<TopoDS_Shape> result = occt::DrillHoles(bodies.back().shape, f);
+    Expected<TopoDS_Shape> result = make(bodies.back().shape);
     if (!result) {
         status = {FeatureState::Error, result.GetError().message};
         return;
@@ -221,7 +226,11 @@ void Model::Rebuild(doc::Document& doc) {
                     return occt::MakeChamfer(body, edges, chamfer->distance.value);
                 });
             } else if (auto* hole = dynamic_cast<doc::HoleFeature*>(&f)) {
-                ApplyHole(*hole, bodies, hole->status);
+                ApplyToLastBody(bodies, hole->status, "Нет тела, в котором делать отверстие",
+                                [&](const TopoDS_Shape& body) { return occt::DrillHoles(body, *hole); });
+            } else if (auto* shell = dynamic_cast<doc::ShellFeature*>(&f)) {
+                ApplyToLastBody(bodies, shell->status, "Нет тела для оболочки",
+                                [&](const TopoDS_Shape& body) { return occt::MakeShell(body, *shell); });
             } else if (f.status.state == FeatureState::NotComputed) {
                 f.status = {FeatureState::Error, "Операция этого типа не поддерживается"};
             }

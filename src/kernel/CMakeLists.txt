@@ -7,6 +7,7 @@ add_library(bz_kernel STATIC
     occt/Fillet.cpp
     occt/Hole.cpp
     occt/Revolve.cpp
+    occt/Shell.cpp
     occt/SketchGeometry.cpp)
 target_link_libraries(bz_kernel
     PUBLIC  bz::document bz::occt_modeling
