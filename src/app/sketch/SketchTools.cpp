@@ -4,10 +4,14 @@
 #include "app/sketch/DimensionLayout.h"
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
+#include "core/Expression.h"
+#include "sketch/Shapes.h"
 #include "sketch/Solver.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <span>
 
 namespace bz::app {
 namespace {
@@ -23,6 +27,31 @@ sketch::Constraint Make(ConstraintType type, ObjectId a, ObjectId b = {}) {
 }
 
 bool IsRound(EntityKind k) { return k == EntityKind::Circle || k == EntityKind::Arc; }
+
+double Sign(double v) { return v < 0 ? -1.0 : 1.0; }
+
+/// Unit vector from `a` towards `b` (along X when they coincide).
+Vec2 Direction(Vec2 a, Vec2 b) {
+    const Vec2 d = b - a;
+    return d.Length() > 1e-12 ? d.Normalized() : Vec2{1, 0};
+}
+
+/// A number typed into the tool panel; nullopt when empty, not a plain
+/// value (names are resolved later, by the dimension) or not positive.
+std::optional<double> TypedValue(const std::string& text, Quantity quantity, const UnitSystem& units) {
+    if (text.empty()) return std::nullopt;
+    const Expected<double> v = EvaluateExpression(text, quantity, units, [](std::string_view) { return std::optional<NamedValue>{}; });
+    if (!v || (quantity != Quantity::Angle && *v <= 0)) return std::nullopt;
+    return *v;
+}
+
+/// Whether the counter-clockwise arc from `start` to `end` around `centre` passes `p`.
+bool ArcContains(Vec2 centre, Vec2 start, Vec2 end, Vec2 p) {
+    const auto angle = [&](Vec2 q) { return std::atan2(q.y - centre.y, q.x - centre.x); };
+    const auto norm = [](double a) { while (a < 0) a += 2 * kPi; while (a >= 2 * kPi) a -= 2 * kPi; return a; };
+    const double a0 = angle(start);
+    return norm(angle(p) - a0) <= norm(angle(end) - a0);
+}
 bool IsCurve(EntityKind k) { return k == EntityKind::Line || IsRound(k); }
 
 /// The constraint a tool makes from picked entities; nullopt when the picks
@@ -152,7 +181,14 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
     options.gridStep = app.settings.gridStep > 0 ? app.settings.gridStep : AdaptiveGridStep(view.MmPerPixel()) / 2;
     if (!myClicks.empty() && (myTool == SketchTool::Line)) options.from = myClicks.back().pos;
     mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
+    // A typed size wins over snapping: the point lands where the size says.
+    if (ApplyTypedSizes(session.doc.units, mySnap.pos)) {
+        const Vec2 pos = mySnap.pos;
+        mySnap = Snap{};
+        mySnap.pos = pos;
+    }
     myCursor = mySnap.pos;
+    myMmPerPixel = view.MmPerPixel();
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && view.vf.hovered) {
         myClicks.push_back(RefFromSnap(mySnap));
@@ -215,11 +251,99 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
     session.CommitInPlaceEdit(std::move(before), "Проецирование геометрии");
 }
 
+std::size_t SketchEditor::ClicksNeeded() const {
+    switch (myTool) {
+        case SketchTool::Point:     return 1;
+        case SketchTool::Arc:       return 3;
+        case SketchTool::Rectangle: return myOptions.rectangle == RectangleMode::ThreePoints ? 3 : 2;
+        case SketchTool::Circle:    return myOptions.circle == CircleMode::ThreePoints ? 3 : 2;
+        default:                    return 2;
+    }
+}
+
+bool SketchEditor::ApplyTypedSizes(const UnitSystem& units, Vec2& pos) const {
+    if (myClicks.empty()) return false;
+    const Vec2 first = myClicks.front().pos, last = myClicks.back().pos;
+    const std::size_t step = myClicks.size();
+    const auto length = [&](const std::string& text) { return TypedValue(text, Quantity::Length, units); };
+
+    switch (myTool) {
+        case SketchTool::Line: {
+            const auto l = length(myOptions.length);
+            const auto a = TypedValue(myOptions.angle, Quantity::Angle, units);
+            if (!l && !a) return false;
+            const Vec2 d = pos - last;
+            const Vec2 dir = a ? Vec2{std::cos(*a), std::sin(*a)} : Direction(last, pos);
+            pos = last + dir * (l ? *l : d.Dot(dir));
+            return true;
+        }
+        case SketchTool::Rectangle: {
+            const auto w = length(myOptions.width), h = length(myOptions.height);
+            if (myOptions.rectangle == RectangleMode::ThreePoints) {
+                if (step == 1 && w) {
+                    pos = first + Direction(first, pos) * *w;
+                    return true;
+                }
+                if (step == 2 && h) {
+                    const Vec2 side = last - first;
+                    const Vec2 normal = Vec2{-side.y, side.x}.Normalized();
+                    pos = last + normal * (*h * Sign((pos - last).Dot(normal)));
+                    return true;
+                }
+                return false;
+            }
+            if (step != 1 || (!w && !h)) return false;
+            const double factor = myOptions.rectangle == RectangleMode::Centre ? 0.5 : 1.0;
+            if (w) pos.x = first.x + Sign(pos.x - first.x) * *w * factor;
+            if (h) pos.y = first.y + Sign(pos.y - first.y) * *h * factor;
+            return true;
+        }
+        case SketchTool::Circle:
+        case SketchTool::Arc: {
+            const bool sized = myTool == SketchTool::Circle ? myOptions.circle != CircleMode::ThreePoints
+                                                            : myOptions.arc == ArcMode::CentreEnds;
+            const auto size = length(myOptions.size);
+            if (step != 1 || !sized || !size) return false;
+            const double r = myTool == SketchTool::Circle ? *size / 2 : *size;   // diameter / radius
+            pos = first + Direction(first, pos) * r;
+            return true;
+        }
+        default: return false;
+    }
+}
+
+void SketchEditor::AddTypedDimensions(doc::Document& doc, sketch::Sketch& sk, const std::vector<TypedDimension>& dims) {
+    for (const auto& [constraint, text, inside] : dims) {
+        sketch::Constraint c = constraint;
+        if (text.empty()) continue;
+        c.parameter.name = doc.NextParameterName();
+        c.parameter.expression = text;
+        c.parameter.quantity = Quantity::Length;
+        // Label a little off the curve, in screen terms.
+        const double off = 28.0 * myMmPerPixel;
+        if (const sketch::Line* l = sk.FindLine(c.refs[0]); l && c.type == ConstraintType::Length) {
+            const Vec2 a = sk.PositionOf(l->start), d = sk.PositionOf(l->end) - a;
+            Vec2 normal = Vec2{-d.y, d.x}.Normalized();
+            if (inside && (*inside - a).Dot(normal) > 0) normal = normal * -1.0;
+            c.labelOffset = normal * off;
+        } else if (c.type == ConstraintType::Diameter || c.type == ConstraintType::Radius) {
+            c.labelOffset = Vec2{1, 1}.Normalized() * (sk.RadiusOf(c.refs[0]) + off);
+        }
+        sk.AddConstraint(doc.Ids(), std::move(c));
+        // Each one gets a fresh name: NextParameterName looks at the sketch.
+        doc.EvaluateParameters();
+    }
+}
+
 void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Snap& snap) {
     doc::SketchFeature* f = Active(session);
     doc::Document& d = session.doc;
-    const std::size_t need = myTool == SketchTool::Point ? 1 : myTool == SketchTool::Arc ? 3 : 2;
-    if (myClicks.size() < need) return;
+    const std::size_t need = ClicksNeeded();
+    if (myClicks.size() < need) {
+        // A rectangle's first side or a circle's chord must not be empty.
+        if (myClicks.size() >= 2 && (myClicks.back().pos - myClicks[myClicks.size() - 2].pos).Length() < 1e-9) myClicks.pop_back();
+        return;
+    }
 
     // Ignore a second click on the same spot (a double click, a zero-length line).
     if (need >= 2 && (myClicks.back().pos - myClicks[myClicks.size() - 2].pos).Length() < 1e-9) {
@@ -229,8 +353,15 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
 
     auto before = f->Clone();
     sketch::Sketch& sk = f->sketch;
+    IdGenerator& ids = d.Ids();
     const char* label = InfoOf(myTool).label;
     std::optional<PointRef> continueFrom;
+    std::vector<TypedDimension> dims;
+    const auto refuse = [&](const char* why) {
+        f->sketch = static_cast<const doc::SketchFeature&>(*before).sketch;
+        myClicks.pop_back();
+        app.notes.Info(why);
+    };
 
     switch (myTool) {
         case SketchTool::Point:
@@ -239,64 +370,110 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
         case SketchTool::Line: {
             const ObjectId a = Resolve(d, sk, myClicks[0]);
             const ObjectId b = Resolve(d, sk, myClicks[1]);
-            const ObjectId line = sk.AddLine(d.Ids(), a, b);
+            const ObjectId line = sk.AddLine(ids, a, b);
             // Inferred alignment becomes a constraint, unless already implied.
             if (snap.horizontal || snap.vertical) {
                 const sketch::Constraint c = Make(snap.horizontal ? ConstraintType::Horizontal : ConstraintType::Vertical, line);
-                if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(d.Ids(), c);
+                if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
             }
+            dims.push_back({Make(ConstraintType::Length, line), myOptions.length, {}});
             continueFrom = PointRef{b, sk.PositionOf(b), {}, {}};
             break;
         }
         case SketchTool::Rectangle: {
-            const Vec2 p = myClicks[0].pos, q = myClicks[1].pos;
-            if (std::abs(p.x - q.x) < 1e-9 || std::abs(p.y - q.y) < 1e-9) {
-                myClicks.pop_back();
-                return;
+            std::optional<sketch::RectangleIds> r;
+            if (myOptions.rectangle == RectangleMode::ThreePoints) {
+                r = sketch::AddThreePointRectangle(sk, ids, Resolve(d, sk, myClicks[0]), Resolve(d, sk, myClicks[1]), myClicks[2].pos);
+                if (!r) return refuse("Третья точка лежит на первой стороне — прямоугольник не получится");
+            } else {
+                const Vec2 p = myClicks[0].pos, q = myClicks[1].pos;
+                if (std::abs(p.x - q.x) < 1e-9 || std::abs(p.y - q.y) < 1e-9) {
+                    myClicks.pop_back();
+                    return;
+                }
+                r = myOptions.rectangle == RectangleMode::Centre
+                        ? sketch::AddCentredRectangle(sk, ids, Resolve(d, sk, myClicks[0]), q)
+                        : sketch::AddCornerRectangle(sk, ids, Resolve(d, sk, myClicks[0]), Resolve(d, sk, myClicks[1]));
             }
-            const ObjectId c0 = Resolve(d, sk, myClicks[0]);
-            const ObjectId c2 = Resolve(d, sk, myClicks[1]);
-            const ObjectId c1 = sk.AddPoint(d.Ids(), {q.x, p.y});
-            const ObjectId c3 = sk.AddPoint(d.Ids(), {p.x, q.y});
-            const ObjectId l0 = sk.AddLine(d.Ids(), c0, c1), l1 = sk.AddLine(d.Ids(), c1, c2);
-            const ObjectId l2 = sk.AddLine(d.Ids(), c2, c3), l3 = sk.AddLine(d.Ids(), c3, c0);
-            for (const auto& [type, line] : {std::pair{ConstraintType::Horizontal, l0}, {ConstraintType::Vertical, l1},
-                                             {ConstraintType::Horizontal, l2}, {ConstraintType::Vertical, l3}})
-                if (!sketch::IsRedundant(sk, Make(type, line))) sk.AddConstraint(d.Ids(), Make(type, line));
+            const Vec2 centre = (sk.PositionOf(r->corners[0]) + sk.PositionOf(r->corners[2])) * 0.5;
+            dims.push_back({Make(ConstraintType::Length, r->sides[0]), myOptions.width, centre});
+            dims.push_back({Make(ConstraintType::Length, r->sides[1]), myOptions.height, centre});
             break;
         }
         case SketchTool::Circle: {
-            const ObjectId center = Resolve(d, sk, myClicks[0]);
+            if (myOptions.circle == CircleMode::ThreePoints) {
+                const auto through = sketch::CircleThroughPoints(myClicks[0].pos, myClicks[1].pos, myClicks[2].pos);
+                if (!through) return refuse("Три точки на одной прямой — окружность через них не проходит");
+                const ObjectId circle = sk.AddCircle(ids, sk.AddPoint(ids, through->centre), through->radius);
+                for (const PointRef& click : myClicks)
+                    if (click.id) sk.AddConstraint(ids, Make(ConstraintType::PointOnCurve, click.id, circle));
+                break;
+            }
+            const ObjectId centre = Resolve(d, sk, myClicks[0]);
+            if (myOptions.circle == CircleMode::Polygon) {
+                const sketch::PolygonIds p = sketch::AddPolygon(sk, ids, centre, myClicks[1].pos, myOptions.polygonSides,
+                                                                myOptions.polygonInscribed);
+                dims.push_back({Make(ConstraintType::Diameter, p.circle), myOptions.size, {}});
+                label = "Многоугольник";
+                break;
+            }
             const double r = (myClicks[1].pos - myClicks[0].pos).Length();
-            const ObjectId circle = sk.AddCircle(d.Ids(), center, r);
-            if (myClicks[1].id) sk.AddConstraint(d.Ids(), Make(ConstraintType::PointOnCurve, myClicks[1].id, circle));
+            const ObjectId circle = sk.AddCircle(ids, centre, r);
+            if (myClicks[1].id) sk.AddConstraint(ids, Make(ConstraintType::PointOnCurve, myClicks[1].id, circle));
+            dims.push_back({Make(ConstraintType::Diameter, circle), myOptions.size, {}});
             break;
         }
         case SketchTool::Arc: {
-            const Vec2 c = myClicks[0].pos;
-            const double r = (myClicks[1].pos - c).Length();
-            PointRef endRef = myClicks[2];
-            if (!endRef.id) endRef.pos = c + (endRef.pos - c).Normalized() * r;
-            // The arc goes counter-clockwise; swap ends when drawn clockwise.
-            PointRef startRef = myClicks[1];
-            if ((startRef.pos - c).Cross(endRef.pos - c) < 0) std::swap(startRef, endRef);
-            const ObjectId center = Resolve(d, sk, myClicks[0]);
+            Vec2 c;
+            PointRef startRef, endRef;
+            if (myOptions.arc == ArcMode::ThreePoints) {
+                // Start, end, then a point the arc passes through.
+                const auto through = sketch::CircleThroughPoints(myClicks[0].pos, myClicks[1].pos, myClicks[2].pos);
+                if (!through) return refuse("Три точки на одной прямой — дуга через них не проходит");
+                c = through->centre;
+                startRef = myClicks[0];
+                endRef = myClicks[1];
+                if (!ArcContains(c, startRef.pos, endRef.pos, myClicks[2].pos)) std::swap(startRef, endRef);
+            } else {
+                c = myClicks[0].pos;
+                const double r = (myClicks[1].pos - c).Length();
+                startRef = myClicks[1];
+                endRef = myClicks[2];
+                if (!endRef.id) endRef.pos = c + (endRef.pos - c).Normalized() * r;
+                // The arc goes counter-clockwise; swap ends when drawn clockwise.
+                if ((startRef.pos - c).Cross(endRef.pos - c) < 0) std::swap(startRef, endRef);
+            }
+            const ObjectId centre = myOptions.arc == ArcMode::ThreePoints ? sk.AddPoint(ids, c) : Resolve(d, sk, myClicks[0]);
             const ObjectId s = Resolve(d, sk, startRef);
             const ObjectId e = Resolve(d, sk, endRef);
-            sk.AddArc(d.Ids(), center, s, e);
+            const ObjectId arc = sk.AddArc(ids, centre, s, e);
+            if (myOptions.arc == ArcMode::CentreEnds) dims.push_back({Make(ConstraintType::Radius, arc), myOptions.size, {}});
             break;
         }
         default:
             break;
     }
 
-    sketch::Solve(sk);
+    AddTypedDimensions(d, sk, dims);
+    if (!sketch::Solve(sk).converged) {
+        f->sketch = static_cast<const doc::SketchFeature&>(*before).sketch;
+        d.EvaluateParameters();
+        myClicks.clear();
+        app.notes.Error("Введённые размеры не сходятся с другими ограничениями эскиза");
+        return;
+    }
     d.MarkChanged(static_cast<std::size_t>(d.IndexOf(f->id)));
     session.CommitInPlaceEdit(std::move(before), label);
+    // Typed sizes are for one shape, as in KOMPAS.
+    myOptions.length.clear();
+    myOptions.angle.clear();
+    myOptions.width.clear();
+    myOptions.height.clear();
+    myOptions.size.clear();
     myClicks.clear();
     if (continueFrom) myClicks.push_back(*continueFrom);   // lines go on in a chain
-    (void)app;
 }
+
 
 bool SketchEditor::AddConstraint(AppContext& app, Session& session, sketch::Constraint c, const char* label) {
     doc::SketchFeature* f = Active(session);
@@ -389,41 +566,96 @@ void SketchEditor::HandleDimension(AppContext& app, Session& session, const Sket
     (void)view;
 }
 
+void SketchEditor::DrawShapePreview(AppContext& app, const SketchView& view) const {
+    ui::Ui& ui = app.ui;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const Color ink = ui.C().sketchHover;
+    const Color faint = ink.WithAlpha(0.6f);
+    const Vec2 a = myClicks.front().pos, b = mySnap.pos;
+    const std::size_t step = myClicks.size();
+    const auto segment = [&](Vec2 p, Vec2 q) { DrawSketchSegment(ui, dl, view, p, q, ink, 2.0f); };
+    const auto loop = [&](std::span<const Vec2> pts) {
+        for (std::size_t i = 0; i < pts.size(); ++i) segment(pts[i], pts[(i + 1) % pts.size()]);
+    };
+    const auto circle = [&](Vec2 c, double r, bool construction) {
+        DrawSketchArc(ui, dl, view, c, r, 0, 2 * kPi, construction ? faint : ink, construction ? 1.2f : 2.0f, construction);
+    };
+    const auto arc = [&](Vec2 c, Vec2 from, Vec2 to) {
+        double a0 = std::atan2(from.y - c.y, from.x - c.x), a1 = std::atan2(to.y - c.y, to.x - c.x);
+        if (a1 <= a0) a1 += 2 * kPi;
+        DrawSketchArc(ui, dl, view, c, (from - c).Length(), a0, a1, ink, 2.0f);
+    };
+
+    switch (myTool) {
+        case SketchTool::Line: segment(myClicks.back().pos, b); break;
+        case SketchTool::Rectangle:
+            if (myOptions.rectangle == RectangleMode::ThreePoints) {
+                if (step == 1) {
+                    segment(a, b);
+                } else {
+                    const Vec2 p = myClicks[1].pos, side = p - a;
+                    const Vec2 normal = Vec2{-side.y, side.x}.Normalized();
+                    const Vec2 off = normal * (b - p).Dot(normal);
+                    const std::array<Vec2, 4> pts{a, p, p + off, a + off};
+                    loop(pts);
+                }
+            } else {
+                const Vec2 p = myOptions.rectangle == RectangleMode::Centre ? a * 2.0 - b : a;
+                const std::array<Vec2, 4> pts{p, Vec2{b.x, p.y}, b, Vec2{p.x, b.y}};
+                loop(pts);
+                if (myOptions.rectangle == RectangleMode::Centre) DrawSketchSegment(ui, dl, view, p, b, faint, 1.2f, true);
+            }
+            break;
+        case SketchTool::Circle:
+            if (myOptions.circle == CircleMode::ThreePoints) {
+                if (step == 1) segment(a, b);
+                else if (const auto c = sketch::CircleThroughPoints(a, myClicks[1].pos, b)) circle(c->centre, c->radius, false);
+            } else if (myOptions.circle == CircleMode::Polygon) {
+                const double distance = (b - a).Length();
+                const int n = std::max(myOptions.polygonSides, 3);
+                const double stepAngle = 2 * kPi / n;
+                const double radius = myOptions.polygonInscribed ? distance : distance / std::cos(stepAngle / 2);
+                const double start = std::atan2(b.y - a.y, b.x - a.x) + (myOptions.polygonInscribed ? 0.0 : stepAngle / 2);
+                std::vector<Vec2> pts;
+                for (int i = 0; i < n; ++i)
+                    pts.push_back(a + Vec2{std::cos(start + i * stepAngle), std::sin(start + i * stepAngle)} * radius);
+                circle(a, distance, true);
+                loop(pts);
+            } else {
+                circle(a, (b - a).Length(), false);
+            }
+            break;
+        case SketchTool::Arc:
+            if (myOptions.arc == ArcMode::ThreePoints) {
+                if (step == 1) {
+                    segment(a, b);
+                } else if (const auto c = sketch::CircleThroughPoints(a, myClicks[1].pos, b)) {
+                    if (ArcContains(c->centre, a, myClicks[1].pos, b)) arc(c->centre, a, myClicks[1].pos);
+                    else arc(c->centre, myClicks[1].pos, a);
+                }
+            } else if (step == 1) {
+                DrawSketchSegment(ui, dl, view, a, b, faint, 1.2f);
+            } else {
+                const Vec2 s = myClicks[1].pos;
+                const Vec2 e = a + Direction(a, b) * (s - a).Length();
+                if ((s - a).Cross(e - a) < 0) arc(a, e, s);
+                else arc(a, s, e);
+            }
+            break;
+        default: break;
+    }
+}
+
 void SketchEditor::DrawPreview(AppContext& app, const SketchView& view, const sketch::Sketch& sk,
                                const UnitSystem& units) {
     ui::Ui& ui = app.ui;
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const Color ink = ui.C().sketchHover;
 
     const bool drawing = myTool >= SketchTool::Line && myTool <= SketchTool::Point;
     if (drawing && myCursor) {
         DrawSnapGuides(ui, dl, view, mySnap);
         DrawSnapMarker(ui, dl, view.ToScreen(mySnap.pos), mySnap);
-        if (!myClicks.empty()) {
-            const Vec2 a = myClicks.front().pos, b = mySnap.pos;
-            switch (myTool) {
-                case SketchTool::Line: DrawSketchSegment(ui, dl, view, myClicks.back().pos, b, ink, 2.0f); break;
-                case SketchTool::Rectangle:
-                    DrawSketchSegment(ui, dl, view, a, {b.x, a.y}, ink, 2.0f);
-                    DrawSketchSegment(ui, dl, view, {b.x, a.y}, b, ink, 2.0f);
-                    DrawSketchSegment(ui, dl, view, b, {a.x, b.y}, ink, 2.0f);
-                    DrawSketchSegment(ui, dl, view, {a.x, b.y}, a, ink, 2.0f);
-                    break;
-                case SketchTool::Circle: DrawSketchArc(ui, dl, view, a, (b - a).Length(), 0, 2 * kPi, ink, 2.0f); break;
-                case SketchTool::Arc:
-                    if (myClicks.size() == 1) {
-                        DrawSketchSegment(ui, dl, view, a, b, ink.WithAlpha(0.6f), 1.2f);
-                    } else {
-                        const Vec2 s = myClicks[1].pos - a, e = b - a;
-                        double a0 = std::atan2(s.y, s.x), a1 = std::atan2(e.y, e.x);
-                        if (s.Cross(e) < 0) std::swap(a0, a1);
-                        if (a1 <= a0) a1 += 2 * kPi;
-                        DrawSketchArc(ui, dl, view, a, s.Length(), a0, a1, ink, 2.0f);
-                    }
-                    break;
-                default: break;
-            }
-        }
+        if (!myClicks.empty()) DrawShapePreview(app, view);
     }
 
     if (myTool == SketchTool::Dimension && myCursor && !myPicks.empty() && !myHover) {

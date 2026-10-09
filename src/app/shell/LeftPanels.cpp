@@ -5,6 +5,7 @@
 #include "core/Expression.h"
 #include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
+#include "app/sketch/SketchEditor.h"
 #include "document/Commands.h"
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
@@ -259,6 +260,8 @@ void DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const float width = panelSize.x - 1;
     if (OperationEditor* operation = app.ops.Active()) {
         operation->DrawPanel(app, session);
+    } else if (session.activeSketch && app.sketch.HasToolPanel()) {
+        app.sketch.DrawToolPanel(app, session, width);
     } else {
         switch (app.shell.leftTab) {
             case LeftTab::Tree:       DrawTreePanel(app, session, width); break;

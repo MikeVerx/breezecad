@@ -434,9 +434,22 @@ std::string SketchEditor::Hint(const Session& session) const {
     switch (myTool) {
         case SketchTool::Line:
             return step == 0 ? InfoOf(myTool).hint : "Укажите конечную точку. Правый щелчок или Esc — закончить цепочку";
-        case SketchTool::Rectangle: return step == 0 ? InfoOf(myTool).hint : "Укажите противоположный угол";
-        case SketchTool::Circle:    return step == 0 ? InfoOf(myTool).hint : "Укажите точку на окружности";
+        case SketchTool::Rectangle:
+            if (myOptions.rectangle == RectangleMode::ThreePoints)
+                return step == 0 ? "Укажите начало первой стороны" : step == 1 ? "Укажите конец первой стороны" : "Укажите ширину прямоугольника";
+            if (myOptions.rectangle == RectangleMode::Centre)
+                return step == 0 ? "Укажите центр прямоугольника" : "Укажите угол прямоугольника";
+            return step == 0 ? InfoOf(myTool).hint : "Укажите противоположный угол";
+        case SketchTool::Circle:
+            if (myOptions.circle == CircleMode::ThreePoints)
+                return step == 0 ? "Укажите первую точку окружности" : step == 1 ? "Укажите вторую точку" : "Укажите третью точку";
+            if (myOptions.circle == CircleMode::Polygon)
+                return step == 0 ? "Укажите центр многоугольника"
+                                 : myOptions.polygonInscribed ? "Укажите вершину" : "Укажите середину стороны";
+            return step == 0 ? InfoOf(myTool).hint : "Укажите точку на окружности";
         case SketchTool::Arc:
+            if (myOptions.arc == ArcMode::ThreePoints)
+                return step == 0 ? "Укажите начало дуги" : step == 1 ? "Укажите конец дуги" : "Укажите точку, через которую идёт дуга";
             return step == 0 ? InfoOf(myTool).hint : step == 1 ? "Укажите начало дуги" : "Укажите конец дуги";
         case SketchTool::Dimension:
             return myPicks.empty() ? InfoOf(myTool).hint : "Укажите место размера или второй элемент";

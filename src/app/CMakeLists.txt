@@ -36,6 +36,7 @@ add_executable(breezecad WIN32
     sketch/SketchOverlay.cpp
     sketch/SketchPick.cpp
     sketch/SketchTools.cpp
+    sketch/SketchToolPanel.cpp
     viewport/MarkingMenu.cpp
     viewport/Measure.cpp
     viewport/Planes.cpp

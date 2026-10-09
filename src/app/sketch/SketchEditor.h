@@ -26,6 +26,24 @@ enum class SketchTool : unsigned char {
     Coincident, Horizontal, Vertical, Parallel, Perpendicular, Equal, Tangent, Fix, Midpoint, Concentric,
 };
 
+/// Ways to draw with one tool, chosen in the tool panel.
+enum class RectangleMode : unsigned char { Corners, Centre, ThreePoints };
+enum class CircleMode : unsigned char { CentreRadius, ThreePoints, Polygon };
+enum class ArcMode : unsigned char { CentreEnds, ThreePoints };
+
+/// The tool panel's settings. Typed sizes lock the cursor while drawing
+/// and become dimensions of what is drawn.
+struct DrawOptions {
+    RectangleMode rectangle = RectangleMode::Corners;
+    CircleMode    circle = CircleMode::CentreRadius;
+    ArcMode       arc = ArcMode::CentreEnds;
+    int           polygonSides = 6;
+    bool          polygonInscribed = true;
+    std::string   length, angle;    ///< line
+    std::string   width, height;    ///< rectangle
+    std::string   size;             ///< circle / polygon diameter, arc radius
+};
+
 struct SketchToolInfo {
     SketchTool  tool;
     const char* label;     ///< "Отрезок"
@@ -61,6 +79,11 @@ public:
     void ToggleConstruction(Session& session);
     bool HasSelection() const { return !mySelection.empty(); }
 
+    /// A drawing tool is active: the left area shows its panel.
+    bool HasToolPanel() const;
+    /// Ways to draw and typed sizes of the active drawing tool.
+    void DrawToolPanel(AppContext& app, Session& session, float width);
+
     /// Input and drawing inside the viewport, once per frame.
     void Frame(AppContext& app, Session& session, const ViewportFrame& vf);
 
@@ -95,6 +118,18 @@ private:
     PointRef RefFromSnap(const Snap& snap) const;
     ObjectId Resolve(doc::Document& doc, sketch::Sketch& sk, const PointRef& ref);
     void FinishDrawingStep(AppContext& app, Session& session, const Snap& snap);
+    /// Clicks the active tool needs, in its current mode.
+    std::size_t ClicksNeeded() const;
+    /// Moves the cursor position to honour typed sizes; true when it moved.
+    bool ApplyTypedSizes(const UnitSystem& units, Vec2& pos) const;
+    /// A typed size to turn into a dimension; its label goes away from `inside`.
+    struct TypedDimension {
+        sketch::Constraint  constraint;
+        std::string         text;
+        std::optional<Vec2> inside;
+    };
+    /// Adds dimensions for typed sizes to the shape just drawn.
+    void AddTypedDimensions(doc::Document& doc, sketch::Sketch& sk, const std::vector<TypedDimension>& dims);
 
     /// Applies a constraint as one undo step if it is valid, not redundant
     /// and solvable. Returns false and explains why otherwise.
@@ -102,11 +137,15 @@ private:
     void TryApplyToSelection(AppContext& app, Session& session);
     void StartInlineEdit(const sketch::Constraint& c);
     void DrawPreview(AppContext& app, const SketchView& view, const sketch::Sketch& sk, const UnitSystem& units);
+    /// The shape being drawn, from the clicks so far to the cursor.
+    void DrawShapePreview(AppContext& app, const SketchView& view) const;
 
     SketchTool myTool = SketchTool::Select;
     double     myLastClickTime = -1.0;   ///< press time of the last drawing click (see DropPressClick)
 
     // drawing tools
+    DrawOptions           myOptions;
+    double                myMmPerPixel = 0.1;   ///< of the last frame, to place automatic dimension labels
     std::vector<PointRef> myClicks;
     Snap                  mySnap;
     std::optional<Vec2>   myCursor;
