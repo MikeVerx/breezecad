@@ -236,6 +236,8 @@ void SketchEditor::ToggleConstruction(Session& session) {
         if (sketch::Circle* c = f->sketch.FindCircle(id)) c->construction = !c->construction;
         for (auto& a : f->sketch.arcs)
             if (a.id == id) a.construction = !a.construction;
+        for (auto& sp : f->sketch.splines)
+            if (sp.id == id) sp.construction = !sp.construction;
     }
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
     session.CommitInPlaceEdit(std::move(before), Tr("Вспомогательная геометрия"));
