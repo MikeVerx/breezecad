@@ -57,9 +57,13 @@ jobs:
           if [ $status -ne 0 ]; then
             exe=$(find build/windows-mingw -name bz_tests.exe | head -1)
             "$exe" -d 2>&1 | grep -vE "WARN|INFO|^$|^=+$" | tail -12 | sed 's/^/last cases: /' | tee -a test.log
-            # And once more under gdb for the backtrace of the crash.
-            gdb -batch -ex run -ex bt -ex "info registers rip" --args "$exe" 2>&1 \
-              | grep -vE "WARN|INFO|^\[New Thread|^\[Thread" | tail -50 | sed 's/^/gdb: /' | tee -a test.log
+            # Each test case alone: names every one that crashes.
+            "$exe" -ltc --no-version 2>/dev/null | grep -vE "^\[doctest\]|^=+$|^$" | while IFS= read -r name; do
+              "$exe" -tc="${name//,/\\,}" >/dev/null 2>&1 || echo "crashes or fails: $name"
+            done | tee -a test.log
+            # And once more under gdb for the backtrace of the first crash (frames only).
+            gdb -batch -ex run -ex bt --args "$exe" 2>&1 | grep -E "^#[0-9]+ " | head -40 \
+              | sed -E 's/^(#[0-9]+) +0x[0-9a-f]+ in /\1 /; s/ from .*//' | sed 's/^/gdb: /' | tee -a test.log
           fi
           exit $status
       - name: Report failures
