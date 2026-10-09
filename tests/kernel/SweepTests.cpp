@@ -1,8 +1,12 @@
 #include "../Fixtures.h"
+#include "core/PathText.h"
+#include "document/BzcFile.h"
 #include "document/SweepFeature.h"
 #include "kernel/Model.h"
 
 #include <doctest.h>
+
+#include <cstdlib>
 
 using namespace bz;
 using namespace bz::test;
@@ -52,6 +56,7 @@ TEST_CASE("sweep along a bent path") {
     model.Rebuild(p.d);
     REQUIRE(p.sweep->status.state == FeatureState::Ok);
     CHECK(model.Volume() > kPi * 4 * 50);
+    if (const char* out = std::getenv("BZ_SAMPLE_OUT")) REQUIRE(doc::SaveBzc(p.d, PathFromUtf8(out), "tests").IsOk());
 }
 
 TEST_CASE("sweep path must be one chain") {

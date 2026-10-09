@@ -80,6 +80,8 @@ void RegisterActions(AppContext& app) {
            [&app] { StartPattern(app, doc::PatternKind::Circular); }});
     a.Add({"feature.mirror", "Зеркало", "mirror", 0, "Отразить операции относительно плоскости", inModel,
            [&app] { StartMirror(app); }});
+    a.Add({"feature.sweep", "Сдвиг", "sweep", 0, "Протянуть контур эскиза вдоль траектории из другого эскиза", inModel,
+           [&app] { StartSweep(app); }});
     a.Add({"feature.loft", "Лофт", "loft", 0, "Тело через контуры нескольких эскизов", inModel, [&app] { StartLoft(app); }});
     a.Add({"feature.chamfer", "Фаска", "chamfer", 0, "Срезать рёбра тела под 45°", inModel, [&app] { StartChamfer(app); }});
 

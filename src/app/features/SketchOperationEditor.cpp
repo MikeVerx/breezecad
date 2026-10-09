@@ -58,6 +58,7 @@ void SketchOperationEditor::StartNew(AppContext& app, Session& session, ObjectId
     if (session.mode == EditMode::Sketch && !sketch) sketch = session.activeSketch;
     if (!sketch && session.doc.FindAs<doc::SketchFeature>(session.selectedFeature)) sketch = session.selectedFeature;
     if (!sketch) sketch = LastUnusedSketch(session.doc);
+    if (sketch) sketch = ChooseSketch(session, sketch);
     if (!sketch) {
         app.notes.Info("Сначала нарисуйте эскиз с замкнутым контуром");
         return;
@@ -80,6 +81,11 @@ void SketchOperationEditor::StartNext(AppContext& app, Session& session, const d
         LoadTexts(*next);
         Changed(session);
     }
+}
+
+ObjectId SketchOperationEditor::ChooseSketch(const Session& session, ObjectId proposed) const {
+    (void)session;
+    return proposed;
 }
 
 void SketchOperationEditor::CarryOver(const doc::SketchSolidFeature& previous, doc::SketchSolidFeature& next) const {

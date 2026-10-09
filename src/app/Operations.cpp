@@ -191,6 +191,13 @@ void StartLoft(AppContext& app) {
     app.ops.loft.StartNew(app, *s);
 }
 
+void StartSweep(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.sweep.StartNew(app, *s);
+}
+
 void StartRevolve(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;

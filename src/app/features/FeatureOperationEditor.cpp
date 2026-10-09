@@ -15,7 +15,7 @@ namespace bz::app {
 bool HasSolidBefore(const doc::Document& d, std::size_t index) {
     for (std::size_t i = 0; i < index && i < d.FeatureCount(); ++i) {
         const doc::Feature* f = d.Features()[i].get();
-        const bool solid = dynamic_cast<const doc::SketchSolidFeature*>(f) || dynamic_cast<const doc::LoftFeature*>(f);
+        const bool solid = dynamic_cast<const doc::SketchSolidFeature*>(f) || dynamic_cast<const doc::LoftFeature*>(f);   // incl. sweep
         if (solid && d.IsActive(i) && !f->suppressed) return true;
     }
     return false;

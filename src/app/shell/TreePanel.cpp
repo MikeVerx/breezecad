@@ -16,6 +16,7 @@
 #include "document/WorkPlaneFeature.h"
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
+#include "document/SweepFeature.h"
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
 
@@ -384,6 +385,7 @@ const char* FeatureIcon(const doc::Feature& f) {
         return p->kind == doc::PatternKind::Circular ? "tree-pattern-circular" : "tree-pattern-rect";
     if (dynamic_cast<const doc::MirrorFeature*>(&f)) return "tree-mirror";
     if (dynamic_cast<const doc::LoftFeature*>(&f)) return "tree-loft";
+    if (dynamic_cast<const doc::SweepFeature*>(&f)) return "tree-sweep";
     return "tree-unknown";
 }
 
