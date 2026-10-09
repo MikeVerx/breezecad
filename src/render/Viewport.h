@@ -54,7 +54,7 @@ struct PlaneQuad {
 };
 
 /// What BeginPickingOriginal makes pickable.
-enum class PickTarget : unsigned char { Edges, Faces };
+enum class PickTarget : unsigned char { Edges, Faces, EdgesAndFaces };
 
 /// What lies under the cursor.
 struct PickResult {
@@ -150,6 +150,9 @@ public:
     void EndPickingOriginal();
     /// Edge under the cursor (PickTarget::Edges), described for storing.
     std::optional<doc::EdgeReference> PickEdge(Vec2 pixel);
+    /// Every edge of the face under the cursor (PickTarget::EdgesAndFaces,
+    /// when no edge is nearer), described for storing.
+    std::vector<doc::EdgeReference> PickFaceEdges(Vec2 pixel);
     /// Flat face under the cursor (PickTarget::Faces); nullopt for a curved one.
     std::optional<doc::FaceReference> PickFace(Vec2 pixel);
     /// True when both references point at the same face of the original

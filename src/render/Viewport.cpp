@@ -22,6 +22,8 @@
 #include <Graphic3d_Vec2.hxx>
 #include <OpenGl_Context.hxx>
 #include <OpenGl_FrameBuffer.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
+#include <TopExp.hxx>
 #include <OpenGl_GraphicDriver.hxx>
 #include <OpenGl_Texture.hxx>
 #include <Prs3d_Drawer.hxx>
@@ -843,7 +845,7 @@ void Viewport::BeginPickingOriginal(const kernel::Model& model, std::size_t feat
     const auto& after = model.GetImpl().bodiesAfter;
     if (featureIndex > 0 && featureIndex <= after.size())
         for (const kernel::Body& body : after[featureIndex - 1]) o.bodies.push_back(body.shape);
-    const int mode = AIS_Shape::SelectionMode(target == PickTarget::Edges ? TopAbs_EDGE : TopAbs_FACE);
+    const int mode = AIS_Shape::SelectionMode(target == PickTarget::Faces ? TopAbs_FACE : TopAbs_EDGE);
     for (const TopoDS_Shape& body : o.bodies) {
         // Shaded (a wireframe presentation is never found by the selector),
         // but with fully transparent faces: only its edges show, over the
@@ -855,6 +857,7 @@ void Viewport::BeginPickingOriginal(const kernel::Model& model, std::size_t feat
         drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(m.colors.edges), Aspect_TOL_SOLID, 1.2));
         ais->SetTransparency(1.0);
         m.context->Display(ais, AIS_Shaded, mode, false);
+        if (target == PickTarget::EdgesAndFaces) m.context->Activate(ais, AIS_Shape::SelectionMode(TopAbs_FACE));
         o.targets.push_back(ais);
     }
     o.active = true;
@@ -886,12 +889,37 @@ std::optional<doc::EdgeReference> Viewport::PickEdge(Vec2 pixel) {
     selector->Pick(px, py, m.view);
     for (int i = 1; i <= selector->NbPicked(); ++i) {
         const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
+        // With faces pickable too, a face in front hides the edges behind it.
+        if (!owner.IsNull() && owner->Shape().ShapeType() == TopAbs_FACE && m.original.target == PickTarget::EdgesAndFaces)
+            return std::nullopt;
         if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_EDGE) continue;
         for (std::size_t b = 0; b < m.original.targets.size(); ++b)
             if (owner->Selectable() == m.original.targets[b])
                 return kernel::occt::DescribeEdge(TopoDS::Edge(owner->Shape()), m.original.bodies[b]);
     }
     return std::nullopt;
+}
+
+std::vector<doc::EdgeReference> Viewport::PickFaceEdges(Vec2 pixel) {
+    Impl& m = *myImpl;
+    std::vector<doc::EdgeReference> out;
+    if (!m.original.active) return out;
+    const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
+    const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->Pick(px, py, m.view);
+    if (selector->NbPicked() < 1) return out;
+    // Only when the nearest thing is a face (an edge nearby wins).
+    const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(1));
+    if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_FACE) return out;
+    for (std::size_t b = 0; b < m.original.targets.size(); ++b) {
+        if (owner->Selectable() != m.original.targets[b]) continue;
+        TopTools_IndexedMapOfShape edges;
+        TopExp::MapShapes(owner->Shape(), TopAbs_EDGE, edges);
+        for (int i = 1; i <= edges.Extent(); ++i)
+            out.push_back(kernel::occt::DescribeEdge(TopoDS::Edge(edges(i)), m.original.bodies[b]));
+    }
+    return out;
 }
 
 std::optional<doc::FaceReference> Viewport::PickFace(Vec2 pixel) {

@@ -227,7 +227,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const bool pickingOriginal = (operation && operation->PicksOriginal()) || projecting;
     if (projecting) {
         if (const int index = session.doc.IndexOf(session.activeSketch); index >= 0) {
-            app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Edges);
+            app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::EdgesAndFaces);
             app.viewport.SetMarkedEdges({});
         }
     } else if (!pickingOriginal) {

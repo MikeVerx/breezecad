@@ -283,49 +283,71 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
     doc::SketchFeature* f = Active(session);
     const int index = session.doc.IndexOf(f->id);
     if (index < 0 || !view.vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
-    // The viewport picks edges of the bodies before this sketch (ViewportPanel
-    // turns that on while this tool is active).
-    const std::optional<doc::EdgeReference> edge = app.viewport.PickEdge(view.vf.ToLocal(ImGui::GetMousePos()));
-    if (!edge) return;
-    for (const doc::Projection& p : f->projections)
-        if (p.edge.curve == edge->curve && (p.edge.middle - edge->middle).Length() < 1e-6) {
-            app.notes.Info("Это ребро уже спроецировано");
-            return;
-        }
-    const Expected<kernel::ProjectedCurve> projected =
-        session.model.ProjectEdge(*edge, f->placement.frame, static_cast<std::size_t>(index));
-    if (!projected) {
-        app.notes.Info(projected.GetError().message);
-        return;
-    }
+    // The viewport picks the bodies before this sketch (ViewportPanel turns
+    // that on while this tool is active): an edge near the cursor, else the
+    // whole outline of the face under it.
+    const Vec2 pixel = view.vf.ToLocal(ImGui::GetMousePos());
+    std::vector<doc::EdgeReference> edges;
+    if (const std::optional<doc::EdgeReference> edge = app.viewport.PickEdge(pixel)) edges.push_back(*edge);
+    else edges = app.viewport.PickFaceEdges(pixel);
+    if (edges.empty()) return;
 
     auto before = f->Clone();
     sketch::Sketch& sk = f->sketch;
     IdGenerator& ids = session.doc.Ids();
+    // Neighbouring edges share their ends: one projected point for both.
+    const double tolerance = std::max(view.MmPerPixel(), 1e-6) * 1e-3;
     const auto point = [&](Vec2 at) {
+        for (const sketch::Point& p : sk.points)
+            if (p.projected && (p.pos - at).Length() < tolerance) return p.id;
         const ObjectId id = sk.AddPoint(ids, at);
         sk.FindPoint(id)->projected = true;
         return id;
     };
-    ObjectId curve;
-    switch (projected->kind) {
-        case kernel::ProjectedCurve::Kind::Line:
-            curve = sk.AddLine(ids, point(projected->start), point(projected->end));
-            sk.FindLine(curve)->projected = true;
-            break;
-        case kernel::ProjectedCurve::Kind::Circle:
-            curve = sk.AddCircle(ids, point(projected->centre), projected->radius);
-            sk.FindCircle(curve)->projected = true;
-            break;
-        case kernel::ProjectedCurve::Kind::Arc:
-            curve = sk.AddArc(ids, point(projected->centre), point(projected->start), point(projected->end));
-            for (auto& a : sk.arcs)
-                if (a.id == curve) a.projected = true;
-            break;
+    int added = 0, already = 0;
+    std::string problem;
+    for (const doc::EdgeReference& edge : edges) {
+        bool known = false;
+        for (const doc::Projection& p : f->projections)
+            known = known || (p.edge.curve == edge.curve && (p.edge.middle - edge.middle).Length() < 1e-6);
+        if (known) {
+            ++already;
+            continue;
+        }
+        const Expected<kernel::ProjectedCurve> projected =
+            session.model.ProjectEdge(edge, f->placement.frame, static_cast<std::size_t>(index));
+        if (!projected) {
+            problem = projected.GetError().message;
+            continue;
+        }
+        ObjectId curve;
+        switch (projected->kind) {
+            case kernel::ProjectedCurve::Kind::Line:
+                // An edge seen end-on projects to a point: nothing to draw.
+                if ((projected->end - projected->start).Length() < tolerance) continue;
+                curve = sk.AddLine(ids, point(projected->start), point(projected->end));
+                sk.FindLine(curve)->projected = true;
+                break;
+            case kernel::ProjectedCurve::Kind::Circle:
+                curve = sk.AddCircle(ids, point(projected->centre), projected->radius);
+                sk.FindCircle(curve)->projected = true;
+                break;
+            case kernel::ProjectedCurve::Kind::Arc:
+                curve = sk.AddArc(ids, point(projected->centre), point(projected->start), point(projected->end));
+                for (auto& a : sk.arcs)
+                    if (a.id == curve) a.projected = true;
+                break;
+        }
+        f->projections.push_back({edge, curve});
+        ++added;
     }
-    f->projections.push_back({*edge, curve});
+    if (added == 0) {
+        app.notes.Info(!problem.empty() ? problem : already > 0 ? "Это уже спроецировано" : "Здесь нечего проецировать");
+        return;
+    }
+    if (!problem.empty()) app.notes.Info("Часть рёбер не спроецирована: " + problem);
     session.doc.MarkChanged(static_cast<std::size_t>(index));
-    session.CommitInPlaceEdit(std::move(before), "Проецирование геометрии");
+    session.CommitInPlaceEdit(std::move(before), edges.size() > 1 ? "Проецирование грани" : "Проецирование геометрии");
 }
 
 std::size_t SketchEditor::ClicksNeeded() const {
