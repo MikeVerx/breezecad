@@ -21,9 +21,9 @@ Expected<std::optional<TopoDS_Shape>> CutByPlane(const TopoDS_Shape& body, const
     double x0, y0, z0, x1, y1, z1;
     box.Get(x0, y0, z0, x1, y1, z1);
     // Big enough to swallow the whole body on its side, wherever the plane is.
-    const Vec3 corner{x0, y0, z0}, far{x1, y1, z1};
-    double reach = (far - corner).Length();
-    for (const Vec3 c : {corner, far}) reach = std::max(reach, (c - plane.origin).Length());
+    const Vec3 corner{x0, y0, z0}, opposite{x1, y1, z1};
+    double reach = (opposite - corner).Length();
+    for (const Vec3 c : {corner, opposite}) reach = std::max(reach, (c - plane.origin).Length());
     const double size = 2 * reach + 10.0;
 
     try {
