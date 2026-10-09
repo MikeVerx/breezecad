@@ -2,6 +2,7 @@
 #include "../Fixtures.h"
 #include "document/BzcFile.h"
 #include "kernel/Model.h"
+#include "kernel/TextGeometry.h"
 
 #include <doctest.h>
 
@@ -226,4 +227,20 @@ TEST_CASE("a closed spline extrudes into a body") {
     kernel::Model model;
     model.Rebuild(d);
     CHECK(model.Volume() > 5000.0);   // roughly 30 x 30 x 10, smooth corners
+}
+
+TEST_CASE("sketch text extrudes as letters with their holes") {
+    kernel::SetTextFont(std::filesystem::path(BZ_SOURCE_DIR) / "assets/fonts/IBMPlexSans-Medium.ttf");
+    REQUIRE_FALSE(kernel::TextOutlines("BZ 08", 10.0).empty());
+    doc::Document d;
+    auto& sk = bz::test::AddSketch(d);
+    const ObjectId anchor = sk.sketch.AddPoint(d.Ids(), {0, 0});
+    sk.sketch.AddText(d.Ids(), anchor, "BZ 08", 10.0);
+    bz::test::AddExtrude(d, sk.id, "2");
+    kernel::Model model;
+    model.Rebuild(d);
+    const double volume = model.Volume();
+    // Letters, not their boxes: well below 4 glyphs x 7 x 10 x 2 mm.
+    CHECK(volume > 50.0);
+    CHECK(volume < 400.0);
 }

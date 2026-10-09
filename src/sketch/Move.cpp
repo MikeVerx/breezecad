@@ -26,6 +26,7 @@ std::vector<ObjectId> MovedPoints(const Sketch& sk, std::span<const ObjectId> en
         else if (const Circle* c = sk.FindCircle(id)) add(c->center);
         else if (const Arc* a = sk.FindArc(id)) { add(a->center); add(a->start); add(a->end); }
         else if (const Spline* s = sk.FindSpline(id)) for (const ObjectId p : s->points) add(p);
+        else if (const Text* t = sk.FindText(id)) add(t->anchor);
     }
     return out;
 }
@@ -88,6 +89,10 @@ std::vector<ObjectId> CopyEntities(Sketch& sk, IdGenerator& ids, std::span<const
     std::vector<Spline> splines;
     for (ObjectId id : entities) {
         if (const Spline* s = sk.FindSpline(id)) splines.push_back(*s);
+        if (const Text* t = sk.FindText(id)) {
+            const ObjectId c = sk.AddText(ids, copyPoint(t->anchor), t->text, t->height);
+            curveCopy[id] = c;
+        }
         if (const Line* l = sk.FindLine(id)) lines.push_back(*l);
         else if (const Circle* c = sk.FindCircle(id)) circles.push_back(*c);
         else if (const Arc* a = sk.FindArc(id)) arcs.push_back(*a);

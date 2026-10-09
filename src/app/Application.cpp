@@ -6,6 +6,7 @@
 #include "app/viewport/ViewportPanel.h"
 #include "core/Log.h"
 #include "core/PathText.h"
+#include "kernel/TextGeometry.h"
 #include "platform/Paths.h"
 #include "platform/ProcessInfo.h"
 #include "platform/SystemTheme.h"
@@ -104,6 +105,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     glfwSetWindowRefreshCallback(myWindow.Handle(), [](GLFWwindow* w) { OnAnyInput(w); });
 
     const std::filesystem::path assets = platform::AssetsDir();
+    kernel::SetTextFont(assets / "fonts" / "IBMPlexSans-Medium.ttf");   // sketch text
     log::Info("Assets: {}", ToUtf8(assets));
 
     // Window icon from the brand SVG.

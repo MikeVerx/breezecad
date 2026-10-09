@@ -6,6 +6,7 @@
 #include "app/sketch/SketchOverlay.h"
 #include "core/Expression.h"
 #include "core/I18n.h"
+#include "kernel/TextGeometry.h"
 #include "sketch/Fillet.h"
 #include "sketch/Mirror.h"
 #include "sketch/Offset.h"
@@ -644,6 +645,43 @@ void SketchEditor::HandleSplit(AppContext& app, Session& session, const SketchVi
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
     session.CommitInPlaceEdit(std::move(before), Tr("Разбить"));
     myHover = {};
+}
+
+void SketchEditor::HandleText(AppContext& app, Session& session, const SketchView& view) {
+    doc::SketchFeature* f = Active(session);
+    if (!f) return;
+    SnapOptions options;
+    options.points = app.settings.pointSnap;
+    options.grid = app.settings.gridSnap;
+    options.gridStep = app.settings.gridStep > 0 ? app.settings.gridStep : AdaptiveGridStep(view.MmPerPixel()) / 2;
+    mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
+    myCursor = mySnap.pos;
+    const auto height = TypedValue(myOptions.textHeight, Quantity::Length, session.doc.units);
+    const bool blank = myOptions.text.find_first_not_of(" \t") == std::string::npos;
+    sketch::Text* over = myHover ? f->sketch.FindText(myHover.id) : nullptr;
+    // Preview where the text would go (not over an existing one: that one changes).
+    if (!over && height && *height > 0 && !blank) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        for (const auto& loop : kernel::TextOutlines(myOptions.text, *height))
+            for (std::size_t i = 0; i + 1 < loop.size(); ++i)
+                DrawSketchSegment(app.ui, dl, view, mySnap.pos + loop[i], mySnap.pos + loop[i + 1], app.ui.C().accent, 1.5f, false);
+    }
+    if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left) || !view.vf.hovered) return;
+    if (!height || *height <= 0 || blank) {
+        app.notes.Info(Tr("Введите текст и высоту"));
+        return;
+    }
+    auto before = f->Clone();
+    if (over) {
+        over->text = myOptions.text;
+        over->height = *height;
+    } else {
+        const ObjectId anchor = Resolve(session.doc, f->sketch, RefFromSnap(mySnap));
+        const ObjectId id = f->sketch.AddText(session.doc.Ids(), anchor, myOptions.text, *height);
+        f->sketch.FindText(id)->construction = myOptions.style != LineStyle::Normal;
+    }
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), Tr("Текст"));
 }
 
 void SketchEditor::HandleFillet(AppContext& app, Session& session, const SketchView& view) {

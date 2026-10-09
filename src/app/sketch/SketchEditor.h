@@ -23,7 +23,7 @@
 namespace bz::app {
 
 enum class SketchTool : unsigned char {
-    Select, Line, Rectangle, Circle, Arc, Point, Spline, Project, Trim, Extend, Split, Fillet, Offset, Move, Rotate, Copy, Scale, Mirror, PatternRect, PatternCircular, Dimension,
+    Select, Line, Rectangle, Circle, Arc, Point, Spline, Text, Project, Trim, Extend, Split, Fillet, Offset, Move, Rotate, Copy, Scale, Mirror, PatternRect, PatternCircular, Dimension,
     Coincident, Horizontal, Vertical, Parallel, Perpendicular, Equal, Tangent, Fix, Midpoint, Concentric, Symmetric,
 };
 
@@ -55,6 +55,8 @@ struct DrawOptions {
     std::string   width, height;    ///< rectangle
     std::string   size;             ///< circle / polygon diameter, arc radius
     std::string   filletRadius = "5";   ///< Скругление: kept between corners
+    std::string   text = "BreezeCAD";     ///< Текст: what the next click places (or puts into a text)
+    std::string   textHeight = "5";
     std::string   offsetDistance = "5"; ///< Эквидистанта
     bool          splineControl = false;  ///< Сплайн: by control vertices (else through the points)
     std::string   moveX, moveY;     ///< move
@@ -135,6 +137,7 @@ private:
     void HandleSplit(AppContext& app, Session& session, const SketchView& view);
     void HandleOffset(AppContext& app, Session& session, const SketchView& view);
     void HandleSpline(AppContext& app, Session& session, const SketchView& view);
+    void HandleText(AppContext& app, Session& session, const SketchView& view);
 
 public:
     /// A tool is in the middle of something (a chain of clicks): a short

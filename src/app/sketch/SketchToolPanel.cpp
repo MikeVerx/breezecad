@@ -60,7 +60,8 @@ bool SketchEditor::HasToolPanel() const {
     return myTool == SketchTool::Line || myTool == SketchTool::Rectangle || myTool == SketchTool::Circle ||
            myTool == SketchTool::Arc || myTool == SketchTool::Move || myTool == SketchTool::Rotate || myTool == SketchTool::Mirror ||
            myTool == SketchTool::Copy || myTool == SketchTool::Scale || myTool == SketchTool::PatternRect ||
-           myTool == SketchTool::PatternCircular;
+           myTool == SketchTool::PatternCircular || myTool == SketchTool::Fillet || myTool == SketchTool::Offset ||
+           myTool == SketchTool::Spline || myTool == SketchTool::Text;
 }
 
 void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width) {
@@ -217,6 +218,12 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
             break;
         case SketchTool::Fillet:
             field(Tr("Радиус"), "##fillet", myOptions.filletRadius, Quantity::Length);
+            break;
+        case SketchTool::Text:
+            ui::FieldLabel(ui, Tr("Текст"));
+            ui::TextField(ui, "##text", myOptions.text, inner);
+            ImGui::Dummy({0, ui.S(6)});
+            field(Tr("Высота"), "##text-height", myOptions.textHeight, Quantity::Length);
             break;
         case SketchTool::Offset:
             field(Tr("Расстояние"), "##offset", myOptions.offsetDistance, Quantity::Length);

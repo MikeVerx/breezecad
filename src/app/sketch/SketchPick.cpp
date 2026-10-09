@@ -1,5 +1,6 @@
 #include "app/sketch/SketchPick.h"
 
+#include "kernel/TextGeometry.h"
 #include "sketch/SplineGeometry.h"
 
 #include "app/sketch/DimensionLayout.h"
@@ -51,6 +52,14 @@ float CurveDistance(const sketch::Sketch& sk, const SketchView& view, ObjectId i
         const Vec2 m = *local - center;
         if (!AngleInArc(std::atan2(m.y, m.x), std::atan2(s.y, s.x), std::atan2(e.y, e.x))) return FLT_MAX;
         return static_cast<float>(std::abs(m.Length() - s.Length()) / mmpp);
+    }
+    if (const sketch::Text* t = sk.FindText(id)) {
+        const Vec2 at = sk.PositionOf(t->anchor);
+        float best = FLT_MAX;
+        for (const auto& loop : kernel::TextOutlines(t->text, t->height))
+            for (std::size_t i = 0; i + 1 < loop.size(); ++i)
+                best = std::min(best, DistanceToSegment(mouse, view.ToScreen(at + loop[i]), view.ToScreen(at + loop[i + 1])));
+        return best;
     }
     if (const sketch::Spline* sp = sk.FindSpline(id)) {
         const std::vector<Vec2> pts = sketch::SampleSpline(sketch::SplineShape(sk, *sp));
@@ -111,6 +120,7 @@ SketchHit HitTest(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse
     for (const auto& c : sk.circles) tryCurve(c.id, sketch::EntityKind::Circle);
     for (const auto& a : sk.arcs) tryCurve(a.id, sketch::EntityKind::Arc);
     for (const auto& s : sk.splines) tryCurve(s.id, sketch::EntityKind::Spline);
+    for (const auto& t : sk.texts) tryCurve(t.id, sketch::EntityKind::Text);
     if (best) return best;
 
     // Dimension labels: a box around the text position.

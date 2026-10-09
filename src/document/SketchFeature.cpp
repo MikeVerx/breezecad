@@ -75,6 +75,7 @@ void SketchFeature::ReserveIds(IdGenerator& ids) const {
     for (const auto& c : sketch.circles) ids.Reserve(c.id);
     for (const auto& a : sketch.arcs) ids.Reserve(a.id);
     for (const auto& s : sketch.splines) ids.Reserve(s.id);
+    for (const auto& t : sketch.texts) ids.Reserve(t.id);
     for (const auto& c : sketch.constraints) ids.Reserve(c.id);
 }
 
@@ -118,6 +119,9 @@ void SketchFeature::SaveFields(Json& out) const {
         curves.push_back({{"id", ToJson(s.id)}, {"type", "spline"}, {"points", std::move(pts)},
                           {"interpolate", s.interpolate}, {"construction", s.construction}});
     }
+    for (const auto& t : sketch.texts)
+        curves.push_back({{"id", ToJson(t.id)}, {"type", "text"}, {"anchor", ToJson(t.anchor)}, {"text", t.text},
+                          {"height", t.height}, {"construction", t.construction}});
 
     Json constraints = Json::array();
     for (const auto& c : sketch.constraints) {
@@ -185,6 +189,11 @@ Status SketchFeature::LoadFields(const Json& in) {
             }
             ok = ok && s.points.size() >= 2;
             sk.splines.push_back(std::move(s));
+        } else if (type == "text") {
+            sketch::Text t;
+            ok = ReadMember(j, "id", t.id) && ReadMember(j, "anchor", t.anchor) && ReadMember(j, "text", t.text) &&
+                 ReadMember(j, "height", t.height) && ReadMember(j, "construction", t.construction) && t.height > 0;
+            sk.texts.push_back(std::move(t));
         }
         // Unknown curve types from newer versions are skipped, not fatal.
         if (!ok) return Bad("curves");

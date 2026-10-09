@@ -125,6 +125,7 @@ void RegisterActions(AppContext& app) {
         {SketchTool::Fillet, "sketch.fillet", ImGuiKey_None},
         {SketchTool::Offset, "sketch.offset", ImGuiKey_O},
         {SketchTool::Spline, "sketch.spline", ImGuiKey_None},
+        {SketchTool::Text, "sketch.text", ImGuiKey_None},
         {SketchTool::Move, "sketch.move", ImGuiKey_M},          {SketchTool::Rotate, "sketch.rotate", ImGuiKey_None},
         {SketchTool::Coincident, "sketch.coincident", ImGuiKey_None},
         {SketchTool::Horizontal, "sketch.horizontal", ImGuiKey_None},

@@ -5,6 +5,7 @@
 #include "core/Parameter.h"
 
 #include <array>
+#include <string>
 #include <vector>
 
 namespace bz::sketch {
@@ -63,6 +64,16 @@ struct Spline {
     bool Closed() const { return points.size() > 2 && points.front() == points.back(); }
 };
 
+/// A line of text ("Текст"): its letters are closed outlines, so it extrudes
+/// as relief or cuts as engraving. The anchor is the left end of the baseline.
+struct Text {
+    ObjectId    id;
+    ObjectId    anchor;
+    std::string text;
+    double      height = 5.0;   ///< font size, mm
+    bool        construction = false;
+};
+
 // ---------------------------------------------------------------------------
 // Constraints. Geometric ones have no value; dimensional ones carry a
 // Parameter, which shows up in the variables table and may hold an
@@ -112,7 +123,7 @@ struct Constraint {
 };
 
 /// Kind of an entity found by id.
-enum class EntityKind : unsigned char { None, Point, Line, Circle, Arc, Constraint, Spline };
+enum class EntityKind : unsigned char { None, Point, Line, Circle, Arc, Constraint, Spline, Text };
 
 /// A complete 2D sketch: geometry plus constraints.
 class Sketch {
@@ -122,6 +133,7 @@ public:
     std::vector<Circle>     circles;
     std::vector<Arc>        arcs;
     std::vector<Spline>     splines;
+    std::vector<Text>       texts;
     std::vector<Constraint> constraints;
 
     // --- creation (ids come from the document's generator) -------------
@@ -129,6 +141,7 @@ public:
     ObjectId AddLine(IdGenerator& ids, ObjectId start, ObjectId end, bool construction = false);
     ObjectId AddCircle(IdGenerator& ids, ObjectId center, double radius, bool construction = false);
     ObjectId AddArc(IdGenerator& ids, ObjectId center, ObjectId start, ObjectId end, bool construction = false);
+    ObjectId AddText(IdGenerator& ids, ObjectId anchor, std::string text, double height);
     ObjectId AddSpline(IdGenerator& ids, std::vector<ObjectId> points, bool interpolate, bool construction = false);
     ObjectId AddConstraint(IdGenerator& ids, Constraint constraint);
     /// Creates the fixed origin point if the sketch has none. Returns its id.
@@ -144,6 +157,8 @@ public:
     Circle*           FindCircle(ObjectId id);
     const Arc*        FindArc(ObjectId id) const;
     const Spline*     FindSpline(ObjectId id) const;
+    Text*             FindText(ObjectId id);
+    const Text*       FindText(ObjectId id) const;
     const Constraint* FindConstraint(ObjectId id) const;
     Constraint*       FindConstraint(ObjectId id);
     const Point*      Origin() const;
@@ -164,7 +179,7 @@ public:
     /// onto an existing one.
     void MergePoints(ObjectId from, ObjectId into);
 
-    bool IsEmpty() const { return lines.empty() && circles.empty() && arcs.empty() && splines.empty(); }
+    bool IsEmpty() const { return lines.empty() && circles.empty() && arcs.empty() && splines.empty() && texts.empty(); }
 
     /// Box around all curves and points (empty for an empty sketch).
     /// Circles count with their full extent; arcs too, which is a bit generous.

@@ -221,6 +221,7 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.BeginColumn();
     r.Small("sketch.point", nullptr, active(SketchTool::Point));
     r.Small("sketch.spline", nullptr, active(SketchTool::Spline));
+    r.Small("sketch.text", nullptr, active(SketchTool::Text));
     r.EndColumn();
     r.EndGroup();
 

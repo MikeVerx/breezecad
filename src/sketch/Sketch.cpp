@@ -54,6 +54,12 @@ ObjectId Sketch::AddLine(IdGenerator& ids, ObjectId start, ObjectId end, bool co
     return id;
 }
 
+ObjectId Sketch::AddText(IdGenerator& ids, ObjectId anchor, std::string text, double height) {
+    const ObjectId id = ids.Next();
+    texts.push_back({id, anchor, std::move(text), height, false});
+    return id;
+}
+
 ObjectId Sketch::AddSpline(IdGenerator& ids, std::vector<ObjectId> pts, bool interpolate, bool construction) {
     const ObjectId id = ids.Next();
     splines.push_back({id, std::move(pts), interpolate, construction});
@@ -100,6 +106,7 @@ EntityKind Sketch::KindOf(ObjectId id) const {
     if (FindIn(circles, id))     return EntityKind::Circle;
     if (FindIn(arcs, id))        return EntityKind::Arc;
     if (FindIn(splines, id))     return EntityKind::Spline;
+    if (FindIn(texts, id))       return EntityKind::Text;
     if (FindIn(constraints, id)) return EntityKind::Constraint;
     return EntityKind::None;
 }
@@ -112,6 +119,8 @@ Circle*           Sketch::FindCircle(ObjectId id)           { return FindIn(circ
 const Circle*     Sketch::FindCircle(ObjectId id) const     { return FindIn(circles, id); }
 const Arc*        Sketch::FindArc(ObjectId id) const        { return FindIn(arcs, id); }
 const Spline*     Sketch::FindSpline(ObjectId id) const     { return FindIn(splines, id); }
+Text*             Sketch::FindText(ObjectId id)             { return FindIn(texts, id); }
+const Text*       Sketch::FindText(ObjectId id) const       { return FindIn(texts, id); }
 Constraint*       Sketch::FindConstraint(ObjectId id)       { return FindIn(constraints, id); }
 const Constraint* Sketch::FindConstraint(ObjectId id) const { return FindIn(constraints, id); }
 
@@ -141,6 +150,8 @@ bool Sketch::IsPointUsed(ObjectId pointId) const {
         if (a.center == pointId || a.start == pointId || a.end == pointId) return true;
     for (const auto& s : splines)
         if (std::find(s.points.begin(), s.points.end(), pointId) != s.points.end()) return true;
+    for (const auto& t : texts)
+        if (t.anchor == pointId) return true;
     return false;
 }
 
@@ -168,6 +179,8 @@ void Sketch::Remove(ObjectId id) {
                 if (a.center == id || a.start == id || a.end == id) curves.push_back(a.id);
             for (const auto& s : splines)
                 if (std::find(s.points.begin(), s.points.end(), id) != s.points.end()) curves.push_back(s.id);
+            for (const auto& t : texts)
+                if (t.anchor == id) curves.push_back(t.id);
             for (ObjectId curve : curves) Remove(curve);
             RemoveConstraintsReferencing(id);
             EraseIf(points, [id](const Point& pt) { return pt.id == id; });
@@ -176,18 +189,21 @@ void Sketch::Remove(ObjectId id) {
         case EntityKind::Line:
         case EntityKind::Circle:
         case EntityKind::Arc:
-        case EntityKind::Spline: {
+        case EntityKind::Spline:
+        case EntityKind::Text: {
             std::vector<ObjectId> ownPoints;
             if (const Line* l = FindLine(id)) ownPoints = {l->start, l->end};
             if (const Circle* c = FindCircle(id)) ownPoints = {c->center};
             if (const Arc* a = FindArc(id)) ownPoints = {a->center, a->start, a->end};
             if (const Spline* s = FindSpline(id)) ownPoints = s->points;
+            if (const Text* t = FindText(id)) ownPoints = {t->anchor};
 
             RemoveConstraintsReferencing(id);
             EraseIf(lines, [id](const Line& l) { return l.id == id; });
             EraseIf(circles, [id](const Circle& c) { return c.id == id; });
             EraseIf(arcs, [id](const Arc& a) { return a.id == id; });
             EraseIf(splines, [id](const Spline& s) { return s.id == id; });
+            EraseIf(texts, [id](const Text& t) { return t.id == id; });
 
             for (ObjectId pid : ownPoints) {
                 const Point* p = FindPoint(pid);
@@ -218,6 +234,7 @@ void Sketch::MergePoints(ObjectId from, ObjectId into) {
     }
     for (auto& s : splines)
         for (ObjectId& p : s.points) remap(p);
+    for (auto& t : texts) remap(t.anchor);
     for (auto& c : constraints) {
         remap(c.refs[0]);
         remap(c.refs[1]);

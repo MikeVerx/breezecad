@@ -13,9 +13,10 @@ add_library(bz_kernel STATIC
     occt/Project.cpp
     occt/Revolve.cpp
     occt/SketchGeometry.cpp
-    occt/Sweep.cpp)
+    occt/Sweep.cpp
+    occt/Text.cpp)
 target_link_libraries(bz_kernel
     PUBLIC  bz::document bz::occt_modeling
-    PRIVATE bz::occt_exchange bz::miniz)
+    PRIVATE bz::occt_exchange bz::miniz TKService TKV3d)   # TKV3d: text outlines on OCCT 7.x
 bz_set_warnings(bz_kernel)
 add_library(bz::kernel ALIAS bz_kernel)

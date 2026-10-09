@@ -1,5 +1,6 @@
 #include "kernel/occt/SketchGeometry.h"
 
+#include "kernel/occt/Text.h"
 #include "sketch/SplineGeometry.h"
 
 #include <BOPTools_AlgoTools3D.hxx>
@@ -7,6 +8,7 @@
 #include <BRepAlgoAPI_Splitter.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_Transform.hxx>
 #include <BRepClass_FaceClassifier.hxx>
 #include <BRepTools.hxx>
 #include <BRepTools_WireExplorer.hxx>
@@ -26,9 +28,12 @@
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Wire.hxx>
 #include <format>
+#include <gp.hxx>
 #include <gp_Ax2.hxx>
+#include <gp_Ax3.hxx>
 #include <gp_Circ.hxx>
 #include <gp_Pln.hxx>
+#include <gp_Trsf.hxx>
 
 #include <algorithm>
 #include <cmath>
@@ -92,6 +97,16 @@ std::vector<TopoDS_Edge> MakeEdges(const doc::SketchFeature& feature) {
         } catch (const Standard_Failure&) {
             // A degenerate spline (points on top of each other) makes no edge.
         }
+    }
+    for (const auto& t : sk.texts) {
+        if (t.construction) continue;
+        const TopoDS_Shape letters = TextFaces(t.text, t.height);
+        if (letters.IsNull()) continue;
+        // Text coordinates: the anchor is the origin, axes along the sketch's.
+        gp_Trsf place;
+        place.SetDisplacement(gp_Ax3(gp::XOY()), gp_Ax3(world(t.anchor), ToDir(frame.normal), ToDir(frame.xDir)));
+        const TopoDS_Shape placed = BRepBuilderAPI_Transform(letters, place, true).Shape();
+        for (TopExp_Explorer e(placed, TopAbs_EDGE); e.More(); e.Next()) edges.push_back(TopoDS::Edge(e.Current()));
     }
     return edges;
 }

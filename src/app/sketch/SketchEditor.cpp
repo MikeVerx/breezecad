@@ -16,7 +16,7 @@
 namespace bz::app {
 namespace {
 
-constexpr std::array<SketchToolInfo, 32> kTools{{
+constexpr std::array<SketchToolInfo, 33> kTools{{
     {SketchTool::Select, N_("Выбор"), "ui-check", N_("Выберите или перетащите элементы эскиза")},
     {SketchTool::Line, N_("Отрезок"), "sk-line", N_("Укажите начальную точку отрезка")},
     {SketchTool::Rectangle, N_("Прямоугольник"), "sk-rectangle", N_("Укажите первый угол прямоугольника")},
@@ -24,6 +24,7 @@ constexpr std::array<SketchToolInfo, 32> kTools{{
     {SketchTool::Arc, N_("Дуга"), "sk-arc", N_("Укажите центр дуги")},
     {SketchTool::Point, N_("Точка"), "sk-point", N_("Укажите положение точки")},
     {SketchTool::Spline, N_("Сплайн"), "sk-spline", N_("Щёлкайте точки сплайна. Правый щелчок или Enter — закончить, щелчок по первой точке — замкнуть")},
+    {SketchTool::Text, N_("Текст"), "sk-text", N_("Введите текст слева и щёлкните, где он начнётся; щелчок по надписи заменит её текст")},
     {SketchTool::Project, N_("Проецировать"), "sk-project", N_("Щёлкните ребро модели или грань (весь её контур) — проекция появится в эскизе и будет следовать за моделью")},
     {SketchTool::Trim, N_("Обрезка"), "sk-trim", N_("Щёлкните лишний кусок кривой — он удалится до ближайших пересечений")},
     {SketchTool::Extend, N_("Удлинение"), "sk-extend", N_("Щёлкните отрезок у конца — он дотянется до ближайшей кривой")},
@@ -239,6 +240,7 @@ void SketchEditor::ToggleConstruction(Session& session) {
             if (a.id == id) a.construction = !a.construction;
         for (auto& sp : f->sketch.splines)
             if (sp.id == id) sp.construction = !sp.construction;
+        if (sketch::Text* t = f->sketch.FindText(id)) t->construction = !t->construction;
     }
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
     session.CommitInPlaceEdit(std::move(before), Tr("Вспомогательная геометрия"));
@@ -340,6 +342,7 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
         case SketchTool::Fillet:    HandleFillet(app, session, view); break;
         case SketchTool::Offset:    HandleOffset(app, session, view); break;
         case SketchTool::Spline:    HandleSpline(app, session, view); break;
+        case SketchTool::Text:      HandleText(app, session, view); break;
         case SketchTool::Move:
         case SketchTool::Rotate:    HandleMotion(app, session, view); break;
         case SketchTool::Mirror:    HandleMirror(app, session, view); break;
