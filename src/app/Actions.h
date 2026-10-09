@@ -48,6 +48,9 @@ public:
     std::string SetChord(std::string_view id, ImGuiKeyChord chord);
     /// Every shortcut as shipped.
     void ResetChords();
+    /// Where an action's shortcut works: 1 sketch, 2 model, 0 everywhere.
+    /// The same chord may serve one action in a sketch and another in the model.
+    static int Scope(std::string_view id);
 
     /// Actions whose label contains `query` (case-insensitive, Cyrillic too).
     std::vector<const Action*> Search(std::string_view query) const;

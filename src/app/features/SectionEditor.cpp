@@ -24,13 +24,32 @@ void SectionEditor::StartNew(AppContext& app, Session& session) {
 }
 
 void SectionEditor::DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) {
-    if (auto* f = dynamic_cast<doc::SectionFeature*>(Edited(session))) PickPlane(app, session, f->plane, vf);
+    auto* f = dynamic_cast<doc::SectionFeature*>(Edited(session));
+    if (!f) return;
+    // A flat face of the body (as it was before the section) wins over the planes behind it.
+    if (vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        if (const std::optional<doc::FaceReference> face = app.viewport.PickFace(vf.ToLocal(ImGui::GetMousePos()))) {
+            f->face = *face;
+            f->plane = {};
+            Changed(session);
+            return;
+        }
+    const ObjectId before = f->plane;
+    PickPlane(app, session, f->plane, vf);
+    if (f->plane != before) f->face = {};
 }
 
 void SectionEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::SectionFeature&>(feature);
     Section(app, "Плоскость");
+    const ObjectId before = f.plane;
     PlaneChoice(app, session, f.plane, width);
+    if (f.plane != before) {
+        f.face = {};
+        Changed(session);
+    }
+    if (f.face.IsSet()) Caption(app, "Сечение по грани детали.", width);
+    Caption(app, "Или щёлкните в окне модели рабочую плоскость или плоскую грань детали.", width);
     Gap(app);
 
     Section(app, "Остаётся");

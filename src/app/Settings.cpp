@@ -45,6 +45,8 @@ Settings Settings::Load(const std::filesystem::path& file) {
         s.windowH = w->value("height", 0);
         s.windowMaximized = w->value("maximized", true);
     }
+    s.shortcutPreset = j.value("shortcutPreset", s.shortcutPreset);
+    s.shortcutsCustom = j.value("shortcutsCustom", s.shortcutsCustom);
     for (const auto& [id, chord] : j.value("shortcuts", nlohmann::json::object()).items())
         if (chord.is_string()) s.shortcuts.emplace_back(id, chord.get<std::string>());
     for (const auto& r : j.value("recentFiles", nlohmann::json::array()))
@@ -74,6 +76,8 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"uiScale", uiScale},
         {"window", {{"x", windowX}, {"y", windowY}, {"width", windowW}, {"height", windowH}, {"maximized", windowMaximized}}},
         {"shortcuts", ShortcutsJson(shortcuts)},
+        {"shortcutPreset", shortcutPreset},
+        {"shortcutsCustom", shortcutsCustom},
         {"recentFiles", recent},
     };
     std::ofstream out(file, std::ios::trunc);

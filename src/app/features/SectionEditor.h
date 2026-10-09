@@ -13,6 +13,8 @@ public:
     const char* Title() const override { return "Сечение"; }
     std::string Hint() const override;
     bool        DrawsPlanes() const override { return true; }
+    bool        PicksOriginal() const override { return true; }
+    bool        PicksFaces() const override { return true; }
     void        DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;
 
 protected:

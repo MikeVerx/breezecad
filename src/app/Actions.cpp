@@ -103,11 +103,21 @@ ImGuiKeyChord ActionRegistry::ParseChord(std::string_view text) {
     return 0;
 }
 
+int ActionRegistry::Scope(std::string_view id) {
+    if (id == "sketch.start") return 2;
+    if (id.starts_with("sketch.")) return 1;
+    if (id.starts_with("feature.")) return 2;
+    return 0;
+}
+
 std::string ActionRegistry::SetChord(std::string_view id, ImGuiKeyChord chord) {
     std::string taken;
+    const int scope = Scope(id);
     for (Action& a : myActions) {
+        const int other = Scope(a.id);
+        const bool overlap = scope == 0 || other == 0 || scope == other;
         if (a.id == id) a.chord = chord;
-        else if (chord != 0 && a.chord == chord) {
+        else if (chord != 0 && a.chord == chord && overlap) {
             a.chord = 0;
             taken = a.id;
         }

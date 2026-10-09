@@ -4,6 +4,7 @@
 #include "app/Format.h"
 #include "app/Materials.h"
 #include "app/Operations.h"
+#include "app/ShortcutPresets.h"
 #include "app/shell/Shell.h"
 #include "document/Commands.h"
 #include "ui/Widgets.h"
@@ -182,6 +183,32 @@ void DrawSettings(AppContext& app) {
         const int a = app.settings.animations ? 0 : 1;
         if (const int n = ui::Segmented(ui, "anim", anim, a, 2, width); n != a) app.settings.animations = n == 0;
     } else {
+        // The set of shortcuts: a ready-made one, or "Свой" once changed by hand.
+        ui::FieldLabel(ui, "Набор сочетаний");
+        const ShortcutPreset* base = FindShortcutPreset(app.settings.shortcutPreset);
+        if (!base) base = &ShortcutPresets().front();
+        const std::string shown = app.settings.shortcutsCustom ? "Свой (на основе: " + std::string(base->label) + ")"
+                                                               : std::string(base->label);
+        ImGui::SetNextItemWidth(width);
+        if (ImGui::BeginCombo("##preset", shown.c_str())) {
+            for (const ShortcutPreset& p : ShortcutPresets())
+                if (ImGui::Selectable(std::string(p.label).c_str(), !app.settings.shortcutsCustom && &p == base)) {
+                    app.actions.ResetChords();
+                    for (const auto& [id, chord] : p.changes) app.actions.SetChord(id, ActionRegistry::ParseChord(chord));
+                    app.settings.shortcutPreset = std::string(p.id);
+                    app.settings.shortcutsCustom = false;
+                    app.shell.shortcutNote.clear();
+                    StoreShortcuts(app);
+                }
+            ImGui::EndCombo();
+        }
+        {
+            ui::FontScope font(ui.fonts.caption);
+            ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+            ImGui::TextUnformatted("Наборы повторяют привычные клавиши других программ; их названия принадлежат правообладателям.");
+            ImGui::PopStyleColor();
+        }
+        ImGui::Dummy({0, ui.S(4)});
         ui::TextField(ui, "##shortcut-filter", app.shell.shortcutFilter, width, "Поиск команды");
         ImGui::Dummy({0, ui.S(2)});
         // Capturing: the first chord pressed (a lone modifier does not count).
@@ -202,6 +229,7 @@ void DrawSettings(AppContext& app) {
                     if (const Action* other = app.actions.Find(taken))
                         app.shell.shortcutNote = ActionRegistry::ChordText(value) + " было у «" + other->label + "» — снято оттуда";
                 app.shell.captureShortcut.clear();
+                app.settings.shortcutsCustom = true;
                 StoreShortcuts(app);
                 break;
             }
@@ -245,6 +273,8 @@ void DrawSettings(AppContext& app) {
         }
         if (ui::SecondaryButton(ui, "##reset-keys", "Сбросить все сочетания", nullptr, {ui.S(220), ui.S(32)})) {
             app.actions.ResetChords();
+            app.settings.shortcutPreset = "breezecad";
+            app.settings.shortcutsCustom = false;
             StoreShortcuts(app);
             app.shell.shortcutNote.clear();
         }

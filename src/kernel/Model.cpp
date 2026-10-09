@@ -274,9 +274,18 @@ std::optional<Frame> PlaneOf(ObjectId id, const doc::Document& doc) {
 
 /// Every body cut by the section plane; bodies wholly on the far side go.
 void ApplySection(doc::SectionFeature& section, const doc::Document& doc, std::vector<Body>& bodies) {
-    const std::optional<Frame> plane = PlaneOf(section.plane, doc);
+    std::optional<Frame> plane;
+    if (section.face.IsSet()) {
+        for (auto it = bodies.rbegin(); it != bodies.rend() && !plane; ++it) plane = occt::ResolvePlaneFrame(it->shape, section.face);
+        if (!plane) {
+            section.status = {FeatureState::Error, "Грань сечения не найдена: модель изменилась слишком сильно"};
+            return;
+        }
+    } else {
+        plane = PlaneOf(section.plane, doc);
+    }
     if (!plane) {
-        section.status = {FeatureState::Error, "Выберите плоскость сечения"};
+        section.status = {FeatureState::Error, "Выберите плоскость или плоскую грань сечения"};
         return;
     }
     if (bodies.empty()) {

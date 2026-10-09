@@ -23,6 +23,8 @@ struct Settings {
     bool        windowMaximized = true;
     /// Shortcuts changed by the user: action id -> chord text ("Ctrl+Shift+E"; empty: none).
     std::vector<std::pair<std::string, std::string>> shortcuts;
+    std::string shortcutPreset = "breezecad";   ///< the set the shortcuts started from
+    bool        shortcutsCustom = false;        ///< changed by hand after choosing the set
     std::vector<std::filesystem::path> recentFiles;   ///< most recent first
 
     static constexpr std::size_t kMaxRecent = 12;
