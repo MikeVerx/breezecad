@@ -23,7 +23,7 @@
 namespace bz::app {
 
 enum class SketchTool : unsigned char {
-    Select, Line, Rectangle, Circle, Arc, Point, Project, Trim, Move, Rotate, Copy, Scale, Mirror, PatternRect, PatternCircular, Dimension,
+    Select, Line, Rectangle, Circle, Arc, Point, Project, Trim, Fillet, Move, Rotate, Copy, Scale, Mirror, PatternRect, PatternCircular, Dimension,
     Coincident, Horizontal, Vertical, Parallel, Perpendicular, Equal, Tangent, Fix, Midpoint, Concentric, Symmetric,
 };
 
@@ -54,6 +54,7 @@ struct DrawOptions {
     std::string   length, angle;    ///< line
     std::string   width, height;    ///< rectangle
     std::string   size;             ///< circle / polygon diameter, arc radius
+    std::string   filletRadius = "5";   ///< Скругление: kept between corners
     std::string   moveX, moveY;     ///< move
     std::string   turn;             ///< rotate
     std::string   factor = "2";     ///< scale
@@ -128,6 +129,7 @@ private:
     void HandleProject(AppContext& app, Session& session, const SketchView& view);
     /// "Обрезка": the piece under the cursor is shown, a click removes it.
     void HandleTrim(AppContext& app, Session& session, const SketchView& view);
+    void HandleFillet(AppContext& app, Session& session, const SketchView& view);
     /// "Перенос" / "Поворот": the selection follows two (three) clicks.
     void HandleMotion(AppContext& app, Session& session, const SketchView& view);
     /// "Зеркало": clicks pick the elements, then (step two) the mirror line.

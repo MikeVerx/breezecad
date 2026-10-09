@@ -246,6 +246,9 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.EndColumn();
     r.BeginColumn();
     r.Small("sketch.trim", nullptr, active(SketchTool::Trim));
+    r.Small("sketch.fillet", nullptr, active(SketchTool::Fillet));
+    r.EndColumn();
+    r.BeginColumn();
     r.Small("edit.delete");
     r.EndColumn();
     r.EndGroup();

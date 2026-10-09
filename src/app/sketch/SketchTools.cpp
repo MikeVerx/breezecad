@@ -6,6 +6,7 @@
 #include "app/sketch/SketchOverlay.h"
 #include "core/Expression.h"
 #include "core/I18n.h"
+#include "sketch/Fillet.h"
 #include "sketch/Mirror.h"
 #include "sketch/Shapes.h"
 #include "sketch/Solver.h"
@@ -483,6 +484,68 @@ void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchVie
     f->PruneProjections();
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
     session.CommitInPlaceEdit(std::move(before), Tr("Обрезка"));
+}
+
+void SketchEditor::HandleFillet(AppContext& app, Session& session, const SketchView& view) {
+    doc::SketchFeature* f = Active(session);
+    if (!f || !myHover || !myCursor) return;
+    const sketch::Sketch& sk = f->sketch;
+    // The corner: a point under the cursor, or the nearer end of a line.
+    ObjectId corner;
+    if (myHover.kind == EntityKind::Point) {
+        corner = myHover.id;
+    } else if (const sketch::Line* l = sk.FindLine(myHover.id)) {
+        const bool startNearer = (sk.PositionOf(l->start) - *myCursor).Length() < (sk.PositionOf(l->end) - *myCursor).Length();
+        corner = startNearer ? l->start : l->end;
+    }
+    if (!corner || !sketch::CornerLines(sk, corner)) return;
+    const auto radius = TypedValue(myOptions.filletRadius, Quantity::Length, session.doc.units);
+    const std::optional<sketch::FilletPlan> plan = radius ? sketch::PlanFillet(sk, corner, *radius) : std::nullopt;
+
+    // Preview: the arc that would replace the corner, or the corner in red.
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ui::ThemeColors& c = app.ui.C();
+    if (plan) {
+        const double r = *radius;
+        const double a0 = std::atan2(plan->onA.y - plan->centre.y, plan->onA.x - plan->centre.x);
+        const double a1 = std::atan2(plan->onB.y - plan->centre.y, plan->onB.x - plan->centre.x);
+        const double sweep = std::remainder(a1 - a0, 2 * kPi);   // the short way round
+        Vec2 prev = plan->onA;
+        for (int i = 1; i <= 24; ++i) {
+            const double t = a0 + sweep * i / 24;
+            const Vec2 p = plan->centre + Vec2{std::cos(t), std::sin(t)} * r;
+            DrawSketchSegment(app.ui, dl, view, prev, p, c.accent, 2.5f, false);
+            prev = p;
+        }
+    } else {
+        const ImVec2 at = view.ToScreen(sk.PositionOf(corner));
+        dl->AddCircle(at, app.ui.S(7), ui::ToU32(c.danger), 16, app.ui.S(2));
+    }
+
+    if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
+    if (!radius) {
+        app.notes.Info(Tr("Введите радиус скругления"));
+        return;
+    }
+    if (!plan) {
+        app.notes.Info(Tr("Скругление не помещается: радиус больше, чем позволяют отрезки"));
+        return;
+    }
+    auto before = f->Clone();
+    sketch::Sketch trial = f->sketch;
+    const std::optional<ObjectId> arc = sketch::FilletCorner(trial, session.doc.Ids(), corner, *radius);
+    if (!arc) return;
+    f->sketch = std::move(trial);
+    AddTypedDimensions(session.doc, f->sketch, {{Make(ConstraintType::Radius, *arc), myOptions.filletRadius, {}}});
+    if (!sketch::Solve(f->sketch).converged) {
+        f->sketch = static_cast<const doc::SketchFeature&>(*before).sketch;
+        session.doc.EvaluateParameters();
+        app.notes.Error(Tr("Скругление противоречит ограничениям эскиза"));
+        return;
+    }
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), Tr("Скругление"));
+    myHover = {};
 }
 
 std::optional<sketch::Motion> SketchEditor::PendingMotion(const UnitSystem& units, bool withCursor) const {

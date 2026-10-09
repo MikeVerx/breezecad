@@ -206,6 +206,9 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         case SketchTool::Arc:
             if (myOptions.arc == ArcMode::CentreEnds) field(Tr("Радиус"), "##r", myOptions.size, Quantity::Length);
             break;
+        case SketchTool::Fillet:
+            field(Tr("Радиус"), "##fillet", myOptions.filletRadius, Quantity::Length);
+            break;
         case SketchTool::Mirror: {
             const std::string chosen = mySelection.empty() ? std::string(Tr("Ничего не выбрано"))
                                                            : Trf("Выбрано элементов: {}", mySelection.size());
