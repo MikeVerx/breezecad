@@ -49,6 +49,7 @@ jobs:
         run: cmake --build --preset windows-mingw 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Test
         run: |
+          set +e +o pipefail   # the msys2 shell runs with -e: keep going to name the crash
           ctest --preset windows-mingw --output-on-failure 2>&1 | tee test.log
           status=${PIPESTATUS[0]}
           # A crash prints no failed check: run again, naming each finished test case.
