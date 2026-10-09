@@ -64,6 +64,17 @@ struct Spline {
     bool Closed() const { return points.size() > 2 && points.front() == points.back(); }
 };
 
+/// An ellipse by three points: the centre and the ends of its two axes
+/// (the solver keeps the axes perpendicular). Axis sizes and the turn are
+/// ordinary dimensions between the points.
+struct Ellipse {
+    ObjectId id;
+    ObjectId center;
+    ObjectId major;   ///< end of one axis
+    ObjectId minor;   ///< end of the other
+    bool     construction = false;
+};
+
 /// Text in a box ("Текст", as Inventor's text box). The box is four
 /// construction lines with their corners: ordinary sketch geometry, so it can
 /// be dimensioned, tied to other geometry and turned; the text is laid out
@@ -132,7 +143,7 @@ struct Constraint {
 };
 
 /// Kind of an entity found by id.
-enum class EntityKind : unsigned char { None, Point, Line, Circle, Arc, Constraint, Spline, Text };
+enum class EntityKind : unsigned char { None, Point, Line, Circle, Arc, Constraint, Spline, Text, Ellipse };
 
 /// A complete 2D sketch: geometry plus constraints.
 class Sketch {
@@ -143,6 +154,7 @@ public:
     std::vector<Arc>        arcs;
     std::vector<Spline>     splines;
     std::vector<Text>       texts;
+    std::vector<Ellipse>    ellipses;
     std::vector<Constraint> constraints;
 
     // --- creation (ids come from the document's generator) -------------
@@ -153,6 +165,7 @@ public:
     /// A text with its box from `bottomLeft` to `topRight` (axis-aligned; the
     /// box's constraints keep it a rectangle with a horizontal bottom).
     ObjectId AddText(IdGenerator& ids, Vec2 bottomLeft, Vec2 topRight, std::string text, double height);
+    ObjectId AddEllipse(IdGenerator& ids, ObjectId center, ObjectId major, ObjectId minor, bool construction = false);
     ObjectId AddSpline(IdGenerator& ids, std::vector<ObjectId> points, bool interpolate, bool construction = false);
     ObjectId AddConstraint(IdGenerator& ids, Constraint constraint);
     /// Creates the fixed origin point if the sketch has none. Returns its id.
@@ -168,6 +181,7 @@ public:
     Circle*           FindCircle(ObjectId id);
     const Arc*        FindArc(ObjectId id) const;
     const Spline*     FindSpline(ObjectId id) const;
+    const Ellipse*    FindEllipse(ObjectId id) const;
     Text*             FindText(ObjectId id);
     const Text*       FindText(ObjectId id) const;
     const Constraint* FindConstraint(ObjectId id) const;
@@ -190,7 +204,7 @@ public:
     /// onto an existing one.
     void MergePoints(ObjectId from, ObjectId into);
 
-    bool IsEmpty() const { return lines.empty() && circles.empty() && arcs.empty() && splines.empty() && texts.empty(); }
+    bool IsEmpty() const { return lines.empty() && circles.empty() && arcs.empty() && splines.empty() && texts.empty() && ellipses.empty(); }
 
     /// Box around all curves and points (empty for an empty sketch).
     /// Circles count with their full extent; arcs too, which is a bit generous.

@@ -53,6 +53,13 @@ float CurveDistance(const sketch::Sketch& sk, const SketchView& view, ObjectId i
         if (!AngleInArc(std::atan2(m.y, m.x), std::atan2(s.y, s.x), std::atan2(e.y, e.x))) return FLT_MAX;
         return static_cast<float>(std::abs(m.Length() - s.Length()) / mmpp);
     }
+    if (const sketch::Ellipse* e = sk.FindEllipse(id)) {
+        const std::vector<Vec2> pts = sketch::SampleEllipse(sk, *e);
+        float best = FLT_MAX;
+        for (std::size_t i = 0; i + 1 < pts.size(); ++i)
+            best = std::min(best, DistanceToSegment(mouse, view.ToScreen(pts[i]), view.ToScreen(pts[i + 1])));
+        return best;
+    }
     if (const sketch::Text* t = sk.FindText(id)) {
         // Anywhere in its box picks the text (the box lines themselves stay lines).
         if (InsideTextBox(sk, *t, *local)) return 0.5f * kCurveRadius;
@@ -118,6 +125,7 @@ SketchHit HitTest(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse
     for (const auto& a : sk.arcs) tryCurve(a.id, sketch::EntityKind::Arc);
     for (const auto& s : sk.splines) tryCurve(s.id, sketch::EntityKind::Spline);
     for (const auto& t : sk.texts) tryCurve(t.id, sketch::EntityKind::Text);
+    for (const auto& e : sk.ellipses) tryCurve(e.id, sketch::EntityKind::Ellipse);
     if (best) return best;
 
     // Dimension labels: a box around the text position.

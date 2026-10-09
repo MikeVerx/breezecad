@@ -341,6 +341,12 @@ void DrawSketch(ui::Ui& ui, ImDrawList* dl, const doc::SketchFeature& feature, c
         DrawSketchArc(ui, dl, view, center, s.Length(), a0, a1, curveColor(a.id, a.construction, a.projected),
                       curveWidth(a.id, a.construction), a.construction);
     }
+    for (const auto& e : sk.ellipses) {
+        const std::vector<Vec2> pts = sketch::SampleEllipse(sk, e);
+        for (std::size_t i = 0; i + 1 < pts.size(); ++i)
+            DrawSketchSegment(ui, dl, view, pts[i], pts[i + 1], curveColor(e.id, e.construction, false), curveWidth(e.id, e.construction),
+                              e.construction ? LinePattern::Dashed : LinePattern::Solid);
+    }
     for (const auto& t : sk.texts) {
         const Color ink = curveColor(t.id, t.construction, false);
         const float width = curveWidth(t.id, t.construction);

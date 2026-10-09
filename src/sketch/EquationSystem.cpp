@@ -68,6 +68,12 @@ EquationSystem::EquationSystem(const Sketch& sketch, ObjectId skip, const Constr
         Add(MakeEq(EqKind::PointDistanceVar, {PointIndex(a.end), PointIndex(a.end) + 1, c, c + 1, r}, 0.0, {}));
     }
 
+    for (const Ellipse& e : sketch.ellipses) {
+        // The two axes stay perpendicular.
+        const int c = PointIndex(e.center), a = PointIndex(e.major), b = PointIndex(e.minor);
+        Add(MakeEq(EqKind::Perpendicular, {c, c + 1, a, a + 1, c, c + 1, b, b + 1}, 0.0, {}));
+    }
+
     for (const Constraint& c : sketch.constraints)
         if (c.id != skip) AddConstraint(sketch, c);
     if (extra) AddConstraint(sketch, *extra);
@@ -334,6 +340,11 @@ std::vector<int> EquationSystem::UnknownsOf(const Sketch& sketch, ObjectId entit
     }
     if (const Spline* s = sketch.FindSpline(entity))
         for (const ObjectId p : s->points) addPoint(p);
+    if (const Ellipse* e = sketch.FindEllipse(entity)) {
+        addPoint(e->center);
+        addPoint(e->major);
+        addPoint(e->minor);
+    }
     if (const Text* t = sketch.FindText(entity))
         for (const ObjectId p : t->corners) addPoint(p);
     if (const Arc* a = sketch.FindArc(entity)) {

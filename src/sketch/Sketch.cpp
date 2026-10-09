@@ -77,6 +77,12 @@ ObjectId Sketch::AddText(IdGenerator& ids, Vec2 bottomLeft, Vec2 topRight, std::
     return texts.back().id;
 }
 
+ObjectId Sketch::AddEllipse(IdGenerator& ids, ObjectId center, ObjectId major, ObjectId minor, bool construction) {
+    const ObjectId id = ids.Next();
+    ellipses.push_back({id, center, major, minor, construction});
+    return id;
+}
+
 ObjectId Sketch::AddSpline(IdGenerator& ids, std::vector<ObjectId> pts, bool interpolate, bool construction) {
     const ObjectId id = ids.Next();
     splines.push_back({id, std::move(pts), interpolate, construction});
@@ -124,6 +130,7 @@ EntityKind Sketch::KindOf(ObjectId id) const {
     if (FindIn(arcs, id))        return EntityKind::Arc;
     if (FindIn(splines, id))     return EntityKind::Spline;
     if (FindIn(texts, id))       return EntityKind::Text;
+    if (FindIn(ellipses, id))    return EntityKind::Ellipse;
     if (FindIn(constraints, id)) return EntityKind::Constraint;
     return EntityKind::None;
 }
@@ -137,6 +144,7 @@ const Circle*     Sketch::FindCircle(ObjectId id) const     { return FindIn(circ
 const Arc*        Sketch::FindArc(ObjectId id) const        { return FindIn(arcs, id); }
 const Spline*     Sketch::FindSpline(ObjectId id) const     { return FindIn(splines, id); }
 Text*             Sketch::FindText(ObjectId id)             { return FindIn(texts, id); }
+const Ellipse*    Sketch::FindEllipse(ObjectId id) const    { return FindIn(ellipses, id); }
 const Text*       Sketch::FindText(ObjectId id) const       { return FindIn(texts, id); }
 Constraint*       Sketch::FindConstraint(ObjectId id)       { return FindIn(constraints, id); }
 const Constraint* Sketch::FindConstraint(ObjectId id) const { return FindIn(constraints, id); }
@@ -169,6 +177,8 @@ bool Sketch::IsPointUsed(ObjectId pointId) const {
         if (std::find(s.points.begin(), s.points.end(), pointId) != s.points.end()) return true;
     for (const auto& t : texts)
         if (std::find(t.corners.begin(), t.corners.end(), pointId) != t.corners.end()) return true;
+    for (const auto& e : ellipses)
+        if (e.center == pointId || e.major == pointId || e.minor == pointId) return true;
     return false;
 }
 
@@ -199,6 +209,8 @@ void Sketch::Remove(ObjectId id) {
                 if (std::find(s.points.begin(), s.points.end(), id) != s.points.end()) curves.push_back(s.id);
             for (const auto& t : texts)
                 if (std::find(t.corners.begin(), t.corners.end(), id) != t.corners.end()) curves.push_back(t.id);
+            for (const auto& e : ellipses)
+                if (e.center == id || e.major == id || e.minor == id) curves.push_back(e.id);
             for (ObjectId curve : curves) Remove(curve);
             RemoveConstraintsReferencing(id);
             EraseIf(points, [id](const Point& pt) { return pt.id == id; });
@@ -208,13 +220,15 @@ void Sketch::Remove(ObjectId id) {
         case EntityKind::Circle:
         case EntityKind::Arc:
         case EntityKind::Spline:
-        case EntityKind::Text: {
+        case EntityKind::Text:
+        case EntityKind::Ellipse: {
             std::vector<ObjectId> ownPoints;
             if (const Line* l = FindLine(id)) ownPoints = {l->start, l->end};
             if (const Circle* c = FindCircle(id)) ownPoints = {c->center};
             if (const Arc* a = FindArc(id)) ownPoints = {a->center, a->start, a->end};
             if (const Spline* s = FindSpline(id)) ownPoints = s->points;
             std::vector<ObjectId> ownLines;
+            if (const Ellipse* e = FindEllipse(id)) ownPoints = {e->center, e->major, e->minor};
             if (const Text* t = FindText(id)) {
                 ownPoints.assign(t->corners.begin(), t->corners.end());
                 ownLines.assign(t->sides.begin(), t->sides.end());
@@ -226,6 +240,7 @@ void Sketch::Remove(ObjectId id) {
             EraseIf(arcs, [id](const Arc& a) { return a.id == id; });
             EraseIf(splines, [id](const Spline& s) { return s.id == id; });
             EraseIf(texts, [id](const Text& t) { return t.id == id; });
+            EraseIf(ellipses, [id](const Ellipse& e) { return e.id == id; });
             // A text takes its box along; a side of a box takes its text.
             for (ObjectId line : ownLines) Remove(line);
             if (kind == EntityKind::Line)
@@ -263,6 +278,11 @@ void Sketch::MergePoints(ObjectId from, ObjectId into) {
         for (ObjectId& p : s.points) remap(p);
     for (auto& t : texts)
         for (ObjectId& p : t.corners) remap(p);
+    for (auto& e : ellipses) {
+        remap(e.center);
+        remap(e.major);
+        remap(e.minor);
+    }
     for (auto& c : constraints) {
         remap(c.refs[0]);
         remap(c.refs[1]);

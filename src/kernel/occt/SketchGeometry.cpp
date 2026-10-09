@@ -32,6 +32,7 @@
 #include <gp_Ax2.hxx>
 #include <gp_Ax3.hxx>
 #include <gp_Circ.hxx>
+#include <gp_Elips.hxx>
 #include <gp_Pln.hxx>
 #include <gp_Trsf.hxx>
 
@@ -97,6 +98,21 @@ std::vector<TopoDS_Edge> MakeEdges(const doc::SketchFeature& feature) {
         } catch (const Standard_Failure&) {
             // A degenerate spline (points on top of each other) makes no edge.
         }
+    }
+    for (const auto& e : sk.ellipses) {
+        if (e.construction) continue;
+        const Vec2 c = sk.PositionOf(e.center), u = sk.PositionOf(e.major) - c, v = sk.PositionOf(e.minor) - c;
+        double a = u.Length(), b = v.Length();
+        if (a < 1e-6 || b < 1e-6) continue;
+        // OCCT wants the major radius first: the longer axis leads.
+        Vec2 dir = u * (1.0 / a);
+        if (b > a) {
+            std::swap(a, b);
+            dir = v * (1.0 / a);
+        }
+        const Vec3 xAxis = frame.xDir * dir.x + frame.YDir() * dir.y;
+        const gp_Ax2 ax(world(e.center), ToDir(frame.normal), ToDir(xAxis));
+        edges.push_back(BRepBuilderAPI_MakeEdge(gp_Elips(ax, a, b)).Edge());
     }
     for (const auto& t : sk.texts) {
         if (t.construction) continue;

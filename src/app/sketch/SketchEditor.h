@@ -34,7 +34,7 @@ enum class RectangleMode : unsigned char {
 };
 inline bool IsSlot(RectangleMode m) { return m >= RectangleMode::SlotCentres; }
 inline bool IsArcSlot(RectangleMode m) { return m == RectangleMode::SlotArc3 || m == RectangleMode::SlotArcCentre; }
-enum class CircleMode : unsigned char { CentreRadius, ThreePoints };
+enum class CircleMode : unsigned char { CentreRadius, ThreePoints, Ellipse };
 enum class ArcMode : unsigned char { CentreEnds, ThreePoints };
 
 /// Line type of what is drawn: основная (makes profiles), вспомогательная

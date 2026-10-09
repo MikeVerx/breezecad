@@ -1,6 +1,7 @@
 #include "sketch/SplineGeometry.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace bz::sketch {
 namespace {
@@ -81,6 +82,24 @@ std::vector<Vec2> SampleSpline(const BSpline& b, int perSpan) {
         for (int i = 0; i < perSpan; ++i) out.push_back(eval(b.knots[s] + (b.knots[s + 1] - b.knots[s]) * i / perSpan));
     out.push_back(b.poles.back());
     return out;
+}
+
+std::vector<Vec2> SampleEllipse(Vec2 center, Vec2 major, Vec2 minor, int count) {
+    const Vec2 u = major - center;
+    const double b = (minor - center).Length();
+    const double a = u.Length();
+    if (a < 1e-12) return {};
+    const Vec2 du = u * (1.0 / a), dv{-du.y, du.x};
+    std::vector<Vec2> out;
+    for (int i = 0; i <= count; ++i) {
+        const double t = 2 * kPi * i / count;
+        out.push_back(center + du * (a * std::cos(t)) + dv * (b * std::sin(t)));
+    }
+    return out;
+}
+
+std::vector<Vec2> SampleEllipse(const Sketch& sk, const Ellipse& e, int count) {
+    return SampleEllipse(sk.PositionOf(e.center), sk.PositionOf(e.major), sk.PositionOf(e.minor), count);
 }
 
 } // namespace bz::sketch

@@ -76,6 +76,7 @@ void SketchFeature::ReserveIds(IdGenerator& ids) const {
     for (const auto& a : sketch.arcs) ids.Reserve(a.id);
     for (const auto& s : sketch.splines) ids.Reserve(s.id);
     for (const auto& t : sketch.texts) ids.Reserve(t.id);
+    for (const auto& e : sketch.ellipses) ids.Reserve(e.id);
     for (const auto& c : sketch.constraints) ids.Reserve(c.id);
 }
 
@@ -119,6 +120,9 @@ void SketchFeature::SaveFields(Json& out) const {
         curves.push_back({{"id", ToJson(s.id)}, {"type", "spline"}, {"points", std::move(pts)},
                           {"interpolate", s.interpolate}, {"construction", s.construction}});
     }
+    for (const auto& e : sketch.ellipses)
+        curves.push_back({{"id", ToJson(e.id)}, {"type", "ellipse"}, {"center", ToJson(e.center)}, {"major", ToJson(e.major)},
+                          {"minor", ToJson(e.minor)}, {"construction", e.construction}});
     for (const auto& t : sketch.texts) {
         Json corners = Json::array(), sides = Json::array();
         for (ObjectId p : t.corners) corners.push_back(ToJson(p));
@@ -194,6 +198,11 @@ Status SketchFeature::LoadFields(const Json& in) {
             }
             ok = ok && s.points.size() >= 2;
             sk.splines.push_back(std::move(s));
+        } else if (type == "ellipse") {
+            sketch::Ellipse e;
+            ok = ReadMember(j, "id", e.id) && ReadMember(j, "center", e.center) && ReadMember(j, "major", e.major) &&
+                 ReadMember(j, "minor", e.minor) && ReadMember(j, "construction", e.construction);
+            sk.ellipses.push_back(e);
         } else if (type == "text") {
             sketch::Text t;
             ok = ReadMember(j, "id", t.id) && ReadMember(j, "text", t.text) && ReadMember(j, "height", t.height) &&

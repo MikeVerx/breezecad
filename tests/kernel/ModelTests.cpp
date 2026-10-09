@@ -3,6 +3,7 @@
 #include "document/BzcFile.h"
 #include "kernel/Model.h"
 #include "kernel/TextGeometry.h"
+#include "sketch/Solver.h"
 
 #include <doctest.h>
 
@@ -250,4 +251,21 @@ TEST_CASE("sketch text extrudes as letters with their holes") {
     d.MarkChanged(0);
     model.Rebuild(d);
     CHECK(model.Volume() > plain * 1.05);
+}
+
+TEST_CASE("an ellipse extrudes into an elliptic cylinder; its axes stay perpendicular") {
+    doc::Document d;
+    auto& sk = bz::test::AddSketch(d);
+    IdGenerator& ids = d.Ids();
+    const ObjectId c = sk.sketch.AddPoint(ids, {0, 0});
+    const ObjectId m = sk.sketch.AddPoint(ids, {20, 0});
+    const ObjectId n = sk.sketch.AddPoint(ids, {0.5, 10});   // a little off: the solver squares it
+    sk.sketch.AddEllipse(ids, c, m, n);
+    REQUIRE(sketch::Solve(sk.sketch).converged);
+    const Vec2 u = sk.sketch.PositionOf(m) - sk.sketch.PositionOf(c), v = sk.sketch.PositionOf(n) - sk.sketch.PositionOf(c);
+    CHECK(std::abs(u.Dot(v)) < 1e-6);
+    bz::test::AddExtrude(d, sk.id, "5");
+    kernel::Model model;
+    model.Rebuild(d);
+    CHECK(model.Volume() == doctest::Approx(kPi * u.Length() * v.Length() * 5).epsilon(1e-3));
 }

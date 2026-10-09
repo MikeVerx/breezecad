@@ -41,8 +41,10 @@ std::vector<ObjectId> MirrorEntities(Sketch& sk, IdGenerator& ids, std::span<con
     std::vector<Circle> circles;
     std::vector<Arc> arcs;
     std::vector<Spline> splines;
+    std::vector<Ellipse> ellipses;
     for (ObjectId id : entities) {
         if (const Spline* s = sk.FindSpline(id)) splines.push_back(*s);
+        if (const Ellipse* e = sk.FindEllipse(id)) ellipses.push_back(*e);
         if (const Line* l = sk.FindLine(id)) lines.push_back(*l);
         else if (const Circle* c = sk.FindCircle(id)) circles.push_back(*c);
         else if (const Arc* ar = sk.FindArc(id)) arcs.push_back(*ar);
@@ -63,6 +65,8 @@ std::vector<ObjectId> MirrorEntities(Sketch& sk, IdGenerator& ids, std::span<con
     }
     for (const Arc& ar : arcs)   // a reflection turns the arc's direction round
         created.push_back(sk.AddArc(ids, mirrored(ar.center), mirrored(ar.end), mirrored(ar.start), ar.construction));
+    for (const Ellipse& e : ellipses)
+        created.push_back(sk.AddEllipse(ids, mirrored(e.center), mirrored(e.major), mirrored(e.minor), e.construction));
     for (const Spline& s : splines) {
         std::vector<ObjectId> pts;
         for (const ObjectId p : s.points) pts.push_back(mirrored(p));

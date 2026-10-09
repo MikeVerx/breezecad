@@ -371,7 +371,7 @@ std::size_t SketchEditor::ClicksNeeded() const {
                 case RectangleMode::SlotArcCentre: return 4;
                 default:                           return 2;
             }
-        case SketchTool::Circle:    return myOptions.circle == CircleMode::ThreePoints ? 3 : 2;
+        case SketchTool::Circle:    return myOptions.circle == CircleMode::CentreRadius ? 2 : 3;
         default:                    return 2;
     }
 }
@@ -1189,6 +1189,19 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
             break;
         }
         case SketchTool::Circle: {
+            if (myOptions.circle == CircleMode::Ellipse) {
+                // Centre, the end of one axis, then how wide the other is.
+                const Vec2 c = myClicks[0].pos, m = myClicks[1].pos;
+                const Vec2 axis = m - c;
+                if (axis.Length() < 1e-9) return refuse(Tr("Ось эллипса нулевой длины"));
+                const Vec2 across = Vec2{-axis.y, axis.x}.Normalized();
+                const double half = std::abs((myClicks[2].pos - c).Dot(across));
+                if (half < 1e-9) return refuse(Tr("Вторая ось эллипса нулевой длины"));
+                const ObjectId centre = Resolve(d, sk, myClicks[0]);
+                const ObjectId major = Resolve(d, sk, myClicks[1]);
+                sk.AddEllipse(ids, centre, major, sk.AddPoint(ids, c + across * half));
+                break;
+            }
             if (myOptions.circle == CircleMode::ThreePoints) {
                 const auto through = sketch::CircleThroughPoints(myClicks[0].pos, myClicks[1].pos, myClicks[2].pos);
                 if (!through) return refuse(Tr("Три точки на одной прямой — окружность через них не проходит"));
@@ -1468,7 +1481,16 @@ void SketchEditor::DrawShapePreview(AppContext& app, const SketchView& view, con
             break;
         }
         case SketchTool::Circle:
-            if (myOptions.circle == CircleMode::ThreePoints) {
+            if (myOptions.circle == CircleMode::Ellipse) {
+                if (step == 1) {
+                    segment(a, b);
+                } else {
+                    const Vec2 m = myClicks[1].pos, axis = m - a;
+                    const Vec2 across = axis.Length() > 1e-12 ? Vec2{-axis.y, axis.x}.Normalized() : Vec2{0, 1};
+                    const std::vector<Vec2> pts = sketch::SampleEllipse(a, m, a + across * std::abs((b - a).Dot(across)));
+                    for (std::size_t i = 0; i + 1 < pts.size(); ++i) segment(pts[i], pts[i + 1]);
+                }
+            } else if (myOptions.circle == CircleMode::ThreePoints) {
                 if (step == 1) segment(a, b);
                 else if (const auto c = sketch::CircleThroughPoints(a, myClicks[1].pos, b)) circle(c->centre, c->radius, false);
             } else {

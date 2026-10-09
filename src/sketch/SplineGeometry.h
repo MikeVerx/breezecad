@@ -28,4 +28,8 @@ BSpline SplineShape(const std::vector<Vec2>& points, bool interpolate, bool clos
 /// Points along the curve, `perSpan` per knot span.
 std::vector<Vec2> SampleSpline(const BSpline& b, int perSpan = 16);
 
+/// Points around an ellipse (closed: the last repeats the first).
+std::vector<Vec2> SampleEllipse(Vec2 center, Vec2 major, Vec2 minor, int count = 96);
+std::vector<Vec2> SampleEllipse(const Sketch& sk, const Ellipse& e, int count = 96);
+
 } // namespace bz::sketch

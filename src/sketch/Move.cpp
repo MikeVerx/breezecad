@@ -27,6 +27,7 @@ std::vector<ObjectId> MovedPoints(const Sketch& sk, std::span<const ObjectId> en
         else if (const Arc* a = sk.FindArc(id)) { add(a->center); add(a->start); add(a->end); }
         else if (const Spline* s = sk.FindSpline(id)) for (const ObjectId p : s->points) add(p);
         else if (const Text* t = sk.FindText(id)) for (const ObjectId p : t->corners) add(p);
+        else if (const Ellipse* e = sk.FindEllipse(id)) { add(e->center); add(e->major); add(e->minor); }
     }
     return out;
 }
@@ -88,9 +89,11 @@ std::vector<ObjectId> CopyEntities(Sketch& sk, IdGenerator& ids, std::span<const
     std::vector<Arc> arcs;
     std::vector<Spline> splines;
     std::vector<Text> texts;
+    std::vector<Ellipse> ellipses;
     for (ObjectId id : entities) {
         if (const Spline* s = sk.FindSpline(id)) splines.push_back(*s);
         if (sk.FindText(id)) texts.push_back(*sk.FindText(id));
+        if (const Ellipse* e = sk.FindEllipse(id)) ellipses.push_back(*e);
         if (const Line* l = sk.FindLine(id)) lines.push_back(*l);
         else if (const Circle* c = sk.FindCircle(id)) circles.push_back(*c);
         else if (const Arc* a = sk.FindArc(id)) arcs.push_back(*a);
@@ -110,6 +113,11 @@ std::vector<ObjectId> CopyEntities(Sketch& sk, IdGenerator& ids, std::span<const
     for (const Arc& a : arcs) {
         const ObjectId c = sk.AddArc(ids, copyPoint(a.center), copyPoint(a.start), copyPoint(a.end), a.construction);
         curveCopy[a.id] = c;
+        created.push_back(c);
+    }
+    for (const Ellipse& e : ellipses) {
+        const ObjectId c = sk.AddEllipse(ids, copyPoint(e.center), copyPoint(e.major), copyPoint(e.minor), e.construction);
+        curveCopy[e.id] = c;
         created.push_back(c);
     }
     for (const Text& t : texts) {

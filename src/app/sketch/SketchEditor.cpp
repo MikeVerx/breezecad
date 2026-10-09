@@ -245,6 +245,8 @@ void SketchEditor::ToggleConstruction(Session& session) {
         for (auto& sp : f->sketch.splines)
             if (sp.id == id) sp.construction = !sp.construction;
         if (sketch::Text* t = f->sketch.FindText(id)) t->construction = !t->construction;
+        for (auto& e : f->sketch.ellipses)
+            if (e.id == id) e.construction = !e.construction;
     }
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
     session.CommitInPlaceEdit(std::move(before), Tr("Вспомогательная геометрия"));
@@ -578,6 +580,8 @@ std::string SketchEditor::Hint(const Session& session) const {
                 return step == 0 ? Tr("Укажите центр прямоугольника") : Tr("Укажите угол прямоугольника");
             return step == 0 ? Tr(InfoOf(myTool).hint) : Tr("Укажите противоположный угол");
         case SketchTool::Circle:
+            if (myOptions.circle == CircleMode::Ellipse)
+                return step == 0 ? Tr("Укажите центр эллипса") : step == 1 ? Tr("Укажите конец первой оси") : Tr("Укажите ширину эллипса");
             if (myOptions.circle == CircleMode::ThreePoints)
                 return step == 0 ? Tr("Укажите первую точку окружности") : step == 1 ? Tr("Укажите вторую точку") : Tr("Укажите третью точку");
             return step == 0 ? Tr(InfoOf(myTool).hint) : Tr("Укажите точку на окружности");
