@@ -1,1567 +1,435 @@
 #include "app/Application.h"
-#include "app/Localization.h"
-#include "app/IconsFontAwesome.h"
-#include "doc/BreezeApplication.h"
-#include "platform/FileDialog.h"
-#include "ui/theme/ThemePresets.h"
-#include "ui/theme/ThemeManager.h"
-#include "ui/widgets/IconTint.h"
-#include "ui/widgets/SvgButton.h"
-#include "ui/widgets/Tooltip.h"
-#include "ui/widgets/SelectionRect.h"
-#include "ui/status/StatusBar.h"            // UI::Status::DrawStatusBar
-#include "ui/status/ProjectTabs.h"
-#include "ui/qat/QuickAccessToolbar.h"
-#include "ui/ribbon/Ribbon.h"
-#include "ui/ribbon/RibbonButton.h"
-#include "ui/ribbon/RibbonGroup.h"
-#include "ui/ribbon/RibbonTabs.h"
-#include "ui/ribbon/tabs/SketchTab.h"
-#include "util/Utf8.h"
-#include "util/Geometry2D.h"
-#include "util/LabelName.h"
-#include "ui/home/HomeScreen.h"
-#include "ui/dialogs/RenameDialog.h"        // UI::Dialogs::DrawRenameDialog
-#include "ui/dialogs/DeleteConfirmDialog.h" // UI::Dialogs::DrawDeleteConfirmDialog
-#include "ui/dialogs/AddBoxDialog.h"
-#include "ui/dialogs/PropertiesDialog.h"    // UI::Dialogs::DrawPropertiesDialog
-#include "ui/dialogs/NotImplementedDialog.h"// UI::Dialogs::DrawNotImplementedDialog
-#include "ui/dialogs/UnsavedChangesDialog.h"
-#include "ui/dialogs/DependencyDialog.h"
-#include "ui/dialogs/SettingsDialog.h"
-#include "ui/panels/TreeSplitter.h"          // UI::Panels::DrawTreeSplitter
-#include "ui/panels/RightPanel.h"            // UI::Panels::DrawRightPanel
-#include "ui/panels/DependenciesPanel.h"
-#include "ui/panels/DocumentTree.h"
-#include "ui/panels/Visibility.h"          // UI::Panels::ShowAllRespectingDefaults          // UI::Panels::DrawDocumentTree
-#include "ui/panels/ContextMenu.h"           // UI::Panels::DrawContextMenu3D
-#include "ui/home/Thumbnails.h"            // UI::Home::CaptureCurrentThumbnail и др.
-#include "ui/theme/Fonts.h"
 
-#include "imgui.h"
-#include "imgui_internal.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
+#include "app/Language.h"
+#include "app/Operations.h"
+#include "app/shell/Shell.h"
+#include "app/viewport/ViewportPanel.h"
+#include "core/Log.h"
+#include "core/PathText.h"
+#include "kernel/TextGeometry.h"
+#include "platform/Paths.h"
+#include "platform/ProcessInfo.h"
+#include "platform/SystemTheme.h"
 
 #include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
+#include <lunasvg.h>
 
-#include <TDF_ChildIterator.hxx>
-#include <STEPControl_Writer.hxx>
-#include <Interface_Static.hxx>
-#include <StlAPI_Writer.hxx>
-#include <BRepMesh_IncrementalMesh.hxx>
-#include <BRep_Builder.hxx>
-#include <TopoDS_Compound.hxx>
-#ifdef _WIN32
-  #include <windows.h>
-  #include <psapi.h>
-#endif
-#include <TDataStd_Name.hxx>
-#include <TDataStd_Integer.hxx>
-#include <TCollection_AsciiString.hxx>
-#include <BRepAdaptor_Surface.hxx>
-#include <BRepBuilderAPI_MakeEdge.hxx>
-#include <TopoDS.hxx>
-#include <TopoDS_Face.hxx>
-#include <TopoDS_Edge.hxx>
-#include <TopoDS_Vertex.hxx>
-#include <TopExp_Explorer.hxx>
-#include <BRep_Tool.hxx>
-#include <TNaming_NamedShape.hxx>
-#include <gp_Pnt.hxx>
-#include <gp_Vec.hxx>
-#include <gp_Dir.hxx>
-#include <gp_Trsf.hxx>
-#include <gp_Ax3.hxx>
-#include <gp_Pln.hxx>
-
-#define _USE_MATH_DEFINES
-#include <cmath>
-#include <cstdlib>
 #include <cstdio>
-#include <algorithm>
-#include <cctype>
-#include <cstring>
-#include <sstream>
-#include <filesystem>
-#include <chrono>
-#include <iostream>
-#include <string>
-#include <vector>
+#include <fstream>
 
-// stb_image extern declarations (глобальные, до namespace)
-extern "C" unsigned char* stbi_load(const char* filename, int* x, int* y,
-                                    int* channels_in_file, int desired_channels);
-extern "C" void stbi_image_free(void* retval_from_stbi_load);
+// Defined (non-static) in imgui_impl_glfw.cpp but not declared in its header.
+ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(int keycode, int scancode);
 
-namespace BreezeCAD {
+namespace bz::app {
+namespace {
 
-using Util::Utf8ToExt;
-using Util::ExtToUtf8;
-using Util::ComputeLengthAngle;
-using Util::ApplyOrtho;
-using Util::SnapToGridPoint;
-using Util::PointFromLengthAngle;
-using Util::LabelKey;
-using Util::GetLabelName;
+constexpr GLenum kGlFramebufferSrgb = 0x8DB9;   // GL_FRAMEBUFFER_SRGB (OpenGL 3.0, absent from GL 1.1 headers)
 
+/// Input callbacks installed before ImGui's, which chain to them.
+Application::InputTap* TapOf(GLFWwindow* window) {
+    return static_cast<Application::InputTap*>(glfwGetWindowUserPointer(window));
+}
 
-// === TRACE (enabled only when env BREEZECAD_TRACE is set) ===
-static void TRACE(const char* msg) {
-    static FILE* g_traceFile = nullptr;
-    static bool g_enabled = (getenv("BREEZECAD_TRACE") != nullptr);
-    if (!g_enabled) return;
-    if (!g_traceFile) g_traceFile = fopen("breezecad_trace.log", "w");
-    if (g_traceFile) {
-        fprintf(g_traceFile, "%s\n", msg);
-        fflush(g_traceFile);
+/// Marks the window as needing frames after any input.
+void OnAnyInput(GLFWwindow* window) {
+    if (auto* tap = TapOf(window)) tap->seen = true;
+}
+
+/// Records a key press together with the modifiers held at that instant.
+/// ImGui sees key events spread over frames, so a quick Ctrl+S on a slow
+/// frame may reach it with Ctrl already released; this never loses it.
+void OnKey(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    OnAnyInput(window);
+    if (action != GLFW_PRESS) return;
+    const ImGuiKey imguiKey = ImGui_ImplGlfw_KeyToImGuiKey(key, scancode);
+    if (imguiKey == ImGuiKey_None) return;
+#if defined(__APPLE__)
+    const int ctrl = GLFW_MOD_SUPER;   // Cmd plays the role of Ctrl, as in ImGui
+#else
+    const int ctrl = GLFW_MOD_CONTROL;
+#endif
+    ImGuiKeyChord chord = imguiKey;
+    if (mods & ctrl) chord |= ImGuiMod_Ctrl;
+    if (mods & GLFW_MOD_SHIFT) chord |= ImGuiMod_Shift;
+    if (mods & GLFW_MOD_ALT) chord |= ImGuiMod_Alt;
+    if (auto* tap = TapOf(window)) tap->chords.push_back(chord);
+}
+
+} // namespace
+
+Application::Application() = default;
+
+Application::~Application() {
+    if (myUi) {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
     }
+    std::error_code ec;
+    std::filesystem::remove(platform::ConfigDir() / "running.lock", ec);
 }
 
-// Вспомогательная: получить tint-цвет иконки по текущей теме
-// Хелпер: маленькая кнопка с SVG-иконкой
-// Обёртка для QAT
-// Чистый C++ конвертеры (см. BreezeDocument.cpp — там идентичные, но локальные)
+bool Application::Init(const std::vector<std::filesystem::path>& files) {
+    const std::filesystem::path config = platform::ConfigDir();
+    log::OpenFile(config / "logs" / "breezecad.log");
+    log::Info("BreezeCAD 0.2.0 starting");
 
-// Диапазоны глифов Font Awesome (Private Use Area)
+    // A lock file left from the last run means it did not exit normally.
+    myShell.crashedLastTime = std::filesystem::exists(config / "running.lock");
+    std::ofstream(config / "running.lock") << "running";
 
-// Тёмная тема
-// Светлая тема — фон с оттенком RAL 5024, кнопки светло-серые
-// Светлая тема — белый фон + серые кнопки, максимальный контраст
-// DeepSColor — фирменная тема с бирюзовым акцентом
-void Application::ApplyTheme(int theme) {
-    UI::Theme::ApplyTheme(theme, myTheme, myOcctView.get());
-    myCurrentTheme = (theme == 3) ? 1 : theme;
-}
-Application::Application() {
-    myWindow = std::make_unique<GlfwWindow>(1280, 720, "BreezeCAD - Prototype");
-    if (!myWindow->GetNativeWindow()) return;
+    mySettings = Settings::Load(config / "settings.json");
+    if (const std::string problem = ApplyLanguage(mySettings); !problem.empty())
+        myNotes.Error(Tr(problem));
+    platform::WindowConfig windowConfig;
+    if (mySettings.windowW > 0 && mySettings.windowH > 0) {
+        windowConfig.width = mySettings.windowW;
+        windowConfig.height = mySettings.windowH;
+        windowConfig.x = mySettings.windowX;
+        windowConfig.y = mySettings.windowY;
+    }
+    windowConfig.maximized = mySettings.windowMaximized;
+    if (!myWindow.Create(windowConfig)) return false;
 
-    // Загружаем и ПРЕДЗАГРУЖАЕМ все SVG-иконки Lucide
-    // (делается до создания окна, чтобы первый кадр не тормозил)
-    myIcons.LoadAll("assets/icons");
-    myIcons.PreloadDefaults();
+    glfwSetWindowUserPointer(myWindow.Handle(), &myInput);
+    glfwSetCursorPosCallback(myWindow.Handle(), [](GLFWwindow* w, double, double) { OnAnyInput(w); });
+    glfwSetMouseButtonCallback(myWindow.Handle(), [](GLFWwindow* w, int, int, int) { OnAnyInput(w); });
+    glfwSetScrollCallback(myWindow.Handle(), [](GLFWwindow* w, double, double) { OnAnyInput(w); });
+    glfwSetKeyCallback(myWindow.Handle(), OnKey);
+    glfwSetCharCallback(myWindow.Handle(), [](GLFWwindow* w, unsigned) { OnAnyInput(w); });
+    glfwSetWindowSizeCallback(myWindow.Handle(), [](GLFWwindow* w, int, int) { OnAnyInput(w); });
+    glfwSetWindowFocusCallback(myWindow.Handle(), [](GLFWwindow* w, int) { OnAnyInput(w); });
+    glfwSetWindowRefreshCallback(myWindow.Handle(), [](GLFWwindow* w) { OnAnyInput(w); });
+
+    const std::filesystem::path assets = platform::AssetsDir();
+    kernel::SetTextFont(assets / "fonts" / "IBMPlexSans-Medium.ttf", assets / "fonts" / "IBMPlexSans-SemiBold.ttf");   // sketch text
+    log::Info("Assets: {}", ToUtf8(assets));
+
+    // Window icon from the brand SVG.
+    if (auto icon = lunasvg::Document::loadFromFile(ToUtf8(assets / "brand" / "breezecad-app-icon.svg"))) {
+        lunasvg::Bitmap bitmap = icon->renderToBitmap(128, 128);
+        bitmap.convertToRGBA();
+        myWindow.SetIcon(bitmap.data(), 128);
+    }
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    {
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigDebugHighlightIdConflicts = false;
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr;   // layout is fixed by the design, nothing to remember
+    io.ConfigWindowsMoveFromTitleBarOnly = true;
+    ImGui_ImplGlfw_InitForOpenGL(myWindow.Handle(), true);
+    ImGui_ImplOpenGL3_Init("#version 330 core");
+
+    // HiDPI: on macOS the framebuffer is 2x the window; elsewhere the UI scales.
+    int winW = 1, fbW = 1, h = 1;
+    glfwGetWindowSize(myWindow.Handle(), &winW, &h);
+    glfwGetFramebufferSize(myWindow.Handle(), &fbW, &h);
+    const float framebufferScale = winW > 0 ? static_cast<float>(fbW) / static_cast<float>(winW) : 1.0f;
+    myFramebufferScale = framebufferScale;
+    myAssets = assets;
+    myScale = ChooseScale();
+    myAppliedScaleSetting = mySettings.uiScale;
+    myFonts.Load(assets, myScale * framebufferScale);
+    io.FontGlobalScale = 1.0f / framebufferScale;
+    myIcons.SetDirectory(assets / "icons");
+    myIcons.SetScale(framebufferScale);
+
+    if (!myViewport.Init(myWindow.NativeSurface())) return false;
+
+    myUi = std::make_unique<ui::Ui>(ui::Ui{myTheme, myFonts, myIcons, myScale});
+    ApplyTheme(true);
+
+    myAutosave = std::make_unique<Autosave>(platform::AutosaveDir());
+    myShell.recoverable = myAutosave->FindRecoverable();
+
+    myContext = std::make_unique<AppContext>(AppContext{*myUi, mySettings, myWorkspace, myActions, myNotes, *myAutosave,
+                                                        myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}});
+    RegisterActions(*myContext);
+    for (const auto& [id, chord] : mySettings.shortcuts) myActions.SetChord(id, ActionRegistry::ParseChord(chord));
+
+    for (const auto& file : files) myWorkspace.Open(file, myNotes, mySettings);
+    // Nothing asked for: the last file, if the user wants it (and it is still there).
+    if (files.empty() && mySettings.reopenLast && !mySettings.recentFiles.empty()) {
+        std::error_code ec;
+        const std::filesystem::path last = mySettings.recentFiles.front();
+        if (std::filesystem::exists(last, ec)) myWorkspace.Open(last, myNotes, mySettings);
     }
+    if (myShell.crashedLastTime && !myShell.recoverable.empty())
+        myNotes.Info(Tr("Прошлый сеанс завершился неожиданно. Несохранённую работу можно восстановить на главной странице."));
+    return true;
+}
 
-    // Отключаем сохранение позиций окон в imgui.ini —
-    // это устраняет баг «белого экрана» при уехавших окнах
-    ImGui::GetIO().IniFilename = nullptr;
+void Application::ApplyTheme(bool force) {
+    const bool dark = mySettings.theme == ThemeChoice::Dark ||
+                      (mySettings.theme == ThemeChoice::System && platform::SystemPrefersDark());
+    if (!force && dark == myDarkApplied && mySettings.viewBackground == myBackgroundApplied) return;
+    myDarkApplied = dark;
+    myBackgroundApplied = mySettings.viewBackground;
+    myTheme = dark ? ui::Theme::Dark() : ui::Theme::Light();
+    ui::ApplyToImGui(myTheme, myScale);
+    const ui::ThemeColors& c = myTheme.colors;
+    // The view background: the theme's gradient, or one of its two ends.
+    const Color top = mySettings.viewBackground == 2 ? c.viewportBottom : c.viewportTop;
+    const Color bottom = mySettings.viewBackground == 1 ? c.viewportTop : c.viewportBottom;
+    myViewport.SetColors({top, bottom, c.body, c.bodyEdges, c.hoverHighlight, c.selection, c.danger});
+    myFramesToDraw = 3;
+}
 
-    ImGui::StyleColorsDark();
-    ApplyTheme(myCurrentTheme);
-    UI::Theme::LoadFonts();
-    ImGui_ImplGlfw_InitForOpenGL(myWindow->GetNativeWindow(), true);
-    ImGui_ImplOpenGL3_Init("#version 330");
-
-    int fbW = 0, fbH = 0;
-    glfwGetFramebufferSize(myWindow->GetNativeWindow(), &fbW, &fbH);
-
-    myOcctView = std::make_unique<OcctView>();
-    try {
-        if (!myOcctView->Init(myWindow->GetNativeWindow(), fbW, fbH)) {
-            myOcctView.reset(); return;
+int Application::Run() {
+    while (true) {
+        if (NeedsAnotherFrame()) {
+            platform::Window::PollEvents();
+        } else {
+            platform::Window::WaitEvents(1.0);   // wakes up for autosave and theme checks
         }
-    } catch (...) { myOcctView.reset(); return; }
-
-    ApplyTheme(myCurrentTheme);
-
-    CreateNewDoc();
-    InitCommands();
-
-    RefreshView();
-    if (myOcctView) myOcctView->FitAll();
-
-    myWindow->SetMouseButtonCallback([this](int b, int a, int m) {
-        if (ImGui::GetIO().WantCaptureMouse) return;
-        if (myOcctView) myOcctView->OnMouseButton(b, a, m);
-    });
-    myWindow->SetCursorPosCallback([this](double x, double y) {
-        if (ImGui::GetIO().WantCaptureMouse) return;
-        if (myOcctView) myOcctView->OnMouseMove(x, y);
-    });
-    myWindow->SetScrollCallback([this](double x, double y) {
-        if (ImGui::GetIO().WantCaptureMouse) return;
-        if (myOcctView) myOcctView->OnMouseScroll(x, y);
-    });
-    myWindow->SetResizeCallback([this](int w, int h) {
-        if (myOcctView) myOcctView->Resize(w, h);
-    });
-}
-
-Application::~Application() {
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
-}
-
-void Application::RefreshView() {
-    if (!myOcctView || !myDocument) return;
-    myOcctView->ClearAllShapes();
-
-    bool hasOps = myDocument->Has3DOperations();
-
-    // Рекурсивный обход всего дерева
-    std::function<void(const TDF_Label&)> walk = [&](const TDF_Label& l) {
-        int type = BreezeDocument::GetType(l);
-
-        TopoDS_Shape s = myDocument->GetShape(l);
-        if (!s.IsNull()) {
-            myOcctView->DisplayShape(s, l, BreezeDocument::IsSystem(l));
-
-            // Определяем видимость
-            std::string key = LabelKey(l);
-            auto it = myVisibility.find(key);
-
-            bool visible;
-            if (it != myVisibility.end()) {
-                // Пользователь явно указал
-                visible = it->second;
-            } else {
-                // По умолчанию: оси и плоскости скрыты, если есть 3D-операции
-                bool isSystemHideable = (type == FT_Axis || type == FT_Plane);
-                visible = !(hasOps && isSystemHideable);
-            }
-
-            if (!visible) {
-                myOcctView->SetShapeVisible(l, false);
-            }
+        const double now = glfwGetTime();
+        if (myInput.seen) {
+            myInput.seen = false;
+            myFramesToDraw = std::max(myFramesToDraw, 3);
+            myShell.lastInputTime = now;
         }
 
-        TDF_ChildIterator it(l, false);
-        for (; it.More(); it.Next()) walk(it.Value());
-    };
-    walk(myDocument->MainLabel());
-
-    myOcctView->Redraw();
-}
-
-void Application::OnNewDocument() {
-    CreateNewDoc();
-    RefreshView();
-    if (myOcctView) myOcctView->FitAll();
-}
-
-// ============================================================
-//  Multi-Document Interface
-// ============================================================
-
-void Application::CreateNewDoc() {
-    auto doc = std::make_unique<BreezeDocument>();
-    doc->CreateBaseGeometry();
-
-    std::string name = "Project" + std::to_string(myNextProjectNumber++);
-
-    myDocuments.push_back(std::move(doc));
-    myProjectNames.push_back(name);
-    myProjectPaths.push_back("");
-    myActiveDocIndex = (int)myDocuments.size() - 1;
-    myDocument = myDocuments.back().get();
-
-    std::cout << "CreateNewDoc: '" << name << "' (index " << myActiveDocIndex << ")";
-}
-
-int Application::AddDocFromFile(const std::string& path,
-                                 const Handle(TDocStd_Document)& loaded) {
-    auto doc = std::make_unique<BreezeDocument>();
-    doc->SetDocument(loaded);
-
-    // Извлекаем имя файла из пути
-    std::string name = path;
-    size_t slash = name.find_last_of("/\\");
-    if (slash != std::string::npos) name = name.substr(slash + 1);
-    size_t dot = name.find_last_of('.');
-    if (dot != std::string::npos) name = name.substr(0, dot);
-
-    myDocuments.push_back(std::move(doc));
-    myProjectNames.push_back(name);
-    myProjectPaths.push_back(path);
-    myActiveDocIndex = (int)myDocuments.size() - 1;
-    myDocument = myDocuments.back().get();
-
-    std::cout << "AddDocFromFile: '" << name << "' from " << path << "\n";
-    return myActiveDocIndex;
-}
-
-void Application::SwitchToDoc(int index) {
-    if (index < 0 || index >= (int)myDocuments.size()) return;
-    if (index == myActiveDocIndex) return;
-
-    // Сохраняем превью текущего документа перед уходом
-    UI::Home::CaptureCurrentThumbnail(*myOcctView, myActiveDocIndex, myThumbnailPaths);
-
-    myActiveDocIndex = index;
-    myDocument = myDocuments[index].get();
-
-    // Сброс состояния эскиза — эскиз принадлежал другому документу
-    myActiveSketchLabel = TDF_Label();
-    myHasSketchStart = false;
-    if (myOcctView) {
-        myOcctView->ClearPreviewLine();
-        myOcctView->ClearAllShapes();
-        myOcctView->ClearGrid();
-        myOcctView->ExitSketchMode();
-    }
-
-    myVisibility.clear();
-    RefreshView();
-    if (myOcctView) myOcctView->FitAll();
-
-    std::cout << "SwitchToDoc: index " << index << "\n";
-}
-
-void Application::CloseDoc(int index) {
-    if (index < 0 || index >= (int)myDocuments.size()) return;
-    if (myDocuments.size() <= 1) return;  // не закрываем последний
-
-    // Проверка на несохранённые изменения
-    BreezeDocument* checkDoc = myDocuments[index].get();
-    if (checkDoc && checkDoc->IsModified()) {
-        myUnsavedState.pendingCloseDocIndex = index;
-        myUnsavedState.pendingWindowClose = false;
-        std::snprintf(myUnsavedState.info, sizeof(myUnsavedState.info),
-            "Проект «%s» содержит "
-            "несохранённые изменения.\n"
-            "Сохранить перед закрытием?",
-            myProjectNames[index].c_str());
-        myUnsavedState.show = true;
-        return;
-    }
-
-    // Освободить OCAF-документ
-    BreezeApplication::Instance().CloseDocument(myDocuments[index]->GetDoc());
-
-    myDocuments.erase(myDocuments.begin() + index);
-    myProjectNames.erase(myProjectNames.begin() + index);
-    myProjectPaths.erase(myProjectPaths.begin() + index);
-
-    if (myActiveDocIndex >= (int)myDocuments.size()) {
-        myActiveDocIndex = (int)myDocuments.size() - 1;
-    }
-    myDocument = (myActiveDocIndex >= 0) ? myDocuments[myActiveDocIndex].get() : nullptr;
-
-    myActiveSketchLabel = TDF_Label();
-    myHasSketchStart = false;
-    if (myOcctView) {
-        myOcctView->ClearPreviewLine();
-        myOcctView->ClearAllShapes();
-        myOcctView->ClearGrid();
-        myOcctView->ExitSketchMode();
-    }
-    myVisibility.clear();
-    RefreshView();
-    if (myOcctView) myOcctView->FitAll();
-
-    std::cout << "CloseDoc: index " << index << "\n";
-}
-
-void Application::OnSave() {
-    if (!myDocument) return;
-    std::string path = myCurrentPath;
-    if (path.empty()) {
-        if (!ShowFileDialog(true, path, "Сохранить как")) return;
-    }
-    if (BreezeApplication::Instance().SaveDocument(myDocument->GetDoc(), path)) {
-        myCurrentPath = path;
-        std::strncpy(myFilePathBuffer, path.c_str(), sizeof(myFilePathBuffer) - 1);
-        myFilePathBuffer[sizeof(myFilePathBuffer) - 1] = '\0';
-        UI::Home::AddRecentFile(myRecentFiles, path);
-        myDocument->SetModified(false);
-        std::cout << "Saved to: " << myCurrentPath << "\n";
-    }
-}
-
-void Application::OnExportSTEP() {
-    if (!myDocument || myDocument->GetDoc().IsNull()) return;
-
-    std::string path;
-    if (!ShowFileDialog(true, path, "Экспорт в STEP",
-                         "STEP (*.step)\0*.step\0STEP (*.stp)\0*.stp\0All (*.*)\0*.*\0\0",
-                         "step")) return;
-
-    try {
-        // Собираем все TopoDS_Shape из документа
-        std::vector<TopoDS_Shape> shapes = myDocument->GetAllShapes();
-        if (shapes.empty()) {
-            std::cerr << "Export STEP: no shapes\n";
-            return;
+        // The window close button: ask about unsaved documents first.
+        if (myWindow.ShouldClose()) {
+            myWindow.SetShouldClose(false);
+            myShell.quitRequested = true;
+            myFramesToDraw = std::max(myFramesToDraw, 3);
         }
+        PollShotRequest();
+        HandleCloseRequests();
+        if (myShell.quitRequested && myWorkspace.sessions.empty()) break;
 
-        STEPControl_Writer writer;
-        Interface_Static::SetCVal("write.step.unit", "MM");
-        Interface_Static::SetCVal("write.step.schema", "AP214");
-
-        for (const auto& s : shapes) {
-            if (writer.Transfer(s, STEPControl_AsIs) != IFSelect_RetDone) {
-                std::cerr << "Export STEP: transfer failed\n";
-                return;
-            }
+        if (mySettings.viewBackground != myBackgroundApplied) ApplyTheme(true);   // chosen in the settings: at once
+        if (now - mySystemThemeCheck > 2.0) {
+            mySystemThemeCheck = now;
+            ApplyTheme(false);
         }
+        for (auto& s : myWorkspace.sessions)
+            if (myAutosave->Update(*s, mySettings, now, now - myShell.lastInputTime)) myFramesToDraw = std::max(myFramesToDraw, 1);
 
-        if (writer.Write(path.c_str()) != IFSelect_RetDone) {
-            std::cerr << "Export STEP: write failed\n";
-            return;
+        if (myFramesToDraw > 0 || NeedsAnotherFrame()) {
+            Frame();
+            if (myFramesToDraw > 0) --myFramesToDraw;
         }
-        std::cout << "Exported to STEP: " << path << "\n";
-    } catch (const std::exception& e) {
-        std::cerr << "Export STEP exception: " << e.what() << "\n";
+        if (myScreenshotFrame >= 0 && myFrameIndex > myScreenshotFrame) break;
     }
+    myWindow.Geometry(mySettings.windowX, mySettings.windowY, mySettings.windowW, mySettings.windowH, mySettings.windowMaximized);
+    mySettings.Save(platform::ConfigDir() / "settings.json");
+    log::Info("BreezeCAD exits normally");
+    return 0;
 }
 
-void Application::OnExportSTL() {
-    if (!myDocument || myDocument->GetDoc().IsNull()) return;
-
-    std::string path;
-    if (!ShowFileDialog(true, path, "Экспорт в STL",
-                         "STL (*.stl)\0*.stl\0All (*.*)\0*.*\0\0",
-                         "stl")) return;
-
-    try {
-        std::vector<TopoDS_Shape> shapes = myDocument->GetAllShapes();
-        if (shapes.empty()) {
-            std::cerr << "Export STL: no shapes\n";
-            return;
-        }
-
-        // Объединяем всё в один compound и пишем
-        BRep_Builder bb;
-        TopoDS_Compound comp;
-        bb.MakeCompound(comp);
-        for (const auto& s : shapes) bb.Add(comp, s);
-
-        // Тесселяция
-        BRepMesh_IncrementalMesh mesh(comp, 0.1);
-
-        StlAPI_Writer writer;
-        writer.ASCIIMode() = Standard_False;
-        if (!writer.Write(comp, path.c_str())) {
-            std::cerr << "Export STL: write failed\n";
-            return;
-        }
-        std::cout << "Exported to STL: " << path << "\n";
-    } catch (const std::exception& e) {
-        std::cerr << "Export STL exception: " << e.what() << "\n";
-    }
-}
-
-void Application::OnOpen() {
-    std::string path;
-    if (!ShowFileDialog(false, path, "Открыть файл")) return;
-
-    Handle(TDocStd_Document) loaded =
-        BreezeApplication::Instance().OpenDocument(path);
-    if (loaded.IsNull()) { std::cerr << "Open failed\n"; return; }
-
-    AddDocFromFile(path, loaded);
-    UI::Home::AddRecentFile(myRecentFiles, path);
-    myVisibility.clear();
-    RefreshView();
-    if (myOcctView) myOcctView->FitAll();
-}
-
-// === Дерево ===
-
-void Application::OnUndo() {
-    if (!myDocument) return;
-    if (myDocument->Undo()) {
-        std::cout << "Undo OK\n";
-        RefreshView();
-        if (!myActiveSketchLabel.IsNull()) {
-            // Если в эскизе — перерисовать линии
-            if (myOcctView) myOcctView->ClearAllShapes();
-            RefreshSketchLines();
-            myOcctView->ShowGrid(myShowGrid);
-        }
-    } else {
-        std::cout << "Undo: nothing to undo\n";
-    }
-}
-
-void Application::OnRedo() {
-    if (!myDocument) return;
-    if (myDocument->Redo()) {
-        std::cout << "Redo OK\n";
-        RefreshView();
-        if (!myActiveSketchLabel.IsNull()) {
-            if (myOcctView) myOcctView->ClearAllShapes();
-            RefreshSketchLines();
-            myOcctView->ShowGrid(myShowGrid);
-        }
-    } else {
-        std::cout << "Redo: nothing to redo\n";
-    }
-}
-
-// Рисует кнопку Ribbon. active=false → красная рамка, "disabled".
-static bool RibbonButton(const char* label, bool active, const char* tooltip = nullptr,
-                          float width = 90, float height = 0) {
-    if (active) {
-        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(50, 90, 140, 255));
-    } else {
-        ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(120, 30, 30, 255));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, IM_COL32(160, 40, 40, 255));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, IM_COL32(180, 50, 50, 255));
-    }
-    bool clicked = active && ImGui::Button(label, ImVec2(width, height));
-    if (tooltip && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip);
-    if (active) ImGui::PopStyleColor();
-    else { ImGui::PopStyleColor(3); }
-    return clicked;
-}
-
-// Большая кнопка Ribbon: верх — название, низ — полоска с ▼ для меню
-// opts — массив указателей на ключи локализации (термины).
-// idx — индекс выбранного в данный момент.
-// Возвращает: 0 = не нажато, 1 = нажата основная, 2 = нажата стрелка ▼
-
-
-// ============================================================
-//  Вкладка «Эскиз»
-// ============================================================
-
-
-// Универсальная кнопка Ribbon с SVG-иконкой Lucide.
-void Application::DrawRibbon() {
-    // Тонкая обёртка: собираем RibbonContext и вызываем модуль.
-    // Логика самого ribbon — в src/ui/ribbon/Ribbon.cpp (подшаг 10.2).
-    UI::Ribbon::RibbonContext ctx;
-    ctx.state = &myRibbonState;
-
-    ctx.drawQat = [this]() {
-        UI::Qat::QatContext qat;
-        qat.icons               = &myIcons;
-        qat.tooltip             = &myTooltipState;
-        qat.searchBuffer        = mySearchBuffer;
-        qat.searchBufferSize    = sizeof(mySearchBuffer);
-        qat.commands            = &myCommands;
-        qat.ramMB               = (float)myLastRAMMB;
-        qat.shapeCount          = myLastShapeCount;
-        qat.rightPanelExpanded  = myRightPanelExpanded;
-        qat.onNewDocument    = [this]() { OnNewDocument(); };
-        qat.onSave           = [this]() { OnSave(); };
-        qat.onUndo           = [this]() { OnUndo(); };
-        qat.onRedo           = [this]() { OnRedo(); };
-        qat.onGoHome         = [this]() { UI::Home::CaptureCurrentThumbnail(*myOcctView, myActiveDocIndex, myThumbnailPaths); myShowHomeScreen = true; };
-        qat.onOpenSettings   = [this]() { mySettingsState.show = true; };
-        qat.onNotImplemented = [this](const char* feat) {
-            myNotImplementedState.feature = feat;
-            myNotImplementedState.show = true;
-        };
-        qat.onMinimize       = [this]() { glfwIconifyWindow(myWindow->GetNativeWindow()); };
-        qat.onMaximize       = [this]() { myWindow->Maximize(); };
-        qat.onClose          = [this]() { glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE); };
-        UI::Qat::DrawQuickAccessToolbar(qat);
-    };
-
-    ctx.icons    = &myIcons;
-
-    // Данные для вкладки «Эскиз».
-    ctx.inSketch         = !myActiveSketchLabel.IsNull();
-    ctx.currentLineStyle = &myCurrentLineStyle;
-    ctx.hasSketchStart   = &myHasSketchStart;
-    ctx.clearPreviewLine = [this]() { if (myOcctView) myOcctView->ClearPreviewLine(); };
-    ctx.exitSketch       = [this]() { ExitSketch(); };
-
-
-    UI::Ribbon::Draw(ctx);
-}
-
-void Application::DrawMenuBar() {
-    // Оставлен для совместимости — но UI теперь полностью в DrawRibbon()
-    // Вызывается из Run()
-}
-
-void Application::RefreshSketchLines() {
-    if (!myDocument || !myOcctView || myActiveSketchLabel.IsNull()) return;
-
-    // Обходим дочерние метки эскиза и показываем их линии
-    TDF_ChildIterator it(myActiveSketchLabel, false);
-    for (; it.More(); it.Next()) {
-        TDF_Label lineLabel = it.Value();
-        TopoDS_Shape s = myDocument->GetShape(lineLabel);
-        if (!s.IsNull()) {
-            LineStyle style = BreezeDocument::GetLineStyle(lineLabel);
-            myOcctView->DisplaySketchLine(s, lineLabel, static_cast<int>(style));
-        }
-    }
-}
-
-// Вычисление длины и угла в плоскости эскиза
-// Принудительное выравнивание угла к ближайшему кратному 90° (Компас-стиль)
-// Проверка: попадает ли точка p в существующую вершину эскиза
-// (Origin или конец уже нарисованной линии).
-// skip — точка, которую нужно игнорировать (старт новой линии,
-//        чтобы случайно не «замкнуться» на только что начатой линии).
-static bool IsPointOnExistingVertex(const gp_Pnt& p, const TDF_Label& sketchLabel,
-                                     const gp_Pnt& skip,
-                                     double threshold) {
-    auto dist2 = [](const gp_Pnt& a, const gp_Pnt& b) {
-        double dx = a.X()-b.X(), dy = a.Y()-b.Y(), dz = a.Z()-b.Z();
-        return dx*dx + dy*dy + dz*dz;
-    };
-
-    double th2 = threshold * threshold;
-
-    // Origin
-    gp_Pnt origin(0, 0, 0);
-    if (dist2(p, origin) < th2 && dist2(skip, origin) > th2)
-        return true;
-
-    // Концы уже нарисованных линий эскиза
-    TDF_ChildIterator it(sketchLabel, false);
-    for (; it.More(); it.Next()) {
-        TDF_Label lineLabel = it.Value();
-        Handle(TNaming_NamedShape) ns;
-        if (lineLabel.FindAttribute(TNaming_NamedShape::GetID(), ns) && !ns.IsNull()) {
-            TopoDS_Shape s = ns->Get();
-            if (!s.IsNull() && s.ShapeType() == TopAbs_EDGE) {
-                TopoDS_Edge e = TopoDS::Edge(s);
-                TopExp_Explorer exp(e, TopAbs_VERTEX);
-                for (; exp.More(); exp.Next()) {
-                    gp_Pnt vp = BRep_Tool::Pnt(TopoDS::Vertex(exp.Current()));
-                    if (dist2(skip, vp) > th2 && dist2(p, vp) < th2) {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
+bool Application::NeedsAnotherFrame() const {
+    if (myBusy || myViewport.NeedsRender() || !myDeferred.empty()) return true;
+    if (myScreenshotFrame >= 0) return true;
+    const ImGuiIO& io = ImGui::GetIO();
+    for (bool down : io.MouseDown)
+        if (down) return true;
     return false;
 }
 
-// Округление точки до сетки (шаг 10 мм) в плоскости эскиза.
-// Привязка к известным точкам: Origin (0,0,0) + концы существующих линий эскиза
-static bool SnapToKnownPoint(const gp_Pnt& p, const TDF_Label& sketchLabel,
-                              const Handle(TDocStd_Document)& doc,
-                              double threshold, gp_Pnt& out) {
-    if (doc.IsNull() || sketchLabel.IsNull()) return false;
-
-    std::vector<gp_Pnt> candidates;
-    candidates.push_back(gp_Pnt(0, 0, 0));  // Origin
-
-    // Концы линий эскиза
-    TDF_ChildIterator it(sketchLabel, false);
-    for (; it.More(); it.Next()) {
-        TDF_Label lineLabel = it.Value();
-        Handle(TNaming_NamedShape) ns;
-        if (lineLabel.FindAttribute(TNaming_NamedShape::GetID(), ns) && !ns.IsNull()) {
-            TopoDS_Shape s = ns->Get();
-            if (!s.IsNull() && s.ShapeType() == TopAbs_EDGE) {
-                TopoDS_Edge e = TopoDS::Edge(s);
-                TopExp_Explorer exp(e, TopAbs_VERTEX);
-                for (; exp.More(); exp.Next()) {
-                    TopoDS_Vertex v = TopoDS::Vertex(exp.Current());
-                    gp_Pnt vp = BRep_Tool::Pnt(v);
-                    candidates.push_back(vp);
-                }
-            }
-        }
-    }
-
-    double bestDist = threshold * threshold;
-    bool found = false;
-    for (const auto& c : candidates) {
-        double dx = c.X() - p.X();
-        double dy = c.Y() - p.Y();
-        double dz = c.Z() - p.Z();
-        double d2 = dx*dx + dy*dy + dz*dz;
-        if (d2 < bestDist) {
-            bestDist = d2;
-            out = c;
-            found = true;
-        }
-    }
-    return found;
-}
-
-void Application::OnSketchClick(int px, int py) {
-    if (!myOcctView || !myDocument || myActiveSketchLabel.IsNull()) return;
-
-    // Если открыт диалог зависимостей — клик добавляет объекты в списки
-    if (myDependencyState.open) {
-        if (!myOcctView->SelectAtPixel(px, py)) return;
-
-        TDF_Label sel = myOcctView->GetSelectedLabel();
-        if (sel.IsNull()) return;
-
-        // Проверяем, что это линия эскиза
-        if (BreezeDocument::GetType(sel) != FT_SketchLine) {
-            myOcctView->ClearSelection();
+void Application::HandleCloseRequests() {
+    if (!myShell.quitRequested || myShell.closeRequest) return;
+    for (std::size_t i = 0; i < myWorkspace.sessions.size(); ++i) {
+        if (myWorkspace.sessions[i]->IsModified()) {
+            myWorkspace.Activate(static_cast<int>(i));
+            myShell.closeRequest = static_cast<int>(i);
             return;
         }
+    }
+    // Nothing left to ask about: close everything.
+    while (!myWorkspace.sessions.empty()) {
+        myAutosave->Discard(*myWorkspace.sessions.back());
+        myWorkspace.Close(static_cast<int>(myWorkspace.sessions.size()) - 1);
+    }
+}
 
-        // Проверяем, нет ли уже этой метки в списках
-        auto inList = [&](const std::vector<TDF_Label>& lst) {
-            for (const auto& l : lst) if (l.IsEqual(sel)) return true;
-            return false;
-        };
+void Application::UpdateTitle() {
+    std::string title = "BreezeCAD";
+    if (Session* s = myWorkspace.Active(); s && !myWorkspace.ShowsHome())
+        title = s->Title() + (s->IsModified() ? " \xE2\x80\xA2" : "") + " \xE2\x80\x94 BreezeCAD";
+    if (title != myTitle) {
+        myTitle = title;
+        myWindow.SetTitle(title);
+    }
+}
 
-        if (!inList(myDependencyState.base) && !inList(myDependencyState.dependent)) {
-            // Первый клик — базовый, остальные — зависимые
-            if (myDependencyState.base.empty()) {
-                myDependencyState.base.push_back(sel);
-                std::cout << "Dependency: base = " << Util::GetLabelName(sel) << "\n";
-            } else {
-                myDependencyState.dependent.push_back(sel);
-                std::cout << "Dependency: dependent = " << Util::GetLabelName(sel) << "\n";
-            }
+float Application::ChooseScale() const {
+    if (mySettings.uiScale > 0) return static_cast<float>(mySettings.uiScale);
+    // The screen's density, then small enough that the layout (about
+    // 1280 x 720 design pixels) fits a small screen such as 1366 x 768.
+    float scale = myWindow.ContentScale() / myFramebufferScale;
+    int x = 0, y = 0, w = 0, h = 0;
+    myWindow.MonitorWorkArea(x, y, w, h);
+    if (w > 0 && h > 0) scale = std::min({scale, static_cast<float>(w) / 1280.0f, static_cast<float>(h) / 700.0f});
+    return std::clamp(scale, 0.75f, 3.0f);
+}
+
+void Application::ApplyScaleIfChanged() {
+    if (mySettings.uiScale == myAppliedScaleSetting) return;
+    myAppliedScaleSetting = mySettings.uiScale;
+    const float scale = ChooseScale();
+    if (std::abs(scale - myScale) < 1e-3f) return;
+    // Fonts are rasterised for one size: build them again, then the texture.
+    myScale = scale;
+    myFonts.Load(myAssets, myScale * myFramebufferScale);
+    ImGui_ImplOpenGL3_DestroyFontsTexture();
+    ImGui_ImplOpenGL3_CreateFontsTexture();
+    myUi->scale = myScale;
+    ui::ApplyToImGui(myTheme, myScale);
+    myFramesToDraw = std::max(myFramesToDraw, 3);
+}
+
+void Application::Frame() {
+    ApplyScaleIfChanged();
+    const double now = glfwGetTime();
+    const double dt = now - myLastFrameTime;
+    myLastFrameTime = now;
+    if (dt > 0 && dt < 1.0) myFps = myFps * 0.9f + static_cast<float>(1.0 / dt) * 0.1f;
+
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    AppContext& app = *myContext;
+    app.now = now;
+    myStats.fps = myFps;
+    if (myFrameIndex % 30 == 0) myStats.memoryMb = platform::ResidentMemoryMb();
+    myStats.hoverMs = app.stats.hoverMs;
+    app.stats = myStats;
+
+    app.pressedChords = myInput.chords;
+    if (myShell.captureShortcut.empty()) myActions.HandleShortcuts(myInput.chords);
+    myInput.chords.clear();
+    if (Session* s = myWorkspace.Active()) {
+        if (s->RebuildIfNeeded()) {
+            myFramesToDraw = std::max(myFramesToDraw, 2);
+            // A changed variable, undo or redo may push the body off screen.
+            if (s->mode == EditMode::Model && !myOps.Active()) myShell.keepModelInView = true;
         }
+        myViewport.Sync(s->model);
+        myViewport.SetDisplayStyle(myShell.displayStyle);
+        if (myShell.keepModelInView) {   // the model was rebuilt and synced above
+            myShell.keepModelInView = false;
+            KeepInView(app, myViewport.ModelBounds());
+        }
+    }
+    myBusy = myViewport.StepAnimation(now);
 
-        myOcctView->ClearSelection();
-        return;
+    const auto smooth = [](double& into, double ms) { into = into * 0.9 + ms * 0.1; };
+    const auto msSince = [](double t) { return (glfwGetTime() - t) * 1000.0; };
+    const double uiStart = glfwGetTime();
+    DrawRoot();
+    DrawDialogs(app);
+    const ImVec2 corner = myShell.viewportMax.x > 0 && !myWorkspace.ShowsHome() ? myShell.viewportMax : ImGui::GetIO().DisplaySize;
+    myBusy = myNotes.Draw(*myUi, corner, now) || myBusy;
+
+    ImGui::Render();
+    smooth(myStats.uiMs, msSince(uiStart));
+    if (myWorkspace.Active() && !myWorkspace.ShowsHome() && myViewport.NeedsRender()) {
+        const double sceneStart = glfwGetTime();
+        myViewport.Render();
+        smooth(myStats.sceneMs, msSince(sceneStart));
+        ++mySceneFramesThisSecond;
+    }
+    const double presentStart = glfwGetTime();
+
+    int fbW = 0, fbH = 0;
+    glfwGetFramebufferSize(myWindow.Handle(), &fbW, &fbH);
+    glViewport(0, 0, fbW, fbH);
+    // UI colours are sRGB values meant to be written as they are. OCCT
+    // switches sRGB writes on for its own rendering and does not switch them
+    // off, which would make the whole interface look washed out.
+    glDisable(kGlFramebufferSrgb);
+    const Color bg = myTheme.colors.appBackground;
+    glClearColor(bg.r, bg.g, bg.b, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    if (myFrameIndex == myScreenshotFrame) TakeScreenshot(myScreenshotFile);
+    if (!myPendingShot.empty()) {
+        TakeScreenshot(myPendingShot);
+        myPendingShot.clear();
+    }
+    myWindow.SwapBuffers();
+    smooth(myStats.presentMs, msSince(presentStart));
+    ++myFrameIndex;
+    if (now - mySecondStart >= 1.0) {
+        myStats.sceneFrames = mySceneFramesThisSecond;
+        mySceneFramesThisSecond = 0;
+        mySecondStart = now;
     }
 
-    gp_Pnt p;
-    if (!myOcctView->ScreenToPlane(px, py, p)) return;
+    // Work requested by panels during the frame, now that nobody iterates.
+    std::vector<std::function<void()>> work;
+    work.swap(myDeferred);
+    for (auto& w : work) w();
+    if (!work.empty()) myFramesToDraw = std::max(myFramesToDraw, 2);
 
-    // 1. Shift → ortho mode (45°)
-    bool shiftHeld = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS
-                  || glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+    UpdateTitle();
+}
 
-    if (myHasSketchStart && shiftHeld) {
-        p = ApplyOrtho(myOcctView->GetSketchPlane(), mySketchStartPoint, p);
+void Application::DrawRoot() {
+    AppContext& app = *myContext;
+    const ImGuiIO& io = ImGui::GetIO();
+    ImGui::SetNextWindowPos({0, 0});
+    ImGui::SetNextWindowSize(io.DisplaySize);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ui::ToVec4(myTheme.colors.appBackground));
+    ImGui::Begin("##root", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleColor();
+
+    const ui::ThemeMetrics& m = myTheme.metrics;
+    const float width = io.DisplaySize.x;
+    float y = 0;
+    DrawHeader(app, {0, y}, width);
+    y += myUi->S(m.headerHeight);
+
+    const float bottom = io.DisplaySize.y - myUi->S(m.statusHeight) - myUi->S(m.tabBarHeight);
+    Session* session = myWorkspace.Active();
+    if (myWorkspace.ShowsHome() || !session) {
+        DrawHomeScreen(app, {0, y}, {width, bottom - y});
     } else {
-        // 2. Привязка к известным точкам
-        bool snapped = false;
-        if (mySnapToPoints) {
-            gp_Pnt snapP;
-            if (SnapToKnownPoint(p, myActiveSketchLabel, myDocument->GetDoc(),
-                                  3.0, snapP)) {
-                p = snapP;
-                snapped = true;
-            }
-        }
-        // 3. Привязка к сетке
-        if (!snapped && mySnapToGrid) {
-            p = SnapToGridPoint(p, myOcctView->GetSketchPlane());
-        }
+        DrawModeBar(app, {0, y}, width);
+        y += myUi->S(m.modeBarHeight);
+        y += DrawRibbon(app, *session, {0, y}, width);
+        const float leftWidth = myUi->S(m.railWidth + m.panelWidth);
+        DrawLeftArea(app, *session, {0, y}, {leftWidth, bottom - y});
+        DrawViewport(app, *session, {leftWidth, y}, {width - leftWidth, bottom - y});
     }
-
-    if (!myHasSketchStart) {
-        mySketchStartPoint = p;
-        myHasSketchStart = true;
-        std::strcpy(myLengthBuffer, "0");
-        std::strcpy(myAngleBuffer, "0");
-        std::cout << "Sketch: start point set\n";
-    } else {
-        // Проверяем, что точки не совпадают
-        double dx = p.X() - mySketchStartPoint.X();
-        double dy = p.Y() - mySketchStartPoint.Y();
-        double dz = p.Z() - mySketchStartPoint.Z();
-        double dist2 = dx*dx + dy*dy + dz*dz;
-
-        if (dist2 < 1e-4) {
-            std::cout << "Sketch: points coincide, ignoring\n";
-            return;
-        }
-
-        // 1. Проверка замыкания — ДО создания линии.
-        //    Если конечная точка p совпадает с существующей вершиной эскиза
-        //    (Origin или концом другой линии, кроме старта этой линии) — замыкание.
-        bool loopClosed = IsPointOnExistingVertex(p, myActiveSketchLabel,
-                                                   mySketchStartPoint,
-                                                   0.5);  // порог 0.5 мм
-
-        std::cout << "Sketch: loop check = " << (loopClosed ? "CLOSED" : "open")
-                  << " (start was at " << mySketchStartPoint.X() << ","
-                  << mySketchStartPoint.Y() << "," << mySketchStartPoint.Z()
-                  << " end at " << p.X() << "," << p.Y() << "," << p.Z() << ")\n";
-
-        std::cout << "Sketch: creating line with style="
-                  << static_cast<int>(myCurrentLineStyle) << "\n";
-
-        try {
-            myDocument->AddSketchLine(myActiveSketchLabel, mySketchStartPoint, p, myCurrentLineStyle);
-            myOcctView->ClearPreviewLine();
-
-            TopoDS_Shape line = BRepBuilderAPI_MakeEdge(mySketchStartPoint, p).Shape();
-
-            int maxTag = 0;
-            TDF_ChildIterator it(myActiveSketchLabel, false);
-            for (; it.More(); it.Next()) {
-                if (it.Value().Tag() > maxTag) maxTag = it.Value().Tag();
-            }
-            TDF_Label lineLabel = myActiveSketchLabel.FindChild(maxTag, false);
-            myOcctView->DisplaySketchLine(line, lineLabel, static_cast<int>(myCurrentLineStyle));
-
-            if (myAutoContinue && !loopClosed) {
-                mySketchStartPoint = p;
-                myHasSketchStart = true;
-                myOcctView->ShowCursorMarker(p);
-                std::cout << "Sketch: line added, continuing\n";
-            } else {
-                myHasSketchStart = false;
-                myOcctView->ClearPreviewLine();
-                if (loopClosed) {
-                    std::cout << "Sketch: line added, loop closed\n";
-                } else {
-                    std::cout << "Sketch: line added, stopped\n";
-                }
-            }
-        } catch (const std::exception& e) {
-            std::cerr << "Sketch: exception creating line: " << e.what() << "\n";
-        } catch (...) {
-            std::cerr << "Sketch: unknown exception creating line\n";
-        }
-    }
-}
-
-void Application::EnterSketch(const TDF_Label& sketchLabel) {
-    if (!myDocument || !myOcctView || sketchLabel.IsNull()) return;
-
-    // Родитель эскиза — плоскость. Берём её геометрию и вычисляем нормаль.
-    TDF_Label parentPlane = sketchLabel.Father();
-    if (parentPlane.IsNull()) {
-        std::cerr << "EnterSketch: no parent plane\n";
-        return;
-    }
-
-    TopoDS_Shape planeShape = myDocument->GetShape(parentPlane);
-    if (planeShape.IsNull() || planeShape.ShapeType() != TopAbs_FACE) {
-        std::cerr << "EnterSketch: parent is not a face\n";
-        return;
-    }
-
-    TopoDS_Face face = TopoDS::Face(planeShape);
-    BRepAdaptor_Surface surf(face);
-    Standard_Real u = (surf.FirstUParameter() + surf.LastUParameter()) * 0.5;
-    Standard_Real v = (surf.FirstVParameter() + surf.LastVParameter()) * 0.5;
-    gp_Pnt p;
-    gp_Vec du, dv;
-    surf.D1(u, v, p, du, dv);
-    gp_Dir normal = du.Crossed(dv);
-
-    myOcctView->EnterSketchMode(normal, p);
-    myOcctView->ShowGrid(myShowGrid);
-    myActiveSketchLabel = sketchLabel;
-    myHasSketchStart = false;
-    myRibbonState.activeTab = 1;  // Sketch tab
-
-    // Показать уже существующие линии эскиза
-    RefreshSketchLines();
-
-    std::cout << "Application: entered sketch mode\n";
-}
-
-void Application::ExitSketch() {
-    myHasSketchStart = false;
-    if (myOcctView) {
-        myOcctView->ClearPreviewLine();
-        myOcctView->ExitSketchMode();
-    }
-    myActiveSketchLabel = TDF_Label();
-    myRibbonState.activeTab = 0;  // 3D Model tab
-
-    // Принудительно перерисовываем всё из документа —
-    // это гарантирует, что плоскости и другие системные объекты вернутся
-    RefreshView();
-    if (myOcctView) myOcctView->FitAll();
-
-    std::cout << "Application: exited sketch mode\n";
-}
-
-void Application::ApplyExactLine() {
-    if (!myOcctView || !myDocument || myActiveSketchLabel.IsNull()) return;
-    if (!myHasSketchStart) return;
-
-    double length = std::atof(myLengthBuffer);
-    double angle  = std::atof(myAngleBuffer);
-
-    if (length < 1e-6) {
-        std::cout << "ApplyExactLine: length too small\n";
-        return;
-    }
-
-    gp_Pnt p = PointFromLengthAngle(myOcctView->GetSketchPlane(),
-                                     mySketchStartPoint,
-                                     length, angle);
-
-    try {
-        myDocument->AddSketchLine(myActiveSketchLabel, mySketchStartPoint, p, myCurrentLineStyle);
-        myOcctView->ClearPreviewLine();
-
-        TopoDS_Shape line = BRepBuilderAPI_MakeEdge(mySketchStartPoint, p).Shape();
-        int maxTag = 0;
-        TDF_ChildIterator it(myActiveSketchLabel, false);
-        for (; it.More(); it.Next()) {
-            if (it.Value().Tag() > maxTag) maxTag = it.Value().Tag();
-        }
-        TDF_Label lineLabel = myActiveSketchLabel.FindChild(maxTag, false);
-        myOcctView->DisplaySketchLine(line, lineLabel, static_cast<int>(myCurrentLineStyle));
-
-        bool loopClosed = IsPointOnExistingVertex(p, myActiveSketchLabel,
-                                                   mySketchStartPoint, 0.5);
-
-        if (myAutoContinue && !loopClosed) {
-            mySketchStartPoint = p;
-            myHasSketchStart = true;
-            myOcctView->ShowCursorMarker(p);
-            std::cout << "ApplyExactLine: line added, continuing\n";
-        } else {
-            myHasSketchStart = false;
-            if (loopClosed) std::cout << "ApplyExactLine: loop closed\n";
-        }
-
-        std::strcpy(myLengthBuffer, "0");
-        std::strcpy(myAngleBuffer, "0");
-        myInputActive = false;
-    } catch (...) {
-        std::cerr << "ApplyExactLine exception\n";
-    }
-}
-
-void Application::DrawPreviewInfo() {
-    if (myActiveSketchLabel.IsNull()) return;
-    if (!myHasSketchStart) return;
-
-    ImGuiIO& io = ImGui::GetIO();
-
-    // Фиксированное положение — правый верхний угол, отступ 20 пикселей
-    ImVec2 pos = ImVec2(io.DisplaySize.x - 280, 60);
-    ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(260, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowBgAlpha(0.9f);
-
-    ImGui::Begin("##preview_info", nullptr,
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
-
-    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.3f, 1.0f), "Length: %.2f mm", myPreviewLength);
-    ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "Angle:  %.1f deg", myPreviewAngle);
-
-    ImGui::Separator();
-    ImGui::Text("Exact input:");
-
-    // Tab — фокус на Length
-    static bool focusLength = false;
-    if (ImGui::IsKeyPressed(ImGuiKey_Tab) && !ImGui::GetIO().WantTextInput) {
-        focusLength = true;
-    }
-
-    ImGui::SetNextItemWidth(120);
-    if (focusLength) {
-        ImGui::SetKeyboardFocusHere();
-        focusLength = false;
-    }
-    bool enterLength = ImGui::InputText("Length", myLengthBuffer, sizeof(myLengthBuffer),
-                                         ImGuiInputTextFlags_EnterReturnsTrue);
-
-    ImGui::SetNextItemWidth(120);
-    bool enterAngle = ImGui::InputText("Angle", myAngleBuffer, sizeof(myAngleBuffer),
-                                        ImGuiInputTextFlags_EnterReturnsTrue);
-
-    if (enterLength || enterAngle) {
-        ApplyExactLine();
-    }
-
-    ImGui::Separator();
-    if (ImGui::Button("Apply", ImVec2(120, 0))) {
-        ApplyExactLine();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-        // Отмена текущей цепочки
-        myHasSketchStart = false;
-        myOcctView->ClearPreviewLine();
-    }
-
-    ImGui::TextDisabled("Tab - focus Length");
-    ImGui::TextDisabled("Enter - apply");
-
+    DrawProjectTabs(app, {0, bottom}, width);
+    DrawStatusBar(app, {0, bottom + myUi->S(m.tabBarHeight)}, width);
     ImGui::End();
 }
 
-void Application::DrawSketchOverlay() {
-    // Пустая — весь UI перенесён в Ribbon и Status Bar
+void Application::PollShotRequest() {
+    if (myShotDir.empty() || !myPendingShot.empty()) return;
+    const std::filesystem::path request = myShotDir / "request";
+    std::error_code ec;
+    if (!std::filesystem::exists(request, ec)) return;
+    std::string name;
+    std::getline(std::ifstream(request), name);
+    std::filesystem::remove(request, ec);
+    myPendingShot = myShotDir / ((name.empty() ? std::string("shot") : name) + ".ppm");
+    myFramesToDraw = std::max(myFramesToDraw, 2);
 }
 
-void Application::DrawViewCube() {
-    if (!myOcctView) return;
-    UI::ViewCube::ViewCubeOverlay::Context ctx{
-        *myOcctView,
-        myTheme,
-        ImGui::GetIO(),
-        myRightPanelExpanded ? 110.0f : 55.0f
-    };
-    myViewCube.Draw(ctx);
+void Application::TakeScreenshot(const std::filesystem::path& file) const {
+    int w = 0, h = 0;
+    glfwGetFramebufferSize(myWindow.Handle(), &w, &h);
+    std::vector<unsigned char> pixels(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 3);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    std::ofstream out(file, std::ios::binary);
+    if (!out) return;
+    out << "P6\n" << w << ' ' << h << "\n255\n";
+    const auto rowBytes = static_cast<std::streamsize>(w) * 3;
+    for (int row = h - 1; row >= 0; --row)
+        out.write(reinterpret_cast<const char*>(pixels.data()) + static_cast<std::ptrdiff_t>(row) * rowBytes, rowBytes);
+    log::Info("Screenshot saved: {}", ToUtf8(file));
 }
 
-void Application::RequestDelete(const TDF_Label& label) {
-    if (label.IsNull()) return;
-
-    if (myDeleteConfirmState.skipConfirm) {
-        // Удаляем сразу
-        if (myDocument) myDocument->RemoveFeature(label);
-        RefreshView();
-        if (myOcctView) myOcctView->FitAll();
-        return;
-    }
-
-    myDeleteConfirmState.pendingLabel = label;
-
-    // Собираем информацию: имя + сколько детей удалится
-    std::string name = "<unnamed>";
-    Handle(TDataStd_Name) nameAttr;
-    if (label.FindAttribute(TDataStd_Name::GetID(), nameAttr)) {
-        name = ExtToUtf8(nameAttr->Get());
-    }
-
-    int childCount = 0;
-    TDF_ChildIterator it(label, false);
-    for (; it.More(); it.Next()) childCount++;
-
-    if (childCount > 0) {
-        std::snprintf(myDeleteConfirmState.info, sizeof(myDeleteConfirmState.info),
-                      "Удалить «%s»?\n\nВместе с ним будут удалены %d вложенных элементов.",
-                      name.c_str(), childCount);
-    } else {
-        std::snprintf(myDeleteConfirmState.info, sizeof(myDeleteConfirmState.info),
-                      "Удалить «%s»?", name.c_str());
-    }
-
-    myDeleteConfirmState.show = true;
-}
-
-void Application::InitCommands() {
-    myCommands.clear();
-
-    auto add = [&](const std::string& id, const std::string& name,
-                    const std::string& shortcut, std::function<void()> action) {
-        myCommands.push_back({ id, name, shortcut, std::move(action) });
-    };
-
-    // Файл
-    add("file.new",   "Создать",   "Ctrl+N",  [this]{ OnNewDocument(); });
-    add("file.open",  "Открыть",   "Ctrl+O",  [this]{ OnOpen(); });
-    add("file.save",  "Сохранить", "Ctrl+S",  [this]{ OnSave(); });
-
-    // Правка
-    add("edit.undo",  "Отменить",  "Ctrl+Z",  [this]{ OnUndo(); });
-    add("edit.redo",  "Повторить", "Ctrl+Y",  [this]{ OnRedo(); });
-
-    // Эскиз — инструменты
-    add("sketch.line",   "Отрезок",         "L", [this]{
-        myCurrentLineStyle = LS_Normal;
-        myHasSketchStart = false;
-        if (myOcctView) myOcctView->ClearPreviewLine();
-    });
-    add("sketch.rect",   "Прямоугольник",   "R", []{});
-    add("sketch.circle", "Окружность",      "C", []{});
-    add("sketch.arc",    "Дуга",            "A", []{});
-    add("sketch.poly",   "Многоугольник",   "",  []{});
-    add("sketch.finish", "Завершить эскиз", "Esc", [this]{ ExitSketch(); });
-
-    // 3D
-    add("model.extrude", "Выдавливание",   "E", []{});
-    add("model.revolve", "Вращение",       "",  []{});
-    add("model.hole",    "Отверстие",      "",  []{});
-
-    // Настройки
-    add("view.settings", "Настройки", "", [this]{ mySettingsState.show = true; });
-
-    std::cout << "InitCommands: " << myCommands.size() << " commands loaded\n";
-}
-
-void Application::UpdateTelemetry() {
-    // RAM через WinAPI (OCCT OSD_MemInfo под MinGW вызывает wmic,
-    // которого нет в Windows 11 начиная с 24H2 — exit code 127).
-#ifdef _WIN32
-    PROCESS_MEMORY_COUNTERS pmc;
-    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
-        myLastRAMMB = (double)pmc.WorkingSetSize / (1024.0 * 1024.0);
-    } else {
-        myLastRAMMB = 0.0;
-    }
-#else
-    myLastRAMMB = 0.0;
-#endif
-
-    // Количество отображаемых объектов
-    if (myOcctView) {
-        myLastShapeCount = myOcctView->GetShapeCount();
-    } else {
-        myLastShapeCount = 0;
-    }
-}
-
-void Application::Run() {
-    bool prevF11 = false;
-    bool prevDelete = false;
-    bool prevCtrlS = false;
-    bool prevCtrlO = false;
-
-    while (!myWindow->ShouldClose()) {
-      try {
-        TRACE("iter: start");
-        myWindow->PollEvents();
-
-        // Перехват X / Alt+F4: если есть несохранённые — показать диалог
-        if (glfwWindowShouldClose(myWindow->GetNativeWindow()) && !myUnsavedState.show) {
-            int modIdx = -1;
-            for (int i = 0; i < (int)myDocuments.size(); i++) {
-                if (myDocuments[i]->IsModified()) { modIdx = i; break; }
-            }
-            if (modIdx >= 0) {
-                glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_FALSE);
-                myUnsavedState.pendingWindowClose = true;
-                myUnsavedState.pendingCloseDocIndex = modIdx;
-                std::snprintf(myUnsavedState.info, sizeof(myUnsavedState.info),
-                    "Проект «%s» содержит "
-                    "несохранённые изменения.\n"
-                    "Сохранить перед выходом?",
-                    myProjectNames[modIdx].c_str());
-                myUnsavedState.show = true;
-            }
-        }
-
-        bool curF11 = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_F11) == GLFW_PRESS;
-        if (curF11 && !prevF11) myWindow->ToggleFullscreen();
-        prevF11 = curF11;
-
-        // === Polling ПКМ через GLFW напрямую (ImGui колбэки перезаписаны нашими) ===
-        if (!myDependencyState.open && !myRenameState.show &&
-            !myDeleteConfirmState.show && !myPropertiesState.show) {
-            ImGuiIO& io = ImGui::GetIO();
-
-            // Мышь в области 3D-сцены?
-            bool inScene = io.MousePos.x > myTreeWidth + 10
-                        && io.MousePos.y > 165
-                        && io.MousePos.x < io.DisplaySize.x - 320
-                        && io.MousePos.y < io.DisplaySize.y - 70;
-
-            static bool  prevRMB = false;
-            static ImVec2 rmbStartPos(0, 0);
-
-            bool curRMB = glfwGetMouseButton(myWindow->GetNativeWindow(),
-                                              GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
-
-            if (curRMB && !prevRMB && inScene) {
-                rmbStartPos = io.MousePos;
-            }
-            if (!curRMB && prevRMB && inScene) {
-                float dx = io.MousePos.x - rmbStartPos.x;
-                float dy = io.MousePos.y - rmbStartPos.y;
-                if (dx*dx + dy*dy < 25.0f) {
-                    // ПКМ-клик без движения → меню
-                    myPendingContextMenu = true;
-                    myContextMenuPos = rmbStartPos;
-
-                    // Выделяем объект под курсором
-                    if (myOcctView) {
-                        int winW = 1, winH = 1, fbW = 1, fbH = 1;
-                        glfwGetWindowSize(myWindow->GetNativeWindow(), &winW, &winH);
-                        glfwGetFramebufferSize(myWindow->GetNativeWindow(), &fbW, &fbH);
-                        int px = (int)(rmbStartPos.x * fbW / winW);
-                        int py = (int)(rmbStartPos.y * fbH / winH);
-                        myOcctView->SelectAtPixel(px, py);
-                    }
-                }
-                // Если было движение — вращение уже отработало в OcctView, ничего не делаем
-            }
-            prevRMB = curRMB;
-        }
-
-        // В режиме эскиза: всегда показываем маркер под курсором,
-        // а если есть старт — ещё и линию-превью
-        if (!myActiveSketchLabel.IsNull() && myOcctView) {
-            if (!ImGui::GetIO().WantCaptureMouse) {
-                static double lastPreviewX = -1e9, lastPreviewY = -1e9;
-
-                double mx, my;
-                glfwGetCursorPos(myWindow->GetNativeWindow(), &mx, &my);
-
-                double dxp = mx - lastPreviewX;
-                double dyp = my - lastPreviewY;
-                if (dxp*dxp + dyp*dyp > 9.0) {  // сдвиг > 3 пикселей
-                    lastPreviewX = mx;
-                    lastPreviewY = my;
-
-                    int winW = 1, winH = 1, fbW = 1, fbH = 1;
-                    glfwGetWindowSize(myWindow->GetNativeWindow(), &winW, &winH);
-                    glfwGetFramebufferSize(myWindow->GetNativeWindow(), &fbW, &fbH);
-                    int px = (int)(mx * fbW / winW);
-                    int py = (int)(my * fbH / winH);
-
-                    gp_Pnt cur;
-                    if (myOcctView->ScreenToPlane(px, py, cur)) {
-                        bool shiftHeld = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS
-                                      || glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-
-                        if (myHasSketchStart && shiftHeld) {
-                            cur = ApplyOrtho(myOcctView->GetSketchPlane(), mySketchStartPoint, cur);
-                        } else {
-                            bool curSnapped = false;
-                            if (mySnapToPoints) {
-                                gp_Pnt snapP;
-                                if (SnapToKnownPoint(cur, myActiveSketchLabel,
-                                                      myDocument->GetDoc(),
-                                                      3.0, snapP)) {
-                                    cur = snapP;
-                                    curSnapped = true;
-                                }
-                            }
-                            if (!curSnapped && mySnapToGrid) {
-                                cur = SnapToGridPoint(cur, myOcctView->GetSketchPlane());
-                            }
-                        }
-
-                        if (myHasSketchStart) {
-                            myOcctView->ShowPreviewLine(mySketchStartPoint, cur);
-
-                            // Считаем длину и угол для отображения
-                            ComputeLengthAngle(myOcctView->GetSketchPlane(),
-                                                mySketchStartPoint, cur,
-                                                myPreviewLength, myPreviewAngle);
-                            myHasPreview = true;
-                        } else {
-                            // Проверяем: подсветить зелёным, если точка попадает
-                            // в существующую вершину (снап сработает при клике)
-                            bool willSnap = IsPointOnExistingVertex(cur,
-                                              myActiveSketchLabel,
-                                              gp_Pnt(1e9, 1e9, 1e9),  // skip невозможно
-                                              3.0);
-                            myOcctView->ShowCursorMarkerHighlighted(cur, willSnap);
-                            myHasPreview = false;
-                        }
-                    }
-                }
-            }
-
-            static bool prevLMB = false;
-            bool curLMB = glfwGetMouseButton(myWindow->GetNativeWindow(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-            if (curLMB && !prevLMB) {
-                // Получаем позицию курсора в координатах framebuffer
-                double mx, my;
-                glfwGetCursorPos(myWindow->GetNativeWindow(), &mx, &my);
-                int winW = 1, winH = 1, fbW = 1, fbH = 1;
-                glfwGetWindowSize(myWindow->GetNativeWindow(), &winW, &winH);
-                glfwGetFramebufferSize(myWindow->GetNativeWindow(), &fbW, &fbH);
-                int px = (int)(mx * fbW / winW);
-                int py = (int)(my * fbH / winH);
-                // Не обрабатывать клики по панелям ImGui
-                if (!ImGui::GetIO().WantCaptureMouse) {
-                    OnSketchClick(px, py);
-                }
-            }
-            prevLMB = curLMB;
-        }
-
-        bool curDelete = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_DELETE) == GLFW_PRESS;
-        if (curDelete && !prevDelete && myOcctView && myDocument) {
-            TDF_Label sel = myOcctView->GetSelectedLabel();
-            if (!sel.IsNull() && !BreezeDocument::IsSystem(sel)) {
-                // Через диалог подтверждения
-                RequestDelete(sel);
-                myOcctView->ClearSelection();
-            }
-        }
-        prevDelete = curDelete;
-
-        bool ctrl = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS
-                 || glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
-        bool curCtrlS = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_S) == GLFW_PRESS;
-        if (curCtrlS && !prevCtrlS) OnSave();
-        prevCtrlS = curCtrlS;
-
-        bool curCtrlO = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_O) == GLFW_PRESS;
-        if (curCtrlO && !prevCtrlO) OnOpen();
-        prevCtrlO = curCtrlO;
-
-        // Ctrl+C — копировать выделенное
-        {
-            bool ctrl = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS
-                     || glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
-            static bool prevCtrlC = false;
-            bool curCtrlC = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_C) == GLFW_PRESS;
-            if (curCtrlC && !prevCtrlC && myOcctView) {
-                TDF_Label sel = myOcctView->GetSelectedLabel();
-                if (!sel.IsNull() && !BreezeDocument::IsSystem(sel)) {
-                    myClipboardLabel = sel;
-                    std::cout << "Copied: tag=" << sel.Tag() << "\n";
-                }
-            }
-            prevCtrlC = curCtrlC;
-
-            // Ctrl+V — вставить
-            static bool prevCtrlV = false;
-            bool curCtrlV = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_V) == GLFW_PRESS;
-            if (curCtrlV && !prevCtrlV && !myClipboardLabel.IsNull()) {
-                // TODO: клонирование
-                std::cout << "Paste — TODO\n";
-            }
-            prevCtrlV = curCtrlV;
-        }
-
-        // Ctrl+C — копировать выделенное
-        {
-            bool ctrl = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS
-                     || glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
-            static bool prevCtrlC = false;
-            bool curCtrlC = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_C) == GLFW_PRESS;
-            if (curCtrlC && !prevCtrlC && myOcctView) {
-                TDF_Label sel = myOcctView->GetSelectedLabel();
-                if (!sel.IsNull() && !BreezeDocument::IsSystem(sel)) {
-                    myClipboardLabel = sel;
-                    std::cout << "Copied: tag=" << sel.Tag() << "\n";
-                }
-            }
-            prevCtrlC = curCtrlC;
-
-            static bool prevCtrlV = false;
-            bool curCtrlV = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_V) == GLFW_PRESS;
-            if (curCtrlV && !prevCtrlV && !myClipboardLabel.IsNull()) {
-                std::cout << "Paste — TODO\n";
-            }
-            prevCtrlV = curCtrlV;
-        }
-
-        // Alt+V — переключить видимость выделенного объекта
-        {
-            bool altHeld = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_LEFT_ALT) == GLFW_PRESS
-                        || glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_RIGHT_ALT) == GLFW_PRESS;
-            static bool prevAltV = false;
-            bool curAltV = altHeld && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_V) == GLFW_PRESS;
-            if (curAltV && !prevAltV && myOcctView && myDocument) {
-                TDF_Label sel = myOcctView->GetSelectedLabel();
-                if (!sel.IsNull()) {
-                    std::string key = LabelKey(sel);
-                    auto it = myVisibility.find(key);
-                    bool curVis = (it != myVisibility.end()) ? it->second : true;
-                    myVisibility[key] = !curVis;
-                    myOcctView->SetShapeVisible(sel, !curVis);
-                    std::cout << "Alt+V: visibility toggled for tag=" << sel.Tag()
-                              << " -> " << (!curVis ? "visible" : "hidden") << "\n";
-                }
-            }
-            prevAltV = curAltV;
-        }
-
-        // F6 — Home view + сброс изоляции
-        static bool prevF6 = false;
-        bool curF6 = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_F6) == GLFW_PRESS;
-        if (curF6 && !prevF6 && myOcctView) {
-            myOcctView->SetHomeView();
-            if (myIsolationActive) {
-                UI::Panels::ShowAllRespectingDefaults(myOcctView.get(), myDocument, myVisibility, myIsolationBackup, myIsolationActive);
-            }
-        }
-        prevF6 = curF6;
-
-        // Ctrl+Z — Undo
-        static bool prevCtrlZ = false;
-        bool curCtrlZ = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_Z) == GLFW_PRESS;
-        if (curCtrlZ && !prevCtrlZ) OnUndo();
-        prevCtrlZ = curCtrlZ;
-
-        // Ctrl+Y — Redo
-        static bool prevCtrlY = false;
-        bool curCtrlY = ctrl && glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_Y) == GLFW_PRESS;
-        if (curCtrlY && !prevCtrlY) OnRedo();
-        prevCtrlY = curCtrlY;
-
-        // Esc — сначала прерывает текущую линию, потом выходит из эскиза
-        static bool prevEsc = false;
-        bool curEsc = glfwGetKey(myWindow->GetNativeWindow(), GLFW_KEY_ESCAPE) == GLFW_PRESS;
-        if (curEsc && !prevEsc && !myActiveSketchLabel.IsNull()) {
-            if (myHasSketchStart) {
-                // Прервать текущую цепочку линий
-                myHasSketchStart = false;
-                if (myOcctView) myOcctView->ClearPreviewLine();
-                myHasPreview = false;
-                std::cout << "Sketch: line chain cancelled\n";
-            } else {
-                // Нечего прерывать — выходим из эскиза
-                ExitSketch();
-            }
-        }
-        prevEsc = curEsc;
-
-        glfwMakeContextCurrent(myWindow->GetNativeWindow());
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-
-        // Запоминаем позицию мыши для превью
-        {
-            double mx, my;
-            glfwGetCursorPos(myWindow->GetNativeWindow(), &mx, &my);
-            myMouseX = mx;
-            myMouseY = my;
-        }
-
-        if (!myShowHomeScreen) {
-            DrawRibbon();
-            UI::Panels::DrawDocumentTree({
-                myDocument, myOcctView.get(), &myIcons,
-                &myVisibility, &myIsolationBackup,
-                &myAddBoxState, &myRenameState, &myDeleteConfirmState, &myPropertiesState,
-                &myStartExpandedManually, &myIsolationActive,
-                &myPendingCreateSketchLabel, &myPendingEnterSketchLabel, &myClipboardLabel,
-                &myPendingContextMenu, &myContextMenuPos,
-                [this]() { OnSave(); },
-                [this]() { OnOpen(); },
-                [this](const TDF_Label& l) { EnterSketch(l); },
-                [this]() { UI::Panels::ShowAllRespectingDefaults(myOcctView.get(), myDocument, myVisibility, myIsolationBackup, myIsolationActive); },
-                [this](const TDF_Label& l) { RequestDelete(l); },
-                [this](const TDF_Label& l) {
-                    myRenameState.pendingLabel = l;
-                    std::string nm = Util::GetLabelName(l);
-                    std::strncpy(myRenameState.buffer, nm.c_str(), sizeof(myRenameState.buffer) - 1);
-                    myRenameState.buffer[sizeof(myRenameState.buffer) - 1] = '\0';
-                    myRenameState.show = true;
-                },
-                [this](const TDF_Label& l) {
-                    myPropertiesState.pendingLabel = l;
-                    myPropertiesState.show = true;
-                }
-            });
-            UI::Panels::DrawTreeSplitter(myTreeWidth);
-            UI::Dialogs::DrawAddBoxDialog({ &myAddBoxState, myDocument,
-                [this]() { RefreshView(); } });
-            DrawPreviewInfo();
-            DrawViewCube();
-            UI::Dialogs::DrawDependencyDialog({ &myDependencyState, myOcctView.get(),
-                [](const char* t) { std::cout << "Dependency '" << t << "' applied\n"; } });
-            UI::Dialogs::DrawRenameDialog({ &myRenameState, myDocument });
-            UI::Dialogs::DrawDeleteConfirmDialog({ &myDeleteConfirmState, myDocument,
-                [this]() { RefreshView(); if (myOcctView) myOcctView->FitAll(); } });
-            UI::Dialogs::DrawUnsavedChangesDialog({ &myUnsavedState, (int)myDocuments.size(),
-                [this](int idx) -> bool {
-                    if (idx < 0 || idx >= (int)myDocuments.size()) return true;
-                    BreezeDocument* prevDoc = myDocument;
-                    int prevIdx = myActiveDocIndex;
-                    myDocument = myDocuments[idx].get();
-                    myActiveDocIndex = idx;
-                    OnSave();
-                    bool saved = !myDocument->IsModified();
-                    if (!saved) { myDocument = prevDoc; myActiveDocIndex = prevIdx; }
-                    return saved;
-                },
-                [this](int idx) { if (idx >= 0 && idx < (int)myDocuments.size()) myDocuments[idx]->SetModified(false); },
-                [this](int idx) { CloseDoc(idx); },
-                [this]() { glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE); } });
-            UI::Dialogs::DrawPropertiesDialog({ &myPropertiesState, myDocument });
-            UI::Panels::DrawContextMenu3D({
-                myDocument, myOcctView.get(), &myIcons,
-                &myVisibility, &myIsolationBackup,
-                &myAddBoxState, &myRenameState, &myDeleteConfirmState, &myPropertiesState,
-                &myStartExpandedManually, &myIsolationActive,
-                &myPendingCreateSketchLabel, &myPendingEnterSketchLabel, &myClipboardLabel,
-                &myPendingContextMenu, &myContextMenuPos,
-                [this]() { OnSave(); },
-                [this]() { OnOpen(); },
-                [this](const TDF_Label& l) { EnterSketch(l); },
-                [this]() { UI::Panels::ShowAllRespectingDefaults(myOcctView.get(), myDocument, myVisibility, myIsolationBackup, myIsolationActive); },
-                [this](const TDF_Label& l) { RequestDelete(l); },
-                [this](const TDF_Label& l) {
-                    myRenameState.pendingLabel = l;
-                    myRenameState.show = true;
-                },
-                [this](const TDF_Label& l) {
-                    myPropertiesState.pendingLabel = l;
-                    myPropertiesState.show = true;
-                }
-            });
-            UI::Widgets::DrawSelectionRect(*myOcctView, myWindow->GetNativeWindow());
-            UI::Panels::DrawDependenciesPanel(!myActiveSketchLabel.IsNull());
-            UI::Panels::DrawRightPanel({
-                &myRightPanelExpanded, myIsolationActive,
-                &myIcons, myOcctView.get(), &myTooltipState,
-                [this]() {
-                    if (myIsolationActive) UI::Panels::ShowAllRespectingDefaults(myOcctView.get(), myDocument, myVisibility, myIsolationBackup, myIsolationActive);
-                    if (myOcctView) myOcctView->FitAll();
-                } });
-        }
-        {
-            UI::Home::HomeContext hs;
-            hs.projectNames     = &myProjectNames;
-            hs.projectPaths     = &myProjectPaths;
-            hs.thumbnails       = &myThumbnailPaths;
-            hs.documentCount    = (int)myDocuments.size();
-            hs.showHomeScreen   = &myShowHomeScreen;
-            hs.viewMode         = &myHomeViewMode;
-            hs.searchBuffer     = myHomeSearch;
-            hs.searchBufferSize = sizeof(myHomeSearch);
-            hs.icons            = &myIcons;
-            hs.theme            = &myTheme;
-            hs.ramMB            = myLastRAMMB;
-            hs.onSwitchDoc      = [this](int i) { SwitchToDoc(i); };
-            hs.onCloseDoc       = [this](int i) { CloseDoc(i); };
-            hs.onCreateDoc      = [this]() { CreateNewDoc(); RefreshView(); if (myOcctView) myOcctView->FitAll(); };
-            hs.onOpenFile       = [this]() { OnOpen(); };
-            hs.onShowSettings   = [this]() { mySettingsState.show = true; };
-            hs.onNotImplemented = [this](const char* feat) {
-                myNotImplementedState.feature = feat;
-                myNotImplementedState.show = true;
-            };
-            hs.onQuit           = [this]() { glfwSetWindowShouldClose(myWindow->GetNativeWindow(), GLFW_TRUE); };
-            UI::Home::DrawHomeScreen(hs);
-        }
-        {
-            UI::Status::StatusInfo info;
-            info.sketchActive       = !myActiveSketchLabel.IsNull();
-            info.snapToGrid         = mySnapToGrid;
-            info.snapToPoints       = mySnapToPoints;
-            info.mouseX             = myMouseX;
-            info.mouseY             = myMouseY;
-            info.rightPanelExpanded = myRightPanelExpanded;
-            UI::Status::DrawStatusBar(info);
-        }
-        {
-            UI::Status::ProjectTabsContext ctx;
-            ctx.names         = &myProjectNames;
-            ctx.paths         = &myProjectPaths;
-            ctx.activeIndex   = myActiveDocIndex;
-            ctx.documentCount = (int)myDocuments.size();
-            ctx.onHome        = myShowHomeScreen;
-            ctx.icons         = &myIcons;
-            ctx.onGoHome      = [this]() { myShowHomeScreen = true; };
-            ctx.onCreate      = [this]() {
-                CreateNewDoc();
-                RefreshView();
-                if (myOcctView) myOcctView->FitAll();
-            };
-            ctx.onSwitch      = [this](int i) { SwitchToDoc(i); };
-            ctx.onClose       = [this](int i) { CloseDoc(i); };
-            UI::Status::DrawProjectTabs(ctx);
-        }
-        UI::Dialogs::DrawSettingsDialog({ &mySettingsState, &myCurrentTheme,
-            [this](int t) { ApplyTheme(t); },
-            [](Language l) { Localization::Instance().SetLanguage(l); } });
-
-        UI::Dialogs::DrawNotImplementedDialog(myNotImplementedState);
-        TRACE("iter: before UpdateTelemetry");
-        UpdateTelemetry();
-        TRACE("iter: after UpdateTelemetry");
-
-        ImGui::Render();
-
-        int fbW = 0, fbH = 0;
-        glfwGetFramebufferSize(myWindow->GetNativeWindow(), &fbW, &fbH);
-        glViewport(0, 0, fbW, fbH);
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        if (myOcctView) myOcctView->Redraw();
-
-        glViewport(0, 0, fbW, fbH);
-        glfwMakeContextCurrent(myWindow->GetNativeWindow());
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        TRACE("iter: before SwapBuffers");
-        myWindow->SwapBuffers();
-        TRACE("iter: after SwapBuffers");
-      } catch (const std::exception& e) {
-        std::cerr << "Runtime exception in main loop: " << e.what() << "\n";
-      } catch (...) {
-        std::cerr << "Unknown exception in main loop (ignored)\n";
-      }
-    }
-}
-
-} // namespace BreezeCAD
+} // namespace bz::app

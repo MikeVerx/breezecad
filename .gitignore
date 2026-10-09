@@ -1,28 +1,16 @@
-# Build artifacts
+# Build output
 build/
-*.o
-*.obj
-*.exe
-*.dll
-*.a
-*.so
-*.dylib
+out/
 
 # IDE
 .vscode/
 .idea/
 *.swp
+compile_commands.json
 
 # OS
 .DS_Store
 Thumbs.db
-external/
 
-# ImGui state (позиции окон — не коммитим)
+# Dear ImGui window state
 imgui.ini
-docs/UI_LAYOUT.md.bak*
-*.bak
-
-# Build helpers
-tools/svg2ico.exe
-tools/*.o

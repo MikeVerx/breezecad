@@ -1,234 +1,108 @@
 #pragma once
 
-#include "platform/glfw/GlfwWindow.h"
-#include "occt/OcctView.h"
-#include "doc/BreezeDocument.h"
-#include "app/IconManager.h"
-#include "ui/viewcube/ViewCubeOverlay.h"
-#include "ui/theme/ThemeTokens.h"
-#include "ui/widgets/Tooltip.h"
-#include "ui/widgets/SelectionRect.h"
-#include "ui/status/StatusBar.h"            // UI::Status::DrawStatusBar
-#include "ui/status/ProjectTabs.h"
-#include "ui/qat/QuickAccessToolbar.h"
-#include "ui/dialogs/RenameDialog.h"        // UI::Dialogs::RenameState
-#include "ui/dialogs/DeleteConfirmDialog.h" // UI::Dialogs::DeleteConfirmState
-#include "ui/dialogs/AddBoxDialog.h"
-#include "ui/dialogs/PropertiesDialog.h"    // UI::Dialogs::PropertiesState
-#include "ui/dialogs/NotImplementedDialog.h"// UI::Dialogs::NotImplementedState
-#include "ui/dialogs/UnsavedChangesDialog.h"
-#include "ui/dialogs/DependencyDialog.h"
-#include "ui/dialogs/SettingsDialog.h"
-#include "ui/panels/TreeSplitter.h"          // UI::Panels::DrawTreeSplitter
-#include "ui/panels/RightPanel.h"            // UI::Panels::DrawRightPanel
-#include "ui/panels/DependenciesPanel.h"
-#include "ui/panels/DocumentTree.h"
-#include "ui/panels/Visibility.h"          // UI::Panels::ShowAllRespectingDefaults
-#include "ui/panels/ContextMenu.h"           // UI::Panels::DrawContextMenu3D     // UI::Panels::DrawDependenciesPanel
-#include "ui/ribbon/RibbonState.h"          // UI::Ribbon::RibbonState
+#include "app/AppContext.h"
+#include "app/Settings.h"
+#include "app/features/OperationEditors.h"
+#include "app/sketch/SketchEditor.h"
+#include "platform/Window.h"
+#include "render/Viewport.h"
+#include "ui/Fonts.h"
+#include "ui/Icons.h"
+#include "ui/Theme.h"
 
-#include <TDF_Label.hxx>
-#include <gp_Pnt.hxx>
-#include <gp_Pln.hxx>
-#include "imgui.h"
-
-#include <map>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <vector>
-#include <functional>
-#include <string>
 
-namespace BreezeCAD {
+namespace bz::app {
 
-
-
-
+/// The desktop application: owns the window, the UI system and the open
+/// documents, and runs the frame loop. Redraws only when something changes.
 class Application {
 public:
     Application();
     ~Application();
 
-    void Run();
+    /// Sets everything up. `files` are documents to open (command line).
+    bool Init(const std::vector<std::filesystem::path>& files);
+    int  Run();
+
+    /// Test hook: save a screenshot of frame `frame` to `file`, then quit.
+    void ScreenshotAndQuit(std::filesystem::path file, int frame) {
+        myScreenshotFile = std::move(file);
+        myScreenshotFrame = frame;
+    }
+    /// Test hook for driving the app from outside (xdotool): while running,
+    /// a file `request` appearing in `dir` makes the next frame save itself as
+    /// `dir/<file content>.ppm`. Enabled by the BZ_SHOT_DIR variable.
+    void EnableShotRequests(std::filesystem::path dir) { myShotDir = std::move(dir); }
+    AppContext& Context() { return *myContext; }
+
+    /// Filled by the GLFW callbacks between frames.
+    struct InputTap {
+        bool                       seen = false;   ///< any input: draw frames
+        std::vector<ImGuiKeyChord> chords;         ///< key presses with the modifiers held at that moment
+    };
 
 private:
-    std::unique_ptr<GlfwWindow>   myWindow;
-    std::unique_ptr<OcctView>     myOcctView;
-    UI::ViewCube::ViewCubeOverlay myViewCube;
-    UI::Widgets::TooltipState     myTooltipState;
-    IconManager                   myIcons;
-    UI::Ribbon::RibbonState      myRibbonState;
-    // === Диалог зависимостей ===
-    UI::Dialogs::DependencyState myDependencyState;
+    void Frame();
+    /// The interface scale: the setting, or one from the screen's density and size.
+    float ChooseScale() const;
+    /// Rebuilds fonts and sizes when the scale setting changed.
+    void ApplyScaleIfChanged();
+    void DrawRoot();
+    void ApplyTheme(bool force);
+    void UpdateTitle();
+    void HandleCloseRequests();
+    bool NeedsAnotherFrame() const;
+    void TakeScreenshot(const std::filesystem::path& file) const;
+    void PollShotRequest();
 
-    // === QAT (Quick Access Toolbar) ===
-    char mySearchBuffer[128] = "";
-    // === Недавние файлы ===
-    std::vector<std::string> myRecentFiles;
+    platform::Window myWindow;
+    Settings         mySettings;
+    ui::Theme        myTheme;
+    ui::Fonts        myFonts;
+    ui::Icons        myIcons;
+    float            myScale = 1.0f;
+    bool             myDarkApplied = false;
+    int              myBackgroundApplied = -1;   ///< Settings::viewBackground in use
+    double           mySystemThemeCheck = 0.0;
 
-    // === Превью проектов ===
-    // Для каждого документа — путь к файлу-превью (PNG)
-    std::vector<std::string> myThumbnailPaths;
+    Workspace        myWorkspace;
+    ActionRegistry   myActions;
+    Notifications    myNotes;
+    std::unique_ptr<Autosave> myAutosave;
+    render::Viewport myViewport;
+    SketchEditor     mySketch;
+    OperationEditors myOps;
+    ShellState       myShell;
+    std::vector<std::function<void()>> myDeferred;
 
-    // Сохранить превью текущего активного документа в PNG
-    // Возвращает путь к превью для документа (пустой, если нет)
+    std::unique_ptr<ui::Ui>     myUi;
+    std::unique_ptr<AppContext> myContext;
 
-    // === Буфер обмена (для копирования объектов) ===
-    TDF_Label myClipboardLabel;
+    InputTap myInput;
+    int    myFramesToDraw = 3;
+    double myLastFrameTime = 0.0;
+    float  myFps = 0.0f;
+    float  myFramebufferScale = 1.0f;
+    double myAppliedScaleSetting = 0.0;
+    std::filesystem::path myAssets;
+    FrameStats myStats;
+    int    mySceneFramesThisSecond = 0;
+    double mySecondStart = 0.0;
+    bool   myBusy = false;   ///< something animates: keep drawing
 
-    // === Изоляция ===
-    bool myIsolationActive = false;
-    std::map<std::string, bool> myIsolationBackup;   // что было скрыто до изоляции
-
-    // === Главная (Home) ===
-    bool myShowHomeScreen = true;   // по умолчанию — стартовая страница
-    int  myHomeViewMode = 0;   // 0 = плитки, 1 = список
-    char myHomeSearch[128] = {0};
-
-    // === Правая панель навигации ===
-    bool myRightPanelExpanded = false;
-    // ViewCube-состояние переехало в myViewCube (ViewCubeOverlay)
-
-    // === ПКМ-меню в 3D-сцене ===
-    bool   myPendingContextMenu = false;
-    ImVec2 myContextMenuPos = ImVec2(0, 0);
-
-    // === Диалог переименования ===
-    UI::Dialogs::RenameState myRenameState;
-
-    // === Диалог подтверждения удаления ===
-    UI::Dialogs::DeleteConfirmState myDeleteConfirmState;
-
-    // === Диалог несохранённых изменений ===
-    UI::Dialogs::UnsavedState myUnsavedState;
-
-    // === Диалог свойств ===
-    UI::Dialogs::PropertiesState myPropertiesState;
-
-
-    // === Splitter (регулировка ширины дерева) ===
-    float myTreeWidth = 340.0f;      // текущая ширина
-    bool  myIsResizingTree = false;  // идёт перетаскивание
-
-    bool myStartExpandedManually = false;  // пользователь развернул Start вручную
-    UI::Dialogs::SettingsState mySettingsState;
-    UI::Dialogs::NotImplementedState myNotImplementedState;
-    int  myCurrentTheme       = 1;
-    ThemeTokens myTheme;
-
-    std::vector<std::string> myPinnedCommands;
-
-    // === Телеметрия ===
-    double myLastRAMMB      = 0.0;
-    int    myLastShapeCount = 0;
-
-    // === Команды (для поиска) ===
-    std::vector<UI::Qat::QatCommand> myCommands;
-
-    // Активный документ (сырой указатель на один из myDocuments)
-    BreezeDocument* myDocument = nullptr;
-
-    // Все открытые документы (владеют)
-    std::vector<std::unique_ptr<BreezeDocument>> myDocuments;
-    int myActiveDocIndex = -1;
-
-    // Имя для новой вкладки (Project1, Project2, ...)
-    int myNextProjectNumber = 1;
-    std::vector<std::string> myProjectNames;   // параллельно с myDocuments
-    std::vector<std::string> myProjectPaths;   // путь файла (пусто, если не сохранён)
-
-    UI::Dialogs::AddBoxState myAddBoxState;
-
-    std::string myCurrentPath;
-    char        myFilePathBuffer[512] = "D:/test_breezecad/part.cbf";
-
-    std::map<std::string, bool> myVisibility;
-
-    TDF_Label myPendingCreateSketchLabel;
-    TDF_Label myPendingEnterSketchLabel;
-
-    TDF_Label myActiveSketchLabel;
-
-    // === Настройки привязок ===
-    bool mySnapToGrid   = true;
-    bool mySnapToPoints = true;
-    bool myAutoContinue = true;
-    bool myOrthoMode    = false;  // Shift — угол кратен 45°
-    bool myShowGrid     = true;   // показывать ли сетку в эскизе
-
-    LineStyle myCurrentLineStyle = LS_Normal;
-
-    // === Состояние рисования ===
-    bool   myHasSketchStart = false;
-    gp_Pnt mySketchStartPoint;
-
-    // Точный ввод длины и угла
-    char myLengthBuffer[32] = "0";
-    char myAngleBuffer[32]  = "0";
-    bool myInputActive      = false;
-
-    // Последнее превью (для отображения длины и угла)
-    bool   myHasPreview = false;
-    double myPreviewLength = 0.0;
-    double myPreviewAngle  = 0.0;
-    double myMouseX = 0.0;
-    double myMouseY = 0.0;
-
-
-    // Логика видимости по умолчанию (учитывает hasOps и myVisibility)
-
-    // Показать все объекты, уважая правила видимости (для снятия изоляции)
-    void DrawRenameDialog();
-    void DrawDeleteConfirmDialog();
-    void DrawUnsavedChangesDialog();
-    void DrawPropertiesDialog();
-    void RequestDelete(const TDF_Label& label);
-    void DrawAddBoxDialog();
-    void DrawMenuBar();
-    void DrawSketchOverlay();
-    void DrawViewCube();
-    void DrawDependencyDialog();
-    void OpenDependencyDialog(int type);
-    void DrawPreviewInfo();
-    void RefreshView();
-    void RefreshSketchLines();
-    void OnSave();
-    void OnExportSTEP();
-    void OnExportSTL();
-    void OnOpen();
-    void OnNewDocument();
-
-    // === Multi-Document ===
-    void CreateNewDoc();                                          // создать пустой + сделать активным
-    int  AddDocFromFile(const std::string& path,
-                        const Handle(TDocStd_Document)& loaded);  // открыть из файла
-    void SwitchToDoc(int index);                                  // переключиться
-    void CloseDoc(int index);                                     // закрыть (с подтверждением)
-    void OnUndo();
-    void OnRedo();
-    void DrawRibbon();
-    void DrawQuickAccessToolbar();
-    void DrawFileMenu();
-    void DrawSettingsDialog();
-    void ApplyTheme(int theme);
-    void InitCommands();
-    void UpdateTelemetry();
-
-    void DrawRibbonSketchTab();
-    void DrawRibbonModelTab();
-    void DrawRibbonAnnotateTab();
-    void DrawRibbonToolsTab();
-    void DrawRibbonManageTab();
-    void DrawRibbonViewTab();
-    void DrawRibbonAssemblyTab();  // заглушка
-
-    // Группы ribbon — блок с рамкой и заголовком снизу по центру
-    void RibbonGroupStart();
-    void RibbonGroupEnd(const char* name);
-    void EnterSketch(const TDF_Label& sketchLabel);
-    void ExitSketch();
-    void OnSketchClick(int px, int py);
-    void FinishCurrentLine();  // для автопродолжения
-    void ApplyExactLine();     // создать линию по введённым Length/Angle
+    std::filesystem::path myScreenshotFile;
+    int                   myScreenshotFrame = -1;
+    int                   myFrameIndex = 0;
+    std::filesystem::path myShotDir;        ///< see EnableShotRequests
+    std::filesystem::path myPendingShot;    ///< file for the next frame, if requested
+    std::string           myTitle;
 };
 
-} // namespace BreezeCAD
+/// All user commands (ribbon, menus, search, shortcuts). AppActions.cpp.
+void RegisterActions(AppContext& app);
+
+} // namespace bz::app

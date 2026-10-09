@@ -1,0 +1,241 @@
+#include "sketch/Solver.h"
+
+#include <doctest.h>
+
+#include <cmath>
+
+using namespace bz;
+using namespace bz::sketch;
+
+namespace {
+
+Constraint Geo(ConstraintType type, ObjectId a, ObjectId b = {}) {
+    Constraint c;
+    c.type = type;
+    c.refs = {a, b};
+    return c;
+}
+
+Constraint Dim(ConstraintType type, double value, ObjectId a, ObjectId b = {}) {
+    Constraint c = Geo(type, a, b);
+    c.parameter.value = value;
+    c.parameter.expression = std::to_string(value);
+    return c;
+}
+
+/// Slightly crooked quadrilateral that constraints turn into a rectangle.
+struct Rect {
+    Sketch      sk;
+    IdGenerator ids;
+    ObjectId    p[4];
+    ObjectId    l[4];
+    ObjectId    origin;
+
+    Rect() {
+        origin = sk.EnsureOrigin(ids);
+        p[0] = sk.AddPoint(ids, {0.5, -0.3});
+        p[1] = sk.AddPoint(ids, {52.0, 1.0});
+        p[2] = sk.AddPoint(ids, {49.0, 33.0});
+        p[3] = sk.AddPoint(ids, {-1.0, 31.0});
+        for (int i = 0; i < 4; ++i) l[i] = sk.AddLine(ids, p[i], p[(i + 1) % 4]);
+        sk.AddConstraint(ids, Geo(ConstraintType::Horizontal, l[0]));
+        sk.AddConstraint(ids, Geo(ConstraintType::Vertical, l[1]));
+        sk.AddConstraint(ids, Geo(ConstraintType::Horizontal, l[2]));
+        sk.AddConstraint(ids, Geo(ConstraintType::Vertical, l[3]));
+    }
+};
+
+bool Near(Vec2 a, Vec2 b, double tol = 1e-6) { return (a - b).Length() < tol; }
+
+} // namespace
+
+TEST_CASE("an under-defined rectangle keeps its freedom") {
+    Rect r;
+    const SolveResult res = Solve(r.sk);
+    REQUIRE(res.converged);
+    CHECK(res.degreesOfFreedom == 4);   // position (2) + width + height
+    CHECK(std::abs(r.sk.PositionOf(r.p[0]).y - r.sk.PositionOf(r.p[1]).y) < 1e-9);
+    CHECK(std::abs(r.sk.PositionOf(r.p[1]).x - r.sk.PositionOf(r.p[2]).x) < 1e-9);
+}
+
+TEST_CASE("a dimensioned rectangle at the origin is fully defined") {
+    Rect r;
+    r.sk.AddConstraint(r.ids, Geo(ConstraintType::Coincident, r.p[0], r.origin));
+    r.sk.AddConstraint(r.ids, Dim(ConstraintType::Length, 60.0, r.l[0]));
+    r.sk.AddConstraint(r.ids, Dim(ConstraintType::Length, 40.0, r.l[1]));
+
+    const SolveResult res = Solve(r.sk);
+    REQUIRE(res.converged);
+    CHECK(res.degreesOfFreedom == 0);
+    CHECK(Near(r.sk.PositionOf(r.p[0]), {0, 0}));
+    CHECK(Near(r.sk.PositionOf(r.p[1]), {60, 0}));
+    CHECK(Near(r.sk.PositionOf(r.p[2]), {60, 40}));
+    CHECK(Near(r.sk.PositionOf(r.p[3]), {0, 40}));
+    for (ObjectId line : r.l) CHECK(res.fullyDefined.count(line) == 1);
+}
+
+TEST_CASE("redundant constraints are detected") {
+    Rect r;
+    r.sk.AddConstraint(r.ids, Geo(ConstraintType::Coincident, r.p[0], r.origin));
+    r.sk.AddConstraint(r.ids, Dim(ConstraintType::Length, 60.0, r.l[0]));
+    r.sk.AddConstraint(r.ids, Dim(ConstraintType::Length, 40.0, r.l[1]));
+    REQUIRE(Solve(r.sk).converged);
+
+    CHECK(IsRedundant(r.sk, Geo(ConstraintType::Parallel, r.l[0], r.l[2])));
+    CHECK(IsRedundant(r.sk, Dim(ConstraintType::Length, 60.0, r.l[2])));
+    CHECK(IsRedundant(r.sk, Geo(ConstraintType::Fix, r.p[2])));
+
+    Rect free;
+    REQUIRE(Solve(free.sk).converged);
+    CHECK_FALSE(IsRedundant(free.sk, Dim(ConstraintType::Length, 60.0, free.l[0])));
+    CHECK_FALSE(IsRedundant(free.sk, Geo(ConstraintType::Equal, free.l[0], free.l[1])));
+}
+
+TEST_CASE("conflicting dimensions fail and leave the sketch untouched") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId a = sk.AddPoint(ids, {0, 0});
+    const ObjectId b = sk.AddPoint(ids, {10, 0});
+    const ObjectId line = sk.AddLine(ids, a, b);
+    sk.AddConstraint(ids, Dim(ConstraintType::Length, 20.0, line));
+    const ObjectId bad = sk.AddConstraint(ids, Dim(ConstraintType::Distance, 30.0, a, b));
+
+    const SolveResult res = Solve(sk);
+    CHECK_FALSE(res.converged);
+    CHECK(Near(sk.PositionOf(b), {10, 0}));
+    CHECK_FALSE(res.failing.empty());
+    bool reportsBad = false;
+    for (ObjectId id : res.failing) reportsBad = reportsBad || id == bad;
+    CHECK(reportsBad);
+}
+
+TEST_CASE("angle, tangency and radius") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId o = sk.EnsureOrigin(ids);
+    const ObjectId a = sk.AddPoint(ids, {0, 0});
+    const ObjectId b = sk.AddPoint(ids, {50, 3});
+    const ObjectId c = sk.AddPoint(ids, {40, 20});
+    const ObjectId base = sk.AddLine(ids, a, b);
+    const ObjectId slope = sk.AddLine(ids, a, c);
+    sk.AddConstraint(ids, Geo(ConstraintType::Coincident, a, o));
+    sk.AddConstraint(ids, Geo(ConstraintType::Horizontal, base));
+    sk.AddConstraint(ids, Dim(ConstraintType::Angle, kPi / 6, base, slope));
+
+    const ObjectId center = sk.AddPoint(ids, {30, 12});
+    const ObjectId circle = sk.AddCircle(ids, center, 8.0);
+    sk.AddConstraint(ids, Geo(ConstraintType::Tangent, base, circle));
+    sk.AddConstraint(ids, Dim(ConstraintType::Radius, 10.0, circle));
+
+    REQUIRE(Solve(sk).converged);
+    const Vec2 dir = (sk.PositionOf(c) - sk.PositionOf(a)).Normalized();
+    CHECK(std::atan2(dir.y, dir.x) == doctest::Approx(kPi / 6));
+    CHECK(sk.RadiusOf(circle) == doctest::Approx(10.0));
+    CHECK(sk.PositionOf(center).y == doctest::Approx(10.0));   // touches the x axis from above
+}
+
+TEST_CASE("arc ends stay on one circle") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId c = sk.AddPoint(ids, {0, 0});
+    const ObjectId s = sk.AddPoint(ids, {10, 0});
+    const ObjectId e = sk.AddPoint(ids, {0, 12});
+    const ObjectId arc = sk.AddArc(ids, c, s, e);
+    sk.AddConstraint(ids, Dim(ConstraintType::Radius, 15.0, arc));
+    REQUIRE(Solve(sk).converged);
+    CHECK((sk.PositionOf(s) - sk.PositionOf(c)).Length() == doctest::Approx(15.0));
+    CHECK((sk.PositionOf(e) - sk.PositionOf(c)).Length() == doctest::Approx(15.0));
+}
+
+TEST_CASE("dragging moves the dragged point and keeps constraints") {
+    Rect r;
+    r.sk.AddConstraint(r.ids, Geo(ConstraintType::Coincident, r.p[0], r.origin));
+    REQUIRE(Solve(r.sk).converged);
+
+    const SolveResult res = Solve(r.sk, {.drags = {Drag{r.p[2], {80, 50}}}});
+    REQUIRE(res.converged);
+    CHECK(Near(r.sk.PositionOf(r.p[2]), {80, 50}));
+    CHECK(Near(r.sk.PositionOf(r.p[0]), {0, 0}));
+    CHECK(r.sk.PositionOf(r.p[1]).x == doctest::Approx(80.0));
+    CHECK(r.sk.PositionOf(r.p[3]).y == doctest::Approx(50.0));
+}
+
+TEST_CASE("dragging a fully defined point does not break the sketch") {
+    Rect r;
+    r.sk.AddConstraint(r.ids, Geo(ConstraintType::Coincident, r.p[0], r.origin));
+    r.sk.AddConstraint(r.ids, Dim(ConstraintType::Length, 60.0, r.l[0]));
+    r.sk.AddConstraint(r.ids, Dim(ConstraintType::Length, 40.0, r.l[1]));
+    REQUIRE(Solve(r.sk).converged);
+
+    const SolveResult res = Solve(r.sk, {.drags = {Drag{r.p[2], {90, 90}}}});
+    REQUIRE(res.converged);
+    CHECK(Near(r.sk.PositionOf(r.p[2]), {60, 40}));
+}
+
+TEST_CASE("removing a point removes its curves and constraints") {
+    Rect r;
+    r.sk.Remove(r.p[1]);
+    CHECK(r.sk.lines.size() == 2);   // the two lines through p1 are gone
+    CHECK(r.sk.FindPoint(r.p[1]) == nullptr);
+    for (const Constraint& c : r.sk.constraints) {
+        CHECK(c.refs[0] != r.l[0]);
+        CHECK(c.refs[0] != r.l[1]);
+    }
+    r.sk.Remove(r.origin);
+    CHECK(r.sk.Origin() != nullptr);
+}
+
+TEST_CASE("merging points reconnects curves") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId a = sk.AddPoint(ids, {0, 0});
+    const ObjectId b = sk.AddPoint(ids, {10, 0});
+    const ObjectId c = sk.AddPoint(ids, {10, 0.001});
+    const ObjectId d = sk.AddPoint(ids, {10, 10});
+    sk.AddLine(ids, a, b);
+    const ObjectId second = sk.AddLine(ids, c, d);
+    sk.MergePoints(c, b);
+    CHECK(sk.FindPoint(c) == nullptr);
+    CHECK(sk.FindLine(second)->start == b);
+}
+
+TEST_CASE("extents cover curves, scaling keeps the shape") {
+    Sketch sk;
+    IdGenerator ids;
+    sk.EnsureOrigin(ids);
+    CHECK(sk.Extents().IsEmpty());
+    const ObjectId a = sk.AddPoint(ids, {2, 1});
+    const ObjectId b = sk.AddPoint(ids, {12, 1});
+    sk.AddLine(ids, a, b);
+    const ObjectId centre = sk.AddPoint(ids, {20, 5});
+    const ObjectId circle = sk.AddCircle(ids, centre, 3);
+
+    Box2 box = sk.Extents();
+    CHECK(Near(box.min, {2, 1}));
+    CHECK(Near(box.max, {23, 8}));
+
+    sk.ScaleAbout({0, 0}, 2.0);
+    CHECK(Near(sk.PositionOf(a), {4, 2}));
+    CHECK(Near(sk.PositionOf(b), {24, 2}));
+    CHECK(sk.RadiusOf(circle) == doctest::Approx(6.0));
+    CHECK(Near(sk.Origin()->pos, {0, 0}));
+}
+
+TEST_CASE("a distance to an осевая is a diameter") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId axis = sk.AddLine(ids, sk.AddPoint(ids, {0, 0}), sk.AddPoint(ids, {0, 10}));
+    sk.FindLine(axis)->centerline = true;
+    Constraint hold;
+    hold.type = ConstraintType::Fix;
+    hold.refs = {sk.FindLine(axis)->start, {}, {}};
+    hold.fixedAt = {0, 0};
+    sk.AddConstraint(ids, hold);
+    sk.AddConstraint(ids, Geo(ConstraintType::Vertical, axis));
+    const ObjectId p = sk.AddPoint(ids, {7, 3});
+    Constraint d = Dim(ConstraintType::PointLineDistance, 30, p, axis);
+    CHECK(IsDiametric(sk, d));
+    sk.AddConstraint(ids, d);
+    REQUIRE(Solve(sk).converged);
+    CHECK(std::abs(sk.PositionOf(p).x) == doctest::Approx(15.0));   // radius, from a diameter of 30
+}

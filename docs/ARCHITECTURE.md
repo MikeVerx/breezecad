@@ -1,273 +1,83 @@
-# BreezeCAD — Архитектура
-
-**Единый источник правды о структуре кода.**
-**Дата:** 2026-09-23
-
----
-
-## 1. Философия
-
-**Код должен быть приятным для чужого программиста.**
-Опытный C++-разработчик открывает проект — понимает за 5 минут.
-
-**Следствия:**
-- Слои с чёткими границами.
-- Никаких монолитов >500 строк.
-- Единый стиль (clang-format).
-- README, ARCHITECTURE, CONTRIBUTING.
-- Тесты для ядра.
-
----
-
-## 2. Слои
-
-    ┌─────────────────────────────────────────┐
-    │  ui/        ImGui, окна, ribbon, темы   │
-    ├─────────────────────────────────────────┤
-    │  app/       Application, команды,       │
-    │             состояния                   │
-    ├─────────────────────────────────────────┤
-    │  doc/       BreezeDocument,             │
-    │             DocumentData, история       │
-    ├─────────────────────────────────────────┤
-    │  kernel/    IKernel (интерфейс),        │
-    │             OcctKernel (реализация)     │
-    ├─────────────────────────────────────────┤
-    │  platform/  GlfwWindow, FileDialog      │
-    └─────────────────────────────────────────┘
-
-**Правило:** слой может зависеть только от слоёв НИЖЕ себя.
-UI не знает про OCCT. Ядро не знает про ImGui.
-
----
-
-## 3. Структура репозитория (целевая)
-
-    src/
-      main.cpp
-      app/
-        Application.cpp/h
-        CommandStack.cpp/h
-        Localization.cpp/h
-        TooltipRegistry.cpp/h
-      ui/
-        ribbon/
-          Ribbon.cpp/h
-          RibbonGroup.cpp/h
-          RibbonButton.cpp/h
-          tabs/
-            ModelTab.cpp
-            SketchTab.cpp
-            AssemblyTab.cpp
-            ViewTab.cpp
-        panels/
-          LeftPanel.cpp/h
-          RightPanel.cpp/h
-        dialogs/
-          Settings.cpp
-          About.cpp
-        HomeScreen.cpp/h
-        ViewCube.cpp/h
-      doc/
-        BreezeDocument.cpp/h
-        DocumentData.cpp/h
-        History.cpp/h
-        Migration.cpp/h
-      kernel/
-        IKernel.h
-        OcctKernel.cpp/h
-        ShapeBuilder.cpp/h
-        BooleanOps.cpp/h
-      platform/
-        glfw/
-          GlfwWindow.cpp/h
-        FileDialog.cpp/h
-
-**Цель Фазы 1.5:** привести `src/` к этой структуре.
-
----
-
-## 4. Ядро — IKernel
-
-**Интерфейс абстракции геометрии.**
-
-Зачем: сегодня OCCT, завтра — своё ядро или альтернатива.
-
-    class IKernel {
-    public:
-        virtual ShapeHandle extrude(Profile, double distance) = 0;
-        virtual ShapeHandle revolve(Profile, Axis, double angle) = 0;
-        virtual ShapeHandle booleanUnion(ShapeHandle, ShapeHandle) = 0;
-        virtual ShapeHandle booleanCut(ShapeHandle, ShapeHandle) = 0;
-        virtual ShapeHandle fillet(ShapeHandle, Edges, double radius) = 0;
-        // ...
-    };
-
-**Правило:** UI и doc работают только с `IKernel*`. Никаких прямых
-вызовов OCCT вне `kernel/`.
-
-**ADR-0001** описывает стратегию ядра (гибрид: урезанный OCCT).
-
----
-
-## 5. Документ — DocumentData
-
-**Три представления одного документа:**
-
-1. **DocumentData** — независимая от ядра структура.
-   - history: список OperationRecord.
-   - parameters: переменные.
-   - materials: материалы.
-   - Парсится из .bzc.
-
-2. **Граф операций** — в памяти, при открытии строится из history.
-   - Каждая операция имеет входы (parents) и выходы.
-   - При изменении параметров — пересчёт потомков.
-
-3. **B-rep тела** — результат применения операций.
-   - Кэшируется.
-   - Может быть пересчитан из графа.
-
-**Принцип:** история — источник правды. B-rep — кэш.
-
----
-
-## 6. UI — ImGui
-
-**Три уровня:**
-
-1. **`ui/ribbon/`** — верхнее меню (QAT + 4 вкладки).
-   - Каждая вкладка — свой файл.
-   - Группы и кнопки — общие helpers.
-
-2. **`ui/panels/`** — панели.
-   - Левая (Дерево / Параметры / Переменные).
-   - Правая (навигация).
-
-3. **`ui/dialogs/`** — модальные окна.
-   - Настройки, О программе.
-
-**Правило:** UI не считает геометрию. Только отображение + команды.
-
----
-
-## 7. Потоки
-
-**Основной поток:** UI + рендер. 60 FPS.
-
-**Фоновые потоки:**
-- **Autosave** — раз в минуту, atomic write.
-- **Tessellation** — после изменения модели.
-- **Long operations** — Boolean, Fillet на большой геометрии.
-
-**Обмен:** thread-safe queue команд + callback с прогрессом.
-
-**Правило:** тяжёлое никогда не блокирует UI.
-
----
-
-## 8. Плагины (Фаза 5+)
-
-**Триггер:** ядро стабильно, .bzc работает, 3-5 модулей от нас.
-
-**API:**
-- C-ABI (extern "C") для стабильности.
-- Lua для скриптов.
-- JSON для UI-тем.
-
-**Слоты:**
-- Вкладка в ribbon.
-- Команда в контекстное меню дерева.
-- Свой импорт/экспорт.
-- Свои операции через IKernel.
-
-**Что нельзя:**
-- Прямой доступ к OCCT.
-- Модификация UI вне слотов.
-- Перехват событий других плагинов.
-
-**Защита от крашей:**
-- Отдельный процесс-менеджер.
-- Диалог при краше: скопировать отчёт, отключить плагин, восстановить.
-
----
-
-## 9. Модульная система
-
-**Что в базе:** деталь, эскиз, сборка, стандартные изделия, STL Viewer.
-
-**Что модульно:** черчение, OCAF-мост, рендер с трассировкой.
-
-**Manifest модуля:**
-- name, version, author
-- dependencies
-- min_gpu_ram_mb, min_ram_mb, min_cores
-- entry_point (DLL/SO)
-
-**При установке:** сверяем требования с системой. Не прошло — disabled.
-
----
-
-## 10. Соглашения по коду
-
-- **Язык:** C++17.
-- **Стиль:** clang-format, .clang-format в корне.
-- **Именование:**
-  - Классы: PascalCase.
-  - Функции: camelCase.
-  - Приватные поля: `my` + PascalCase (`myWindow`).
-  - Константы: kPascalCase (`kMaxUndoSteps`).
-- **Заголовки:** `#pragma once`, forward declarations где можно.
-- **Ошибки:** исключения в ядре, коды в UI.
-- **Логи:** `std::cout` для старта, TRACE для отладки.
-- **Тесты:** Catch2 или doctest, только для ядра.
-
----
-
-## 11. Потоки данных
-
-### Команда пользователя
-
-    UI клик → Application::ExecuteCommand(id) → Command::Execute()
-        ↓
-    IKernel::operation(...)  → TopoDS_Shape
-        ↓
-    BreezeDocument::AddFeature(shape)
-        ↓
-    History.append(OperationRecord)
-        ↓
-    UI обновляется (re-render)
-
-### Загрузка файла
-
-    .bzc → manifest → migration? → history → IKernel → B-rep
-                                                       ↓
-                                                  UI + tessellation
-
-### Сохранение файла
-
-    History + Parameters + Materials → DocumentData → .bzc (ZIP)
-
----
-
-## 12. Рефакторинг (Фаза 1.5)
-
-**Что делаем:**
-1. Разбить `Application.cpp` (4700 строк) на модули.
-2. Ввести слои `platform / kernel / doc / app / ui`.
-3. Убрать циклические зависимости.
-4. clang-format единый.
-5. README + CONTRIBUTING.
-6. Тесты для ядра (базовые).
-
-**Цель:** новый разработчик понимает проект за 5 минут.
-
----
-
-## 13. Правила для нового чата
-
-1. Не нарушать слои (UI -> app -> doc -> kernel -> platform).
-2. Не добавлять прямой OCCT в UI/doc.
-3. Файлы >500 строк — разбивать.
-4. Любое архитектурное решение — ADR.
-5. Любая новая зависимость — обоснование.
+# BreezeCAD — архитектура (для программистов)
+
+C++20, Dear ImGui (интерфейс, immediate mode), OCCT (геометрическое ядро),
+GLFW + OpenGL 3.3. Сборка — CMake presets (`linux-debug`, Windows — MSYS2/MinGW64
+в CI). Тесты — doctest (`build/<preset>/bin/bz_tests`).
+
+## Модули и зависимости
+
+```
+core      ← математика, единицы, выражения, лог, перевод (I18n)
+sketch    ← core            эскиз 2D: сущности, связи, решатель, операции правки
+document  ← core, sketch    дерево операций, параметры, команды undo, файл .bzc
+kernel    ← document, OCCT  перестроение модели (тела, регионы эскизов, экспорт)
+render    ← core, kernel    вьюпорт OCCT/OpenGL, выбор (pick), подсветка
+ui        ← core, ImGui     тема, шрифты, иконки, виджеты, видовой куб
+platform  ← core            окна, пути, файловые диалоги, запуск браузера/папки
+app       ← всё выше        оболочка: лента, панели, редакторы операций и эскиза
+```
+Правило: стрелки только вниз. `sketch` и `document` не знают про OCCT и ImGui —
+их можно тестировать без окна; `kernel` не знает про интерфейс.
+
+## Поток данных
+
+1. **Документ** (`doc::Document`): упорядоченный список `Feature` (эскизы, операции,
+   рабочие плоскости) + параметры (`Parameter`: имя, выражение, значение).
+   Ссылки между операциями — по `ObjectId`; ссылки на геометрию тела —
+   по описанию (`FaceReference`, `EdgeReference`), а не по индексам OCCT:
+   после перестроения они находятся заново (`kernel/occt/FaceMatch`, `EdgeMatch`).
+2. **Изменение** идёт командой (`doc::Command`: Do/Undo/Label) через
+   `Session::Execute`, или правкой на месте с копией «до»
+   (`Session::CommitInPlaceEdit(before, label)`) — так устроены эскиз и панели операций.
+   Изменённая операция помечается `Document::MarkChanged(index)`.
+3. **Перестроение** (`kernel::Model::Rebuild(doc)`): с первой изменённой операции
+   до конца; у каждой операции `status` (Ok / Warning / Error + текст по-русски).
+   Регионы эскизов (замкнутые контуры) строит OCCT из рёбер эскиза.
+4. **Показ**: `render::Viewport::Sync(model)` пересоздаёт тела, когда сменилась ревизия.
+   Рисуется по требованию (кадр — только когда что-то изменилось).
+
+## Эскиз
+
+- `sketch::Sketch`: Point / Line / Circle / Arc / Spline + Constraint
+  (геометрические и размерные, до 3 ссылок). Кривые ссылаются на точки по id.
+- Решатель: `sketch::Solve` (демпфированный Гаусс–Ньютон минимальной нормы по `EquationSystem`), анализ степеней
+  свободы и «полностью определённых» элементов.
+- Операции правки — свободные функции в `src/sketch/*` (Shapes, Trim/Extend/Split,
+  Fillet, Offset, Move, Mirror, SplineGeometry) с тестами в `tests/sketch`.
+- Редактор (`app/sketch`): `SketchEditor` (состояние, диспетчер инструментов),
+  `SketchTools.cpp` (Handle* для каждого инструмента), `SketchToolPanel.cpp`
+  (левая панель), `SketchOverlay`/`SketchPick` (рисование/выбор), `DimensionLayout`.
+
+## Интерфейс
+
+- Оболочка (`app/shell`): Header (меню, панель быстрого доступа), Ribbon (лента),
+  LeftPanels/TreePanel (дерево, свойства, переменные), Bars (строка состояния), Dialogs.
+- Команды — `ActionRegistry` (`AppActions.cpp`): id, подпись, иконка, сочетание,
+  условие доступности. Лента, меню, поиск команд и клавиши берут их отсюда.
+- Панели операций — `OperationEditor` → `FeatureOperationEditor` →
+  `SketchOperationEditor` (операции от эскиза). Живой предпросмотр: операция уже
+  в документе, Отмена восстанавливает. Манипуляторы — `features/DragArrow`.
+- Перевод: весь видимый текст через `Tr("…")`/`Trf("…{}", x)`; ключ — русский текст;
+  каталоги `assets/lang/*.json` или папка пользователя (см. `translations/README.md`).
+- Настройки: `app/Settings` (JSON в папке пользователя), окно — `Dialogs.cpp`.
+
+## Файл .bzc
+Zip: `manifest.json` (версия формата) + `document.json` (дерево, параметры, эскизы). Неизвестные типы
+операций сохраняются и показываются с ошибкой, а не теряются; новые поля читаются
+`ReadMember` (отсутствует — значение по умолчанию), поэтому старые файлы открываются.
+
+## Как добавить…
+- **Инструмент эскиза**: `SketchTool` (SketchEditor.h) → строка в `kTools`
+  (SketchEditor.cpp, размер массива +1) → `case` в диспетчере → `Handle…` в
+  SketchTools.cpp → строка в `tools[]` (AppActions.cpp) → `r.Small(...)` (Ribbon.cpp)
+  → при нужде поле в SketchToolPanel.cpp → иконка `assets/icons/sk-*.svg`.
+  Геометрию — отдельной функцией в `src/sketch` с тестом.
+- **Операцию модели**: `document/XxxFeature.{h,cpp}` (поля, Save/Load, регистрация в
+  FeatureRegistry) → применение в `kernel/Model.cpp` (+ `occt/Xxx.cpp`) → панель
+  `app/features/XxxEditor` → команда в AppActions + кнопка в Ribbon → тест в `tests/kernel`.
+- **Настройку**: поле в `Settings.h`, чтение/запись в `Settings.cpp`, строка в
+  `Dialogs.cpp`.
+
+## Проверки
+`bz_tests` (ядро эскиза, документ, ядро OCCT), UI-сценарии `scripts/ui-test/*.sh`
+на Xvfb (Linux), CI: Windows (выкладывает сборку), Linux; macOS — вручную.

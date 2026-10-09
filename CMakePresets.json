@@ -1,0 +1,62 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    {
+      "name": "linux-debug",
+      "displayName": "Linux Debug",
+      "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux Release",
+      "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "windows-mingw",
+      "displayName": "Windows (MSYS2 MinGW64) Release",
+      "description": "Set OCCT_DIR to the folder that contains OpenCASCADEConfig.cmake, e.g. C:/occt/install/cmake.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "OpenCASCADE_DIR": "$env{OCCT_DIR}"
+      }
+    },
+    {
+      "name": "windows-mingw-debug",
+      "displayName": "Windows (MSYS2 MinGW64) Debug",
+      "inherits": "windows-mingw",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "macos",
+      "displayName": "macOS Release (Homebrew OCCT)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "13.3"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "linux-debug",         "configurePreset": "linux-debug" },
+    { "name": "linux-release",       "configurePreset": "linux-release" },
+    { "name": "windows-mingw",       "configurePreset": "windows-mingw" },
+    { "name": "windows-mingw-debug", "configurePreset": "windows-mingw-debug" },
+    { "name": "macos",               "configurePreset": "macos" }
+  ],
+  "testPresets": [
+    { "name": "linux-debug",   "configurePreset": "linux-debug",   "output": { "outputOnFailure": true } },
+    { "name": "linux-release", "configurePreset": "linux-release", "output": { "outputOnFailure": true } },
+    { "name": "windows-mingw", "configurePreset": "windows-mingw", "output": { "outputOnFailure": true } },
+    { "name": "macos",         "configurePreset": "macos",         "output": { "outputOnFailure": true } }
+  ]
+}
