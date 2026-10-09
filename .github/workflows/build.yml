@@ -48,7 +48,15 @@ jobs:
         id: build
         run: cmake --build --preset windows-mingw 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Test
-        run: ctest --preset windows-mingw --output-on-failure 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+        run: |
+          ctest --preset windows-mingw --output-on-failure 2>&1 | tee test.log
+          status=${PIPESTATUS[0]}
+          # A crash prints no failed check: run again, naming each finished test case.
+          if [ $status -ne 0 ]; then
+            exe=$(find build/windows-mingw -name bz_tests.exe | head -1)
+            "$exe" -d 2>&1 | grep -vE "WARN|INFO" | tail -15 | sed 's/^/last cases: /' | tee -a test.log
+          fi
+          exit $status
       - name: Report failures
         if: failure()
         run: bash scripts/ci-annotate.sh build.log test.log
