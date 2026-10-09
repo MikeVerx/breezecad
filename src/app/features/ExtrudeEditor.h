@@ -20,8 +20,12 @@ protected:
     void LoadTexts(const doc::Feature& feature) override;
     void DrawOptions(AppContext& app, Session& session, doc::SketchSolidFeature& feature, float width) override;
     void CarryOver(const doc::SketchSolidFeature& previous, doc::SketchSolidFeature& next) const override;
+    /// The length arrow: drawn over the model, dragged to change the distance.
+    bool PickInViewport(AppContext& app, Session& session, doc::SketchSolidFeature& feature, const SketchView& view) override;
 
 private:
+    bool   myDragging = false;
+    double myDragOffset = 0.0;   ///< handle position minus the grabbed point along the arrow
     std::string myDistance;
     std::string myTaper;
 };

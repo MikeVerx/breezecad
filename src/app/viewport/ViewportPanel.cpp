@@ -216,6 +216,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     vf.projection = app.viewport.Projection();
     vf.hovered = ImGui::IsItemHovered() && !navigating;
     UpdateMarkingMenu(app, session, vf);   // may take the mouse from the overlays
+    app.shell.handleHot = false;           // a handle drawn below sets it again for the next frame
 
     app.shell.planeQuads.clear();   // refilled by the overlays below
 

@@ -86,7 +86,7 @@ bool UpdateMarkingMenu(AppContext& app, Session& session, ViewportFrame& vf) {
     const ImVec2 mouse = ImGui::GetMousePos();
 
     if (!m.open) {
-        if (vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        if (vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !app.shell.handleHot) {
             m.armed = true;
             m.pressAt = mouse;
             m.pressTime = ImGui::GetTime();

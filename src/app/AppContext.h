@@ -30,6 +30,7 @@ enum class RibbonTab : unsigned char { Model, Sketch, View };
 struct ShellState {
     LeftTab   leftTab   = LeftTab::Tree;
     RibbonTab ribbonTab = RibbonTab::Model;
+    bool      handleHot = false;      ///< a drag handle in the view is under the cursor or held (no radial menu)
     float     ribbonScroll = 0.0f;   ///< sideways scroll of a ribbon wider than the window
     float     ribbonContent = 0.0f;  ///< the ribbon's laid-out width in the last frame
 
