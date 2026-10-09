@@ -10,7 +10,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include <array>
 #include <string>
+#include <string_view>
+#include <utility>
 
 namespace bz::doc::json_io {
 
@@ -37,6 +40,25 @@ bool Read(const Json& j, ObjectId& out);
 bool Read(const Json& j, Frame& out);
 bool Read(const Json& j, Parameter& out);
 bool Read(const Json& j, FaceReference& out);
+
+/// Enum values in files are written by name: `table` lists {value, name}.
+template <class E, std::size_t N>
+std::string_view IdOf(const std::array<std::pair<E, std::string_view>, N>& table, E value) {
+    for (const auto& [v, id] : table)
+        if (v == value) return id;
+    return table.front().second;
+}
+
+/// The value named `id` in `table`; false when the name is unknown.
+template <class E, std::size_t N>
+bool FromId(const std::array<std::pair<E, std::string_view>, N>& table, std::string_view id, E& out) {
+    for (const auto& [v, name] : table)
+        if (name == id) {
+            out = v;
+            return true;
+        }
+    return false;
+}
 
 /// Reads an optional member; missing keeps the default, malformed fails.
 template <class T>

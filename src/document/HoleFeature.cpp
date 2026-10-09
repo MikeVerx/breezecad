@@ -27,9 +27,7 @@ void HoleFeature::CollectParameters(std::vector<Parameter*>& out) {
 void HoleFeature::SaveFields(Json& out) const {
     Json centreList = Json::array();
     for (Vec2 c : centres) centreList.push_back(json_io::ToJson(c));
-    std::string_view typeId = "simple";
-    for (const auto& [t, key] : kTypeIds)
-        if (t == type) typeId = key;
+    const std::string_view typeId = json_io::IdOf(kTypeIds, type);
     out["face"]         = json_io::ToJson(face);
     out["centres"]      = std::move(centreList);
     out["type"]         = typeId;
@@ -48,13 +46,7 @@ Status HoleFeature::LoadFields(const Json& in) {
         !ReadMember(in, "depth", f.depth) || !ReadMember(in, "headDiameter", f.headDiameter) ||
         !ReadMember(in, "headDepth", f.headDepth) || !ReadMember(in, "sinkDiameter", f.sinkDiameter))
         return Error{"Отверстие: повреждены параметры"};
-    bool known = false;
-    for (const auto& [t, key] : kTypeIds)
-        if (key == typeId) {
-            f.type = t;
-            known = true;
-        }
-    if (!known) return Error{"Отверстие: неизвестный тип «" + typeId + "»"};
+    if (!json_io::FromId(kTypeIds, typeId, f.type)) return Error{"Отверстие: неизвестный тип «" + typeId + "»"};
     for (const Json& c : in.value("centres", Json::array())) {
         Vec2 v;
         if (!json_io::Read(c, v)) return Error{"Отверстие: повреждены центры"};

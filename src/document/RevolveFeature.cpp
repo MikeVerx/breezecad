@@ -9,6 +9,8 @@ namespace bz::doc {
 namespace {
 
 using json_io::Json;
+using json_io::FromId;
+using json_io::IdOf;
 using json_io::ReadMember;
 
 constexpr std::array<std::pair<RevolveAxisKind, std::string_view>, 3> kAxisIds{{
@@ -22,23 +24,6 @@ constexpr std::array<std::pair<RevolveExtent, std::string_view>, 3> kExtentIds{{
     {RevolveExtent::Angle, "angle"},
     {RevolveExtent::Symmetric, "symmetric"},
 }};
-
-template <class E, std::size_t N>
-std::string_view IdOf(const std::array<std::pair<E, std::string_view>, N>& table, E value) {
-    for (const auto& [v, id] : table)
-        if (v == value) return id;
-    return table.front().second;
-}
-
-template <class E, std::size_t N>
-bool FromId(const std::array<std::pair<E, std::string_view>, N>& table, std::string_view id, E& out) {
-    for (const auto& [v, name] : table)
-        if (name == id) {
-            out = v;
-            return true;
-        }
-    return false;
-}
 
 } // namespace
 

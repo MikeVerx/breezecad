@@ -8,6 +8,8 @@
 namespace bz::doc {
 namespace {
 
+using json_io::FromId;
+using json_io::IdOf;
 using json_io::Json;
 
 constexpr std::array<std::pair<CurveKind, std::string_view>, 3> kCurveIds{{
@@ -16,23 +18,6 @@ constexpr std::array<std::pair<CurveKind, std::string_view>, 3> kCurveIds{{
 constexpr std::array<std::pair<SurfaceKind, std::string_view>, 6> kSurfaceIds{{
     {SurfaceKind::Plane, "plane"},   {SurfaceKind::Cylinder, "cylinder"}, {SurfaceKind::Cone, "cone"},
     {SurfaceKind::Sphere, "sphere"}, {SurfaceKind::Torus, "torus"},       {SurfaceKind::Other, "other"}}};
-
-template <class E, std::size_t N>
-std::string_view IdOf(const std::array<std::pair<E, std::string_view>, N>& table, E value) {
-    for (const auto& [v, id] : table)
-        if (v == value) return id;
-    return table.back().second;
-}
-
-template <class E, std::size_t N>
-bool FromId(const std::array<std::pair<E, std::string_view>, N>& table, std::string_view id, E& out) {
-    for (const auto& [v, name] : table)
-        if (name == id) {
-            out = v;
-            return true;
-        }
-    return false;
-}
 
 Json ToJson(const EdgeReference& e) {
     Json faces = Json::array();
