@@ -7,6 +7,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 
 using namespace bz;
 using namespace bz::test;
@@ -170,9 +171,9 @@ TEST_CASE("export STEP, STL and 3MF") {
 
     {   // closed before the folder is removed: Windows cannot delete open files
         std::ifstream in(step);
-        std::string header;
-        std::getline(in, header);
-        CHECK(header.find("ISO-10303-21") != std::string::npos);
+        const std::string text{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        CHECK(text.starts_with("ISO-10303-21"));
+        CHECK(text.find("'BreezeCAD'") != std::string::npos);   // originating system in the header
     }
     CHECK(std::filesystem::file_size(stl) == 84 + 50 * 12);   // a box: 6 faces x 2 triangles
     CHECK(std::filesystem::file_size(mf3) > 200);

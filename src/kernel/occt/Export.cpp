@@ -10,6 +10,8 @@
 #include <Interface_Static.hxx>
 #include <Poly_Triangulation.hxx>
 #include <STEPControl_Writer.hxx>
+#include <APIHeaderSection_MakeHeader.hxx>
+#include <TCollection_HAsciiString.hxx>
 #include <Standard_Version.hxx>
 #include <Standard_Failure.hxx>
 #include <TopExp_Explorer.hxx>
@@ -95,6 +97,12 @@ Status Model::ExportStep(const std::filesystem::path& path) const {
         Interface_Static::SetCVal("write.step.unit", "MM");
         if (writer.Transfer(Compound(myImpl->bodies), STEPControl_AsIs) != IFSelect_RetDone)
             return Error{"Не удалось подготовить STEP"};
+        // Say who wrote the file (OCCT puts its own name and 'Author' there).
+        APIHeaderSection_MakeHeader header(writer.Model());
+        header.SetOriginatingSystem(new TCollection_HAsciiString("BreezeCAD"));
+        header.SetAuthorValue(1, new TCollection_HAsciiString(""));
+        header.SetOrganizationValue(1, new TCollection_HAsciiString(""));
+        header.SetDescriptionValue(1, new TCollection_HAsciiString("BreezeCAD model"));
 #if OCC_VERSION_HEX >= 0x070700
         // Our own stream: opened with the wide path on Windows and closed
         // here, so the file is never left locked by the writer.
