@@ -222,6 +222,24 @@ void SketchEditor::ToggleConstruction(Session& session) {
     session.CommitInPlaceEdit(std::move(before), "Вспомогательная геометрия");
 }
 
+void SketchEditor::UpdateShownGlyphs(const sketch::Sketch& sk, bool all) {
+    myShownGlyphs.clear();
+    if (all) return;
+    // As in Inventor: the constraints of what is selected (and under the
+    // cursor) show; the rest stay hidden until F8.
+    const auto shown = [&](ObjectId id) {
+        return id && (mySelection.contains(id) || id == myHover.id || std::find(myPicks.begin(), myPicks.end(), id) != myPicks.end());
+    };
+    for (const sketch::Constraint& c : sk.constraints) {
+        if (sketch::IsDimensional(c.type)) continue;
+        bool related = shown(c.id) || shown(c.refs[0]) || shown(c.refs[1]);
+        // A point's constraints show with its curve.
+        for (const sketch::Line& l : sk.lines)
+            if (shown(l.id) && (c.refs[0] == l.start || c.refs[0] == l.end || c.refs[1] == l.start || c.refs[1] == l.end)) related = true;
+        if (related) myShownGlyphs.insert(c.id);
+    }
+}
+
 void SketchEditor::ToggleCenterline(Session& session) {
     doc::SketchFeature* f = Active(session);
     if (!f || mySelection.empty()) return;
@@ -255,11 +273,13 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
 
     const ImVec2 mouse = ImGui::GetMousePos();
     myCursor = vf.hovered ? view.FromScreen(mouse) : std::nullopt;
+    UpdateShownGlyphs(f->sketch, app.settings.showAllConstraints);
+    const std::unordered_set<ObjectId>* glyphs = app.settings.showAllConstraints ? nullptr : &myShownGlyphs;
     if (!myDragging) {
         myHover = vf.hovered ? HitTest(f->sketch, view, mouse, session.doc.units) : SketchHit{};
         // Constraint glyphs are selectable too (to delete a constraint).
         if (!myHover && vf.hovered)
-            for (const GlyphPlacement& g : LayoutGlyphs(f->sketch, view, app.ui.scale))
+            for (const GlyphPlacement& g : LayoutGlyphs(f->sketch, view, app.ui.scale, glyphs))
                 if (std::abs(mouse.x - g.center.x) < app.ui.S(9) && std::abs(mouse.y - g.center.y) < app.ui.S(9))
                     myHover = {g.constraint, sketch::EntityKind::Constraint};
     }
@@ -268,6 +288,7 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
     style.selection = &mySelection;
     style.hover = myHover.id;
     style.analysis = &f->analysis;
+    style.glyphs = glyphs;
     for (ObjectId id : myPicks) style.picked.push_back(id);
     DrawSketch(app.ui, dl, *f, view, session.doc.units, style);
 

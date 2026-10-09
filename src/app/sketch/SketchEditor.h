@@ -177,6 +177,11 @@ private:
     Snap                  mySnap;
     std::optional<Vec2>   myCursor;
 
+    /// Constraints whose glyphs show when not all are shown: those of the
+    /// selected and hovered elements (rebuilt every frame).
+    std::unordered_set<ObjectId> myShownGlyphs;
+    void UpdateShownGlyphs(const sketch::Sketch& sk, bool all);
+
     // selection, picking
     std::unordered_set<ObjectId> mySelection;
     std::vector<ObjectId>        myPicks;

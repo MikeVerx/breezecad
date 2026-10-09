@@ -236,7 +236,8 @@ void FillSketchRegion(ImDrawList* dl, const SketchView& view, const kernel::Sket
             dl->AddPolyline(pts.data(), static_cast<int>(pts.size()), ui::ToU32(outline), ImDrawFlags_Closed, outlineWidth);
 }
 
-std::vector<GlyphPlacement> LayoutGlyphs(const sketch::Sketch& sk, const SketchView& view, float scale) {
+std::vector<GlyphPlacement> LayoutGlyphs(const sketch::Sketch& sk, const SketchView& view, float scale,
+                                         const std::unordered_set<ObjectId>* only) {
     std::vector<GlyphPlacement> out;
     std::vector<std::pair<ObjectId, int>> stack;   // glyphs already placed per entity
     const auto slot = [&](ObjectId entity) {
@@ -274,7 +275,7 @@ std::vector<GlyphPlacement> LayoutGlyphs(const sketch::Sketch& sk, const SketchV
 
     for (const auto& c : sk.constraints) {
         const char* icon = GlyphIcon(c.type);
-        if (!icon) continue;
+        if (!icon || (only && !only->contains(c.id))) continue;
         // Coincidences show as a dot at the point; the others beside each entity.
         const bool both = c.type == ConstraintType::Parallel || c.type == ConstraintType::Perpendicular ||
                           c.type == ConstraintType::Equal || c.type == ConstraintType::Tangent ||
@@ -348,7 +349,7 @@ void DrawSketch(ui::Ui& ui, ImDrawList* dl, const doc::SketchFeature& feature, c
     }
 
     // Constraint glyphs.
-    for (const GlyphPlacement& g : LayoutGlyphs(sk, view, ui.scale)) {
+    for (const GlyphPlacement& g : LayoutGlyphs(sk, view, ui.scale, style.glyphs)) {
         const bool hot = style.hover == g.constraint || Contains(style.selection, g.constraint);
         const float size = ui.S(14);
         if (hot) dl->AddRectFilled({g.center.x - size * 0.65f, g.center.y - size * 0.65f},

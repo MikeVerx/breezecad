@@ -20,6 +20,8 @@ struct SketchDrawStyle {
     std::vector<ObjectId>                      picked;
     const doc::SketchFeature::Analysis*        analysis = nullptr;
     bool                                       passive = false;   ///< not being edited: thin, muted, no dimensions
+    /// Geometric constraints whose glyphs are drawn; nullptr draws all.
+    const std::unordered_set<ObjectId>*        glyphs = nullptr;
 };
 
 void DrawSketchGrid(ui::Ui& ui, ImDrawList* dl, const SketchView& view, double step);
@@ -50,6 +52,8 @@ struct GlyphPlacement {
     ImVec2      center;
     const char* icon;
 };
-std::vector<GlyphPlacement> LayoutGlyphs(const sketch::Sketch& sk, const SketchView& view, float scale);
+/// `only`: the constraints to place (nullptr: all of them).
+std::vector<GlyphPlacement> LayoutGlyphs(const sketch::Sketch& sk, const SketchView& view, float scale,
+                                         const std::unordered_set<ObjectId>* only = nullptr);
 
 } // namespace bz::app

@@ -103,6 +103,11 @@ void RegisterActions(AppContext& app) {
            "Сделать выбранные отрезки осевыми: ось для вращения и пружины, в контуры не входят",
            [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasSelection(); },
            [&app] { app.sketch.ToggleCenterline(*app.Doc()); }});
+    a.Add({"sketch.showConstraints", "Показать все зависимости", "c-show-all", ImGuiKey_F8,
+           "Значки всех зависимостей эскиза (F8). Скрытые видны у выделенного", inSketch,
+           [&app] { app.settings.showAllConstraints = true; }});
+    a.Add({"sketch.hideConstraints", "Скрыть зависимости", "c-hide-all", ImGuiKey_F9,
+           "Показывать значки только у выделенного (F9)", inSketch, [&app] { app.settings.showAllConstraints = false; }});
     const struct {
         SketchTool  tool;
         const char* id;

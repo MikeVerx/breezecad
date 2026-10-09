@@ -34,6 +34,7 @@ Settings Settings::Load(const std::filesystem::path& file) {
     s.autosaveMinutes = std::clamp(j.value("autosaveMinutes", s.autosaveMinutes), 0, 120);
     s.gridSnap        = j.value("gridSnap", s.gridSnap);
     s.pointSnap       = j.value("pointSnap", s.pointSnap);
+    s.showAllConstraints = j.value("showAllConstraints", s.showAllConstraints);
     s.gridStep        = std::max(0.0, j.value("gridStep", s.gridStep));
     for (const auto& r : j.value("recentFiles", nlohmann::json::array()))
         if (r.is_string()) s.recentFiles.push_back(PathFromUtf8(r.get<std::string>()));
@@ -49,6 +50,7 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"autosaveMinutes", autosaveMinutes},
         {"gridSnap", gridSnap},
         {"pointSnap", pointSnap},
+        {"showAllConstraints", showAllConstraints},
         {"gridStep", gridStep},
         {"recentFiles", recent},
     };

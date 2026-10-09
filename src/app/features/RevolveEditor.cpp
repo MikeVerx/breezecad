@@ -60,7 +60,6 @@ void RevolveEditor::CarryOver(const doc::SketchSolidFeature& previous, doc::Sket
 void RevolveEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSolidFeature& feature, float width) {
     auto& f = static_cast<doc::RevolveFeature&>(feature);
     ui::Ui& ui = app.ui;
-    const ui::ThemeColors& c = ui.C();
 
     Section(app, "Ось");
     {

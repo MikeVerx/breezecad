@@ -247,6 +247,8 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.Icon("sketch.midpoint", active(SketchTool::Midpoint));
     r.Icon("sketch.tangent", active(SketchTool::Tangent));
     r.Icon("sketch.concentric", active(SketchTool::Concentric));
+    r.Icon("sketch.showConstraints", r.App().settings.showAllConstraints);
+    r.Icon("sketch.hideConstraints", !r.App().settings.showAllConstraints);
     r.EndGrid();
     r.EndGroup();
 
