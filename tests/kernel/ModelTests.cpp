@@ -213,3 +213,17 @@ TEST_CASE("mass properties of two separate bodies") {
     none.Rebuild(empty);
     CHECK_FALSE(none.Properties());
 }
+
+TEST_CASE("a closed spline extrudes into a body") {
+    doc::Document d;
+    auto& sk = bz::test::AddSketch(d);
+    IdGenerator& ids = d.Ids();
+    std::vector<ObjectId> pts;
+    for (const Vec2 p : {Vec2{0, 0}, Vec2{30, -5}, Vec2{40, 20}, Vec2{10, 30}}) pts.push_back(sk.sketch.AddPoint(ids, p));
+    pts.push_back(pts.front());
+    sk.sketch.AddSpline(ids, pts, true);
+    bz::test::AddExtrude(d, sk.id, "10");
+    kernel::Model model;
+    model.Rebuild(d);
+    CHECK(model.Volume() > 5000.0);   // roughly 30 x 30 x 10, smooth corners
+}

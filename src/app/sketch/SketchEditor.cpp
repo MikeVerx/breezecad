@@ -16,13 +16,14 @@
 namespace bz::app {
 namespace {
 
-constexpr std::array<SketchToolInfo, 30> kTools{{
+constexpr std::array<SketchToolInfo, 31> kTools{{
     {SketchTool::Select, N_("Выбор"), "ui-check", N_("Выберите или перетащите элементы эскиза")},
     {SketchTool::Line, N_("Отрезок"), "sk-line", N_("Укажите начальную точку отрезка")},
     {SketchTool::Rectangle, N_("Прямоугольник"), "sk-rectangle", N_("Укажите первый угол прямоугольника")},
     {SketchTool::Circle, N_("Окружность"), "sk-circle", N_("Укажите центр окружности")},
     {SketchTool::Arc, N_("Дуга"), "sk-arc", N_("Укажите центр дуги")},
     {SketchTool::Point, N_("Точка"), "sk-point", N_("Укажите положение точки")},
+    {SketchTool::Spline, N_("Сплайн"), "sk-spline", N_("Щёлкайте точки сплайна. Правый щелчок или Enter — закончить, щелчок по первой точке — замкнуть")},
     {SketchTool::Project, N_("Проецировать"), "sk-project", N_("Щёлкните ребро модели или грань (весь её контур) — проекция появится в эскизе и будет следовать за моделью")},
     {SketchTool::Trim, N_("Обрезка"), "sk-trim", N_("Щёлкните лишний кусок кривой — он удалится до ближайших пересечений")},
     {SketchTool::Extend, N_("Удлинение"), "sk-extend", N_("Щёлкните отрезок у конца — он дотянется до ближайшей кривой")},
@@ -317,6 +318,7 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
     // A short right click ends a chain of lines, like in KOMPAS.
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Right) && ImGui::GetMouseDragDelta(ImGuiMouseButton_Right).x == 0 &&
         !myClicks.empty()) {
+        if (myTool == SketchTool::Spline) FinishSpline(app, session, false);   // a spline ends where it was
         myClicks.clear();
     }
 
@@ -333,6 +335,7 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
         case SketchTool::Extend:    HandleExtend(app, session, view); break;
         case SketchTool::Fillet:    HandleFillet(app, session, view); break;
         case SketchTool::Offset:    HandleOffset(app, session, view); break;
+        case SketchTool::Spline:    HandleSpline(app, session, view); break;
         case SketchTool::Move:
         case SketchTool::Rotate:    HandleMotion(app, session, view); break;
         case SketchTool::Mirror:    HandleMirror(app, session, view); break;

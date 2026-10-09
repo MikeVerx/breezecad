@@ -11,6 +11,7 @@
 #include "sketch/Offset.h"
 #include "sketch/Shapes.h"
 #include "sketch/Solver.h"
+#include "sketch/SplineGeometry.h"
 #include "sketch/Trim.h"
 
 #include <algorithm>
@@ -555,6 +556,63 @@ void SketchEditor::HandleOffset(AppContext& app, Session& session, const SketchV
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
     session.CommitInPlaceEdit(std::move(before), Tr("Эквидистанта"));
     myOffsetCurve = {};
+}
+
+void SketchEditor::HandleSpline(AppContext& app, Session& session, const SketchView& view) {
+    doc::SketchFeature* f = Active(session);
+    SnapOptions options;
+    options.points = app.settings.pointSnap;
+    options.grid = app.settings.gridSnap;
+    options.gridStep = app.settings.gridStep > 0 ? app.settings.gridStep : AdaptiveGridStep(view.MmPerPixel()) / 2;
+    mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
+    myCursor = mySnap.pos;
+    myMmPerPixel = view.MmPerPixel();
+
+    // Back on the first point: the spline closes.
+    const bool closing = myClicks.size() >= 3 &&
+                         (mySnap.pos - myClicks.front().pos).Length() < 8.0 * std::max(view.MmPerPixel(), 1e-9);
+    if (!myClicks.empty()) {
+        std::vector<Vec2> pts;
+        for (const PointRef& c : myClicks) pts.push_back(c.pos);
+        pts.push_back(closing ? myClicks.front().pos : mySnap.pos);
+        const std::vector<Vec2> curve = sketch::SampleSpline(sketch::SplineShape(pts, !myOptions.splineControl, closing));
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        for (std::size_t i = 0; i + 1 < curve.size(); ++i) DrawSketchSegment(app.ui, dl, view, curve[i], curve[i + 1], app.ui.C().accent, 2.0f, false);
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) {
+        FinishSpline(app, session, false);
+        return;
+    }
+    if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left) || !view.vf.hovered) return;
+    if (closing) {
+        FinishSpline(app, session, true);
+        return;
+    }
+    // A second click on the same spot (a double click) adds nothing.
+    if (!myClicks.empty() && (myClicks.back().pos - mySnap.pos).Length() < 1e-9) return;
+    myClicks.push_back(RefFromSnap(mySnap));
+}
+
+void SketchEditor::FinishSpline(AppContext& app, Session& session, bool closed) {
+    doc::SketchFeature* f = Active(session);
+    if (!f || myClicks.size() < 2) {
+        myClicks.clear();
+        return;
+    }
+    auto before = f->Clone();
+    sketch::Sketch& sk = f->sketch;
+    std::vector<ObjectId> pts;
+    for (const PointRef& c : myClicks) pts.push_back(Resolve(session.doc, sk, c));
+    if (closed) pts.push_back(pts.front());
+    sk.AddSpline(session.doc.Ids(), std::move(pts), !myOptions.splineControl, myOptions.style != LineStyle::Normal);
+    myClicks.clear();
+    if (!sketch::Solve(sk).converged) {
+        f->sketch = static_cast<const doc::SketchFeature&>(*before).sketch;
+        app.notes.Error(Tr("Сплайн противоречит ограничениям эскиза"));
+        return;
+    }
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), Tr("Сплайн"));
 }
 
 void SketchEditor::HandleFillet(AppContext& app, Session& session, const SketchView& view) {

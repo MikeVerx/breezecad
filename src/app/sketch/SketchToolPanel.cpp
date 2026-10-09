@@ -149,6 +149,15 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
             }
             break;
         }
+        case SketchTool::Spline: {
+            static constexpr std::array<Way, 2> ways{{{"sk-spline", N_("Через точки")}, {"sk-spline-cv", N_("По управляющим точкам")}}};
+            const int current = myOptions.splineControl ? 1 : 0;
+            if (const int chosen = WayRow(ui, "spline", ways, current, inner); chosen != current) {
+                myOptions.splineControl = chosen == 1;
+                restart();
+            }
+            break;
+        }
         case SketchTool::Arc: {
             static constexpr std::array<Way, 2> ways{{{"sk-arc", N_("Центр, начало, конец")}, {"sk-arc-3pt", N_("По трём точкам")}}};
             const int chosen = WayRow(ui, "arc", ways, static_cast<int>(myOptions.arc), inner);

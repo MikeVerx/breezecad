@@ -154,7 +154,9 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
             nav.button = -1;   // a right click not bound to a gesture: just the menu, on release
         }
     }
-    if (nav.button < 0 && ImGui::IsMouseReleased(ImGuiMouseButton_Right) && sceneHovered && !busy &&
+    // In a sketch, a right click that ends a chain is not a menu click.
+    const bool sketchBusy = session.mode == EditMode::Sketch && app.sketch.Busy();
+    if (nav.button < 0 && ImGui::IsMouseReleased(ImGuiMouseButton_Right) && sceneHovered && !busy && !sketchBusy &&
         ImGui::GetMouseDragDelta(ImGuiMouseButton_Right).x == 0 && ImGui::GetMouseDragDelta(ImGuiMouseButton_Right).y == 0)
         ImGui::OpenPopup("##viewport-menu");
 
@@ -168,7 +170,7 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
         if (ImGui::IsMouseReleased(nav.button)) {
             // A short right click: the context menu; a short middle click
             // confirms the operation, like in KOMPAS.
-            if (!nav.moved && nav.button == ImGuiMouseButton_Right) ImGui::OpenPopup("##viewport-menu");
+            if (!nav.moved && nav.button == ImGuiMouseButton_Right && !sketchBusy) ImGui::OpenPopup("##viewport-menu");
             if (!nav.moved && nav.button == ImGuiMouseButton_Middle && app.ops.Active())
                 app.Later([&app, &session] { EnterPressed(app); });
             nav.orbiting = nav.panning = nav.zooming = false;

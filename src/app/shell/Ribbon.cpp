@@ -220,6 +220,7 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.Large("sketch.rectangle", Tr("Прямо-\nугольник"), active(SketchTool::Rectangle));
     r.BeginColumn();
     r.Small("sketch.point", nullptr, active(SketchTool::Point));
+    r.Small("sketch.spline", nullptr, active(SketchTool::Spline));
     r.EndColumn();
     r.EndGroup();
 
