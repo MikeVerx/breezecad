@@ -1,6 +1,7 @@
 #include "kernel/Model.h"
 
 #include "core/Log.h"
+#include "document/CoilFeature.h"
 #include "document/DraftFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/HoleFeature.h"
@@ -14,6 +15,7 @@
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
 #include "document/WorkPlaneFeature.h"
+#include "kernel/occt/Coil.h"
 #include "kernel/occt/Draft.h"
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Extrude.h"
@@ -487,6 +489,11 @@ void Model::Rebuild(doc::Document& doc) {
                                      [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature&, const Frame&) {
                                          return occt::MakeSweep(faces, *path);
                                      });
+            } else if (auto* coil = dynamic_cast<doc::CoilFeature*>(&f)) {
+                if (Expected<TopoDS_Shape> solid = occt::MakeCoil(*coil))
+                    CombineSolid(coil->id, coil->operation, *solid, impl, bodies, coil->status);
+                else
+                    coil->status = {FeatureState::Error, solid.GetError().message};
             } else if (auto* loft = dynamic_cast<doc::LoftFeature*>(&f)) {
                 ApplyLoft(*loft, impl, bodies, doc);
             } else if (auto* wp = dynamic_cast<doc::WorkPlaneFeature*>(&f)) {
