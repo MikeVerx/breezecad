@@ -232,7 +232,8 @@ void EquationSystem::AddConstraint(const Sketch& sk, const Constraint& c) {
             const int p = P(a);
             const auto [s, e] = lineEnds(b);
             if (p < 0 || s < 0) return;
-            Equation eq = MakeEq(EqKind::PointLine, {p, p + 1, s, s + 1, e, e + 1}, c.parameter.value, src);
+            const double distance = IsDiametric(sk, c) ? c.parameter.value / 2 : c.parameter.value;
+            Equation eq = MakeEq(EqKind::PointLine, {p, p + 1, s, s + 1, e, e + 1}, distance, src);
             eq.sign = SignOf((pos(e) - pos(s)).Cross(pos(p) - pos(s)));
             Add(eq);
             return;

@@ -164,4 +164,8 @@ private:
     void RemoveConstraintsReferencing(ObjectId id);
 };
 
+/// A distance from a point to an осевая: shown and driven as a diameter
+/// (twice the distance), as for a shaft profile drawn as a half.
+bool IsDiametric(const Sketch& sk, const Constraint& c);
+
 } // namespace bz::sketch

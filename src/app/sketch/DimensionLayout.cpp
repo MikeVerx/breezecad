@@ -22,7 +22,10 @@ std::optional<std::pair<Vec2, Vec2>> LinearEnds(const sketch::Sketch& sk, const 
         const Vec2 p = sk.PositionOf(c.refs[0]);
         const Vec2 a = sk.PositionOf(l->start), b = sk.PositionOf(l->end);
         const Vec2 d = (b - a).Normalized();
-        return std::pair{p, a + d * (p - a).Dot(d)};
+        const Vec2 foot = a + d * (p - a).Dot(d);
+        // To an осевая: the whole diameter, from the point to its mirror image.
+        if (l->centerline) return std::pair{p, foot * 2.0 - p};
+        return std::pair{p, foot};
     }
     if (!sk.FindPoint(c.refs[0]) || !sk.FindPoint(c.refs[1])) return std::nullopt;
     return std::pair{sk.PositionOf(c.refs[0]), sk.PositionOf(c.refs[1])};
@@ -47,13 +50,13 @@ std::optional<std::tuple<Vec2, Vec2, Vec2>> AngleParts(const sketch::Sketch& sk,
     return std::tuple{vertex, u1, u2};
 }
 
-std::string Label(const sketch::Constraint& c, double value, const UnitSystem& units) {
+std::string Label(const sketch::Sketch& sk, const sketch::Constraint& c, double value, const UnitSystem& units) {
     std::string text;
     if (c.type == ConstraintType::Angle) {
         text = FormatValue(std::abs(value), Quantity::Angle, units, 2) + (units.angle == AngleUnit::Degree ? "\xC2\xB0" : "");
     } else {
         text = FormatValue(value, Quantity::Length, units, 3);
-        if (c.type == ConstraintType::Diameter) text = "\xC3\x98" + text;   // Ø
+        if (c.type == ConstraintType::Diameter || sketch::IsDiametric(sk, c)) text = "\xC3\x98" + text;   // Ø
         if (c.type == ConstraintType::Radius) text = "R" + text;
     }
     // A dimension driven by an expression shows that it is a formula.
@@ -122,7 +125,7 @@ std::optional<DimensionLayout> LayoutDimension(const sketch::Sketch& sk, const s
     DimensionLayout out;
     const std::optional<double> measured = MeasureDimension(sk, c);
     if (!measured) return std::nullopt;
-    out.text = Label(c, c.reference ? *measured : c.parameter.value, units);
+    out.text = Label(sk, c, c.reference ? *measured : c.parameter.value, units);
 
     switch (c.type) {
         case ConstraintType::Radius:

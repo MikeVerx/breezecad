@@ -224,4 +224,10 @@ void Sketch::ScaleAbout(Vec2 center, double factor) {
     }
 }
 
+bool IsDiametric(const Sketch& sk, const Constraint& c) {
+    if (c.type != ConstraintType::PointLineDistance) return false;
+    const Line* axis = sk.FindLine(c.refs[1]);
+    return axis && axis->centerline;
+}
+
 } // namespace bz::sketch

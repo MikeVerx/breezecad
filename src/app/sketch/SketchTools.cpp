@@ -218,7 +218,9 @@ std::optional<sketch::Constraint> DimensionFromPicks(const sketch::Sketch& sk, c
         const Vec2 d1 = sk.PositionOf(l1->end) - sk.PositionOf(l1->start);
         const Vec2 d2 = sk.PositionOf(l2->end) - sk.PositionOf(l2->start);
         const bool parallel = std::abs(d1.Normalized().Cross(d2.Normalized())) < 1e-6;
-        c = parallel ? Make(ConstraintType::PointLineDistance, l2->start, picks[0]) : Make(ConstraintType::Angle, picks[0], picks[1]);
+        // To an осевая the dimension measures from the other line (and becomes a diameter).
+        if (parallel && l2->centerline && !l1->centerline) c = Make(ConstraintType::PointLineDistance, l1->start, picks[1]);
+        else c = parallel ? Make(ConstraintType::PointLineDistance, l2->start, picks[0]) : Make(ConstraintType::Angle, picks[0], picks[1]);
     } else if (k0 == EntityKind::Point && k1 == EntityKind::Line) {
         c = Make(ConstraintType::PointLineDistance, picks[0], picks[1]);
     } else if (k0 == EntityKind::Line && k1 == EntityKind::Point) {

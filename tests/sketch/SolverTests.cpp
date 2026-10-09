@@ -220,3 +220,22 @@ TEST_CASE("extents cover curves, scaling keeps the shape") {
     CHECK(sk.RadiusOf(circle) == doctest::Approx(6.0));
     CHECK(Near(sk.Origin()->pos, {0, 0}));
 }
+
+TEST_CASE("a distance to an осевая is a diameter") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId axis = sk.AddLine(ids, sk.AddPoint(ids, {0, 0}), sk.AddPoint(ids, {0, 10}));
+    sk.FindLine(axis)->centerline = true;
+    Constraint hold;
+    hold.type = ConstraintType::Fix;
+    hold.refs = {sk.FindLine(axis)->start, {}, {}};
+    hold.fixedAt = {0, 0};
+    sk.AddConstraint(ids, hold);
+    sk.AddConstraint(ids, Geo(ConstraintType::Vertical, axis));
+    const ObjectId p = sk.AddPoint(ids, {7, 3});
+    Constraint d = Dim(ConstraintType::PointLineDistance, 30, p, axis);
+    CHECK(IsDiametric(sk, d));
+    sk.AddConstraint(ids, d);
+    REQUIRE(Solve(sk).converged);
+    CHECK(std::abs(sk.PositionOf(p).x) == doctest::Approx(15.0));   // radius, from a diameter of 30
+}
