@@ -117,6 +117,8 @@ private:
     void ApplyMotion(AppContext& app, Session& session, const sketch::Motion& motion);
     void HandleDimension(AppContext& app, Session& session, const SketchView& view);
     void HandleConstraint(AppContext& app, Session& session, const SketchView& view);
+    /// Constraint tools' panel: the picked elements, each can be dropped.
+    void DrawPicks(AppContext& app, Session& session, float width);
     void HandleInlineEdit(AppContext& app, Session& session, const SketchView& view);
 
     // Building blocks.

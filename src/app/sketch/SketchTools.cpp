@@ -652,7 +652,12 @@ void SketchEditor::HandleConstraint(AppContext& app, Session& session, const Ske
     if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
     if (!myHover || myHover.kind == EntityKind::Constraint) return;
     doc::SketchFeature* f = Active(session);
-    if (std::find(myPicks.begin(), myPicks.end(), myHover.id) != myPicks.end()) return;
+    // A second click on a picked element drops it: a wrong first pick is
+    // replaced without leaving the tool.
+    if (const auto it = std::find(myPicks.begin(), myPicks.end(), myHover.id); it != myPicks.end()) {
+        myPicks.erase(it);
+        return;
+    }
     myPicks.push_back(myHover.id);
 
     bool needMore = false;

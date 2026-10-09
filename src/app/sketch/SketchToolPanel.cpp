@@ -53,6 +53,7 @@ std::optional<double> PlainValue(const std::string& text, Quantity quantity, con
 } // namespace
 
 bool SketchEditor::HasToolPanel() const {
+    if (myTool >= SketchTool::Coincident) return true;   // constraints: the picked elements
     return myTool == SketchTool::Line || myTool == SketchTool::Rectangle || myTool == SketchTool::Circle ||
            myTool == SketchTool::Arc || myTool == SketchTool::Move || myTool == SketchTool::Rotate;
 }
@@ -90,6 +91,12 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         ui::ExpressionField(ui, id, text, UnitLabel(q, units), {}, inner, false, false);
         ImGui::Dummy({0, ui.S(8)});
     };
+
+    if (myTool >= SketchTool::Coincident) {
+        DrawPicks(app, session, inner);
+        ImGui::EndGroup();
+        return;
+    }
 
     // Ways to draw.
     switch (myTool) {
@@ -211,6 +218,50 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
                   : "Укажите три точки в поле эскиза.",
             inner);
     ImGui::EndGroup();
+}
+
+void SketchEditor::DrawPicks(AppContext& app, Session& session, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    const doc::SketchFeature* f = Active(session);
+    if (!f) return;
+    const auto kindName = [](sketch::EntityKind k) {
+        switch (k) {
+            case sketch::EntityKind::Point:  return "Точка";
+            case sketch::EntityKind::Line:   return "Отрезок";
+            case sketch::EntityKind::Circle: return "Окружность";
+            case sketch::EntityKind::Arc:    return "Дуга";
+            default:                         return "Элемент";
+        }
+    };
+    ui::FieldLabel(ui, "Выбранные элементы");
+    ImGui::Dummy({0, ui.S(4)});
+    std::optional<std::size_t> drop;
+    const float h = ui.S(34);
+    for (std::size_t i = 0; i <= myPicks.size(); ++i) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const bool filled = i < myPicks.size();
+        dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(filled ? c.accentSoft : c.panel), ui.S(8));
+        dl->AddRect(p, {p.x + width, p.y + h}, ui::ToU32(filled ? c.accentSoftBorder : c.divider), ui.S(8));
+        const std::string text = filled ? std::to_string(i + 1) + ". " + kindName(f->sketch.KindOf(myPicks[i]))
+                                        : std::to_string(i + 1) + ". щёлкните элемент в эскизе";
+        dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(12), p.y + (h - ui.S(13)) / 2 - ui.S(1)},
+                    ui::ToU32(filled ? c.text : c.textMuted), text.c_str());
+        if (filled) {
+            ImGui::SetCursorScreenPos({p.x + width - ui.S(32), p.y + ui.S(4)});
+            ImGui::PushID(static_cast<int>(i));
+            if (ui::IconButton(ui, "##drop-pick", "ui-close", 26, 12, "Убрать и выбрать другой")) drop = i;
+            ImGui::PopID();
+        }
+        ImGui::SetCursorScreenPos({p.x, p.y + h + ui.S(6)});
+        if (!filled) break;
+    }
+    if (drop) myPicks.erase(myPicks.begin() + static_cast<std::ptrdiff_t>(*drop));
+    ImGui::Dummy({0, ui.S(8)});
+    Caption(ui, InfoOf(myTool).hint, width);
+    ImGui::Dummy({0, ui.S(4)});
+    Caption(ui, "Ошиблись — щёлкните элемент ещё раз или нажмите крестик и выберите другой.", width);
 }
 
 } // namespace bz::app
