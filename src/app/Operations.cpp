@@ -205,6 +205,13 @@ void StartDraft(AppContext& app) {
     app.ops.draft.StartNew(app, *s);
 }
 
+void StartCoil(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.coil.StartNew(app, *s);
+}
+
 void StartRevolve(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;

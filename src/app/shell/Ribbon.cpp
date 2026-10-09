@@ -122,7 +122,7 @@ void ModelRibbon(RibbonBuilder& r) {
     r.BeginColumn();
     r.Small("feature.sweep");
     r.Small("feature.loft");
-    r.SmallLater("coil", "Пружина");
+    r.Small("feature.coil");
     r.EndColumn();
     r.EndGroup();
 

@@ -83,6 +83,8 @@ void RegisterActions(AppContext& app) {
     a.Add({"feature.sweep", "Сдвиг", "sweep", 0, "Протянуть контур эскиза вдоль траектории из другого эскиза", inModel,
            [&app] { StartSweep(app); }});
     a.Add({"feature.loft", "Лофт", "loft", 0, "Тело через контуры нескольких эскизов", inModel, [&app] { StartLoft(app); }});
+    a.Add({"feature.coil", "Пружина", "coil", 0, "Проволока, навитая по винтовой линии вокруг оси; вырезом — канавка", inModel,
+           [&app] { StartCoil(app); }});
     a.Add({"feature.draft", "Уклон", "draft", 0, "Наклонить боковые грани, чтобы деталь выходила из формы", inModel,
            [&app] { StartDraft(app); }});
     a.Add({"feature.chamfer", "Фаска", "chamfer", 0, "Срезать рёбра тела под 45°", inModel, [&app] { StartChamfer(app); }});

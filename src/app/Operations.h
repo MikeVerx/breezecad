@@ -38,6 +38,7 @@ void StartMirror(AppContext& app);
 void StartLoft(AppContext& app);
 void StartSweep(AppContext& app);
 void StartDraft(AppContext& app);
+void StartCoil(AppContext& app);
 /// Double click in the tree: edit a sketch or an operation.
 void EditFeature(AppContext& app, Session& session, ObjectId id);
 void DeleteFeature(AppContext& app, Session& session, ObjectId id);
