@@ -1,6 +1,7 @@
 #include "core/PathText.h"
 #include "document/BzcFile.h"
 #include "document/Commands.h"
+#include "document/DraftFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
@@ -231,6 +232,7 @@ TEST_CASE("every feature type survives a file round trip") {
     made.push_back(std::make_unique<doc::MirrorFeature>());
     made.push_back(std::make_unique<doc::LoftFeature>());
     made.push_back(std::make_unique<doc::SweepFeature>());
+    made.push_back(std::make_unique<doc::DraftFeature>());
     std::vector<std::pair<ObjectId, std::string_view>> expected;
     for (auto& f : made) {
         f->id = d.Ids().Next();

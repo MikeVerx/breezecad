@@ -1,6 +1,7 @@
 #include "kernel/Model.h"
 
 #include "core/Log.h"
+#include "document/DraftFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/HoleFeature.h"
 #include "document/ExtrudeFeature.h"
@@ -13,6 +14,7 @@
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
 #include "document/WorkPlaneFeature.h"
+#include "kernel/occt/Draft.h"
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Extrude.h"
 #include "kernel/occt/FaceMatch.h"
@@ -263,11 +265,16 @@ Expected<std::vector<gp_Trsf>> PatternPlacements(const doc::PatternFeature& f) {
     return placements;
 }
 
+/// Frame of an origin plane or of a placed work plane; nullopt otherwise.
+std::optional<Frame> PlaneOf(ObjectId id, const doc::Document& doc) {
+    if (const auto origin = doc::origin::PlaneFrame(id)) return origin;
+    if (const auto* wp = doc.FindAs<doc::WorkPlaneFeature>(id); wp && wp->frame) return wp->frame;
+    return std::nullopt;
+}
+
 /// The reflection of a mirror, about an origin plane or a work plane.
 Expected<gp_Trsf> MirrorPlacement(const doc::MirrorFeature& f, const doc::Document& doc) {
-    std::optional<Frame> plane = doc::origin::PlaneFrame(f.plane);
-    if (!plane)
-        if (const auto* wp = doc.FindAs<doc::WorkPlaneFeature>(f.plane); wp && wp->frame) plane = wp->frame;
+    const std::optional<Frame> plane = PlaneOf(f.plane, doc);
     if (!plane) return Error{"Выберите плоскость зеркала"};
     gp_Trsf mirror;
     mirror.SetMirror(gp_Ax2(gp_Pnt(plane->origin.x, plane->origin.y, plane->origin.z),
@@ -484,6 +491,13 @@ void Model::Rebuild(doc::Document& doc) {
                 ApplyLoft(*loft, impl, bodies, doc);
             } else if (auto* wp = dynamic_cast<doc::WorkPlaneFeature*>(&f)) {
                 PlaceWorkPlane(*wp, doc, bodies);
+            } else if (auto* draft = dynamic_cast<doc::DraftFeature*>(&f)) {
+                const std::optional<Frame> neutral = PlaneOf(draft->plane, doc);
+                if (!neutral)
+                    draft->status = {FeatureState::Error, "Выберите нейтральную плоскость"};
+                else
+                    ApplyToLastBody(bodies, draft->status, "Нет тела для уклона",
+                                    [&](const TopoDS_Shape& body) { return occt::MakeDraft(body, *draft, *neutral); });
             } else if (auto* shell = dynamic_cast<doc::ShellFeature*>(&f)) {
                 ApplyToLastBody(bodies, shell->status, "Нет тела для оболочки",
                                 [&](const TopoDS_Shape& body) { return occt::MakeShell(body, *shell); });
