@@ -135,6 +135,9 @@ bool FeatureOperationEditor::ParameterField(AppContext& app, Session& session, c
     }
     // Enter finishes the operation, as the "Готово Enter" button says.
     if (r.submitted && parameter.error.empty()) app.Later([&app, &session, this] { Done(app, session); });
+    // Esc too: the field has the focus as soon as the panel opens, and Esc
+    // should cancel the operation as the panel says, not just leave the field.
+    if (r.cancelled) app.Later([&app, &session, this] { Cancel(app, session); });
     if (r.fxClicked) ImGui::OpenPopup("##fx");
     ui::FontScope font(ui.fonts.body);   // before Begin: must outlive the End call
     if (ImGui::BeginPopup("##fx")) {

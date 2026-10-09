@@ -176,7 +176,9 @@ void PatternEditor::DrawRectangular(AppContext& app, Session& session, doc::Patt
     if (DirectionChoice(ui, "rev1", f.reversed1, half)) Changed(session);
     ImGui::Dummy({0, ui.S(4)});
     Section(app, "Количество и шаг");
-    ParameterField(app, session, "count1", myCount1, f.count1, half, myFocusFirstField, false);
+    // Fields are not focused on open: they are below the list of operations,
+    // and focusing would scroll it away.
+    ParameterField(app, session, "count1", myCount1, f.count1, half, false, false);
     ImGui::SameLine(0, ui.S(8));
     ParameterField(app, session, "spacing1", mySpacing1, f.spacing1, half, false);
     Gap(app);
@@ -206,7 +208,7 @@ void PatternEditor::DrawCircular(AppContext& app, Session& session, doc::Pattern
     if (AxisChoice(ui, "axis", f.axis, width)) Changed(session);
     Gap(app);
     Section(app, "Количество и угол");
-    ParameterField(app, session, "count", myCircularCount, f.circularCount, half, myFocusFirstField, false);
+    ParameterField(app, session, "count", myCircularCount, f.circularCount, half, false, false);
     ImGui::SameLine(0, ui.S(8));
     ParameterField(app, session, "angle", myAngle, f.angle, half, false);
     Caption(app, "360° — копии по кругу; меньший угол — первая и последняя на его концах.", width);

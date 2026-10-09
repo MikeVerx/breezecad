@@ -45,6 +45,7 @@ struct FieldResult {
     bool edited    = false;   ///< text changed this frame
     bool committed = false;   ///< Enter pressed or focus left after an edit
     bool submitted = false;   ///< Enter pressed: the user means "done"
+    bool cancelled = false;   ///< Esc pressed in the field: the user means "cancel"
     bool fxClicked = false;   ///< the "fx" button was pressed
     bool active    = false;   ///< the field has keyboard focus
 };

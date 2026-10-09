@@ -279,7 +279,8 @@ void HoleEditor::DrawSizes(AppContext& app, Session& session, doc::HoleFeature& 
     Gap(app);
 
     Section(app, "Диаметр");
-    ParameterField(app, session, "diameter", myDiameter, f.diameter, width, myFocusFirstField);
+    // Not focused on open: it is below the centres, and focusing would scroll them away.
+    ParameterField(app, session, "diameter", myDiameter, f.diameter, width, false);
     Gap(app);
 
     if (f.type == HoleType::Counterbore) {

@@ -273,6 +273,7 @@ FieldResult ExpressionField(Ui& ui, const char* id, std::string& text, std::stri
     result.active = ImGui::IsItemActive();
     const bool enter = ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
     result.submitted = enter && (result.active || ImGui::IsItemDeactivated());
+    result.cancelled = ImGui::IsKeyPressed(ImGuiKey_Escape, false) && (result.active || ImGui::IsItemDeactivated());
     result.committed = ImGui::IsItemDeactivatedAfterEdit() || result.submitted;
     ImGui::PopStyleColor(3);
     ImGui::PopStyleVar(2);
