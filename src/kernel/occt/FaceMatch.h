@@ -15,6 +15,11 @@ namespace bz::kernel::occt {
 /// the point. nullopt when no flat face faces that way.
 std::optional<TopoDS_Face> ResolveFace(const TopoDS_Shape& body, const doc::FaceReference& ref);
 
+/// doc::PlaneFrame of the referenced face as it is on `body` now (the
+/// stored point moved onto the face's current plane); nullopt when the face
+/// is not found.
+std::optional<Frame> ResolvePlaneFrame(const TopoDS_Shape& body, const doc::FaceReference& ref);
+
 /// Outward unit normal of a flat face (nullopt for a curved one).
 std::optional<Vec3> PlanarNormal(const TopoDS_Face& face);
 

@@ -3,7 +3,6 @@
 #include "document/JsonIO.h"
 
 #include <array>
-#include <cmath>
 #include <utility>
 
 namespace bz::doc {
@@ -16,16 +15,6 @@ constexpr std::array<std::pair<HoleType, std::string_view>, 3> kTypeIds{{
     {HoleType::Simple, "simple"}, {HoleType::Counterbore, "counterbore"}, {HoleType::Countersink, "countersink"}}};
 
 } // namespace
-
-Frame HolePlaneFrame(const FaceReference& face) {
-    Frame f;
-    f.normal = face.normal.Normalized();
-    f.origin = f.normal * face.point.Dot(f.normal);   // foot of the model origin on the plane
-    // x: the model X axis projected on the plane, or Y when the plane faces X.
-    const Vec3 axis = std::abs(f.normal.x) < 0.9 ? Vec3{1, 0, 0} : Vec3{0, 1, 0};
-    f.xDir = (axis - f.normal * axis.Dot(f.normal)).Normalized();
-    return f;
-}
 
 void HoleFeature::CollectParameters(std::vector<Parameter*>& out) {
     out.push_back(&diameter);

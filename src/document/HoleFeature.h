@@ -4,7 +4,7 @@
 // The face is kept by its outward normal and a point on it, and found again
 // on the rebuilt body (the planar face with that normal nearest the point).
 // Centres live in the face's plane, in coordinates anchored to the model
-// origin (see HolePlaneFrame), so they stay put when the face moves along
+// origin (see PlaneFrame in FaceReference.h), so they stay put when the face moves along
 // its normal, e.g. when the part gets thicker.
 
 #include "core/Math.h"
@@ -22,7 +22,7 @@ public:
     static constexpr std::string_view kType = "hole";
 
     FaceReference     face;
-    std::vector<Vec2> centres;      ///< in HolePlaneFrame of the face
+    std::vector<Vec2> centres;      ///< in PlaneFrame(face)
     HoleType          type = HoleType::Simple;
     bool              throughAll = false;
     Parameter diameter{.name = "", .expression = "6.6", .quantity = Quantity::Length, .value = 6.6, .error = {}};
@@ -38,10 +38,5 @@ public:
     void SaveFields(nlohmann::json& out) const override;
     Status LoadFields(const nlohmann::json& in) override;
 };
-
-/// The frame hole centres are measured in: on the plane through `point`
-/// with `normal`, origin at the foot of the model origin, x along a stable
-/// in-plane direction.
-Frame HolePlaneFrame(const FaceReference& face);
 
 } // namespace bz::doc

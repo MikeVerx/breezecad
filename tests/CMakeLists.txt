@@ -7,6 +7,7 @@ add_executable(bz_tests
     kernel/ModelTests.cpp
     kernel/RevolveTests.cpp
     kernel/ShellTests.cpp
+    kernel/WorkPlaneTests.cpp
     sketch/SolverTests.cpp)
 target_link_libraries(bz_tests PRIVATE bz::core bz::sketch bz::document bz::kernel bz::doctest)
 bz_set_warnings(bz_tests)

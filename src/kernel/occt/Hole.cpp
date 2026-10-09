@@ -3,7 +3,6 @@
 #include "kernel/occt/Extrude.h"   // ApplyBoolean
 #include "kernel/occt/FaceMatch.h"
 
-#include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepPrimAPI_MakeCone.hxx>
@@ -64,14 +63,9 @@ Status CheckSizes(const doc::HoleFeature& f) {
 Expected<TopoDS_Shape> DrillHoles(const TopoDS_Shape& body, const doc::HoleFeature& f) {
     if (Status s = CheckSizes(f); !s) return s.GetError();
     if (f.centres.empty()) return Error{"Укажите центр отверстия на грани"};
-    const std::optional<TopoDS_Face> face = ResolveFace(body, f.face);
-    if (!face) return Error{"Грань отверстия не найдена: модель изменилась слишком сильно"};
-    // The stored point moved onto the face's plane as it is now.
-    const Vec3 n = f.face.normal.Normalized();
-    const gp_XYZ location = BRepAdaptor_Surface(*face).Plane().Location().XYZ();
-    const Vec3 onFace = f.face.point + n * (Vec3{location.X(), location.Y(), location.Z()} - f.face.point).Dot(n);
-
-    const Frame frame = doc::HolePlaneFrame({f.face.normal, onFace});
+    const std::optional<Frame> plane = ResolvePlaneFrame(body, f.face);
+    if (!plane) return Error{"Грань отверстия не найдена: модель изменилась слишком сильно"};
+    const Frame& frame = *plane;
     const Vec3 down = -frame.normal;
     const double depth = f.throughAll ? Diagonal(body) : f.depth.value;
     try {

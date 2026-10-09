@@ -6,6 +6,7 @@
 #include "document/RevolveFeature.h"
 #include "document/ShellFeature.h"
 #include "document/SketchFeature.h"
+#include "document/WorkPlaneFeature.h"
 
 namespace bz::doc {
 
@@ -19,6 +20,7 @@ FeatureRegistry& FeatureRegistry::Default() {
         r.Register(std::string(ChamferFeature::kType), [] { return std::make_unique<ChamferFeature>(); });
         r.Register(std::string(HoleFeature::kType), [] { return std::make_unique<HoleFeature>(); });
         r.Register(std::string(ShellFeature::kType), [] { return std::make_unique<ShellFeature>(); });
+        r.Register(std::string(WorkPlaneFeature::kType), [] { return std::make_unique<WorkPlaneFeature>(); });
         return r;
     }();
     return registry;

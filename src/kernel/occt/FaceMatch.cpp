@@ -54,4 +54,13 @@ std::optional<TopoDS_Face> ResolveFace(const TopoDS_Shape& body, const doc::Face
     return best;
 }
 
+std::optional<Frame> ResolvePlaneFrame(const TopoDS_Shape& body, const doc::FaceReference& ref) {
+    const std::optional<TopoDS_Face> face = ResolveFace(body, ref);
+    if (!face) return std::nullopt;
+    const Vec3 n = ref.normal.Normalized();
+    const Vec3 location = ToVec(BRepAdaptor_Surface(*face).Plane().Location().XYZ());
+    const Vec3 onFace = ref.point + n * (location - ref.point).Dot(n);
+    return doc::PlaneFrame({ref.normal, onFace});
+}
+
 } // namespace bz::kernel::occt

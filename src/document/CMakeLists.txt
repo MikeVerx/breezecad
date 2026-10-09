@@ -5,8 +5,10 @@ add_library(bz_document STATIC
     EdgeFeature.cpp
     ExtrudeFeature.cpp
     FeatureRegistry.cpp
+    FaceReference.cpp
     HoleFeature.cpp
     ShellFeature.cpp
+    WorkPlaneFeature.cpp
     JsonIO.cpp
     Recompute.cpp
     RevolveFeature.cpp

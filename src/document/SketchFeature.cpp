@@ -1,6 +1,7 @@
 #include "document/SketchFeature.h"
 
 #include "document/JsonIO.h"
+#include "document/Origin.h"
 
 #include <array>
 #include <utility>
@@ -55,7 +56,8 @@ bool ConstraintTypeFromId(std::string_view id, ConstraintType& out) {
 }
 
 std::vector<ObjectId> SketchFeature::Dependencies() const {
-    if (placement.onFace) return {placement.support};
+    // A face's body or a work plane; origin planes are not features.
+    if (placement.support && !origin::IsOriginElement(placement.support)) return {placement.support};
     return {};
 }
 

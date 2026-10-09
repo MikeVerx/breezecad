@@ -7,9 +7,12 @@
 #include "document/Recompute.h"
 #include "document/RevolveFeature.h"
 #include "document/ShellFeature.h"
+#include "document/Origin.h"
 #include "document/SketchFeature.h"
+#include "document/WorkPlaneFeature.h"
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Extrude.h"
+#include "kernel/occt/FaceMatch.h"
 #include "kernel/occt/Fillet.h"
 #include "kernel/occt/Hole.h"
 #include "kernel/occt/ModelImpl.h"
@@ -157,6 +160,41 @@ void ApplyToLastBody(std::vector<Body>& bodies, doc::FeatureStatus& status, cons
     status = {FeatureState::Ok, {}};
 }
 
+/// Puts a work plane where its base (origin plane, work plane or face of a
+/// body) and offset say.
+void PlaceWorkPlane(doc::WorkPlaneFeature& wp, const doc::Document& doc, const std::vector<Body>& bodies) {
+    std::optional<Frame> base;
+    if (wp.face.IsSet()) {
+        for (auto it = bodies.rbegin(); it != bodies.rend() && !base; ++it) base = occt::ResolvePlaneFrame(it->shape, wp.face);
+        if (!base) {
+            wp.frame.reset();
+            wp.status = {FeatureState::Error, "Грань рабочей плоскости не найдена: модель изменилась слишком сильно"};
+            return;
+        }
+    } else if (const auto originPlane = doc::origin::PlaneFrame(wp.base)) {
+        base = originPlane;
+    } else if (const auto* other = doc.FindAs<doc::WorkPlaneFeature>(wp.base); other && other->frame) {
+        base = other->frame;
+    }
+    if (!base) {
+        wp.frame.reset();
+        wp.status = {FeatureState::Error, "Не задана плоскость, от которой строить"};
+        return;
+    }
+    if (wp.offset.HasError()) {
+        wp.status = {FeatureState::Error, wp.offset.error};
+        return;
+    }
+    wp.frame = doc::OffsetFrame(*base, wp.reversed ? -wp.offset.value : wp.offset.value);
+    wp.status = {FeatureState::Ok, {}};
+}
+
+/// A sketch on a work plane moves with it (sketch coordinates stay the same).
+void FollowWorkPlane(doc::SketchFeature& sk, const doc::Document& doc) {
+    if (const auto* wp = doc.FindAs<doc::WorkPlaneFeature>(sk.placement.support); wp && wp->frame)
+        sk.placement.frame = *wp->frame;
+}
+
 /// OCCT prints progress reports (STEP statistics...) to stdout; keep only
 /// warnings and errors, our own log covers the rest.
 void QuietOcctMessages() {
@@ -200,6 +238,7 @@ void Model::Rebuild(doc::Document& doc) {
         const bool skip = !doc.IsActive(i) || f.suppressed;
         if (!skip) {
             if (auto* sk = dynamic_cast<doc::SketchFeature*>(&f)) {
+                FollowWorkPlane(*sk, doc);
                 Expected<occt::SketchProfile> profile = occt::BuildProfile(*sk);
                 if (profile) {
                     impl.sketches[sk->id] = std::move(*profile);
@@ -228,6 +267,8 @@ void Model::Rebuild(doc::Document& doc) {
             } else if (auto* hole = dynamic_cast<doc::HoleFeature*>(&f)) {
                 ApplyToLastBody(bodies, hole->status, "Нет тела, в котором делать отверстие",
                                 [&](const TopoDS_Shape& body) { return occt::DrillHoles(body, *hole); });
+            } else if (auto* wp = dynamic_cast<doc::WorkPlaneFeature*>(&f)) {
+                PlaceWorkPlane(*wp, doc, bodies);
             } else if (auto* shell = dynamic_cast<doc::ShellFeature*>(&f)) {
                 ApplyToLastBody(bodies, shell->status, "Нет тела для оболочки",
                                 [&](const TopoDS_Shape& body) { return occt::MakeShell(body, *shell); });

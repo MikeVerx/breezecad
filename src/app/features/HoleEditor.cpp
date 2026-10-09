@@ -126,7 +126,7 @@ void HoleEditor::DrawInViewport(AppContext& app, Session& session, const Viewpor
     myHoveredCentre.reset();
 
     if (HasFace(*f)) {
-        const SketchView view{doc::HolePlaneFrame(f->face), vf};
+        const SketchView view{doc::PlaneFrame(f->face), vf};
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ui::ThemeColors& c = app.ui.C();
         const ImVec2 mouse = ImGui::GetMousePos();
@@ -176,7 +176,7 @@ void HoleEditor::ClickModel(AppContext& app, Session& session, doc::HoleFeature&
         app.notes.Info("Все центры отверстия лежат на одной грани. Чтобы выбрать другую, нажмите «Другая грань»");
         return;
     }
-    const Vec2 local = doc::HolePlaneFrame(f.face).ToLocal(hit->point);
+    const Vec2 local = doc::PlaneFrame(f.face).ToLocal(hit->point);
     const double mmPerPixel = vf.projection.mmPerPixel;
     f.centres.push_back({RoundForZoom(local.x, mmPerPixel), RoundForZoom(local.y, mmPerPixel)});
     Changed(session);

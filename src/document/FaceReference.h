@@ -19,4 +19,10 @@ struct FaceReference {
     bool operator==(const FaceReference&) const = default;
 };
 
+/// Coordinates on the face's plane: origin at the foot of the model origin,
+/// x along the model X projected on the plane (Y when the plane faces X).
+/// They do not change when the face moves along its normal, so positions
+/// measured in them (hole centres) follow the face.
+Frame PlaneFrame(const FaceReference& face);
+
 } // namespace bz::doc
