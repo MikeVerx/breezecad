@@ -14,6 +14,14 @@
 #if defined(_WIN32)
 #include <windows.h>
 #include <shellapi.h>
+
+// Laptops with two GPUs (NVIDIA Optimus, AMD switchable graphics) run a
+// program on the integrated one unless the executable asks otherwise. These
+// exported names are what the drivers look for.
+extern "C" {
+__declspec(dllexport) DWORD NvOptimusEnablement = 1;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
 #endif
 
 namespace {

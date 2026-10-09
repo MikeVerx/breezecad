@@ -240,8 +240,10 @@ void Application::Frame() {
 
     AppContext& app = *myContext;
     app.now = now;
-    app.stats.fps = myFps;
-    if (myFrameIndex % 30 == 0) app.stats.memoryMb = platform::ResidentMemoryMb();
+    myStats.fps = myFps;
+    if (myFrameIndex % 30 == 0) myStats.memoryMb = platform::ResidentMemoryMb();
+    myStats.hoverMs = app.stats.hoverMs;
+    app.stats = myStats;
 
     myActions.HandleShortcuts(myInput.chords);
     myInput.chords.clear();
@@ -260,13 +262,23 @@ void Application::Frame() {
     }
     myBusy = myViewport.StepAnimation(now);
 
+    const auto smooth = [](double& into, double ms) { into = into * 0.9 + ms * 0.1; };
+    const auto msSince = [](double t) { return (glfwGetTime() - t) * 1000.0; };
+    const double uiStart = glfwGetTime();
     DrawRoot();
     DrawDialogs(app);
     const ImVec2 corner = myShell.viewportMax.x > 0 && !myWorkspace.ShowsHome() ? myShell.viewportMax : ImGui::GetIO().DisplaySize;
     myBusy = myNotes.Draw(*myUi, corner, now) || myBusy;
 
     ImGui::Render();
-    if (myWorkspace.Active() && !myWorkspace.ShowsHome() && myViewport.NeedsRender()) myViewport.Render();
+    smooth(myStats.uiMs, msSince(uiStart));
+    if (myWorkspace.Active() && !myWorkspace.ShowsHome() && myViewport.NeedsRender()) {
+        const double sceneStart = glfwGetTime();
+        myViewport.Render();
+        smooth(myStats.sceneMs, msSince(sceneStart));
+        ++mySceneFramesThisSecond;
+    }
+    const double presentStart = glfwGetTime();
 
     int fbW = 0, fbH = 0;
     glfwGetFramebufferSize(myWindow.Handle(), &fbW, &fbH);
@@ -285,7 +297,13 @@ void Application::Frame() {
         myPendingShot.clear();
     }
     myWindow.SwapBuffers();
+    smooth(myStats.presentMs, msSince(presentStart));
     ++myFrameIndex;
+    if (now - mySecondStart >= 1.0) {
+        myStats.sceneFrames = mySceneFramesThisSecond;
+        mySceneFramesThisSecond = 0;
+        mySecondStart = now;
+    }
 
     // Work requested by panels during the frame, now that nobody iterates.
     std::vector<std::function<void()>> work;

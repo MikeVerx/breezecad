@@ -206,7 +206,11 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     // Pre-highlight the face (or, for fillets, the edge) under the cursor.
     const bool hoverMatters =
         projecting || (session.mode != EditMode::Sketch && (!operation || pickingOriginal || operation->PicksFaces()));
-    app.viewport.Hover(vf.hovered && hoverMatters ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);
+    {
+        const double start = glfwGetTime();
+        app.viewport.Hover(vf.hovered && hoverMatters ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);
+        app.stats.hoverMs = app.stats.hoverMs * 0.9 + (glfwGetTime() - start) * 100.0;   // ms, smoothed
+    }
 
     // Mode overlays.
     switch (session.mode) {

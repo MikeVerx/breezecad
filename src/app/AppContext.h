@@ -107,9 +107,16 @@ struct ViewportFrame {
     ImVec2 Project(Vec3 world) const { return ToScreen(projection.Project(world)); }
 };
 
+/// Where the time of a frame goes (milliseconds, smoothed), for the stats
+/// tooltip: a slow machine report can then say what is slow.
 struct FrameStats {
     float  fps = 0.0f;
     double memoryMb = 0.0;
+    double hoverMs = 0.0;     ///< what is under the cursor in the model
+    double uiMs = 0.0;        ///< building the interface (hover included)
+    double sceneMs = 0.0;     ///< drawing the model
+    double presentMs = 0.0;   ///< drawing the interface and showing the frame (waits for the screen)
+    int    sceneFrames = 0;   ///< model redraws in the last second
 };
 
 struct AppContext {

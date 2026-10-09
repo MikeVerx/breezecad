@@ -81,6 +81,9 @@ private:
     int    myFramesToDraw = 3;
     double myLastFrameTime = 0.0;
     float  myFps = 0.0f;
+    FrameStats myStats;
+    int    mySceneFramesThisSecond = 0;
+    double mySecondStart = 0.0;
     bool   myBusy = false;   ///< something animates: keep drawing
 
     std::filesystem::path myScreenshotFile;

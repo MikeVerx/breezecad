@@ -400,7 +400,9 @@ bool Viewport::Init(const NativeGlSurface& surface) {
     m.view->Camera()->SetProjectionType(Graphic3d_Camera::Projection_Orthographic);
     Graphic3d_RenderingParams& params = m.view->ChangeRenderingParams();
     params.NbMsaaSamples = 4;
-    params.TransparencyMethod = Graphic3d_RTM_BLEND_OIT;
+    // Plain blending: the tints here are light, and order-independent
+    // transparency costs several passes over the whole scene every frame.
+    params.TransparencyMethod = Graphic3d_RTM_BLEND_UNORDERED;
     params.IsAntialiasingEnabled = true;
 
     m.occtWindow = new Aspect_NeutralWindow();
@@ -461,14 +463,20 @@ void Viewport::Hover(std::optional<Vec2> pixel) {
     if (pixel == m.hoverPixel) return;
     m.hoverPixel = pixel;
     if (!pixel) {
-        m.context->ClearDetected(false);
-        m.dirty = true;
+        if (m.context->HasDetected()) {
+            m.context->ClearDetected(false);
+            m.dirty = true;
+        }
         return;
     }
     const auto px = static_cast<int>(std::lround(pixel->x * m.pixelScale));
     const auto py = static_cast<int>(std::lround(pixel->y * m.pixelScale));
+    // Redraw only when what is under the cursor changed: moving across one
+    // face must not repaint the whole model on every mouse event.
+    const Handle(SelectMgr_EntityOwner) before = m.context->HasDetected() ? m.context->DetectedOwner() : nullptr;
     m.context->MoveTo(px, py, m.view, false);
-    m.dirty = true;
+    const Handle(SelectMgr_EntityOwner) after = m.context->HasDetected() ? m.context->DetectedOwner() : nullptr;
+    if (before != after) m.dirty = true;
 }
 
 void Viewport::SetColors(const ViewportColors& colors) {

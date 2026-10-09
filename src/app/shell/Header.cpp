@@ -268,7 +268,10 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
         ui::FontScope font(ui.fonts.mono);
         Session* s = app.Doc();
         const int objects = s ? static_cast<int>(s->doc.FeatureCount()) : 0;
-        const std::string fps = std::format("{:.0f}", app.stats.fps);
+        // Frames are drawn only when something changes, so frames per second
+        // would count mouse events; the work per frame is the honest figure.
+        const double workMs = app.stats.uiMs + app.stats.sceneMs;
+        const std::string fps = std::format("{:.1f}", workMs);
         const std::string mem = std::format("{:.0f}", app.stats.memoryMb);
         const std::string obj = std::to_string(objects);
         float sx = right - statsWidth + ui.S(12);
@@ -279,9 +282,19 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
             dl->AddText(ui.fonts.mono, ui.S(11), {sx, sy}, ui::ToU32(c.textMuted), unit);
             sx += ui.fonts.mono->CalcTextSizeA(ui.S(11), FLT_MAX, 0, unit).x + ui.S(12);
         };
-        stat(fps, "FPS", c.success);
+        const float statsLeft = sx;
+        stat(fps, "мс", workMs < 8 ? c.success : workMs < 25 ? c.warning : c.danger);
         stat(mem, "МБ", c.text);
         stat(obj, "OBJ", c.text);
+        // Where a frame's time goes, for performance reports.
+        if (ImGui::IsMouseHoveringRect({statsLeft, pos.y}, {right, pos.y + h})) {
+            const FrameStats& st = app.stats;
+            ImGui::SetTooltip("Работа над кадром: %.1f мс интерфейс (из них %.2f мс — поиск под курсором),\n"
+                              "%.1f мс модель; вывод на экран %.1f мс (включает ожидание монитора)\n"
+                              "Кадров за секунду: %.0f, перерисовок модели: %d\n"
+                              "Кадр рисуется только когда что-то меняется.",
+                              st.uiMs, st.hoverMs, st.sceneMs, st.presentMs, st.fps, st.sceneFrames);
+        }
     }
     const float searchX = right - statsWidth - searchWidth;
 
