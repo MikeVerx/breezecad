@@ -90,21 +90,71 @@ Quantity_Color ToQuantity(const Color& c) {
 
 double SmoothStep(double t) { return t * t * (3.0 - 2.0 * t); }
 
-/// Rotates `v` toward `w` by fraction t (both unit vectors).
-Vec3 Slerp(Vec3 v, Vec3 w, double t) {
-    const double dot = std::clamp(v.Dot(w), -1.0, 1.0);
-    const double angle = std::acos(dot);
-    if (angle < 1e-6) return v;
-    if (kPi - angle < 1e-6) {
-        // Opposite directions: turn around any perpendicular axis.
-        Vec3 axis = std::abs(v.z) < 0.9 ? v.Cross({0, 0, 1}) : v.Cross({1, 0, 0});
-        axis = axis.Normalized();
-        const double a = angle * t;
-        return (v * std::cos(a) + axis.Cross(v) * std::sin(a)).Normalized();
+/// A camera orientation as a unit quaternion: how the camera axes (right,
+/// up, back) are turned from the model axes. Interpolating it turns the view
+/// along the shortest way, with the up direction staying at a right angle to
+/// the line of sight, whatever the two views are (even opposite ones).
+struct Orientation {
+    double w = 1, x = 0, y = 0, z = 0;
+
+    static Orientation FromView(Vec3 dir, Vec3 up) {
+        const Vec3 back = (-dir).Normalized();
+        Vec3 right = up.Cross(back);
+        if (right.Length() < 1e-9) right = std::abs(back.z) < 0.9 ? Vec3{0, 0, 1}.Cross(back) : Vec3{1, 0, 0}.Cross(back);
+        right = right.Normalized();
+        const Vec3 u = back.Cross(right);
+        // Rotation matrix with columns right, u, back -> quaternion.
+        const double m00 = right.x, m01 = u.x, m02 = back.x;
+        const double m10 = right.y, m11 = u.y, m12 = back.y;
+        const double m20 = right.z, m21 = u.z, m22 = back.z;
+        Orientation q;
+        const double trace = m00 + m11 + m22;
+        if (trace > 0) {
+            const double k = 0.5 / std::sqrt(trace + 1.0);
+            q = {0.25 / k, (m21 - m12) * k, (m02 - m20) * k, (m10 - m01) * k};
+        } else if (m00 > m11 && m00 > m22) {
+            const double k = 2.0 * std::sqrt(1.0 + m00 - m11 - m22);
+            q = {(m21 - m12) / k, 0.25 * k, (m01 + m10) / k, (m02 + m20) / k};
+        } else if (m11 > m22) {
+            const double k = 2.0 * std::sqrt(1.0 + m11 - m00 - m22);
+            q = {(m02 - m20) / k, (m01 + m10) / k, 0.25 * k, (m12 + m21) / k};
+        } else {
+            const double k = 2.0 * std::sqrt(1.0 + m22 - m00 - m11);
+            q = {(m10 - m01) / k, (m02 + m20) / k, (m12 + m21) / k, 0.25 * k};
+        }
+        return q.Normalized();
     }
-    const double s = std::sin(angle);
-    return (v * (std::sin((1 - t) * angle) / s) + w * (std::sin(t * angle) / s)).Normalized();
-}
+
+    Orientation Normalized() const {
+        const double n = std::sqrt(w * w + x * x + y * y + z * z);
+        return {w / n, x / n, y / n, z / n};
+    }
+
+    Vec3 Rotate(Vec3 v) const {
+        // v' = v + 2w (q x v) + 2 q x (q x v), q = (x, y, z)
+        const Vec3 q{x, y, z};
+        const Vec3 t = q.Cross(v) * 2.0;
+        return v + t * w + q.Cross(t);
+    }
+
+    Vec3 Direction() const { return -Rotate({0, 0, 1}); }
+    Vec3 Up() const { return Rotate({0, 1, 0}); }
+
+    static Orientation Slerp(Orientation a, Orientation b, double t) {
+        double dot = a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z;
+        if (dot < 0) {   // the shorter way round
+            b = {-b.w, -b.x, -b.y, -b.z};
+            dot = -dot;
+        }
+        if (dot > 0.9995) {
+            return Orientation{a.w + (b.w - a.w) * t, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t}
+                .Normalized();
+        }
+        const double angle = std::acos(dot);
+        const double sa = std::sin((1 - t) * angle) / std::sin(angle), sb = std::sin(t * angle) / std::sin(angle);
+        return Orientation{a.w * sa + b.w * sb, a.x * sa + b.x * sb, a.y * sa + b.y * sb, a.z * sa + b.z * sb}.Normalized();
+    }
+};
 
 /// Sketch frame on a planar face: normal points out of the material, the
 /// origin is the world origin projected onto the plane, and X follows the
@@ -504,6 +554,7 @@ void Viewport::SetCamera(const CameraState& state) {
     const Handle(Graphic3d_Camera) cam = myImpl->Camera();
     cam->SetEyeAndCenter(ToPnt(state.eye), ToPnt(state.center));
     cam->SetUp(ToDir(state.up));
+    cam->OrthogonalizeUp();   // an up leaning toward the line of sight would tilt the next turns
     cam->SetScale(std::max(state.scale, 1e-3));
     myImpl->dirty = true;
 }
@@ -608,13 +659,14 @@ bool Viewport::StepAnimation(double now) {
     const double t = std::clamp((now - m.animStart) / m.animDuration, 0.0, 1.0);
     const double s = SmoothStep(t);
 
-    const Vec3 fromDir = (m.animFrom.center - m.animFrom.eye).Normalized();
-    const Vec3 toDir = (m.animTo.center - m.animTo.eye).Normalized();
+    const Orientation from = Orientation::FromView(m.animFrom.center - m.animFrom.eye, m.animFrom.up);
+    const Orientation to = Orientation::FromView(m.animTo.center - m.animTo.eye, m.animTo.up);
+    const Orientation turned = Orientation::Slerp(from, to, s);
     const double fromDist = (m.animFrom.center - m.animFrom.eye).Length();
     const double toDist = (m.animTo.center - m.animTo.eye).Length();
-    const Vec3 dir = Slerp(fromDir, toDir, s);
+    const Vec3 dir = turned.Direction();
     const Vec3 center = m.animFrom.center + (m.animTo.center - m.animFrom.center) * s;
-    const Vec3 up = Slerp(m.animFrom.up.Normalized(), m.animTo.up.Normalized(), s);
+    const Vec3 up = turned.Up();
     const double dist = fromDist + (toDist - fromDist) * s;
     const double scale = m.animFrom.scale * std::pow(m.animTo.scale / m.animFrom.scale, s);
     SetCamera({center - dir * dist, center, up, scale});

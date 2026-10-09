@@ -100,6 +100,9 @@ ViewCubeAction DrawViewCube(Ui& ui, const ViewProjection& view, ImVec2 topLeft, 
     // Interaction area: dragging it orbits, a click picks a region.
     const float area = cs * 2.0f;
     ImGui::SetCursorScreenPos({center.x - area, center.y - area});
+    // The arrow and roll buttons sit inside this area: let them take the
+    // hover and the clicks (without this they never fire).
+    ImGui::SetNextItemAllowOverlap();
     ImGui::InvisibleButton("##viewcube", {area * 2, area * 2});
     const bool cubeHovered = ImGui::IsItemHovered();
     const bool cubeActive = ImGui::IsItemActive();
