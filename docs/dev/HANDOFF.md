@@ -39,6 +39,10 @@ https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-win
 - Сборка: `cmake --build --preset linux-debug -- -k 0 2>&1 | grep -E "error|warning:" | head`.
 - Скриншоты — только когда без них нельзя; кропать PIL'ом нужный участок.
 - Не ждать CI в цикле: пушнуть и идти дальше; проверить один раз в конце сессии.
+- **Минуты GitHub Actions платные** (приватный репо: Windows ×2, macOS ×10). Коммитить
+  часто, а **пушить пачкой 1–3 раза за сессию**. macOS — только вручную (workflow_dispatch),
+  docs/translations не собираются. Если джобы падают за ~6 с — это биллинг
+  («recent account payments have failed…»), не код: сказать автору.
 - Подагентов не запускать без нужды.
 
 ## 3. UI-тест (Xvfb)

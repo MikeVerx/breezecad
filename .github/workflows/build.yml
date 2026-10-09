@@ -5,10 +5,15 @@
 # "next-build" on the Releases page — a stable link to the freshest build.
 name: build
 
+# Private repository: Actions minutes are counted (Windows x2, macOS x10), so
+# documentation-only pushes build nothing and macOS builds only on request
+# (Actions → build → Run workflow).
 on:
   push:
     branches: [next, main]
+    paths-ignore: ['docs/**', 'translations/**', '**/*.md']
   pull_request:
+    paths-ignore: ['docs/**', 'translations/**', '**/*.md']
   workflow_dispatch:
 
 concurrency:
@@ -96,6 +101,7 @@ jobs:
           gh release edit next-build --notes "$notes"
 
   macos:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
