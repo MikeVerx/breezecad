@@ -21,8 +21,9 @@ struct ViewCubeAction {
 };
 
 /// Draws the cube in the top-right corner of the viewport rectangle
-/// [`topLeft`, `bottomRight`] and the triad in its bottom-left corner.
-ViewCubeAction DrawViewCube(Ui& ui, const ViewProjection& view, ImVec2 topLeft, ImVec2 bottomRight);
+/// [`topLeft`, `bottomRight`] and, if `showTriad`, the axis triad in its
+/// bottom-left corner.
+ViewCubeAction DrawViewCube(Ui& ui, const ViewProjection& view, ImVec2 topLeft, ImVec2 bottomRight, bool showTriad = true);
 
 /// Home view direction (from the model toward the camera): front-right-top.
 inline constexpr Vec3 kHomeDirection{1.0, -1.0, 1.0};

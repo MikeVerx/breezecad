@@ -307,7 +307,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     app.viewport.SetPlanes(app.shell.planeQuads);
 
     // View cube and triad on top of everything.
-    const ui::ViewCubeAction cube = ui::DrawViewCube(ui, vf.projection, pos, {pos.x + size.x, pos.y + size.y});
+    const ui::ViewCubeAction cube = ui::DrawViewCube(ui, vf.projection, pos, {pos.x + size.x, pos.y + size.y}, app.settings.showTriad);
     if (cube.lookFrom) LookFrom(app, cube.lookFrom->first, cube.lookFrom->second);
     if (cube.home) HomeView(app);
     if (cube.dragYaw != 0 || cube.dragPitch != 0) app.viewport.Orbit(cube.dragYaw, cube.dragPitch, app.viewport.ModelCenter());

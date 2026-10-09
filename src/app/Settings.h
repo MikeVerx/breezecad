@@ -14,6 +14,7 @@ enum class ThemeChoice : unsigned char { System, Light, Dark };
 struct Settings {
     ThemeChoice theme          = ThemeChoice::System;
     bool        animations     = true;    ///< smooth camera moves
+    bool        showTriad      = true;    ///< axis triad in the corner of the view
     int         autosaveMinutes = 5;      ///< 0 turns autosave off
     bool        gridSnap       = true;
     bool        pointSnap      = true;

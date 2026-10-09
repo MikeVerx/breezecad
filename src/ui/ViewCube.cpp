@@ -80,7 +80,7 @@ void Triangle(ImDrawList* dl, ImVec2 c, ImVec2 dir, float size, ImU32 color) {
 
 } // namespace
 
-ViewCubeAction DrawViewCube(Ui& ui, const ViewProjection& view, ImVec2 topLeft, ImVec2 bottomRight) {
+ViewCubeAction DrawViewCube(Ui& ui, const ViewProjection& view, ImVec2 topLeft, ImVec2 bottomRight, bool showTriad) {
     ViewCubeAction action;
     const ThemeColors& c = ui.C();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -252,6 +252,7 @@ ViewCubeAction DrawViewCube(Ui& ui, const ViewProjection& view, ImVec2 topLeft, 
     ui.icons.Draw(dl, "ui-home", {homeCenter.x - ui.S(8), homeCenter.y - ui.S(8)}, ui.S(16), c.floatingInk);
 
     // Axis triad in the bottom-left corner, far axes first.
+    if (!showTriad) return action;
     const ImVec2 origin{topLeft.x + ui.S(44), bottomRight.y - ui.S(44)};
     struct Axis {
         Vec3        e;

@@ -31,6 +31,7 @@ Settings Settings::Load(const std::filesystem::path& file) {
     const std::string theme = j.value("theme", "system");
     s.theme = theme == "light" ? ThemeChoice::Light : theme == "dark" ? ThemeChoice::Dark : ThemeChoice::System;
     s.animations      = j.value("animations", s.animations);
+    s.showTriad       = j.value("showTriad", s.showTriad);
     s.autosaveMinutes = std::clamp(j.value("autosaveMinutes", s.autosaveMinutes), 0, 120);
     s.gridSnap        = j.value("gridSnap", s.gridSnap);
     s.pointSnap       = j.value("pointSnap", s.pointSnap);
@@ -89,6 +90,7 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"showAllConstraints", showAllConstraints},
         {"gridStep", gridStep},
         {"uiScale", uiScale},
+        {"showTriad", showTriad},
         {"language", language},
         {"window", {{"x", windowX}, {"y", windowY}, {"width", windowW}, {"height", windowH}, {"maximized", windowMaximized}}},
         {"shortcuts", ShortcutsJson(shortcuts)},
