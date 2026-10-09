@@ -11,14 +11,34 @@
 namespace bz::app {
 namespace {
 
-/// What the plane starts from, for the panel.
-std::string BaseName(const Session& session, const doc::WorkPlaneFeature& f) {
-    if (f.face.IsSet()) return Tr("Грань тела");
-    if (f.base == doc::origin::kPlaneXY) return Tr("Плоскость XY");
-    if (f.base == doc::origin::kPlaneXZ) return Tr("Плоскость XZ");
-    if (f.base == doc::origin::kPlaneYZ) return Tr("Плоскость YZ");
-    if (const doc::Feature* base = session.doc.Find(f.base)) return base->name;
+using doc::WorkPlaneMethod;
+
+/// A start (plane or face), for the panel; empty when none.
+std::string StartName(const Session& session, ObjectId base, const doc::FaceReference& face) {
+    if (face.IsSet()) return Tr("Грань тела");
+    if (base == doc::origin::kPlaneXY) return Tr("Плоскость XY");
+    if (base == doc::origin::kPlaneXZ) return Tr("Плоскость XZ");
+    if (base == doc::origin::kPlaneYZ) return Tr("Плоскость YZ");
+    if (const doc::Feature* f = session.doc.Find(base)) return f->name;
     return {};
+}
+
+/// A chosen thing as a row: what it is, a check or a warning; the active one
+/// (where the next click goes) has a stronger border. True when clicked.
+bool Chip(ui::Ui& ui, const char* id, const std::string& caption, const std::string& value, bool active, float width) {
+    const ui::ThemeColors& c = ui.C();
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float h = ui.S(34);
+    const bool clicked = ImGui::InvisibleButton(id, {width, h});
+    const bool hovered = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(active ? c.accentSoft : hovered ? c.hover : c.panel), ui.S(8));
+    dl->AddRect(p, {p.x + width, p.y + h}, ui::ToU32(active ? c.accent : c.accentSoftBorder), ui.S(8), 0, ui.S(active ? 1.6f : 1.0f));
+    ui.icons.Draw(dl, value.empty() ? "status-warning" : "ui-check", {p.x + ui.S(10), p.y + (h - ui.S(14)) / 2}, ui.S(14),
+                  value.empty() ? c.warning : c.accent);
+    const std::string text = caption + ": " + (value.empty() ? std::string(Tr("не выбрано")) : value);
+    dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(32), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), text.c_str());
+    return clicked;
 }
 
 } // namespace
@@ -26,12 +46,20 @@ std::string BaseName(const Session& session, const doc::WorkPlaneFeature& f) {
 bool WorkPlaneEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::WorkPlaneFeature*>(&f) != nullptr; }
 
 std::string WorkPlaneEditor::Hint() const {
+    switch (myMethod) {
+        case WorkPlaneMethod::Midplane:
+            return Tr("Щёлкните две параллельные плоскости или грани — плоскость встанет посередине. Enter — готово, Esc — отмена");
+        case WorkPlaneMethod::Angle:
+            return Tr("Щёлкните плоскость или грань, затем прямое ребро на ней, введите угол. Enter — готово, Esc — отмена");
+        case WorkPlaneMethod::Offset: break;
+    }
     return Tr("Щёлкните плоскость или плоскую грань, от которой строить, введите смещение. Enter — готово, Esc — отмена");
 }
 
 void WorkPlaneEditor::StartNew(AppContext& app, Session& session) {
     auto f = std::make_unique<doc::WorkPlaneFeature>();
     f->offset.name = session.doc.NextParameterName();
+    f->angle.name = session.doc.NextParameterName();
     // A plane selected in the tree is the natural start (a plane above a
     // plane); otherwise XY, so the new plane is on screen at once and a
     // click on another plane or a face moves it there.
@@ -42,7 +70,11 @@ void WorkPlaneEditor::StartNew(AppContext& app, Session& session) {
 }
 
 void WorkPlaneEditor::LoadTexts(const doc::Feature& feature) {
-    myOffset = static_cast<const doc::WorkPlaneFeature&>(feature).offset.expression;
+    const auto& f = static_cast<const doc::WorkPlaneFeature&>(feature);
+    myOffset = f.offset.expression;
+    myAngle = f.angle.expression;
+    myMethod = f.method;
+    mySlot = 0;
 }
 
 void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) {
@@ -50,22 +82,37 @@ void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const Vi
     if (!f) return;
     const int index = session.doc.IndexOf(f->id);
     if (index < 0) return;
+    myMethod = f->method;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 mouse = ImGui::GetMousePos();
+    const Vec2 local = vf.ToLocal(mouse);
+    // Through an edge: edges and faces of the body before this plane are picked.
+    const bool byEdge = f->method == WorkPlaneMethod::Angle;
+    if (byEdge) {
+        app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::EdgesAndFaces);
+        app.viewport.SetMarkedEdges(f->edge ? std::vector<doc::EdgeReference>{*f->edge} : std::vector<doc::EdgeReference>{});
+    }
 
     // Candidates: origin planes and the work planes before this one.
     std::vector<ShownPlane> planes = OriginPlanes(session);
     const std::vector<ShownPlane> work = WorkPlanes(session, static_cast<std::size_t>(index));
     planes.insert(planes.end(), work.begin(), work.end());
     const ShownPlane* hot = vf.hovered ? PlaneUnderCursor(vf, mouse, planes) : nullptr;
-    std::optional<render::PickResult> face;
-    if (vf.hovered) face = app.viewport.Pick(vf.ToLocal(mouse));
-    if (face && face->plane) hot = nullptr;   // the body wins, as when starting a sketch
+    std::optional<doc::FaceReference> face;
+    std::optional<doc::EdgeReference> edge;
+    if (vf.hovered && byEdge) {
+        edge = app.viewport.PickEdge(local);
+        if (!edge) face = app.viewport.PickFace(local);
+    } else if (vf.hovered) {
+        if (const auto hit = app.viewport.Pick(local); hit && hit->plane) face = doc::FaceReference{hit->plane->normal, hit->point};
+    }
+    if (face || edge) hot = nullptr;   // the body wins, as when starting a sketch
 
     const bool faint = !session.model.Bodies().empty();
     for (const ShownPlane& p : planes) {
-        const bool isBase = !f->face.IsSet() && p.id == f->base;
-        DrawPlane(app, dl, vf, p, &p == hot, faint && &p != hot && !isBase);   // the base: not faded
+        const bool chosen = (!f->face.IsSet() && p.id == f->base) ||
+                            (f->method == WorkPlaneMethod::Midplane && !f->face2.IsSet() && p.id == f->base2);
+        DrawPlane(app, dl, vf, p, &p == hot, faint && &p != hot && !chosen);   // the chosen: not faded
     }
     // The plane being made, in the accent colour.
     bool placed = false;
@@ -73,6 +120,7 @@ void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const Vi
         if (p.id != f->id) continue;
         DrawPlane(app, dl, vf, p, true);
         placed = true;
+        if (f->method != WorkPlaneMethod::Offset) continue;
         // Offset arrow from the start to the middle of the new plane.
         const Vec3 dir = p.frame.normal * (f->reversed ? -1.0 : 1.0);
         const Vec3 tip = p.frame.ToWorld(p.centre);
@@ -89,53 +137,89 @@ void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const Vi
             Changed(session);
         }
     }
-    if (!placed || f->offset.HasError()) myArrow.Release();
+    if (!placed || f->offset.HasError() || f->method != WorkPlaneMethod::Offset) myArrow.Release();
     if (myArrow.Hot()) return;
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
-    if (hot) {
-        f->base = hot->id;
-        f->face = {};
+    if (edge) {
+        f->edge = *edge;
+        mySlot = 0;
         Changed(session);
-    } else if (face && face->plane) {
-        f->face = {face->plane->normal, face->point};
-        f->base = {};
-        Changed(session);
+        return;
     }
+    if (!hot && !face) return;
+    const ObjectId id = hot ? hot->id : ObjectId{};
+    const doc::FaceReference picked = face ? *face : doc::FaceReference{};
+    // The second start of a midplane takes the click when it is the active field.
+    if (f->method == WorkPlaneMethod::Midplane && mySlot == 1) {
+        f->base2 = id;
+        f->face2 = picked;
+        mySlot = 0;
+    } else {
+        f->base = id;
+        f->face = picked;
+        if (f->method == WorkPlaneMethod::Midplane && !f->base2 && !f->face2.IsSet()) mySlot = 1;
+        if (f->method == WorkPlaneMethod::Angle && !f->edge) mySlot = 1;
+    }
+    Changed(session);
 }
 
 void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::WorkPlaneFeature&>(feature);
     ui::Ui& ui = app.ui;
-    const ui::ThemeColors& c = ui.C();
 
-    Section(app, Tr("От чего строить"));
+    Section(app, Tr("Способ"));
     {
-        const std::string base = BaseName(session, f);
-        const ImVec2 p = ImGui::GetCursorScreenPos();
-        const float h = ui.S(34);
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoft), ui.S(8));
-        dl->AddRect(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoftBorder), ui.S(8));
-        ui.icons.Draw(dl, base.empty() ? "status-warning" : "ui-check", {p.x + ui.S(10), p.y + (h - ui.S(14)) / 2}, ui.S(14), c.accent);
-        const std::string chip = base.empty() ? std::string(Tr("Ничего не выбрано")) : base;
-        dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(32), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), chip.c_str());
-        ImGui::Dummy({width, h});
+        static constexpr std::array<const char*, 3> methods{N_("Смещение"), N_("Посередине"), N_("Под углом")};
+        const int current = static_cast<int>(f.method);
+        if (const int chosen = ui::Segmented(ui, "method", methods, current, 3, width); chosen != current) {
+            f.method = static_cast<WorkPlaneMethod>(chosen);
+            myMethod = f.method;
+            // The start is kept; the next click goes to what the method still needs.
+            mySlot = f.method == WorkPlaneMethod::Offset ? 0 : 1;
+            Changed(session);
+        }
     }
-    Caption(app, Tr("Щёлкните плоскость начала координат, рабочую плоскость или плоскую грань тела."), width);
     Gap(app);
 
-    Section(app, Tr("Смещение"));
-    ParameterField(app, session, "offset", myOffset, f.offset, width, myFocusFirstField);
-    Gap(app);
-
-    Section(app, Tr("Направление"));
-    static constexpr std::array<const char*, 2> labels{N_("По нормали"), N_("Обратно")};
-    const int current = f.reversed ? 1 : 0;
-    const int chosen = ui::Segmented(ui, "direction", labels, current, 2, width);
-    if (chosen != current) {
-        f.reversed = chosen == 1;
-        Changed(session);
+    const std::string first = StartName(session, f.base, f.face);
+    switch (f.method) {
+        case WorkPlaneMethod::Offset:
+            Section(app, Tr("От чего строить"));
+            Chip(ui, "##start", Tr("Плоскость"), first, true, width);
+            Caption(app, Tr("Щёлкните плоскость начала координат, рабочую плоскость или плоскую грань тела."), width);
+            Gap(app);
+            Section(app, Tr("Смещение"));
+            ParameterField(app, session, "offset", myOffset, f.offset, width, myFocusFirstField);
+            break;
+        case WorkPlaneMethod::Midplane:
+            Section(app, Tr("Между"));
+            if (Chip(ui, "##first", Tr("Первая"), first, mySlot == 0, width)) mySlot = 0;
+            ImGui::Dummy({0, ui.S(4)});
+            if (Chip(ui, "##second", Tr("Вторая"), StartName(session, f.base2, f.face2), mySlot == 1, width)) mySlot = 1;
+            Caption(app, Tr("Две параллельные плоскости или плоские грани. Щелчок в окне попадает в выделенное поле."), width);
+            break;
+        case WorkPlaneMethod::Angle:
+            Section(app, Tr("Через ребро"));
+            if (Chip(ui, "##first", Tr("Плоскость"), first, mySlot == 0, width)) mySlot = 0;
+            ImGui::Dummy({0, ui.S(4)});
+            if (Chip(ui, "##edge", Tr("Ребро"), f.edge ? std::string(Tr("выбрано")) : std::string(), mySlot == 1, width)) mySlot = 1;
+            Caption(app, Tr("Прямое ребро, параллельное плоскости: новая плоскость проходит через него под углом к ней."), width);
+            Gap(app);
+            Section(app, Tr("Угол"));
+            ParameterField(app, session, "angle", myAngle, f.angle, width, myFocusFirstField);
+            break;
+    }
+    if (f.method != WorkPlaneMethod::Midplane) {
+        Gap(app);
+        Section(app, Tr("Направление"));
+        static constexpr std::array<const char*, 2> labels{N_("По нормали"), N_("Обратно")};
+        const int current = f.reversed ? 1 : 0;
+        const int chosen = ui::Segmented(ui, "direction", labels, current, 2, width);
+        if (chosen != current) {
+            f.reversed = chosen == 1;
+            Changed(session);
+        }
     }
 }
 

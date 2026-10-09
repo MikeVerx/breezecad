@@ -20,4 +20,8 @@ doc::EdgeReference DescribeEdge(const TopoDS_Edge& edge, const TopoDS_Shape& bod
 std::vector<std::optional<TopoDS_Edge>> ResolveEdges(const std::vector<doc::EdgeReference>& refs,
                                                      const TopoDS_Shape& body);
 
+/// A straight edge as it is on `body` now: a point in its middle and its
+/// unit direction. nullopt when it is gone or not straight.
+std::optional<std::pair<Vec3, Vec3>> ResolveLine(const doc::EdgeReference& ref, const TopoDS_Shape& body);
+
 } // namespace bz::kernel::occt

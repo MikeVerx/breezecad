@@ -1,6 +1,8 @@
 #pragma once
-// The "Плоскость" operation panel: the start is an origin plane, a work plane
-// or a flat face clicked in the viewport; the offset is typed in the panel.
+// The "Плоскость" operation panel: offset from a start, half way between two
+// starts, or through an edge at an angle (see doc::WorkPlaneFeature). Starts
+// are origin planes, work planes or flat faces clicked in the viewport; the
+// click goes to the highlighted field of the panel.
 
 #include "app/features/DragArrow.h"
 #include "app/features/FeatureOperationEditor.h"
@@ -17,6 +19,8 @@ public:
     std::string Hint() const override;
     bool        PicksFaces() const override { return true; }
     bool        DrawsPlanes() const override { return true; }
+    /// Through an edge: the edges of the body before the plane are picked.
+    bool        PicksOriginal() const override { return myMethod == doc::WorkPlaneMethod::Angle; }
 
     void DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;
 
@@ -26,7 +30,9 @@ protected:
     void DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) override;
 
 private:
-    std::string myOffset;
+    std::string           myOffset, myAngle;
+    doc::WorkPlaneMethod  myMethod = doc::WorkPlaneMethod::Offset;   ///< of the edited plane, last frame
+    int                   mySlot = 0;   ///< where the next click goes: 0 the start, 1 the second start or the edge
     DragArrow   myArrow;   ///< offset
 };
 

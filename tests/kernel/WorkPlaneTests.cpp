@@ -5,6 +5,8 @@
 
 #include <doctest.h>
 
+#include <cmath>
+
 using namespace bz;
 using namespace bz::test;
 using doc::FeatureState;
@@ -123,4 +125,58 @@ TEST_CASE("a sketch on a face moves with the face") {
     CHECK(top.placement.frame.origin.z == doctest::Approx(25.0));
     CHECK(model.BoundingBox()->max.z == doctest::Approx(30.0).epsilon(1e-4));
     CHECK(model.Volume() == doctest::Approx(40.0 * 40 * 25 + 10.0 * 10 * 5));
+}
+
+namespace {
+
+/// A box 120 x 80 x 30 standing on XY, centred on the origin.
+doc::Document BoxDocument() {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddRect(d, sk, {-60, -40}, {60, 40});
+    AddExtrude(d, sk.id, "30");
+    return d;
+}
+
+} // namespace
+
+TEST_CASE("work plane half way between a plane and a parallel face") {
+    doc::Document d = BoxDocument();
+    auto& wp = AddWorkPlane(d, "0");
+    wp.method = doc::WorkPlaneMethod::Midplane;
+    wp.face2 = {{0, 0, 1}, {0, 0, 30}};   // the top of the box
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(wp.status.state == FeatureState::Ok);
+    CHECK(wp.frame->origin.z == doctest::Approx(15.0));
+
+    wp.face2 = {{1, 0, 0}, {60, 0, 15}};   // a side: not parallel to XY
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(wp.id)));
+    model.Rebuild(d);
+    CHECK(wp.status.state == FeatureState::Error);
+}
+
+TEST_CASE("work plane through an edge at an angle to a face") {
+    doc::Document d = BoxDocument();
+    auto& wp = AddWorkPlane(d, "0");
+    wp.method = doc::WorkPlaneMethod::Angle;
+    wp.face = {{0, 0, 1}, {0, 0, 30}};
+    doc::EdgeReference e;   // the top front edge, along X
+    e.curve = doc::CurveKind::Line;
+    e.direction = {1, 0, 0};
+    e.middle = {0, -40, 30};
+    e.faces = {{{doc::SurfaceKind::Plane, {0, -1, 0}}, {doc::SurfaceKind::Plane, {0, 0, 1}}}};
+    wp.edge = e;
+    wp.angle.expression = "90";
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(wp.status.state == FeatureState::Ok);
+    CHECK(wp.frame->origin.y == doctest::Approx(-40.0));
+    CHECK(wp.frame->origin.z == doctest::Approx(30.0));
+    CHECK(std::abs(wp.frame->normal.y) == doctest::Approx(1.0));   // the front face's plane
+
+    wp.angle.expression = "45";
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(wp.id)));
+    model.Rebuild(d);
+    CHECK(std::abs(wp.frame->normal.z) == doctest::Approx(std::sqrt(0.5)));
 }

@@ -324,29 +324,60 @@ Expected<gp_Trsf> MirrorPlacement(const doc::MirrorFeature& f, const doc::Docume
 /// Puts a work plane where its base (origin plane, work plane or face of a
 /// body) and offset say.
 void PlaceWorkPlane(doc::WorkPlaneFeature& wp, const doc::Document& doc, const std::vector<Body>& bodies) {
-    std::optional<Frame> base;
-    if (wp.face.IsSet()) {
-        for (auto it = bodies.rbegin(); it != bodies.rend() && !base; ++it) base = occt::ResolvePlaneFrame(it->shape, wp.face);
-        if (!base) {
-            wp.frame.reset();
-            wp.status = {FeatureState::Error, "Грань рабочей плоскости не найдена: модель изменилась слишком сильно"};
-            return;
-        }
-    } else if (const auto originPlane = doc::origin::PlaneFrame(wp.base)) {
-        base = originPlane;
-    } else if (const auto* other = doc.FindAs<doc::WorkPlaneFeature>(wp.base); other && other->frame) {
-        base = other->frame;
-    }
-    if (!base) {
+    using doc::WorkPlaneMethod;
+    const auto fail = [&](const char* message) {
         wp.frame.reset();
-        wp.status = {FeatureState::Error, "Не задана плоскость, от которой строить"};
-        return;
+        wp.status = {FeatureState::Error, message};
+    };
+    // A start: a flat face of a body, an origin plane or a work plane before.
+    const auto start = [&](ObjectId base, const doc::FaceReference& face) -> std::optional<Frame> {
+        if (face.IsSet()) {
+            for (auto it = bodies.rbegin(); it != bodies.rend(); ++it)
+                if (auto f = occt::ResolvePlaneFrame(it->shape, face)) return f;
+            return std::nullopt;
+        }
+        if (const auto originPlane = doc::origin::PlaneFrame(base)) return originPlane;
+        if (const auto* other = doc.FindAs<doc::WorkPlaneFeature>(base); other && other->frame) return other->frame;
+        return std::nullopt;
+    };
+    const std::optional<Frame> first = start(wp.base, wp.face);
+    if (!first) {
+        return fail(wp.face.IsSet() ? "Грань рабочей плоскости не найдена: модель изменилась слишком сильно"
+                                    : "Не задана плоскость, от которой строить");
     }
-    if (wp.offset.HasError()) {
-        wp.status = {FeatureState::Error, wp.offset.error};
-        return;
+    switch (wp.method) {
+        case WorkPlaneMethod::Offset:
+            if (wp.offset.HasError()) return fail("Смещение задано с ошибкой");
+            wp.frame = doc::OffsetFrame(*first, wp.reversed ? -wp.offset.value : wp.offset.value);
+            break;
+        case WorkPlaneMethod::Midplane: {
+            const std::optional<Frame> second = start(wp.base2, wp.face2);
+            if (!second) return fail("Выберите вторую плоскость или грань");
+            if (std::abs(std::abs(first->normal.Dot(second->normal)) - 1.0) > 1e-6)
+                return fail("Плоскости не параллельны — середины между ними нет");
+            const double gap = (second->origin - first->origin).Dot(first->normal);
+            if (std::abs(gap) < 1e-9) return fail("Это одна и та же плоскость");
+            wp.frame = doc::OffsetFrame(*first, gap / 2);
+            break;
+        }
+        case WorkPlaneMethod::Angle: {
+            if (!wp.edge) return fail("Выберите прямое ребро — ось поворота плоскости");
+            if (wp.angle.HasError()) return fail("Угол задан с ошибкой");
+            std::optional<std::pair<Vec3, Vec3>> line;
+            for (auto it = bodies.rbegin(); it != bodies.rend() && !line; ++it) line = occt::ResolveLine(*wp.edge, it->shape);
+            if (!line) return fail("Ребро не найдено или оно не прямое");
+            const auto& [point, axis] = *line;
+            if (std::abs(axis.Dot(first->normal)) > 1e-6) return fail("Ребро должно быть параллельно плоскости, от которой строить");
+            // The start's normal turned about the edge (Rodrigues; axis is across the normal).
+            const double t = wp.reversed ? -wp.angle.value : wp.angle.value;
+            Frame f;
+            f.origin = point;
+            f.normal = (first->normal * std::cos(t) + axis.Cross(first->normal) * std::sin(t)).Normalized();
+            f.xDir = axis;
+            wp.frame = f;
+            break;
+        }
     }
-    wp.frame = doc::OffsetFrame(*base, wp.reversed ? -wp.offset.value : wp.offset.value);
     wp.status = {FeatureState::Ok, {}};
 }
 

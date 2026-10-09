@@ -165,4 +165,14 @@ std::vector<std::optional<TopoDS_Edge>> ResolveEdges(const std::vector<doc::Edge
     return found;
 }
 
+std::optional<std::pair<Vec3, Vec3>> ResolveLine(const doc::EdgeReference& ref, const TopoDS_Shape& body) {
+    const auto found = ResolveEdges({ref}, body);
+    if (found.empty() || !found.front()) return std::nullopt;
+    const BRepAdaptor_Curve curve(*found.front());
+    if (curve.GetType() != GeomAbs_Line) return std::nullopt;
+    const gp_Pnt mid = curve.Value((curve.FirstParameter() + curve.LastParameter()) / 2);
+    const gp_Dir d = curve.Line().Direction();
+    return std::make_pair(Vec3{mid.X(), mid.Y(), mid.Z()}, Vec3{d.X(), d.Y(), d.Z()});
+}
+
 } // namespace bz::kernel::occt
