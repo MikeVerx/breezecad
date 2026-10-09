@@ -126,6 +126,7 @@ std::optional<DimensionLayout> LayoutDimension(const sketch::Sketch& sk, const s
     const std::optional<double> measured = MeasureDimension(sk, c);
     if (!measured) return std::nullopt;
     out.text = Label(sk, c, c.reference ? *measured : c.parameter.value, units);
+    if (!c.reference) out.name = c.parameter.name;
 
     switch (c.type) {
         case ConstraintType::Radius:

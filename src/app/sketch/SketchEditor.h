@@ -83,6 +83,8 @@ public:
     void Finish(AppContext& app, Session& session);
     /// Turns the camera to look straight at the sketch plane (F6).
     void LookAtSketch(AppContext& app, Session& session);
+    /// The sketch with its dimension labels, in model space (for Показать всё).
+    Box3 FitBox(Session& session) const;
     /// Zooms out (keeping the direction) when the sketch left the screen.
     void KeepSketchInView(AppContext& app, Session& session);
 
@@ -217,6 +219,9 @@ private:
     ObjectId    myEditDimension;
     std::string myEditText;
     bool        myEditFocus = false;
+    bool        myEditTyped = false;   ///< the value was changed (a clicked name is then added, not put instead)
+    int         myCaretFrames = 0;     ///< frames to keep the caret at the end after inserting a name
+    bool        myClickUsed = false;   ///< this frame's click went into the formula, tools must not see it
 };
 
 } // namespace bz::app

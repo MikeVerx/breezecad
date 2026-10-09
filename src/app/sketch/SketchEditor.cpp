@@ -156,6 +156,11 @@ void SketchEditor::LookAtSketch(AppContext& app, Session& session) {
     app.viewport.AnimateTo(target, app.settings.animations ? 0.45 : 0.0);
 }
 
+Box3 SketchEditor::FitBox(Session& session) const {
+    const doc::SketchFeature* f = Active(session);
+    return f ? SketchBox(*f, session.doc.units) : Box3{};
+}
+
 void SketchEditor::KeepSketchInView(AppContext& app, Session& session) {
     const doc::SketchFeature* f = Active(session);
     if (!f) return;
@@ -299,8 +304,9 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
     for (ObjectId id : myPicks) style.picked.push_back(id);
     DrawSketch(app.ui, dl, *f, view, session.doc.units, style);
 
+    myClickUsed = false;
     if (myEditDimension) HandleInlineEdit(app, session, view);
-    if (!vf.hovered && !myDragging) return;
+    if (myClickUsed || (!vf.hovered && !myDragging)) return;
 
     // A short right click ends a chain of lines, like in KOMPAS.
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Right) && ImGui::GetMouseDragDelta(ImGuiMouseButton_Right).x == 0 &&
@@ -424,6 +430,8 @@ void SketchEditor::StartInlineEdit(const sketch::Constraint& c) {
     myEditDimension = c.id;
     myEditText = c.parameter.expression;
     myEditFocus = true;
+    myEditTyped = false;
+    myCaretFrames = 0;
 }
 
 void SketchEditor::HandleInlineEdit(AppContext& app, Session& session, const SketchView& view) {
@@ -441,9 +449,29 @@ void SketchEditor::HandleInlineEdit(AppContext& app, Session& session, const Ske
     const float width = ui.S(150);
     ImGui::SetCursorScreenPos({at.x - width / 2, at.y - ui.S(18)});
     const Quantity q = c->type == sketch::ConstraintType::Angle ? Quantity::Angle : Quantity::Length;
+    // A click on another dimension puts its name into the formula, as in
+    // Inventor: "d3" replaces an untouched value, otherwise it is added.
+    const ImVec2 mouse = ImGui::GetMousePos();
+    const bool overField = mouse.x >= at.x - width / 2 && mouse.x <= at.x + width / 2 && mouse.y >= at.y - ui.S(18) &&
+                           mouse.y <= at.y + ui.S(18);
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && view.vf.hovered && !overField) {
+        const SketchHit hit = HitTest(f->sketch, view, mouse, session.doc.units);
+        const sketch::Constraint* other = hit.kind == sketch::EntityKind::Constraint ? f->sketch.FindConstraint(hit.id) : nullptr;
+        if (other && other->id != c->id && sketch::IsDimensional(other->type) && !other->parameter.name.empty()) {
+            if (!myEditTyped) myEditText.clear();
+            myEditText += other->parameter.name;
+            myEditTyped = true;
+            myEditFocus = true;
+            myCaretFrames = 2;
+            myClickUsed = true;
+        }
+    }
     const ui::FieldResult r = ui::ExpressionField(ui, "##dimension-edit", myEditText, UnitLabel(q, session.doc.units), {},
-                                                  width, myEditFocus, false);
+                                                  width, myEditFocus, false, myCaretFrames > 0);
+    if (myCaretFrames > 0) --myCaretFrames;
+    if (r.edited) myEditTyped = true;
     myEditFocus = false;
+    if (myClickUsed) return;   // the field lost focus to that click; it comes back next frame
     if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
         myEditDimension = {};
         return;

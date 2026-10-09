@@ -161,11 +161,17 @@ void DrawDimension(ui::Ui& ui, ImDrawList* dl, const SketchView& view, const Dim
     const float fs = ui.S(12);
     const ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0, layout.text.c_str());
     const ImVec2 at = view.ToScreen(layout.label);
-    const ImVec2 p0{at.x - ts.x / 2 - ui.S(5), at.y - ts.y / 2 - ui.S(2)};
-    const ImVec2 p1{at.x + ts.x / 2 + ui.S(5), at.y + ts.y / 2 + ui.S(2)};
+    // The parameter's name in grey under the value: what to type in a formula.
+    const float nfs = ui.S(9.5f);
+    const ImVec2 ns = layout.name.empty() ? ImVec2{0, 0} : font->CalcTextSizeA(nfs, FLT_MAX, 0, layout.name.c_str());
+    const float halfW = std::max(ts.x, ns.x) / 2;
+    const ImVec2 p0{at.x - halfW - ui.S(5), at.y - ts.y / 2 - ui.S(2)};
+    const ImVec2 p1{at.x + halfW + ui.S(5), at.y + ts.y / 2 + ui.S(2) + ns.y};
     dl->AddRectFilled(p0, p1, ui::ToU32(ui.C().panel.WithAlpha(0.92f)), ui.S(4));
     if (highlight) dl->AddRect(p0, p1, ink, ui.S(4), 0, ui.S(1));
     dl->AddText(font, fs, {at.x - ts.x / 2, at.y - ts.y / 2}, ink, layout.text.c_str());
+    if (!layout.name.empty())
+        dl->AddText(font, nfs, {at.x - ns.x / 2, at.y + ts.y / 2}, ui::ToU32(ui.C().textMuted), layout.name.c_str());
 }
 
 void DrawSnapMarker(ui::Ui& ui, ImDrawList* dl, ImVec2 at, const Snap& snap) {

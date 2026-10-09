@@ -24,6 +24,7 @@ struct DimensionLayout {
     Vec2               label;        ///< text centre
     Vec2               anchor;       ///< what labelOffset is relative to
     std::string        text;         ///< "60", "Ø20", "R10", "30°", "(45)"
+    std::string        name;         ///< the parameter's name ("d3"), shown small under the value
 };
 
 /// Layout of a dimensional constraint, or nullopt when its geometry is

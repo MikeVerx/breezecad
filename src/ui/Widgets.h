@@ -53,7 +53,8 @@ struct FieldResult {
 /// Numeric field that accepts expressions: value, unit suffix and an "fx"
 /// button that links the value to a variable. Shows `error` below in red.
 FieldResult ExpressionField(Ui& ui, const char* id, std::string& text, std::string_view unit,
-                            const std::string& error, float width, bool focusNow = false, bool showFx = true);
+                            const std::string& error, float width, bool focusNow = false, bool showFx = true,
+                            bool caretAtEnd = false);
 
 /// Single-line text field in the house style.
 bool TextField(Ui& ui, const char* id, std::string& text, float width, const char* placeholder = nullptr,

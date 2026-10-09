@@ -247,6 +247,13 @@ void HomeView(AppContext& app) {
 
 void FitView(AppContext& app) {
     const render::CameraState now = app.viewport.Camera();
+    // In a sketch: the sketch and its dimension labels, not the whole model.
+    if (Session* s = app.Doc(); s && s->mode == EditMode::Sketch)
+        if (const Box3 box = app.sketch.FitBox(*s); !box.IsEmpty()) {
+            app.viewport.AnimateTo(app.viewport.FitCamera(now.center - now.eye, now.up, box, 1.15),
+                                   app.settings.animations ? 0.35 : 0.0);
+            return;
+        }
     const render::CameraState target = app.viewport.FitCamera(now.center - now.eye, now.up);
     app.viewport.AnimateTo(target, app.settings.animations ? 0.35 : 0.0);
 }

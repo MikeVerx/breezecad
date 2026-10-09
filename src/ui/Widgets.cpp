@@ -244,7 +244,7 @@ bool LinkButton(Ui& ui, const char* id, const char* label) {
 }
 
 FieldResult ExpressionField(Ui& ui, const char* id, std::string& text, std::string_view unit, const std::string& error,
-                            float width, bool focusNow, bool showFx) {
+                            float width, bool focusNow, bool showFx, bool caretAtEnd) {
     FieldResult result;
     ImGui::PushID(id);
     const ThemeColors& c = ui.C();
@@ -269,7 +269,13 @@ FieldResult ExpressionField(Ui& ui, const char* id, std::string& text, std::stri
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4{0, 0, 0, 0});
     if (focusNow) ImGui::SetKeyboardFocusHere();
     ImGui::SetNextItemWidth(width - fxW - unitW);
-    result.edited = ImGui::InputText("##value", &text, ImGuiInputTextFlags_AutoSelectAll);
+    // caretAtEnd: the text was just added to (a name inserted), keep typing after it.
+    const auto toEnd = [](ImGuiInputTextCallbackData* data) {
+        data->CursorPos = data->SelectionStart = data->SelectionEnd = data->BufTextLen;
+        return 0;
+    };
+    result.edited = caretAtEnd ? ImGui::InputText("##value", &text, ImGuiInputTextFlags_CallbackAlways, toEnd)
+                               : ImGui::InputText("##value", &text, ImGuiInputTextFlags_AutoSelectAll);
     result.active = ImGui::IsItemActive();
     const bool enter = ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
     result.submitted = enter && (result.active || ImGui::IsItemDeactivated());
