@@ -135,6 +135,7 @@ void SketchEditor::Edit(AppContext& app, Session& session, ObjectId sketch) {
 }
 
 void SketchEditor::Finish(AppContext& app, Session& session) {
+    EndTextEdit(session);
     // Back to the direction the user looked from before the sketch, framed
     // to show the model and the new sketch (Inventor does the same).
     if (myCameraBeforeSketch) {
@@ -193,6 +194,7 @@ void SketchEditor::SetTool(AppContext& app, Session& session, SketchTool tool) {
     myClicks.clear();
     myPicks.clear();
     myOffsetCurve = {};
+    if (tool != SketchTool::Text) EndTextEdit(session);
     myTool = tool;
     myMirrorAxisStep = tool == SketchTool::Mirror && !mySelection.empty();   // chosen beforehand: go to the line
     if (tool >= SketchTool::Coincident) TryApplyToSelection(app, session);
@@ -201,6 +203,8 @@ void SketchEditor::SetTool(AppContext& app, Session& session, SketchTool tool) {
 void SketchEditor::Escape(AppContext& app, Session& session) {
     if (myEditDimension) {
         myEditDimension = {};
+    } else if (myEditedText) {
+        EndTextEdit(session);
     } else if (!myClicks.empty() || !myPicks.empty() || myOffsetCurve) {
         myOffsetCurve = {};
         myClicks.clear();
@@ -369,6 +373,13 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
         if (cursor) myDragStart = *cursor;
     }
 
+    // Double click on a text: its panel, to change the words and the format.
+    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && myHover.kind == sketch::EntityKind::Text) {
+        const ObjectId text = myHover.id;
+        SetTool(app, session, SketchTool::Text);
+        BeginTextEdit(session, text);
+        return;
+    }
     // Double click on a dimension: edit its value.
     if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && myHover.kind == sketch::EntityKind::Constraint) {
         if (const sketch::Constraint* c = f->sketch.FindConstraint(myHover.id); c && sketch::IsDimensional(c->type))

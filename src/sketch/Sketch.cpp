@@ -54,10 +54,27 @@ ObjectId Sketch::AddLine(IdGenerator& ids, ObjectId start, ObjectId end, bool co
     return id;
 }
 
-ObjectId Sketch::AddText(IdGenerator& ids, ObjectId anchor, std::string text, double height) {
-    const ObjectId id = ids.Next();
-    texts.push_back({id, anchor, std::move(text), height, false});
-    return id;
+ObjectId Sketch::AddText(IdGenerator& ids, Vec2 bottomLeft, Vec2 topRight, std::string text, double height) {
+    Text t;
+    t.corners = {AddPoint(ids, bottomLeft), AddPoint(ids, {topRight.x, bottomLeft.y}), AddPoint(ids, topRight),
+                 AddPoint(ids, {bottomLeft.x, topRight.y})};
+    for (std::size_t i = 0; i < 4; ++i) t.sides[i] = AddLine(ids, t.corners[i], t.corners[(i + 1) % 4], true);
+    const auto add = [&](ConstraintType type, ObjectId a, ObjectId b) {
+        Constraint c;
+        c.type = type;
+        c.refs = {a, b};
+        AddConstraint(ids, c);
+    };
+    // A rectangle that may turn: delete the horizontal to rotate the text.
+    add(ConstraintType::Perpendicular, t.sides[0], t.sides[3]);
+    add(ConstraintType::Parallel, t.sides[0], t.sides[2]);
+    add(ConstraintType::Parallel, t.sides[1], t.sides[3]);
+    add(ConstraintType::Horizontal, t.sides[0], {});
+    t.id = ids.Next();
+    t.text = std::move(text);
+    t.height = height;
+    texts.push_back(std::move(t));
+    return texts.back().id;
 }
 
 ObjectId Sketch::AddSpline(IdGenerator& ids, std::vector<ObjectId> pts, bool interpolate, bool construction) {
@@ -151,7 +168,7 @@ bool Sketch::IsPointUsed(ObjectId pointId) const {
     for (const auto& s : splines)
         if (std::find(s.points.begin(), s.points.end(), pointId) != s.points.end()) return true;
     for (const auto& t : texts)
-        if (t.anchor == pointId) return true;
+        if (std::find(t.corners.begin(), t.corners.end(), pointId) != t.corners.end()) return true;
     return false;
 }
 
@@ -160,7 +177,8 @@ void Sketch::RemoveConstraintsReferencing(ObjectId id) {
 }
 
 void Sketch::Remove(ObjectId id) {
-    switch (KindOf(id)) {
+    const EntityKind kind = KindOf(id);
+    switch (kind) {
         case EntityKind::None:
             return;
         case EntityKind::Constraint:
@@ -180,7 +198,7 @@ void Sketch::Remove(ObjectId id) {
             for (const auto& s : splines)
                 if (std::find(s.points.begin(), s.points.end(), id) != s.points.end()) curves.push_back(s.id);
             for (const auto& t : texts)
-                if (t.anchor == id) curves.push_back(t.id);
+                if (std::find(t.corners.begin(), t.corners.end(), id) != t.corners.end()) curves.push_back(t.id);
             for (ObjectId curve : curves) Remove(curve);
             RemoveConstraintsReferencing(id);
             EraseIf(points, [id](const Point& pt) { return pt.id == id; });
@@ -196,7 +214,11 @@ void Sketch::Remove(ObjectId id) {
             if (const Circle* c = FindCircle(id)) ownPoints = {c->center};
             if (const Arc* a = FindArc(id)) ownPoints = {a->center, a->start, a->end};
             if (const Spline* s = FindSpline(id)) ownPoints = s->points;
-            if (const Text* t = FindText(id)) ownPoints = {t->anchor};
+            std::vector<ObjectId> ownLines;
+            if (const Text* t = FindText(id)) {
+                ownPoints.assign(t->corners.begin(), t->corners.end());
+                ownLines.assign(t->sides.begin(), t->sides.end());
+            }
 
             RemoveConstraintsReferencing(id);
             EraseIf(lines, [id](const Line& l) { return l.id == id; });
@@ -204,6 +226,11 @@ void Sketch::Remove(ObjectId id) {
             EraseIf(arcs, [id](const Arc& a) { return a.id == id; });
             EraseIf(splines, [id](const Spline& s) { return s.id == id; });
             EraseIf(texts, [id](const Text& t) { return t.id == id; });
+            // A text takes its box along; a side of a box takes its text.
+            for (ObjectId line : ownLines) Remove(line);
+            if (kind == EntityKind::Line)
+                for (const Text& t : std::vector<Text>(texts))
+                    if (std::find(t.sides.begin(), t.sides.end(), id) != t.sides.end()) Remove(t.id);
 
             for (ObjectId pid : ownPoints) {
                 const Point* p = FindPoint(pid);
@@ -234,7 +261,8 @@ void Sketch::MergePoints(ObjectId from, ObjectId into) {
     }
     for (auto& s : splines)
         for (ObjectId& p : s.points) remap(p);
-    for (auto& t : texts) remap(t.anchor);
+    for (auto& t : texts)
+        for (ObjectId& p : t.corners) remap(p);
     for (auto& c : constraints) {
         remap(c.refs[0]);
         remap(c.refs[1]);

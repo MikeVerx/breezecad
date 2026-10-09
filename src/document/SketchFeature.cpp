@@ -119,9 +119,14 @@ void SketchFeature::SaveFields(Json& out) const {
         curves.push_back({{"id", ToJson(s.id)}, {"type", "spline"}, {"points", std::move(pts)},
                           {"interpolate", s.interpolate}, {"construction", s.construction}});
     }
-    for (const auto& t : sketch.texts)
-        curves.push_back({{"id", ToJson(t.id)}, {"type", "text"}, {"anchor", ToJson(t.anchor)}, {"text", t.text},
-                          {"height", t.height}, {"construction", t.construction}});
+    for (const auto& t : sketch.texts) {
+        Json corners = Json::array(), sides = Json::array();
+        for (ObjectId p : t.corners) corners.push_back(ToJson(p));
+        for (ObjectId l : t.sides) sides.push_back(ToJson(l));
+        curves.push_back({{"id", ToJson(t.id)}, {"type", "text"}, {"corners", std::move(corners)}, {"sides", std::move(sides)},
+                          {"text", t.text}, {"height", t.height}, {"font", t.font}, {"bold", t.bold}, {"italic", t.italic},
+                          {"halign", t.hAlign}, {"valign", t.vAlign}, {"construction", t.construction}});
+    }
 
     Json constraints = Json::array();
     for (const auto& c : sketch.constraints) {
@@ -191,8 +196,13 @@ Status SketchFeature::LoadFields(const Json& in) {
             sk.splines.push_back(std::move(s));
         } else if (type == "text") {
             sketch::Text t;
-            ok = ReadMember(j, "id", t.id) && ReadMember(j, "anchor", t.anchor) && ReadMember(j, "text", t.text) &&
-                 ReadMember(j, "height", t.height) && ReadMember(j, "construction", t.construction) && t.height > 0;
+            ok = ReadMember(j, "id", t.id) && ReadMember(j, "text", t.text) && ReadMember(j, "height", t.height) &&
+                 ReadMember(j, "font", t.font) && ReadMember(j, "bold", t.bold) && ReadMember(j, "italic", t.italic) &&
+                 ReadMember(j, "halign", t.hAlign) && ReadMember(j, "valign", t.vAlign) &&
+                 ReadMember(j, "construction", t.construction) && t.height > 0 && t.hAlign < 3 && t.vAlign < 3;
+            const Json corners = j.value("corners", Json::array()), sides = j.value("sides", Json::array());
+            ok = ok && corners.size() == 4 && sides.size() == 4;
+            for (std::size_t i = 0; ok && i < 4; ++i) ok = json_io::Read(corners[i], t.corners[i]) && json_io::Read(sides[i], t.sides[i]);
             sk.texts.push_back(std::move(t));
         }
         // Unknown curve types from newer versions are skipped, not fatal.

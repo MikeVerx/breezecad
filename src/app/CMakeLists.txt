@@ -38,6 +38,7 @@ add_executable(breezecad WIN32
     ShortcutPresets.cpp
     sketch/SketchEditor.cpp
     sketch/SketchOverlay.cpp
+    sketch/SketchText.cpp
     sketch/SketchPick.cpp
     sketch/SketchTools.cpp
     sketch/SketchToolPanel.cpp

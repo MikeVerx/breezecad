@@ -64,14 +64,23 @@ struct Spline {
     bool Closed() const { return points.size() > 2 && points.front() == points.back(); }
 };
 
-/// A line of text ("Текст"): its letters are closed outlines, so it extrudes
-/// as relief or cuts as engraving. The anchor is the left end of the baseline.
+/// Text in a box ("Текст", as Inventor's text box). The box is four
+/// construction lines with their corners: ordinary sketch geometry, so it can
+/// be dimensioned, tied to other geometry and turned; the text is laid out
+/// inside it, along its bottom side. The letters are closed outlines: they
+/// extrude as relief or cut as engraving.
 struct Text {
-    ObjectId    id;
-    ObjectId    anchor;
-    std::string text;
-    double      height = 5.0;   ///< font size, mm
-    bool        construction = false;
+    ObjectId                id;
+    std::array<ObjectId, 4> corners{};   ///< bottom-left, bottom-right, top-right, top-left
+    std::array<ObjectId, 4> sides{};     ///< bottom, right, top, left (construction lines, owned)
+    std::string             text;        ///< UTF-8, lines separated by '\n'
+    double                  height = 5.0;   ///< font size, mm
+    std::string             font;        ///< family name; empty: the program's font
+    bool                    bold = false;
+    bool                    italic = false;
+    unsigned char           hAlign = 0;  ///< 0 left, 1 centre, 2 right
+    unsigned char           vAlign = 0;  ///< 0 bottom, 1 middle, 2 top
+    bool                    construction = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -141,7 +150,9 @@ public:
     ObjectId AddLine(IdGenerator& ids, ObjectId start, ObjectId end, bool construction = false);
     ObjectId AddCircle(IdGenerator& ids, ObjectId center, double radius, bool construction = false);
     ObjectId AddArc(IdGenerator& ids, ObjectId center, ObjectId start, ObjectId end, bool construction = false);
-    ObjectId AddText(IdGenerator& ids, ObjectId anchor, std::string text, double height);
+    /// A text with its box from `bottomLeft` to `topRight` (axis-aligned; the
+    /// box's constraints keep it a rectangle with a horizontal bottom).
+    ObjectId AddText(IdGenerator& ids, Vec2 bottomLeft, Vec2 topRight, std::string text, double height);
     ObjectId AddSpline(IdGenerator& ids, std::vector<ObjectId> points, bool interpolate, bool construction = false);
     ObjectId AddConstraint(IdGenerator& ids, Constraint constraint);
     /// Creates the fixed origin point if the sketch has none. Returns its id.

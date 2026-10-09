@@ -6,6 +6,7 @@
 #include "app/sketch/SketchOverlay.h"
 #include "core/Expression.h"
 #include "core/I18n.h"
+#include "app/sketch/SketchText.h"
 #include "kernel/TextGeometry.h"
 #include "sketch/Fillet.h"
 #include "sketch/Mirror.h"
@@ -647,39 +648,123 @@ void SketchEditor::HandleSplit(AppContext& app, Session& session, const SketchVi
     myHover = {};
 }
 
+void SketchEditor::BeginTextEdit(Session& session, ObjectId text) {
+    EndTextEdit(session);
+    doc::SketchFeature* f = Active(session);
+    const sketch::Text* t = f ? f->sketch.FindText(text) : nullptr;
+    if (!t) return;
+    myEditedText = text;
+    myTextBefore = f->Clone();
+    myOptions.text = t->text;
+    myOptions.textHeight = FormatValue(t->height, Quantity::Length, session.doc.units, 3);
+    myOptions.textFont = t->font;
+    myOptions.textStyle = (t->bold ? 1 : 0) + (t->italic ? 2 : 0);
+    myOptions.textHAlign = t->hAlign;
+    myOptions.textVAlign = t->vAlign;
+}
+
+void SketchEditor::EndTextEdit(Session& session) {
+    if (!myEditedText) return;
+    doc::SketchFeature* f = Active(session);
+    const sketch::Text* now = f ? f->sketch.FindText(myEditedText) : nullptr;
+    const auto* before = myTextBefore ? dynamic_cast<const doc::SketchFeature*>(myTextBefore.get()) : nullptr;
+    const sketch::Text* was = before ? before->sketch.FindText(myEditedText) : nullptr;
+    const bool changed = now && was &&
+                         (FormatOf(*now).Key() != FormatOf(*was).Key());
+    if (changed) session.CommitInPlaceEdit(std::move(myTextBefore), Tr("Текст"));
+    myTextBefore.reset();
+    myEditedText = {};
+}
+
+void SketchEditor::ApplyTextOptions(Session& session) {
+    doc::SketchFeature* f = Active(session);
+    sketch::Text* t = f && myEditedText ? f->sketch.FindText(myEditedText) : nullptr;
+    if (!t) return;
+    const auto height = TypedValue(myOptions.textHeight, Quantity::Length, session.doc.units);
+    sketch::Text next = *t;
+    next.text = myOptions.text;
+    if (height && *height > 0) next.height = *height;
+    next.font = myOptions.textFont;
+    next.bold = myOptions.textStyle & 1;
+    next.italic = myOptions.textStyle & 2;
+    next.hAlign = static_cast<unsigned char>(myOptions.textHAlign);
+    next.vAlign = static_cast<unsigned char>(myOptions.textVAlign);
+    if (FormatOf(next).Key() == FormatOf(*t).Key()) return;
+    *t = next;
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+}
+
 void SketchEditor::HandleText(AppContext& app, Session& session, const SketchView& view) {
     doc::SketchFeature* f = Active(session);
     if (!f) return;
+    ApplyTextOptions(session);
     SnapOptions options;
     options.points = app.settings.pointSnap;
     options.grid = app.settings.gridSnap;
     options.gridStep = app.settings.gridStep > 0 ? app.settings.gridStep : AdaptiveGridStep(view.MmPerPixel()) / 2;
     mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
     myCursor = mySnap.pos;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ui::ThemeColors& c = app.ui.C();
+
+    // The format of the next text, from the panel.
     const auto height = TypedValue(myOptions.textHeight, Quantity::Length, session.doc.units);
-    const bool blank = myOptions.text.find_first_not_of(" \t") == std::string::npos;
+    const kernel::TextFormat format{myOptions.text, height ? *height : 0.0, myOptions.textFont, (myOptions.textStyle & 1) != 0,
+                                    (myOptions.textStyle & 2) != 0, myOptions.textHAlign, myOptions.textVAlign};
+    const bool usable = height && *height > 0 && myOptions.text.find_first_not_of(" \t\n") != std::string::npos;
+
     sketch::Text* over = myHover ? f->sketch.FindText(myHover.id) : nullptr;
-    // Preview where the text would go (not over an existing one: that one changes).
-    if (!over && height && *height > 0 && !blank) {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        for (const auto& loop : kernel::TextOutlines(myOptions.text, *height))
-            for (std::size_t i = 0; i + 1 < loop.size(); ++i)
-                DrawSketchSegment(app.ui, dl, view, mySnap.pos + loop[i], mySnap.pos + loop[i + 1], app.ui.C().accent, 1.5f, false);
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && view.vf.hovered) {
+        if (over) {   // a click on a text: edit that one
+            if (over->id != myEditedText) BeginTextEdit(session, over->id);
+            return;
+        }
+        EndTextEdit(session);
+        myTextPress = mySnap.pos;
     }
-    if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left) || !view.vf.hovered) return;
-    if (!height || *height <= 0 || blank) {
+    if (!myTextPress) {
+        // Preview: the text in a box that just holds it, at the cursor.
+        if (!over && !myEditedText && usable) {
+            const Vec2 size = kernel::TextExtent(format);
+            for (const auto& loop : kernel::TextOutlines(format, size.x, size.y))
+                for (std::size_t i = 0; i + 1 < loop.size(); ++i)
+                    DrawSketchSegment(app.ui, dl, view, mySnap.pos + loop[i], mySnap.pos + loop[i + 1], c.accent, 1.5f, false);
+        }
+        return;
+    }
+    // Dragging: the box from the press to the cursor.
+    const Vec2 a = *myTextPress, b = mySnap.pos;
+    const bool dragged = (view.ToScreen(a).x - view.ToScreen(b).x) * (view.ToScreen(a).x - view.ToScreen(b).x) +
+                             (view.ToScreen(a).y - view.ToScreen(b).y) * (view.ToScreen(a).y - view.ToScreen(b).y) >
+                         36.0f;
+    if (dragged) {
+        const Vec2 lo{std::min(a.x, b.x), std::min(a.y, b.y)}, hi{std::max(a.x, b.x), std::max(a.y, b.y)};
+        const Vec2 corners[4] = {lo, {hi.x, lo.y}, hi, {lo.x, hi.y}};
+        for (int i = 0; i < 4; ++i) DrawSketchSegment(app.ui, dl, view, corners[i], corners[(i + 1) % 4], c.accent, 1.0f, true);
+    }
+    if (!ImGui::IsMouseReleased(ImGuiMouseButton_Left)) return;
+    myTextPress.reset();
+    if (!usable) {
         app.notes.Info(Tr("Введите текст и высоту"));
         return;
     }
-    auto before = f->Clone();
-    if (over) {
-        over->text = myOptions.text;
-        over->height = *height;
+    Vec2 lo = a, hi;
+    if (dragged) {
+        lo = {std::min(a.x, b.x), std::min(a.y, b.y)};
+        hi = {std::max(a.x, b.x), std::max(a.y, b.y)};
     } else {
-        const ObjectId anchor = Resolve(session.doc, f->sketch, RefFromSnap(mySnap));
-        const ObjectId id = f->sketch.AddText(session.doc.Ids(), anchor, myOptions.text, *height);
-        f->sketch.FindText(id)->construction = myOptions.style != LineStyle::Normal;
+        const Vec2 size = kernel::TextExtent(format);   // a click: the box just holds the text
+        hi = lo + Vec2{std::max(size.x, *height), std::max(size.y, *height)};
     }
+    auto before = f->Clone();
+    const ObjectId id = f->sketch.AddText(session.doc.Ids(), lo, hi, myOptions.text, *height);
+    sketch::Text* t = f->sketch.FindText(id);
+    t->font = myOptions.textFont;
+    t->bold = myOptions.textStyle & 1;
+    t->italic = myOptions.textStyle & 2;
+    t->hAlign = static_cast<unsigned char>(myOptions.textHAlign);
+    t->vAlign = static_cast<unsigned char>(myOptions.textVAlign);
+    t->construction = myOptions.style != LineStyle::Normal;
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
     session.CommitInPlaceEdit(std::move(before), Tr("Текст"));
 }

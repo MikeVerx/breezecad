@@ -230,17 +230,24 @@ TEST_CASE("a closed spline extrudes into a body") {
 }
 
 TEST_CASE("sketch text extrudes as letters with their holes") {
-    kernel::SetTextFont(std::filesystem::path(BZ_SOURCE_DIR) / "assets/fonts/IBMPlexSans-Medium.ttf");
-    REQUIRE_FALSE(kernel::TextOutlines("BZ 08", 10.0).empty());
+    const std::filesystem::path fonts = std::filesystem::path(BZ_SOURCE_DIR) / "assets/fonts";
+    kernel::SetTextFont(fonts / "IBMPlexSans-Medium.ttf", fonts / "IBMPlexSans-SemiBold.ttf");
+    const kernel::TextFormat format{"BZ 08", 10.0, {}, false, false, 0, 0};
+    const Vec2 size = kernel::TextExtent(format);
+    REQUIRE(size.x > 20.0);
     doc::Document d;
     auto& sk = bz::test::AddSketch(d);
-    const ObjectId anchor = sk.sketch.AddPoint(d.Ids(), {0, 0});
-    sk.sketch.AddText(d.Ids(), anchor, "BZ 08", 10.0);
+    const ObjectId text = sk.sketch.AddText(d.Ids(), {0, 0}, size, "BZ 08", 10.0);
     bz::test::AddExtrude(d, sk.id, "2");
     kernel::Model model;
     model.Rebuild(d);
-    const double volume = model.Volume();
-    // Letters, not their boxes: well below 4 glyphs x 7 x 10 x 2 mm.
-    CHECK(volume > 50.0);
-    CHECK(volume < 400.0);
+    const double plain = model.Volume();
+    // Letters, not their box: well below 4 glyphs x 7 x 10 x 2 mm.
+    CHECK(plain > 50.0);
+    CHECK(plain < 400.0);
+    // Bold letters are fatter; centring in a wider box moves, not changes them.
+    sk.sketch.FindText(text)->bold = true;
+    d.MarkChanged(0);
+    model.Rebuild(d);
+    CHECK(model.Volume() > plain * 1.05);
 }

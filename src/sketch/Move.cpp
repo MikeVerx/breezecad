@@ -26,7 +26,7 @@ std::vector<ObjectId> MovedPoints(const Sketch& sk, std::span<const ObjectId> en
         else if (const Circle* c = sk.FindCircle(id)) add(c->center);
         else if (const Arc* a = sk.FindArc(id)) { add(a->center); add(a->start); add(a->end); }
         else if (const Spline* s = sk.FindSpline(id)) for (const ObjectId p : s->points) add(p);
-        else if (const Text* t = sk.FindText(id)) add(t->anchor);
+        else if (const Text* t = sk.FindText(id)) for (const ObjectId p : t->corners) add(p);
     }
     return out;
 }
@@ -87,12 +87,10 @@ std::vector<ObjectId> CopyEntities(Sketch& sk, IdGenerator& ids, std::span<const
     std::vector<Circle> circles;
     std::vector<Arc> arcs;
     std::vector<Spline> splines;
+    std::vector<Text> texts;
     for (ObjectId id : entities) {
         if (const Spline* s = sk.FindSpline(id)) splines.push_back(*s);
-        if (const Text* t = sk.FindText(id)) {
-            const ObjectId c = sk.AddText(ids, copyPoint(t->anchor), t->text, t->height);
-            curveCopy[id] = c;
-        }
+        if (sk.FindText(id)) texts.push_back(*sk.FindText(id));
         if (const Line* l = sk.FindLine(id)) lines.push_back(*l);
         else if (const Circle* c = sk.FindCircle(id)) circles.push_back(*c);
         else if (const Arc* a = sk.FindArc(id)) arcs.push_back(*a);
@@ -112,6 +110,22 @@ std::vector<ObjectId> CopyEntities(Sketch& sk, IdGenerator& ids, std::span<const
     for (const Arc& a : arcs) {
         const ObjectId c = sk.AddArc(ids, copyPoint(a.center), copyPoint(a.start), copyPoint(a.end), a.construction);
         curveCopy[a.id] = c;
+        created.push_back(c);
+    }
+    for (const Text& t : texts) {
+        // A copy of the box (corners moved), the same words and format.
+        const Vec2 bl = motion.Apply(sk.PositionOf(t.corners[0])), tr = motion.Apply(sk.PositionOf(t.corners[2]));
+        const ObjectId c = sk.AddText(ids, bl, tr, t.text, t.height);
+        Text* copy = sk.FindText(c);
+        for (std::size_t i = 0; i < 4; ++i)
+            if (Point* p = sk.FindPoint(copy->corners[i])) p->pos = motion.Apply(sk.PositionOf(t.corners[i]));
+        copy->font = t.font;
+        copy->bold = t.bold;
+        copy->italic = t.italic;
+        copy->hAlign = t.hAlign;
+        copy->vAlign = t.vAlign;
+        copy->construction = t.construction;
+        curveCopy[t.id] = c;
         created.push_back(c);
     }
     for (const Spline& s : splines) {

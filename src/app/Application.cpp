@@ -105,7 +105,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     glfwSetWindowRefreshCallback(myWindow.Handle(), [](GLFWwindow* w) { OnAnyInput(w); });
 
     const std::filesystem::path assets = platform::AssetsDir();
-    kernel::SetTextFont(assets / "fonts" / "IBMPlexSans-Medium.ttf");   // sketch text
+    kernel::SetTextFont(assets / "fonts" / "IBMPlexSans-Medium.ttf", assets / "fonts" / "IBMPlexSans-SemiBold.ttf");   // sketch text
     log::Info("Assets: {}", ToUtf8(assets));
 
     // Window icon from the brand SVG.

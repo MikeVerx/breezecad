@@ -55,8 +55,11 @@ struct DrawOptions {
     std::string   width, height;    ///< rectangle
     std::string   size;             ///< circle / polygon diameter, arc radius
     std::string   filletRadius = "5";   ///< Скругление: kept between corners
-    std::string   text = "BreezeCAD";     ///< Текст: what the next click places (or puts into a text)
+    std::string   text = "BreezeCAD";     ///< Текст: the words of the next text, or of the one being edited
     std::string   textHeight = "5";
+    std::string   textFont;               ///< empty: the program's font
+    int           textStyle = 0;          ///< 0 regular, 1 bold, 2 italic, 3 bold italic
+    int           textHAlign = 0, textVAlign = 0;
     std::string   offsetDistance = "5"; ///< Эквидистанта
     bool          splineControl = false;  ///< Сплайн: by control vertices (else through the points)
     std::string   moveX, moveY;     ///< move
@@ -138,6 +141,15 @@ private:
     void HandleOffset(AppContext& app, Session& session, const SketchView& view);
     void HandleSpline(AppContext& app, Session& session, const SketchView& view);
     void HandleText(AppContext& app, Session& session, const SketchView& view);
+    /// Text being edited (double click, or a click with the Текст tool): the
+    /// panel changes it live; one undo step when the editing ends.
+    ObjectId                      myEditedText;
+    std::unique_ptr<doc::Feature> myTextBefore;
+    std::optional<Vec2>           myTextPress;   ///< where a new text's box starts (mouse down)
+    void BeginTextEdit(Session& session, ObjectId text);
+    void EndTextEdit(Session& session);
+    /// Puts the panel's format into the edited text (when it differs).
+    void ApplyTextOptions(Session& session);
 
 public:
     /// A tool is in the middle of something (a chain of clicks): a short

@@ -6,9 +6,12 @@
 #include "app/sketch/SketchEditor.h"
 #include "core/Expression.h"
 #include "core/I18n.h"
+#include "kernel/TextGeometry.h"
 #include "ui/Widgets.h"
 
 #include <algorithm>
+#include <imgui_stdlib.h>
+
 #include <array>
 #include <cmath>
 
@@ -219,12 +222,36 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         case SketchTool::Fillet:
             field(Tr("Радиус"), "##fillet", myOptions.filletRadius, Quantity::Length);
             break;
-        case SketchTool::Text:
+        case SketchTool::Text: {
+            if (myEditedText) Caption(ui, Tr("Правка надписи: изменения видны сразу. Esc — закончить."), inner);
             ui::FieldLabel(ui, Tr("Текст"));
-            ui::TextField(ui, "##text", myOptions.text, inner);
+            ImGui::SetNextItemWidth(inner);
+            ImGui::InputTextMultiline("##text", &myOptions.text, {inner, ui.S(64)});
             ImGui::Dummy({0, ui.S(6)});
             field(Tr("Высота"), "##text-height", myOptions.textHeight, Quantity::Length);
+            ui::FieldLabel(ui, Tr("Шрифт"));
+            ImGui::SetNextItemWidth(inner);
+            const std::string shown = myOptions.textFont.empty() ? std::string(Tr("Шрифт программы")) : myOptions.textFont;
+            if (ImGui::BeginCombo("##font", shown.c_str(), ImGuiComboFlags_HeightLarge)) {
+                if (ImGui::Selectable(Tr("Шрифт программы"), myOptions.textFont.empty())) myOptions.textFont.clear();
+                for (const std::string& name : kernel::AvailableFonts())
+                    if (ImGui::Selectable(name.c_str(), name == myOptions.textFont)) myOptions.textFont = name;
+                ImGui::EndCombo();
+            }
+            ImGui::Dummy({0, ui.S(6)});
+            static constexpr std::array<const char*, 4> styles{N_("Обычный"), N_("Жирный"), N_("Курсив"), N_("Жирн. курсив")};
+            myOptions.textStyle = ui::Segmented(ui, "text-style", styles, myOptions.textStyle, 2, inner);
+            ImGui::Dummy({0, ui.S(6)});
+            ui::FieldLabel(ui, Tr("Выравнивание в рамке"));
+            static constexpr std::array<const char*, 3> across{N_("Влево"), N_("По центру"), N_("Вправо")};
+            myOptions.textHAlign = ui::Segmented(ui, "text-h", across, myOptions.textHAlign, 3, inner);
+            ImGui::Dummy({0, ui.S(4)});
+            static constexpr std::array<const char*, 3> down{N_("Вниз"), N_("Посередине"), N_("Вверх")};
+            myOptions.textVAlign = ui::Segmented(ui, "text-v", down, myOptions.textVAlign, 3, inner);
+            Caption(ui, Tr("Щелчок ставит рамку по размеру текста, протяжка задаёт её размер. Рамку можно образмерить и повернуть (уберите её горизонтальность)."), inner);
+            ApplyTextOptions(session);   // the edited text follows the panel at once
             break;
+        }
         case SketchTool::Offset:
             field(Tr("Расстояние"), "##offset", myOptions.offsetDistance, Quantity::Length);
             break;
@@ -324,10 +351,14 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         ImGui::EndGroup();
         return;
     }
-    Caption(ui,
-            sized ? Tr("Введённый размер фиксирует курсор и станет размером эскиза. Пустое поле — размер задаётся мышью.")
-                  : Tr("Укажите три точки в поле эскиза."),
-            inner);
+    // Shapes only: the other tools say what to do themselves.
+    const bool shape = myTool == SketchTool::Line || myTool == SketchTool::Rectangle || myTool == SketchTool::Circle ||
+                       myTool == SketchTool::Arc;
+    if (shape)
+        Caption(ui,
+                sized ? Tr("Введённый размер фиксирует курсор и станет размером эскиза. Пустое поле — размер задаётся мышью.")
+                      : Tr("Укажите три точки в поле эскиза."),
+                inner);
     ImGui::EndGroup();
 }
 

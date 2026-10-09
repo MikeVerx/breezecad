@@ -100,11 +100,16 @@ std::vector<TopoDS_Edge> MakeEdges(const doc::SketchFeature& feature) {
     }
     for (const auto& t : sk.texts) {
         if (t.construction) continue;
-        const TopoDS_Shape letters = TextFaces(t.text, t.height);
+        // The box: its bottom side gives the direction, the left side the height.
+        const Vec2 bl = sk.PositionOf(t.corners[0]), br = sk.PositionOf(t.corners[1]), tl = sk.PositionOf(t.corners[3]);
+        const double w = (br - bl).Length(), h = (tl - bl).Length();
+        if (w < 1e-9) continue;
+        const Vec2 u = (br - bl) * (1.0 / w);
+        const TopoDS_Shape letters = TextFaces({t.text, t.height, t.font, t.bold, t.italic, t.hAlign, t.vAlign}, w, h);
         if (letters.IsNull()) continue;
-        // Text coordinates: the anchor is the origin, axes along the sketch's.
+        const Vec3 along = frame.xDir * u.x + frame.YDir() * u.y;
         gp_Trsf place;
-        place.SetDisplacement(gp_Ax3(gp::XOY()), gp_Ax3(world(t.anchor), ToDir(frame.normal), ToDir(frame.xDir)));
+        place.SetDisplacement(gp_Ax3(gp::XOY()), gp_Ax3(world(t.corners[0]), ToDir(frame.normal), ToDir(along)));
         const TopoDS_Shape placed = BRepBuilderAPI_Transform(letters, place, true).Shape();
         for (TopExp_Explorer e(placed, TopAbs_EDGE); e.More(); e.Next()) edges.push_back(TopoDS::Edge(e.Current()));
     }

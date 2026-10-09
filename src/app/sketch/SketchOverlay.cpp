@@ -1,6 +1,6 @@
 #include "app/sketch/SketchOverlay.h"
 
-#include "kernel/TextGeometry.h"
+#include "app/sketch/SketchText.h"
 #include "sketch/SplineGeometry.h"
 
 #include <algorithm>
@@ -342,12 +342,11 @@ void DrawSketch(ui::Ui& ui, ImDrawList* dl, const doc::SketchFeature& feature, c
                       curveWidth(a.id, a.construction), a.construction);
     }
     for (const auto& t : sk.texts) {
-        const Vec2 at = sk.PositionOf(t.anchor);
         const Color ink = curveColor(t.id, t.construction, false);
         const float width = curveWidth(t.id, t.construction);
-        for (const auto& loop : kernel::TextOutlines(t.text, t.height))
+        for (const auto& loop : TextLoops(sk, t))
             for (std::size_t i = 0; i + 1 < loop.size(); ++i)
-                DrawSketchSegment(ui, dl, view, at + loop[i], at + loop[i + 1], ink, width,
+                DrawSketchSegment(ui, dl, view, loop[i], loop[i + 1], ink, width,
                                   t.construction ? LinePattern::Dashed : LinePattern::Solid);
     }
     for (const auto& sp : sk.splines) {
