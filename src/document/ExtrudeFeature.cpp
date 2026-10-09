@@ -2,6 +2,8 @@
 
 #include "document/JsonIO.h"
 
+#include <format>
+
 namespace bz::doc {
 namespace {
 
@@ -49,7 +51,7 @@ Status ExtrudeFeature::LoadFields(const Json& in) {
     if (!ReadMember(in, "extent", ext) || !ReadMember(in, "reversed", f.reversed) || !ReadMember(in, "distance", f.distance) ||
         !ReadMember(in, "taper", f.taper))
         return Error{"Выдавливание: повреждены параметры"};
-    if (!ExtentTypeFromId(ext, f.extent)) return Error{"Выдавливание: неизвестный способ «" + ext + "»"};
+    if (!ExtentTypeFromId(ext, f.extent)) return Error{std::format("Выдавливание: неизвестный способ «{}»", ext)};
 
     sketch    = f.sketch;
     profiles  = std::move(f.profiles);

@@ -1,6 +1,7 @@
 #include "app/viewport/Measure.h"
 
 #include "app/Format.h"
+#include "core/I18n.h"
 #include "ui/Widgets.h"
 
 #include <cmath>
@@ -28,21 +29,21 @@ std::string Area(double mm2, const UnitSystem& units) {
 
 /// What one picked entity is and its sizes.
 void Describe(std::vector<Row>& rows, const char* title, const EntityInfo& e, const UnitSystem& units) {
-    const char* kind = e.kind == EntityKind::Vertex ? "вершина"
-                       : e.kind == EntityKind::Edge ? (e.straight ? "прямое ребро" : e.radius ? "дуга / окружность" : "ребро")
-                                                    : (e.flat ? "плоская грань" : "грань");
+    const char* kind = e.kind == EntityKind::Vertex ? Tr("вершина")
+                       : e.kind == EntityKind::Edge ? (e.straight ? Tr("прямое ребро") : e.radius ? Tr("дуга / окружность") : Tr("ребро"))
+                                                    : (e.flat ? Tr("плоская грань") : Tr("грань"));
     rows.push_back({title, kind});
     if (e.kind == EntityKind::Vertex) {
         rows.push_back({"X; Y; Z", FormatValue(e.point.x, Quantity::Length, units, 2) + "; " +
                                        FormatValue(e.point.y, Quantity::Length, units, 2) + "; " +
                                        FormatValue(e.point.z, Quantity::Length, units, 2)});
     }
-    if (e.length) rows.push_back({"Длина", Length(*e.length, units)});
+    if (e.length) rows.push_back({Tr("Длина"), Length(*e.length, units)});
     if (e.radius) {
-        rows.push_back({"Радиус", Length(*e.radius, units)});
-        rows.push_back({"Диаметр", Length(*e.radius * 2, units)});
+        rows.push_back({Tr("Радиус"), Length(*e.radius, units)});
+        rows.push_back({Tr("Диаметр"), Length(*e.radius * 2, units)});
     }
-    if (e.area) rows.push_back({"Площадь", Area(*e.area, units)});
+    if (e.area) rows.push_back({Tr("Площадь"), Area(*e.area, units)});
 }
 
 } // namespace
@@ -72,23 +73,23 @@ void DrawMeasure(AppContext& app, Session& session, const ViewportFrame& vf) {
 
     // The card.
     std::vector<Row> rows;
-    if (m.first) Describe(rows, "Первый", *m.first, units);
-    if (m.second) Describe(rows, "Второй", *m.second, units);
+    if (m.first) Describe(rows, Tr("Первый"), *m.first, units);
+    if (m.second) Describe(rows, Tr("Второй"), *m.second, units);
     if (m.between) {
-        rows.push_back({"Расстояние", Length(m.between->distance, units)});
+        rows.push_back({Tr("Расстояние"), Length(m.between->distance, units)});
         if (m.between->angle)
-            rows.push_back({"Угол", FormatValue(*m.between->angle, Quantity::Angle, units, 2) + UnitLabel(Quantity::Angle, units)});
+            rows.push_back({Tr("Угол"), FormatValue(*m.between->angle, Quantity::Angle, units, 2) + UnitLabel(Quantity::Angle, units)});
     }
     const float width = ui.S(270), pad = ui.S(14), rowH = ui.S(22);
-    const char* hint = !m.first ? "Щёлкните вершину, ребро или грань." : !m.second ? "Щёлкните второй элемент — покажу расстояние."
-                                                                               : "Следующий щелчок начнёт новое измерение.";
+    const char* hint = !m.first ? Tr("Щёлкните вершину, ребро или грань.") : !m.second ? Tr("Щёлкните второй элемент — покажу расстояние.")
+                                                                               : Tr("Следующий щелчок начнёт новое измерение.");
     const float height = pad * 2 + ui.S(24) + rowH * static_cast<float>(rows.size()) + ui.S(22);
     const ImVec2 p{vf.min.x + ui.S(14), vf.min.y + ui.S(14)};
     dl->AddRectFilled(p, {p.x + width, p.y + height}, ui::ToU32(c.floatingButton), ui.S(10));
     dl->AddRect(p, {p.x + width, p.y + height}, ui::ToU32(c.floatingBorder), ui.S(10));
-    dl->AddText(ui.fonts.strong, ui.S(13), {p.x + pad, p.y + pad}, ui::ToU32(c.text), "Измерение");
+    dl->AddText(ui.fonts.strong, ui.S(13), {p.x + pad, p.y + pad}, ui::ToU32(c.text), Tr("Измерение"));
     ImGui::SetCursorScreenPos({p.x + width - ui.S(36), p.y + ui.S(8)});
-    if (ui::IconButton(ui, "##measure-close", "ui-close", 26, 12, "Закрыть (Esc)")) app.shell.measuring = false;
+    if (ui::IconButton(ui, "##measure-close", "ui-close", 26, 12, Tr("Закрыть (Esc)"))) app.shell.measuring = false;
 
     float y = p.y + pad + ui.S(26);
     for (const Row& r : rows) {

@@ -2,6 +2,7 @@
 
 #include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
+#include "core/I18n.h"
 #include "core/Log.h"
 #include "document/BzcFile.h"
 #include "document/Commands.h"
@@ -42,7 +43,7 @@ void OpenDocument(AppContext& app, std::optional<std::filesystem::path> file) {
             app.notes.Error(problem);
             return;
         }
-        file = platform::ShowOpenDialog("Открыть документ", {{"Документ BreezeCAD", "*.bzc"}}, folder);
+        file = platform::ShowOpenDialog(Tr("Открыть документ"), {{Tr("Документ BreezeCAD"), "*.bzc"}}, folder);
         if (!file) return;
     }
     EndEditing(app);
@@ -76,7 +77,7 @@ void RequestClose(AppContext& app, int index) {
 void RecoverDocument(AppContext& app, const RecoverableDocument& rec) {
     Expected<doc::Document> loaded = doc::LoadBzc(rec.copy);
     if (!loaded) {
-        app.notes.Error("Копию не удалось открыть: " + loaded.GetError().message);
+        app.notes.Error(Trf("Копию не удалось открыть: {}", Tr(loaded.GetError().message)));
         return;
     }
     EndEditing(app);
@@ -87,7 +88,7 @@ void RecoverDocument(AppContext& app, const RecoverableDocument& rec) {
     s.history.MarkUnsaved();   // the recovered state is not in the original file
     app.autosave.Remove(rec);
     std::erase_if(app.shell.recoverable, [&](const RecoverableDocument& r) { return r.folder == rec.folder; });
-    app.notes.Success("Восстановлено: " + rec.title + ". Сохраните документ.");
+    app.notes.Success(Trf("Восстановлено: {}. Сохраните документ.", rec.title));
 }
 
 bool CanUndo(AppContext& app) {

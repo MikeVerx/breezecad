@@ -2,18 +2,19 @@
 
 #include "app/Operations.h"
 #include "app/features/OperationEditors.h"
+#include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
 #include "app/viewport/MarkingMenu.h"
 #include "app/viewport/Measure.h"
 #include "app/viewport/Planes.h"
 #include "app/viewport/Section.h"
-#include "app/shell/Shell.h"
+#include "core/I18n.h"
 #include "document/ExtrudeFeature.h"
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
-#include "ui/ViewCube.h"
 #include "ui/Menus.h"
+#include "ui/ViewCube.h"
 #include "ui/Widgets.h"
 
 #include <GLFW/glfw3.h>
@@ -44,7 +45,7 @@ void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDra
     for (const ShownPlane& p : planes) DrawPlane(app, dl, vf, p, &p == hot, faint && &p != hot);
 
     // Prompt at the top of the viewport.
-    const char* prompt = "Выберите плоскость или плоскую грань для эскиза";
+    const char* prompt = Tr("Выберите плоскость или плоскую грань для эскиза");
     ImFont* font = app.ui.fonts.medium;
     const ImVec2 ts = font->CalcTextSizeA(app.ui.S(13), FLT_MAX, 0, prompt);
     const ImVec2 p{(vf.min.x + vf.max.x - ts.x) / 2 - app.ui.S(14), vf.min.y + app.ui.S(14)};
@@ -68,7 +69,7 @@ void ContextMenu(AppContext& app, Session& session) {
     const auto item = [&](const char* id) {
         const Action* a = app.actions.Find(id);
         const std::string sc = ActionRegistry::ChordText(a->chord);
-        if (ui::MenuItem(ui, a->label.c_str(), sc.empty() ? nullptr : sc.c_str(), a->icon, false, a->IsEnabled())) {
+        if (ui::MenuItem(ui, a->Label(), sc.empty() ? nullptr : sc.c_str(), a->icon, false, a->IsEnabled())) {
             const std::string action = id;
             app.Later([&app, action] { app.actions.Run(action); });
         }
@@ -85,7 +86,7 @@ void ContextMenu(AppContext& app, Session& session) {
         item("sketch.construction");
         item("edit.delete");
     } else {
-        if (app.shell.nav.facePlane && ui::MenuItem(ui, "Эскиз на этой грани", nullptr, "sketch")) {
+        if (app.shell.nav.facePlane && ui::MenuItem(ui, Tr("Эскиз на этой грани"), nullptr, "sketch")) {
             const doc::SketchPlacement placement{app.shell.nav.faceBody, *app.shell.nav.facePlane, true,
                                                  {app.shell.nav.facePlane->normal, app.shell.nav.pivot}};
             app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
@@ -98,7 +99,7 @@ void ContextMenu(AppContext& app, Session& session) {
         ImGui::Separator();
         item("view.home");
         item("view.fit");
-        if (ui::BeginSubmenu(ui, "Стиль отображения", "ui-display-style")) {
+        if (ui::BeginSubmenu(ui, Tr("Стиль отображения"), "ui-display-style")) {
             for (const char* id : {"view.shaded", "view.edges", "view.wireframe", "view.hidden", "view.transparent"}) item(id);
             ImGui::EndMenu();
         }
@@ -280,7 +281,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
 
             // A friendly start for an empty part.
             if (session.doc.FeatureCount() == 0) {
-                const char* text = "Начните с эскиза: «Начать эскиз» на ленте (S), затем выберите плоскость";
+                const char* text = Tr("Начните с эскиза: «Начать эскиз» на ленте (S), затем выберите плоскость");
                 ImFont* font = ui.fonts.medium;
                 const ImVec2 ts = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, text);
                 const ImVec2 p{pos.x + (size.x - ts.x) / 2 - ui.S(14), pos.y + ui.S(14)};

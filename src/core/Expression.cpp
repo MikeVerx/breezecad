@@ -5,6 +5,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <format>
 
 namespace bz {
 namespace {
@@ -88,7 +89,7 @@ public:
         if (!v) return v;
         SkipSpaces();
         if (myPos != myText.size())
-            return Error{"Лишние символы: «" + std::string(myText.substr(myPos)) + "»"};
+            return Error{std::format("Лишние символы: «{}»", myText.substr(myPos))};
         return v;
     }
 
@@ -191,7 +192,7 @@ private:
         if (std::isdigit(static_cast<unsigned char>(c)) || c == '.') return ParseNumber();
         if (IsIdentStart(c)) return ParseName();
         if (c == '\0') return Error{"Пустое выражение"};
-        return Error{std::string("Неожиданный символ «") + c + "»"};
+        return Error{std::format("Неожиданный символ «{}»", c)};
     }
 
     Expected<Value> ParseNumber() {
@@ -216,7 +217,7 @@ private:
         }
         char* end = nullptr;
         const double v = std::strtod(digits.c_str(), &end);
-        if (end == digits.c_str() || *end != '\0') return Error{"Неверное число «" + digits + "»"};
+        if (end == digits.c_str() || *end != '\0') return Error{std::format("Неверное число «{}»", digits)};
 
         // Optional unit directly after the number (spaces allowed).
         const std::size_t save = myPos;
@@ -231,14 +232,14 @@ private:
         const std::string name = ReadWord();
         SkipSpaces();
         if (Peek() == '(') {
-            if (!IsFunction(name)) return Error{"Неизвестная функция «" + name + "»"};
+            if (!IsFunction(name)) return Error{std::format("Неизвестная функция «{}»", name)};
             return ParseCall(name);
         }
         if (name == "pi") return Value{kPi, {}};
-        if (FindUnit(name)) return Error{"Единица «" + name + "» без числа"};
-        if (!myLookup) return Error{"Неизвестное имя «" + name + "»"};
+        if (FindUnit(name)) return Error{std::format("Единица «{}» без числа", name)};
+        if (!myLookup) return Error{std::format("Неизвестное имя «{}»", name)};
         const std::optional<NamedValue> named = myLookup(name);
-        if (!named) return Error{"Неизвестное имя «" + name + "»"};
+        if (!named) return Error{std::format("Неизвестное имя «{}»", name)};
         return Value{named->value, DimOf(named->quantity)};
     }
 
@@ -256,7 +257,7 @@ private:
                 ++myPos;
                 continue;
             }
-            if (Peek() != ')') return Error{"Ожидалась «)» после аргументов " + name};
+            if (Peek() != ')') return Error{std::format("Ожидалась «)» после аргументов {}", name)};
         }
         ++myPos;
         --myCallDepth;
@@ -265,22 +266,22 @@ private:
 
     Expected<Value> ApplyFunction(const std::string& name, std::vector<Value>& args) const {
         const auto expectArgs = [&](std::size_t n) -> Status {
-            if (args.size() != n) return Error{"Функция " + name + " ждёт аргументов: " + std::to_string(n)};
+            if (args.size() != n) return Error{std::format("Функция {} ждёт аргументов: {}", name, n)};
             return Status::Ok();
         };
         if (name == "sin" || name == "cos" || name == "tan") {
             if (Status s = expectArgs(1); !s) return s.GetError();
             Value a = args[0].dim.IsNone() ? Adopt(args[0], {0, 1}) : args[0];
-            if (!(a.dim == Dim{0, 1})) return Error{"Аргумент " + name + " должен быть углом"};
+            if (!(a.dim == Dim{0, 1})) return Error{std::format("Аргумент {} должен быть углом", name)};
             const double r = name == "sin" ? std::sin(a.v) : name == "cos" ? std::cos(a.v) : std::tan(a.v);
             return Value{r, {}};
         }
         if (name == "asin" || name == "acos" || name == "atan") {
             if (Status s = expectArgs(1); !s) return s.GetError();
-            if (!args[0].dim.IsNone()) return Error{"Аргумент " + name + " должен быть числом"};
+            if (!args[0].dim.IsNone()) return Error{std::format("Аргумент {} должен быть числом", name)};
             const double x = args[0].v;
             const double r = name == "asin" ? std::asin(x) : name == "acos" ? std::acos(x) : std::atan(x);
-            if (std::isnan(r)) return Error{"Аргумент " + name + " вне области определения"};
+            if (std::isnan(r)) return Error{std::format("Аргумент {} вне области определения", name)};
             return Value{r, {0, 1}};
         }
         if (name == "sqrt") {
@@ -296,14 +297,14 @@ private:
             return Value{r, args[0].dim};
         }
         // min / max
-        if (args.empty()) return Error{"Функция " + name + " ждёт хотя бы один аргумент"};
+        if (args.empty()) return Error{std::format("Функция {} ждёт хотя бы один аргумент", name)};
         Value best = args[0];
         for (std::size_t i = 1; i < args.size(); ++i) {
             Value a = best;
             Value b = args[i];
             if (a.dim.IsNone() && !b.dim.IsNone()) a = Adopt(a, b.dim);
             if (b.dim.IsNone() && !a.dim.IsNone()) b = Adopt(b, a.dim);
-            if (!(a.dim == b.dim)) return Error{"Аргументы " + name + " в разных единицах"};
+            if (!(a.dim == b.dim)) return Error{std::format("Аргументы {} в разных единицах", name)};
             best = (name == "min") == (b.v < a.v) ? b : a;
         }
         return best;

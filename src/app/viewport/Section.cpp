@@ -1,6 +1,7 @@
 #include "app/viewport/Section.h"
 
 #include "app/Format.h"
+#include "core/I18n.h"
 #include "ui/Widgets.h"
 
 #include <array>
@@ -62,10 +63,10 @@ void DrawSectionBar(AppContext& app, Session& session, const ViewportFrame& vf) 
     x += label + gap;
 
     ImGui::SetCursorScreenPos({x, p.y + (height - button) / 2});
-    if (ui::IconButton(ui, "##section-flip", "ui-swap", 30, 16, "Показать другую половину")) s.flipped = !s.flipped;
+    if (ui::IconButton(ui, "##section-flip", "ui-swap", 30, 16, Tr("Показать другую половину"))) s.flipped = !s.flipped;
     x += button + gap;
     ImGui::SetCursorScreenPos({x, p.y + (height - button) / 2});
-    if (ui::IconButton(ui, "##section-close", "ui-close", 30, 14, "Убрать сечение")) s.on = false;
+    if (ui::IconButton(ui, "##section-close", "ui-close", 30, 14, Tr("Убрать сечение"))) s.on = false;
 }
 
 } // namespace bz::app

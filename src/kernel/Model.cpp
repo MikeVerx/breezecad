@@ -29,13 +29,14 @@
 
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
-#include <BRepTools.hxx>
 #include <BRepGProp.hxx>
+#include <BRepTools.hxx>
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
 #include <Message.hxx>
 #include <Message_Messenger.hxx>
 #include <Message_Printer.hxx>
+#include <format>
 #include <gp_Ax1.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Trsf.hxx>
@@ -67,7 +68,7 @@ std::string NextBodyName(const std::vector<Body>& bodies) {
         const std::string prefix = "Тело";
         if (b.name.rfind(prefix, 0) == 0) largest = std::max(largest, std::atoi(b.name.c_str() + prefix.size()));
     }
-    return "Тело" + std::to_string(largest + 1);
+    return std::format("Тело{}", largest + 1);
 }
 
 /// The last step of every operation that makes a solid: keep it as a new
@@ -114,7 +115,7 @@ void ApplyLoft(doc::LoftFeature& f, Model::Impl& impl, std::vector<Body>& bodies
         }
         const std::vector<TopoDS_Face> faces = occt::SelectFaces(profile->second, {});
         if (faces.size() != 1) {
-            f.status = {FeatureState::Error, "В «" + sketch->name + "» должен быть ровно один замкнутый контур"};
+            f.status = {FeatureState::Error, std::format("В «{}» должен быть ровно один замкнутый контур", sketch->name)};
             return;
         }
         outlines.push_back(BRepTools::OuterWire(faces.front()));
@@ -190,7 +191,7 @@ void ApplyEdgeFeature(const doc::EdgeFeature& f, std::vector<Body>& bodies, doc:
     }
     target.shape = *result;
     status = lost == 0 ? doc::FeatureStatus{FeatureState::Ok, {}}
-                       : doc::FeatureStatus{FeatureState::Warning, "Не найдено рёбер: " + std::to_string(lost)};
+                       : doc::FeatureStatus{FeatureState::Warning, std::format("Не найдено рёбер: {}", lost)};
 }
 
 /// Holes are cut from the most recent body.
@@ -228,8 +229,8 @@ void ApplyCopies(const doc::CopyFeature& f, const std::vector<gp_Trsf>& placemen
         const auto tool = impl.tools.find(source);
         if (tool == impl.tools.end()) {
             const doc::Feature* sf = doc.Find(source);
-            status = {FeatureState::Error, "«" + (sf ? sf->name : std::string("?")) + "» нельзя скопировать: копируются "
-                                           "только выдавливание, вращение и отверстия без ошибок"};
+            status = {FeatureState::Error, std::format("«{}» нельзя скопировать: копируются только выдавливание, вращение и отверстия без ошибок",
+                                                       sf ? sf->name : std::string("?"))};
             return;
         }
         for (const gp_Trsf& t : placements) {

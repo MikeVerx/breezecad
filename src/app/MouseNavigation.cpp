@@ -1,16 +1,18 @@
 #include "app/MouseNavigation.h"
 
+#include "core/I18n.h"
+
 namespace bz::app {
 
 const std::vector<MousePreset>& MousePresets() {
     using B = MouseButtonChoice;
     using M = ModifierChoice;
     static const std::vector<MousePreset> presets{
-        {"breezecad", "BreezeCAD (по умолчанию)", {{B::Right, M::None}, {B::Middle, M::None}, {}, false}},
-        {"inventor", "Как в Autodesk Inventor", {{B::Middle, M::Shift}, {B::Middle, M::None}, {}, false}},
-        {"kompas", "Как в КОМПАС-3D", {{B::Middle, M::None}, {B::Middle, M::Shift}, {B::Middle, M::Ctrl}, false}},
-        {"blender", "Как в Blender", {{B::Middle, M::None}, {B::Middle, M::Shift}, {B::Middle, M::Ctrl}, false}},
-        {"solidworks", "Как в SolidWorks", {{B::Middle, M::None}, {B::Middle, M::Ctrl}, {B::Middle, M::Shift}, false}},
+        {"breezecad", N_("BreezeCAD (по умолчанию)"), {{B::Right, M::None}, {B::Middle, M::None}, {}, false}},
+        {"inventor", N_("Как в Autodesk Inventor"), {{B::Middle, M::Shift}, {B::Middle, M::None}, {}, false}},
+        {"kompas", N_("Как в КОМПАС-3D"), {{B::Middle, M::None}, {B::Middle, M::Shift}, {B::Middle, M::Ctrl}, false}},
+        {"blender", N_("Как в Blender"), {{B::Middle, M::None}, {B::Middle, M::Shift}, {B::Middle, M::Ctrl}, false}},
+        {"solidworks", N_("Как в SolidWorks"), {{B::Middle, M::None}, {B::Middle, M::Ctrl}, {B::Middle, M::Shift}, false}},
     };
     return presets;
 }
@@ -30,7 +32,7 @@ std::string GestureText(const MouseGesture& g) {
         case ModifierChoice::Alt:   out = "Alt + "; break;
         case ModifierChoice::None:  break;
     }
-    out += g.button == MouseButtonChoice::Right ? "ПКМ" : "зажатое колесо";
+    out += g.button == MouseButtonChoice::Right ? Tr("ПКМ") : Tr("зажатое колесо");
     return out;
 }
 

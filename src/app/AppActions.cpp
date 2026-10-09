@@ -3,6 +3,7 @@
 
 #include "app/Application.h"
 #include "app/Operations.h"
+#include "core/I18n.h"
 #include "document/Origin.h"
 
 namespace bz::app {
@@ -20,96 +21,96 @@ void RegisterActions(AppContext& app) {
     const auto inModel = [&app] { return app.Doc() && !app.workspace.ShowsHome() && app.Doc()->mode != EditMode::Sketch; };
 
     // --- file ---
-    a.Add({"file.new", "Новая деталь", "ui-new", Ctrl(ImGuiKey_N), {}, {}, [&app] { NewDocument(app); }});
-    a.Add({"file.open", "Открыть…", "ui-open", Ctrl(ImGuiKey_O), {}, {}, [&app] { OpenDocument(app); }});
-    a.Add({"file.save", "Сохранить", "ui-save", Ctrl(ImGuiKey_S), {}, hasDoc, [&app] { SaveDocument(app, false); }});
-    a.Add({"file.saveAs", "Сохранить как…", "ui-save", CtrlShift(ImGuiKey_S), {}, hasDoc, [&app] { SaveDocument(app, true); }});
-    a.Add({"file.close", "Закрыть документ", "ui-close", Ctrl(ImGuiKey_W), {}, hasDoc,
+    a.Add({"file.new", N_("Новая деталь"), "ui-new", Ctrl(ImGuiKey_N), {}, {}, [&app] { NewDocument(app); }});
+    a.Add({"file.open", N_("Открыть…"), "ui-open", Ctrl(ImGuiKey_O), {}, {}, [&app] { OpenDocument(app); }});
+    a.Add({"file.save", N_("Сохранить"), "ui-save", Ctrl(ImGuiKey_S), {}, hasDoc, [&app] { SaveDocument(app, false); }});
+    a.Add({"file.saveAs", N_("Сохранить как…"), "ui-save", CtrlShift(ImGuiKey_S), {}, hasDoc, [&app] { SaveDocument(app, true); }});
+    a.Add({"file.close", N_("Закрыть документ"), "ui-close", Ctrl(ImGuiKey_W), {}, hasDoc,
            [&app] { RequestClose(app, app.workspace.ActiveIndex()); }});
-    a.Add({"file.exportStep", "Экспорт в STEP", "export", 0, "Для обмена с другими САПР (AP214)", hasDoc,
+    a.Add({"file.exportStep", N_("Экспорт в STEP"), "export", 0, N_("Для обмена с другими САПР (AP214)"), hasDoc,
            [&app] { ExportDocument(app, ExportFormat::Step); }});
-    a.Add({"file.exportStl", "Экспорт в STL", "export", 0, "Сетка для 3D-печати", hasDoc,
+    a.Add({"file.exportStl", N_("Экспорт в STL"), "export", 0, N_("Сетка для 3D-печати"), hasDoc,
            [&app] { ExportDocument(app, ExportFormat::Stl); }});
-    a.Add({"file.export3mf", "Экспорт в 3MF", "export", 0, "Современный формат для слайсеров", hasDoc,
+    a.Add({"file.export3mf", N_("Экспорт в 3MF"), "export", 0, N_("Современный формат для слайсеров"), hasDoc,
            [&app] { ExportDocument(app, ExportFormat::ThreeMf); }});
-    a.Add({"app.quit", "Выход", "", Ctrl(ImGuiKey_Q), {}, {}, [&app] { app.shell.quitRequested = true; }});
-    a.Add({"app.home", "Главная страница", "ui-home", 0, {}, {}, [&app] { app.workspace.ShowHome(true); }});
-    a.Add({"app.search", "Поиск команд", "ui-search", Ctrl(ImGuiKey_K), {}, {}, [&app] {
+    a.Add({"app.quit", N_("Выход"), "", Ctrl(ImGuiKey_Q), {}, {}, [&app] { app.shell.quitRequested = true; }});
+    a.Add({"app.home", N_("Главная страница"), "ui-home", 0, {}, {}, [&app] { app.workspace.ShowHome(true); }});
+    a.Add({"app.search", N_("Поиск команд"), "ui-search", Ctrl(ImGuiKey_K), {}, {}, [&app] {
                app.shell.paletteOpen = true;
                app.shell.focusPalette = true;
            }});
-    a.Add({"tools.measure", "Измерить", "measure", 0, "Размеры элемента и расстояние между двумя (Esc — закончить)",
+    a.Add({"tools.measure", N_("Измерить"), "measure", 0, N_("Размеры элемента и расстояние между двумя (Esc — закончить)"),
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); }, [&app] {
                if (Session* s = app.Doc()) app.ops.Close(app, *s);
                app.shell.measuring = !app.shell.measuring;
            }});
-    a.Add({"view.section", "Разрез вида", "section", 0, "Разрезать вид плоскостью, чтобы заглянуть внутрь детали",
+    a.Add({"view.section", N_("Разрез вида"), "section", 0, N_("Разрезать вид плоскостью, чтобы заглянуть внутрь детали"),
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { app.shell.section.on = !app.shell.section.on; }});
-    a.Add({"tools.massProperties", "МЦХ", "mass-properties", 0, "Масса, объём, площадь, центр масс и габариты детали",
+    a.Add({"tools.massProperties", N_("МЦХ"), "mass-properties", 0, N_("Масса, объём, площадь, центр масс и габариты детали"),
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { app.shell.showMassProperties = true; }});
-    a.Add({"app.settings", "Настройки", "ui-sliders", 0, "Масштаб интерфейса, оформление, сочетания клавиш", {},
+    a.Add({"app.settings", N_("Настройки"), "ui-sliders", 0, N_("Масштаб интерфейса, оформление, сочетания клавиш"), {},
            [&app] { app.shell.showSettings = true; }});
-    a.Add({"app.about", "О программе", "ui-info", 0, {}, {}, [&app] { app.shell.showAbout = true; }});
+    a.Add({"app.about", N_("О программе"), "ui-info", 0, {}, {}, [&app] { app.shell.showAbout = true; }});
 
     // --- edit ---
-    a.Add({"edit.undo", "Отменить", "ui-undo", Ctrl(ImGuiKey_Z), {}, [&app] { return CanUndo(app); }, [&app] { Undo(app); }});
-    a.Add({"edit.redo", "Повторить", "ui-redo", Ctrl(ImGuiKey_Y), {}, [&app] { return CanRedo(app); }, [&app] { Redo(app); }});
+    a.Add({"edit.undo", N_("Отменить"), "ui-undo", Ctrl(ImGuiKey_Z), {}, [&app] { return CanUndo(app); }, [&app] { Undo(app); }});
+    a.Add({"edit.redo", N_("Повторить"), "ui-redo", Ctrl(ImGuiKey_Y), {}, [&app] { return CanRedo(app); }, [&app] { Redo(app); }});
     a.Add({"edit.redoAlt", "", "", CtrlShift(ImGuiKey_Z), {}, [&app] { return CanRedo(app); }, [&app] { Redo(app); }});
-    a.Add({"edit.delete", "Удалить", "ui-trash", ImGuiKey_Delete, {}, hasDoc, [&app] { DeletePressed(app); }});
+    a.Add({"edit.delete", N_("Удалить"), "ui-trash", ImGuiKey_Delete, {}, hasDoc, [&app] { DeletePressed(app); }});
     a.Add({"edit.escape", "", "", ImGuiKey_Escape, {}, {}, [&app] { EscapePressed(app); }});
     a.Add({"edit.confirm", "", "", ImGuiKey_Enter, {}, {}, [&app] { EnterPressed(app); }});
     a.Add({"edit.confirmPad", "", "", ImGuiKey_KeypadEnter, {}, {}, [&app] { EnterPressed(app); }});
 
     // --- model ---
-    a.Add({"sketch.start", "Начать эскиз", "sketch", ImGuiKey_S,
-           "Выберите плоскость или плоскую грань и рисуйте профиль", inModel, [&app] { StartSketch(app); }});
-    a.Add({"feature.extrude", "Выдавливание", "extrude", ImGuiKey_E,
-           "Вытянуть замкнутый контур эскиза в тело (E)", hasDoc, [&app] { StartExtrude(app); }});
-    a.Add({"feature.revolve", "Вращение", "revolve", ImGuiKey_R,
-           "Повернуть замкнутый контур эскиза вокруг оси (R)", inModel, [&app] { StartRevolve(app); }});
-    a.Add({"feature.fillet", "Сопряжение", "fillet", 0, "Скруглить рёбра тела", inModel, [&app] { StartFillet(app); }});
-    a.Add({"feature.hole", "Отверстие", "hole", ImGuiKey_H, "Просверлить отверстия в плоской грани: простые, с цековкой или зенковкой (H)",
+    a.Add({"sketch.start", N_("Начать эскиз"), "sketch", ImGuiKey_S,
+           N_("Выберите плоскость или плоскую грань и рисуйте профиль"), inModel, [&app] { StartSketch(app); }});
+    a.Add({"feature.extrude", N_("Выдавливание"), "extrude", ImGuiKey_E,
+           N_("Вытянуть замкнутый контур эскиза в тело (E)"), hasDoc, [&app] { StartExtrude(app); }});
+    a.Add({"feature.revolve", N_("Вращение"), "revolve", ImGuiKey_R,
+           N_("Повернуть замкнутый контур эскиза вокруг оси (R)"), inModel, [&app] { StartRevolve(app); }});
+    a.Add({"feature.fillet", N_("Сопряжение"), "fillet", 0, N_("Скруглить рёбра тела"), inModel, [&app] { StartFillet(app); }});
+    a.Add({"feature.hole", N_("Отверстие"), "hole", ImGuiKey_H, N_("Просверлить отверстия в плоской грани: простые, с цековкой или зенковкой (H)"),
            inModel, [&app] { StartHole(app); }});
-    a.Add({"feature.workPlane", "Плоскость", "work-plane", 0, "Рабочая плоскость со смещением — для эскизов не на гранях", inModel,
+    a.Add({"feature.workPlane", N_("Плоскость"), "work-plane", 0, N_("Рабочая плоскость со смещением — для эскизов не на гранях"), inModel,
            [&app] { StartWorkPlane(app); }});
-    a.Add({"feature.patternRect", "Прямоугольный", "pattern-rect", 0, "Повторить операции рядами вдоль осей", inModel,
+    a.Add({"feature.patternRect", N_("Прямоугольный"), "pattern-rect", 0, N_("Повторить операции рядами вдоль осей"), inModel,
            [&app] { StartPattern(app, doc::PatternKind::Rectangular); }});
-    a.Add({"feature.patternCircular", "Круговой", "pattern-circular", 0, "Повторить операции по кругу вокруг оси", inModel,
+    a.Add({"feature.patternCircular", N_("Круговой"), "pattern-circular", 0, N_("Повторить операции по кругу вокруг оси"), inModel,
            [&app] { StartPattern(app, doc::PatternKind::Circular); }});
-    a.Add({"feature.mirror", "Зеркало", "mirror", 0, "Отразить операции относительно плоскости", inModel,
+    a.Add({"feature.mirror", N_("Зеркало"), "mirror", 0, N_("Отразить операции относительно плоскости"), inModel,
            [&app] { StartMirror(app); }});
-    a.Add({"feature.sweep", "Сдвиг", "sweep", 0, "Протянуть контур эскиза вдоль траектории из другого эскиза", inModel,
+    a.Add({"feature.sweep", N_("Сдвиг"), "sweep", 0, N_("Протянуть контур эскиза вдоль траектории из другого эскиза"), inModel,
            [&app] { StartSweep(app); }});
-    a.Add({"feature.loft", "Лофт", "loft", 0, "Тело через контуры нескольких эскизов", inModel, [&app] { StartLoft(app); }});
-    a.Add({"feature.coil", "Пружина", "coil", 0, "Проволока, навитая по винтовой линии вокруг оси; вырезом — канавка", inModel,
+    a.Add({"feature.loft", N_("Лофт"), "loft", 0, N_("Тело через контуры нескольких эскизов"), inModel, [&app] { StartLoft(app); }});
+    a.Add({"feature.coil", N_("Пружина"), "coil", 0, N_("Проволока, навитая по винтовой линии вокруг оси; вырезом — канавка"), inModel,
            [&app] { StartCoil(app); }});
-    a.Add({"feature.section", "Сечение", "cut-section", 0, "Отсечь модель плоскостью — операция в дереве, гасится и удаляется как любая", inModel,
+    a.Add({"feature.section", N_("Сечение"), "cut-section", 0, N_("Отсечь модель плоскостью — операция в дереве, гасится и удаляется как любая"), inModel,
            [&app] { StartSection(app); }});
-    a.Add({"feature.chamfer", "Фаска", "chamfer", 0, "Срезать рёбра тела под 45°", inModel, [&app] { StartChamfer(app); }});
+    a.Add({"feature.chamfer", N_("Фаска"), "chamfer", 0, N_("Срезать рёбра тела под 45°"), inModel, [&app] { StartChamfer(app); }});
 
     // --- sketch ---
-    a.Add({"sketch.finish", "Принять эскиз", "sk-finish", 0, "Выйти из эскиза (Esc при пустом выборе)", inSketch, [&app] {
+    a.Add({"sketch.finish", N_("Принять эскиз"), "sk-finish", 0, N_("Выйти из эскиза (Esc при пустом выборе)"), inSketch, [&app] {
                if (Session* s = app.Doc()) app.sketch.Finish(app, *s);
            }});
-    a.Add({"sketch.lookAt", "Смотреть на эскиз", "sk-look-at", ImGuiKey_F6, "Развернуть камеру к плоскости эскиза (F6)",
+    a.Add({"sketch.lookAt", N_("Смотреть на эскиз"), "sk-look-at", ImGuiKey_F6, N_("Развернуть камеру к плоскости эскиза (F6)"),
            inSketch, [&app] {
                if (Session* s = app.Doc()) app.sketch.LookAtSketch(app, *s);
            }});
-    a.Add({"sketch.construction", "Вспомогательная", "sk-construction", ImGuiKey_G,
-           "Сделать выбранное вспомогательной геометрией: она не образует контуров (G)",
+    a.Add({"sketch.construction", N_("Вспомогательная"), "sk-construction", ImGuiKey_G,
+           N_("Сделать выбранное вспомогательной геометрией: она не образует контуров (G)"),
            [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasSelection(); },
            [&app] { app.sketch.ToggleConstruction(*app.Doc()); }});
-    a.Add({"sketch.centerline", "Осевая", "sk-centerline", 0,
-           "Сделать выбранные отрезки осевыми: ось для вращения и пружины, в контуры не входят",
+    a.Add({"sketch.centerline", N_("Осевая"), "sk-centerline", 0,
+           N_("Сделать выбранные отрезки осевыми: ось для вращения и пружины, в контуры не входят"),
            [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasSelection(); },
            [&app] { app.sketch.ToggleCenterline(*app.Doc()); }});
-    a.Add({"sketch.showConstraints", "Показать все зависимости", "c-show-all", ImGuiKey_F8,
-           "Значки всех зависимостей эскиза (F8). Скрытые видны у выделенного", inSketch,
+    a.Add({"sketch.showConstraints", N_("Показать все зависимости"), "c-show-all", ImGuiKey_F8,
+           N_("Значки всех зависимостей эскиза (F8). Скрытые видны у выделенного"), inSketch,
            [&app] { app.settings.showAllConstraints = true; }});
-    a.Add({"sketch.hideConstraints", "Скрыть зависимости", "c-hide-all", ImGuiKey_F9,
-           "Показывать значки только у выделенного (F9)", inSketch, [&app] { app.settings.showAllConstraints = false; }});
+    a.Add({"sketch.hideConstraints", N_("Скрыть зависимости"), "c-hide-all", ImGuiKey_F9,
+           N_("Показывать значки только у выделенного (F9)"), inSketch, [&app] { app.settings.showAllConstraints = false; }});
     const struct {
         SketchTool  tool;
         const char* id;
@@ -143,37 +144,37 @@ void RegisterActions(AppContext& app) {
     }
 
     // --- view ---
-    a.Add({"view.home", "Домой (изометрия)", "view-home", ImGuiKey_Home, {}, hasDoc, [&app] { HomeView(app); }});
-    a.Add({"view.fit", "Показать всё", "view-fit", ImGuiKey_F, {}, hasDoc, [&app] { FitView(app); }});
-    a.Add({"view.front", "Вид спереди", "tree-plane", 0, {}, hasDoc, [&app] { LookFrom(app, {0, -1, 0}, {0, 0, 1}); }});
-    a.Add({"view.top", "Вид сверху", "tree-plane", 0, {}, hasDoc, [&app] { LookFrom(app, {0, 0, 1}, {0, 1, 0}); }});
-    a.Add({"view.right", "Вид справа", "tree-plane", 0, {}, hasDoc, [&app] { LookFrom(app, {1, 0, 0}, {0, 0, 1}); }});
+    a.Add({"view.home", N_("Домой (изометрия)"), "view-home", ImGuiKey_Home, {}, hasDoc, [&app] { HomeView(app); }});
+    a.Add({"view.fit", N_("Показать всё"), "view-fit", ImGuiKey_F, {}, hasDoc, [&app] { FitView(app); }});
+    a.Add({"view.front", N_("Вид спереди"), "tree-plane", 0, {}, hasDoc, [&app] { LookFrom(app, {0, -1, 0}, {0, 0, 1}); }});
+    a.Add({"view.top", N_("Вид сверху"), "tree-plane", 0, {}, hasDoc, [&app] { LookFrom(app, {0, 0, 1}, {0, 1, 0}); }});
+    a.Add({"view.right", N_("Вид справа"), "tree-plane", 0, {}, hasDoc, [&app] { LookFrom(app, {1, 0, 0}, {0, 0, 1}); }});
     const struct {
         render::DisplayStyle style;
         const char*          id;
         const char*          label;
         const char*          icon;
     } styles[] = {
-        {render::DisplayStyle::Shaded, "view.shaded", "Тонированный", "ds-shaded"},
-        {render::DisplayStyle::ShadedWithEdges, "view.edges", "С рёбрами", "ds-shaded-edges"},
-        {render::DisplayStyle::Wireframe, "view.wireframe", "Каркас", "ds-wireframe"},
-        {render::DisplayStyle::HiddenLines, "view.hidden", "Скрытые линии", "ds-hidden-lines"},
-        {render::DisplayStyle::Transparent, "view.transparent", "Прозрачный", "ds-transparent"},
+        {render::DisplayStyle::Shaded, "view.shaded", N_("Тонированный"), "ds-shaded"},
+        {render::DisplayStyle::ShadedWithEdges, "view.edges", N_("С рёбрами"), "ds-shaded-edges"},
+        {render::DisplayStyle::Wireframe, "view.wireframe", N_("Каркас"), "ds-wireframe"},
+        {render::DisplayStyle::HiddenLines, "view.hidden", N_("Скрытые линии"), "ds-hidden-lines"},
+        {render::DisplayStyle::Transparent, "view.transparent", N_("Прозрачный"), "ds-transparent"},
     };
     for (const auto& s : styles) {
         const render::DisplayStyle style = s.style;
-        a.Add({s.id, s.label, s.icon, 0, "Стиль отображения", {}, [&app, style] { app.shell.displayStyle = style; }});
+        a.Add({s.id, s.label, s.icon, 0, N_("Стиль отображения"), {}, [&app, style] { app.shell.displayStyle = style; }});
     }
-    a.Add({"view.themeLight", "Светлая тема", "ui-sun", 0, {}, {}, [&app] { SetTheme(app, ThemeChoice::Light); }});
-    a.Add({"view.themeDark", "Тёмная тема", "ui-moon", 0, {}, {}, [&app] { SetTheme(app, ThemeChoice::Dark); }});
-    a.Add({"view.themeSystem", "Тема как в системе", "theme", 0, {}, {}, [&app] { SetTheme(app, ThemeChoice::System); }});
-    a.Add({"view.animations", "Анимации камеры", "", 0, "Плавные повороты камеры", {},
+    a.Add({"view.themeLight", N_("Светлая тема"), "ui-sun", 0, {}, {}, [&app] { SetTheme(app, ThemeChoice::Light); }});
+    a.Add({"view.themeDark", N_("Тёмная тема"), "ui-moon", 0, {}, {}, [&app] { SetTheme(app, ThemeChoice::Dark); }});
+    a.Add({"view.themeSystem", N_("Тема как в системе"), "theme", 0, {}, {}, [&app] { SetTheme(app, ThemeChoice::System); }});
+    a.Add({"view.animations", N_("Анимации камеры"), "", 0, N_("Плавные повороты камеры"), {},
            [&app] { app.settings.animations = !app.settings.animations; }});
 
     // --- left panel ---
-    a.Add({"panel.tree", "Дерево построения", "ui-tree", 0, {}, {}, [&app] { app.shell.leftTab = LeftTab::Tree; }});
-    a.Add({"panel.properties", "Свойства детали", "ui-sliders", 0, {}, {}, [&app] { app.shell.leftTab = LeftTab::Properties; }});
-    a.Add({"panel.variables", "Переменные", "ui-variables", 0, {}, {}, [&app] { app.shell.leftTab = LeftTab::Variables; }});
+    a.Add({"panel.tree", N_("Дерево построения"), "ui-tree", 0, {}, {}, [&app] { app.shell.leftTab = LeftTab::Tree; }});
+    a.Add({"panel.properties", N_("Свойства детали"), "ui-sliders", 0, {}, {}, [&app] { app.shell.leftTab = LeftTab::Properties; }});
+    a.Add({"panel.variables", N_("Переменные"), "ui-variables", 0, {}, {}, [&app] { app.shell.leftTab = LeftTab::Variables; }});
 }
 
 } // namespace bz::app

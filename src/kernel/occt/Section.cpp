@@ -6,6 +6,7 @@
 #include <Bnd_Box.hxx>
 #include <Standard_Failure.hxx>
 #include <TopExp_Explorer.hxx>
+#include <format>
 #include <gp_Ax2.hxx>
 
 #include <algorithm>
@@ -38,7 +39,7 @@ Expected<std::optional<TopoDS_Shape>> CutByPlane(const TopoDS_Shape& body, const
         if (!TopExp_Explorer(result, TopAbs_SOLID).More()) return std::optional<TopoDS_Shape>{};
         return std::optional<TopoDS_Shape>{result};
     } catch (const Standard_Failure& failure) {
-        return Error{std::string("Ошибка сечения: ") + failure.GetMessageString()};
+        return Error{std::format("Ошибка сечения: {}", failure.GetMessageString())};
     }
 }
 

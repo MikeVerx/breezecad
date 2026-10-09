@@ -1,6 +1,7 @@
 #include "app/Autosave.h"
 
 #include "app/Settings.h"
+#include "core/I18n.h"
 #include "core/Log.h"
 #include "core/PathText.h"
 #include "document/BzcFile.h"
@@ -82,7 +83,7 @@ std::vector<RecoverableDocument> Autosave::FindRecoverable() const {
         doc.folder = entry.path();
         doc.copy = entry.path() / std::format("copy{}.bzc", info.value("slot", 1));
         doc.original = PathFromUtf8(info.value("original", ""));
-        doc.title = info.value("title", "Без имени");
+        doc.title = info.value("title", Tr("Без имени"));
         doc.savedAt = info.value("savedAt", "");
         if (std::filesystem::exists(doc.copy, ec)) found.push_back(std::move(doc));
     }

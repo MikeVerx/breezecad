@@ -3,6 +3,7 @@
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepOffsetAPI_ThruSections.hxx>
 #include <Standard_Failure.hxx>
+#include <format>
 
 namespace bz::kernel::occt {
 
@@ -17,7 +18,7 @@ Expected<TopoDS_Shape> MakeLoft(const std::vector<TopoDS_Wire>& outlines, bool r
         if (!BRepCheck_Analyzer(result).IsValid()) return Error{"Лофт получился некорректным"};
         return result;
     } catch (const Standard_Failure& failure) {
-        return Error{std::string("Ошибка лофта: ") + failure.GetMessageString()};
+        return Error{std::format("Ошибка лофта: {}", failure.GetMessageString())};
     }
 }
 

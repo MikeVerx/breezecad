@@ -4,6 +4,7 @@
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepOffsetAPI_MakePipe.hxx>
 #include <Standard_Failure.hxx>
+#include <format>
 
 namespace bz::kernel::occt {
 
@@ -21,7 +22,7 @@ Expected<TopoDS_Shape> MakeSweep(const std::vector<TopoDS_Face>& faces, const To
             return Error{"Сдвиг получился некорректным: профиль слишком велик для изгибов траектории?"};
         return result;
     } catch (const Standard_Failure& failure) {
-        return Error{std::string("Ошибка сдвига: ") + failure.GetMessageString()};
+        return Error{std::format("Ошибка сдвига: {}", failure.GetMessageString())};
     }
 }
 

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <format>
 #include <functional>
 #include <unordered_map>
 
@@ -123,7 +124,7 @@ int Document::EvaluateParameters() {
     for (Parameter* p : params) {
         p->error.clear();
         if (p->name.empty()) continue;
-        if (!byName.emplace(p->name, p).second) p->error = "Имя «" + p->name + "» уже занято";
+        if (!byName.emplace(p->name, p).second) p->error = std::format("Имя «{}» уже занято", p->name);
     }
 
     enum class Mark : unsigned char { Unvisited, InProgress, Done };
@@ -134,7 +135,7 @@ int Document::EvaluateParameters() {
         Mark& mark = marks[p];
         if (mark == Mark::Done) return;
         if (mark == Mark::InProgress) {
-            p->error = "Циклическая ссылка через «" + p->name + "»";
+            p->error = std::format("Циклическая ссылка через «{}»", p->name);
             return;
         }
         mark = Mark::InProgress;

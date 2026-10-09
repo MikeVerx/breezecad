@@ -50,10 +50,10 @@ Expected<std::string> ReadWholeFile(const std::filesystem::path& path) {
 /// Extracts one entry of an in-memory ZIP. Empty optional-like error when missing.
 Expected<std::string> ExtractEntry(mz_zip_archive& zip, const char* name) {
     const int index = mz_zip_reader_locate_file(&zip, name, nullptr, 0);
-    if (index < 0) return Error{std::string("В архиве нет ") + name};
+    if (index < 0) return Error{std::format("В архиве нет {}", name)};
     std::size_t size = 0;
     void* data = mz_zip_reader_extract_to_heap(&zip, static_cast<mz_uint>(index), &size, 0);
-    if (!data) return Error{std::string("Не удалось распаковать ") + name};
+    if (!data) return Error{std::format("Не удалось распаковать {}", name)};
     std::string text(static_cast<const char*>(data), size);
     mz_free(data);
     return text;
@@ -117,8 +117,8 @@ Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
         if (!feature) {
             auto unknown = std::make_unique<UnknownFeature>();
             unknown->typeId = type;
-            unknown->status = {FeatureState::Error, "Тип операции «" + type + "» не поддерживается этой версией"};
-            if (report) report->warnings.push_back("Операция типа «" + type + "» сохранена, но не будет построена");
+            unknown->status = {FeatureState::Error, std::format("Тип операции «{}» не поддерживается этой версией", type)};
+            if (report) report->warnings.push_back(std::format("Операция типа «{}» сохранена, но не будет построена", type));
             feature = std::move(unknown);
         }
         if (!ReadMember(j, "id", feature->id) || !feature->id || !ReadMember(j, "name", feature->name) ||
@@ -160,7 +160,7 @@ Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::stri
     temp += ".saving";
     {
         std::ofstream out(temp, std::ios::binary | std::ios::trunc);
-        if (!out) return Error{"Нет доступа к папке: " + ToUtf8(path.parent_path())};
+        if (!out) return Error{std::format("Нет доступа к папке: {}", ToUtf8(path.parent_path()))};
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
         out.flush();
         if (!out) return Error{"Не удалось записать файл (диск заполнен?)"};
@@ -169,7 +169,7 @@ Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::stri
     std::filesystem::rename(temp, path, ec);
     if (ec) {
         std::filesystem::remove(temp, ec);
-        return Error{"Не удалось заменить файл: " + ToUtf8(path)};
+        return Error{std::format("Не удалось заменить файл: {}", ToUtf8(path))};
     }
     return Status::Ok();
 }

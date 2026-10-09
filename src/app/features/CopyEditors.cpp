@@ -1,5 +1,6 @@
 #include "app/features/CopyEditors.h"
 
+#include "core/I18n.h"
 #include "document/HoleFeature.h"
 #include "document/Origin.h"
 #include "document/SketchSolidFeature.h"
@@ -33,7 +34,7 @@ bool AxisChoice(ui::Ui& ui, const char* id, ModelAxis& axis, float width) {
 
 /// Segmented "Прямо" / "Обратно". Returns true when changed.
 bool DirectionChoice(ui::Ui& ui, const char* id, bool& reversed, float width) {
-    static constexpr std::array<const char*, 2> labels{"Прямо", "Обратно"};
+    static constexpr std::array<const char*, 2> labels{N_("Прямо"), N_("Обратно")};
     const int current = reversed ? 1 : 0;
     const int chosen = ui::Segmented(ui, id, labels, current, 2, width);
     if (chosen == current) return false;
@@ -64,9 +65,9 @@ void CopyEditor::ChooseDefaultSource(const Session& session, doc::CopyFeature& f
 }
 
 bool CopyEditor::DrawSources(AppContext& app, Session& session, doc::CopyFeature& f, float width) {
-    Section(app, "Что копировать");
+    Section(app, Tr("Что копировать"));
     return FeatureChecklist(app, session, f.sources, IsCopyable, width,
-                            "Нет операций, которые можно скопировать: выдавливание, вращение или отверстие.");
+                            Tr("Нет операций, которые можно скопировать: выдавливание, вращение или отверстие."));
 }
 
 // --- PatternEditor --------------------------------------------------------------
@@ -74,7 +75,7 @@ bool CopyEditor::DrawSources(AppContext& app, Session& session, doc::CopyFeature
 bool PatternEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::PatternFeature*>(&f) != nullptr; }
 
 std::string PatternEditor::Hint() const {
-    return "Отметьте операции, которые нужно повторить, задайте направление, количество и шаг. Enter — готово, Esc — отмена";
+    return Tr("Отметьте операции, которые нужно повторить, задайте направление, количество и шаг. Enter — готово, Esc — отмена");
 }
 
 const char* PatternEditor::Icon() const {
@@ -83,7 +84,7 @@ const char* PatternEditor::Icon() const {
 
 void PatternEditor::StartNew(AppContext& app, Session& session, PatternKind kind) {
     if (session.model.Bodies().empty()) {
-        app.notes.Info("Сначала создайте тело и операцию, которую нужно повторить");
+        app.notes.Info(Tr("Сначала создайте тело и операцию, которую нужно повторить"));
         return;
     }
     auto f = std::make_unique<doc::PatternFeature>();
@@ -108,8 +109,8 @@ void PatternEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fe
     DrawSources(app, session, f, width);
     Gap(app);
 
-    Section(app, "Вид массива");
-    static constexpr std::array<const char*, 2> kinds{"Прямоугольный", "Круговой"};
+    Section(app, Tr("Вид массива"));
+    static constexpr std::array<const char*, 2> kinds{N_("Прямоугольный"), N_("Круговой")};
     const int current = static_cast<int>(f.kind);
     const int chosen = ui::Segmented(app.ui, "kind", kinds, current, 2, width);
     if (chosen != current) {
@@ -125,12 +126,12 @@ void PatternEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fe
 void PatternEditor::DrawRectangular(AppContext& app, Session& session, doc::PatternFeature& f, float width) {
     ui::Ui& ui = app.ui;
     const float half = (width - ui.S(8)) / 2;
-    Section(app, "Направление 1");
+    Section(app, Tr("Направление 1"));
     if (AxisChoice(ui, "dir1", f.direction1, half)) Changed(session);
     ImGui::SameLine(0, ui.S(8));
     if (DirectionChoice(ui, "rev1", f.reversed1, half)) Changed(session);
     ImGui::Dummy({0, ui.S(4)});
-    Section(app, "Количество и шаг");
+    Section(app, Tr("Количество и шаг"));
     // Fields are not focused on open: they are below the list of operations,
     // and focusing would scroll it away.
     ParameterField(app, session, "count1", myCount1, f.count1, half, false, false);
@@ -138,8 +139,8 @@ void PatternEditor::DrawRectangular(AppContext& app, Session& session, doc::Patt
     ParameterField(app, session, "spacing1", mySpacing1, f.spacing1, half, false);
     Gap(app);
 
-    Section(app, "Направление 2");
-    static constexpr std::array<const char*, 4> second{"Нет", "X", "Y", "Z"};
+    Section(app, Tr("Направление 2"));
+    static constexpr std::array<const char*, 4> second{N_("Нет"), "X", "Y", "Z"};
     const int current = f.useDirection2 ? static_cast<int>(f.direction2) + 1 : 0;
     const int chosen = ui::Segmented(ui, "dir2", second, current, 4, width);
     if (chosen != current) {
@@ -159,14 +160,14 @@ void PatternEditor::DrawRectangular(AppContext& app, Session& session, doc::Patt
 void PatternEditor::DrawCircular(AppContext& app, Session& session, doc::PatternFeature& f, float width) {
     ui::Ui& ui = app.ui;
     const float half = (width - ui.S(8)) / 2;
-    Section(app, "Ось (через начало координат)");
+    Section(app, Tr("Ось (через начало координат)"));
     if (AxisChoice(ui, "axis", f.axis, width)) Changed(session);
     Gap(app);
-    Section(app, "Количество и угол");
+    Section(app, Tr("Количество и угол"));
     ParameterField(app, session, "count", myCircularCount, f.circularCount, half, false, false);
     ImGui::SameLine(0, ui.S(8));
     ParameterField(app, session, "angle", myAngle, f.angle, half, false);
-    Caption(app, "360° — копии по кругу; меньший угол — первая и последняя на его концах.", width);
+    Caption(app, Tr("360° — копии по кругу; меньший угол — первая и последняя на его концах."), width);
 }
 
 // --- MirrorEditor ---------------------------------------------------------------
@@ -174,12 +175,12 @@ void PatternEditor::DrawCircular(AppContext& app, Session& session, doc::Pattern
 bool MirrorEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::MirrorFeature*>(&f) != nullptr; }
 
 std::string MirrorEditor::Hint() const {
-    return "Отметьте операции, которые нужно отразить, и щёлкните плоскость симметрии. Enter — готово, Esc — отмена";
+    return Tr("Отметьте операции, которые нужно отразить, и щёлкните плоскость симметрии. Enter — готово, Esc — отмена");
 }
 
 void MirrorEditor::StartNew(AppContext& app, Session& session) {
     if (session.model.Bodies().empty()) {
-        app.notes.Info("Сначала создайте тело и операцию, которую нужно отразить");
+        app.notes.Info(Tr("Сначала создайте тело и операцию, которую нужно отразить"));
         return;
     }
     auto f = std::make_unique<doc::MirrorFeature>();
@@ -196,7 +197,7 @@ void MirrorEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
     auto& f = static_cast<doc::MirrorFeature&>(feature);
     DrawSources(app, session, f, width);
     Gap(app);
-    Section(app, "Плоскость симметрии");
+    Section(app, Tr("Плоскость симметрии"));
     PlaneChoice(app, session, f.plane, width);
 }
 

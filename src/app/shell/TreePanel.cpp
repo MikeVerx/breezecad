@@ -5,19 +5,20 @@
 #include "app/Format.h"
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
-#include "document/Commands.h"
+#include "core/I18n.h"
 #include "document/CoilFeature.h"
-#include "document/SectionFeature.h"
+#include "document/Commands.h"
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
 #include "document/LoftFeature.h"
+#include "document/Origin.h"
 #include "document/PatternFeature.h"
 #include "document/RevolveFeature.h"
-#include "document/WorkPlaneFeature.h"
-#include "document/Origin.h"
+#include "document/SectionFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
+#include "document/WorkPlaneFeature.h"
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
 
@@ -107,7 +108,7 @@ RowResult Row(AppContext& app, const char* id, const std::string& name, const Ro
 
 std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
     if (const auto* ex = dynamic_cast<const doc::ExtrudeFeature*>(&f)) {
-        if (ex->extent == doc::ExtentType::ThroughAll) return "насквозь";
+        if (ex->extent == doc::ExtentType::ThroughAll) return Tr("насквозь");
         return FormatValue(ex->distance.value, Quantity::Length, d.units) + " " + UnitLabel(Quantity::Length, d.units);
     }
     if (const auto* fillet = dynamic_cast<const doc::FilletFeature*>(&f))
@@ -140,31 +141,31 @@ void ContextMenu(AppContext& app, Session& session, const doc::Feature& f, std::
     ui::MenuStyle style(ui);   // before Begin: must outlive the End call
     if (!ImGui::BeginPopupContextItem("##feature-menu")) return;
     const ObjectId id = f.id;
-    if (ui::MenuItem(ui, "Редактировать", nullptr, "ui-edit")) app.Later([&app, &session, id] { EditFeature(app, session, id); });
+    if (ui::MenuItem(ui, Tr("Редактировать"), nullptr, "ui-edit")) app.Later([&app, &session, id] { EditFeature(app, session, id); });
     if (const auto* op = dynamic_cast<const doc::SketchSolidFeature*>(&f)) {
         const ObjectId sk = op->sketch;
-        if (ui::MenuItem(ui, "Редактировать эскиз", nullptr, "tree-sketch"))
+        if (ui::MenuItem(ui, Tr("Редактировать эскиз"), nullptr, "tree-sketch"))
             app.Later([&app, &session, sk] { EditFeature(app, session, sk); });
     }
-    if (ui::MenuItem(ui, "Переименовать", "F2", "ui-rename")) {
+    if (ui::MenuItem(ui, Tr("Переименовать"), "F2", "ui-rename")) {
         app.shell.renaming = id;
         app.shell.renameText = f.name;
         app.shell.renameFocus = true;
     }
-    if (ui::MenuItem(ui, f.suppressed ? "Включить" : "Подавить", nullptr, f.suppressed ? "ui-eye" : "ui-eye-off")) {
+    if (ui::MenuItem(ui, f.suppressed ? Tr("Включить") : Tr("Подавить"), nullptr, f.suppressed ? "ui-eye" : "ui-eye-off")) {
         app.Later([&session, id] {
             const doc::Feature* current = session.doc.Find(id);
             if (!current) return;
             auto edited = current->Clone();
             edited->suppressed = !current->suppressed;
-            const std::string label = (current->suppressed ? "Включить " : "Подавить ") + current->name;
+            const std::string label = current->suppressed ? Trf("Включить {}", current->name) : Trf("Подавить {}", current->name);
             session.Execute(doc::ReplaceFeature(std::move(edited), label));
         });
     }
-    if (ui::MenuItem(ui, "Переместить маркер конца сюда", nullptr, "ui-marker"))
+    if (ui::MenuItem(ui, Tr("Переместить маркер конца сюда"), nullptr, "ui-marker"))
         app.Later([&session, index] { session.Execute(doc::SetEndMarker(session.doc, index + 1)); });
     ImGui::Separator();
-    if (ui::MenuItem(ui, "Удалить", "Del", "ui-trash")) app.Later([&app, &session, id] { DeleteFeature(app, session, id); });
+    if (ui::MenuItem(ui, Tr("Удалить"), "Del", "ui-trash")) app.Later([&app, &session, id] { DeleteFeature(app, session, id); });
     ImGui::EndPopup();
 }
 
@@ -181,17 +182,17 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         const float h = ui.S(40);
         ImDrawList* dl = ImGui::GetWindowDrawList();
         dl->AddText(ui.fonts.strong, ui.S(13), {p.x + ui.S(14), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text),
-                    "Дерево построения");
+                    Tr("Дерево построения"));
         dl->AddLine({p.x, p.y + h - 1}, {p.x + width, p.y + h - 1}, ui::ToU32(c.dividerSoft));
         ImGui::SetCursorScreenPos({p.x + width - ui.S(38), p.y + ui.S(7)});
-        if (ui::IconButton(ui, "##tree-search", "ui-search", 26, 15, "Поиск в дереве", true, app.shell.treeSearch)) {
+        if (ui::IconButton(ui, "##tree-search", "ui-search", 26, 15, Tr("Поиск в дереве"), true, app.shell.treeSearch)) {
             app.shell.treeSearch = !app.shell.treeSearch;
             app.shell.treeFilter.clear();
         }
         ImGui::SetCursorScreenPos({p.x, p.y + h});
         if (app.shell.treeSearch) {
             ImGui::SetCursorScreenPos({p.x + ui.S(8), p.y + h + ui.S(6)});
-            ui::TextField(ui, "##filter", app.shell.treeFilter, width - ui.S(16), "Имя операции", ImGui::IsWindowAppearing());
+            ui::TextField(ui, "##filter", app.shell.treeFilter, width - ui.S(16), Tr("Имя операции"), ImGui::IsWindowAppearing());
             ImGui::Dummy({0, ui.S(4)});
         }
     }
@@ -216,17 +217,17 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         style.caret = true;
         style.open = app.shell.originExpanded;
         style.icon = "tree-origin";
-        const RowResult r = Row(app, "##origin", "Начало координат", style, rowW);
+        const RowResult r = Row(app, "##origin", Tr("Начало координат"), style, rowW);
         if (r.clicked || r.caretClicked) app.shell.originExpanded = !app.shell.originExpanded;
         if (app.shell.originExpanded) {
             const struct {
                 ObjectId    id;
                 const char* name;
                 const char* icon;
-            } items[] = {{doc::origin::kPlaneXY, "Плоскость XY", "tree-plane"}, {doc::origin::kPlaneXZ, "Плоскость XZ", "tree-plane"},
-                         {doc::origin::kPlaneYZ, "Плоскость YZ", "tree-plane"}, {doc::origin::kAxisX, "Ось X", "tree-axis"},
-                         {doc::origin::kAxisY, "Ось Y", "tree-axis"},           {doc::origin::kAxisZ, "Ось Z", "tree-axis"},
-                         {doc::origin::kPoint, "Центральная точка", "tree-point"}};
+            } items[] = {{doc::origin::kPlaneXY, Tr("Плоскость XY"), "tree-plane"}, {doc::origin::kPlaneXZ, Tr("Плоскость XZ"), "tree-plane"},
+                         {doc::origin::kPlaneYZ, Tr("Плоскость YZ"), "tree-plane"}, {doc::origin::kAxisX, Tr("Ось X"), "tree-axis"},
+                         {doc::origin::kAxisY, Tr("Ось Y"), "tree-axis"},           {doc::origin::kAxisZ, Tr("Ось Z"), "tree-axis"},
+                         {doc::origin::kPoint, Tr("Центральная точка"), "tree-point"}};
             for (const auto& item : items) {
                 RowStyle s;
                 s.depth = 2;
@@ -260,7 +261,7 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         style.meta = FeatureMeta(f, d);
         if (f.status.state == doc::FeatureState::Error) style.statusIcon = "status-error";
         if (f.status.state == doc::FeatureState::Warning) style.statusIcon = "status-warning";
-        style.statusText = f.status.message;
+        style.statusText = Tr(f.status.message);
 
         ImGui::PushID(static_cast<int>(f.id.value));
         if (app.shell.renaming == f.id) {
@@ -280,7 +281,7 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
                     if (!current || name.empty() || name == current->name) return;
                     auto edited = current->Clone();
                     edited->name = name;
-                    session.Execute(doc::ReplaceFeature(std::move(edited), "Переименование"));
+                    session.Execute(doc::ReplaceFeature(std::move(edited), Tr("Переименование")));
                 });
             }
             ImGui::Dummy({0, ui.S(2)});
@@ -319,14 +320,14 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const bool hovered = ImGui::IsItemHovered();
         const float x0 = p.x + ui.S(28);
-        const char* label = "Конец детали";
+        const char* label = Tr("Конец детали");
         const float lw = ui.fonts.medium->CalcTextSizeA(ui.S(11), FLT_MAX, 0, label).x;
         const float lineEnd = p.x + rowW - lw - ui.S(16);
         dl->AddRectFilled({x0, p.y + h / 2 - ui.S(1)}, {lineEnd, p.y + h / 2 + ui.S(1)}, ui::ToU32(c.accent), ui.S(1));
         dl->AddText(ui.fonts.medium, ui.S(11), {lineEnd + ui.S(8), p.y + (h - ui.S(11)) / 2 - ui.S(1)}, ui::ToU32(c.accent), label);
         if (hovered) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-            ui::ItemTooltip(ui, "Перетащите, чтобы временно откатить деталь до нужной операции");
+            ui::ItemTooltip(ui, Tr("Перетащите, чтобы временно откатить деталь до нужной операции"));
         }
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoPreviewTooltip)) {
             ImGui::SetDragDropPayload(kMarkerPayload, nullptr, 0);
@@ -363,8 +364,8 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         ui::FontScope font(ui.fonts.bodySmall);
         ImGui::SetCursorPosX(ui.S(20));
         ImGui::PushTextWrapPos(width - ui.S(20));
-        ImGui::TextColored(ui::ToVec4(c.textMuted),
-                           "Деталь пустая. Нажмите «Начать эскиз» на ленте (S) и выберите плоскость — с этого начинается любая деталь.");
+        ImGui::TextColored(ui::ToVec4(c.textMuted), "%s",
+                           Tr("Деталь пустая. Нажмите «Начать эскиз» на ленте (S) и выберите плоскость — с этого начинается любая деталь."));
         ImGui::PopTextWrapPos();
     }
     ImGui::EndGroup();

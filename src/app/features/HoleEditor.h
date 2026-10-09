@@ -6,6 +6,7 @@
 
 #include "app/features/DragArrow.h"
 #include "app/features/FeatureOperationEditor.h"
+#include "core/I18n.h"
 #include "document/HoleFeature.h"
 
 #include <optional>
@@ -16,7 +17,7 @@ class HoleEditor final : public FeatureOperationEditor {
 public:
     void        StartNew(AppContext& app, Session& session);
     bool        CanEdit(const doc::Feature& f) const override;
-    const char* Title() const override { return "Отверстие"; }
+    const char* Title() const override { return Tr("Отверстие"); }
     std::string Hint() const override;
     bool        PicksFaces() const override { return true; }
 

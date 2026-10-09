@@ -1,5 +1,6 @@
 #include "app/features/EdgeOperationEditor.h"
 
+#include "core/I18n.h"
 #include "ui/Widgets.h"
 
 #include <algorithm>
@@ -18,7 +19,7 @@ bool SameEdge(const doc::EdgeReference& a, const doc::EdgeReference& b) {
 
 void EdgeOperationEditor::StartNew(AppContext& app, Session& session) {
     if (session.model.Bodies().empty()) {
-        app.notes.Info("Сначала создайте тело: эскиз и выдавливание или вращение");
+        app.notes.Info(Tr("Сначала создайте тело: эскиз и выдавливание или вращение"));
         return;
     }
     OpenNew(app, session, Create(session));
@@ -43,7 +44,7 @@ bool EdgeOperationEditor::ShowStatus(const doc::Feature& feature) const {
 }
 
 std::string EdgeOperationEditor::Hint() const {
-    return "Щёлкните рёбра модели (повторный щелчок убирает ребро), введите размер. Enter — готово, Esc — отмена";
+    return Tr("Щёлкните рёбра модели (повторный щелчок убирает ребро), введите размер. Enter — готово, Esc — отмена");
 }
 
 void EdgeOperationEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
@@ -51,7 +52,7 @@ void EdgeOperationEditor::DrawBody(AppContext& app, Session& session, doc::Featu
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
 
-    Section(app, "Рёбра");
+    Section(app, Tr("Рёбра"));
     {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(34);
@@ -60,12 +61,12 @@ void EdgeOperationEditor::DrawBody(AppContext& app, Session& session, doc::Featu
         dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoft), ui.S(8));
         dl->AddRect(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoftBorder), ui.S(8));
         ui.icons.Draw(dl, any ? "ui-check" : "status-warning", {p.x + ui.S(10), p.y + (h - ui.S(14)) / 2}, ui.S(14), c.accent);
-        const std::string chip = any ? "Выбрано рёбер: " + std::to_string(f.edges.size()) : std::string("Рёбра не выбраны");
+        const std::string chip = any ? Trf("Выбрано рёбер: {}", f.edges.size()) : std::string(Tr("Рёбра не выбраны"));
         dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(32), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), chip.c_str());
         ImGui::Dummy({width, h});
     }
-    Caption(app, "Щёлкните ребро на модели, чтобы добавить его; повторный щелчок убирает.", width);
-    if (!f.edges.empty() && ui::LinkButton(ui, "##clear-edges", "Очистить выбор")) {
+    Caption(app, Tr("Щёлкните ребро на модели, чтобы добавить его; повторный щелчок убирает."), width);
+    if (!f.edges.empty() && ui::LinkButton(ui, "##clear-edges", Tr("Очистить выбор"))) {
         f.edges.clear();
         Changed(session);
     }
@@ -105,7 +106,7 @@ void FilletEditor::LoadTexts(const doc::Feature& feature) {
 }
 
 void FilletEditor::DrawSize(AppContext& app, Session& session, doc::EdgeFeature& feature, float width) {
-    Section(app, "Радиус");
+    Section(app, Tr("Радиус"));
     ParameterField(app, session, "radius", myRadius, static_cast<doc::FilletFeature&>(feature).radius, width, myFocusFirstField);
 }
 
@@ -124,7 +125,7 @@ void ChamferEditor::LoadTexts(const doc::Feature& feature) {
 }
 
 void ChamferEditor::DrawSize(AppContext& app, Session& session, doc::EdgeFeature& feature, float width) {
-    Section(app, "Расстояние");
+    Section(app, Tr("Расстояние"));
     ParameterField(app, session, "distance", myDistance, static_cast<doc::ChamferFeature&>(feature).distance, width,
                    myFocusFirstField);
 }

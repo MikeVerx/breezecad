@@ -2,8 +2,9 @@
 
 #include "app/Format.h"
 #include "app/shell/Shell.h"
-#include "app/viewport/Planes.h"
 #include "app/sketch/SketchEditor.h"
+#include "app/viewport/Planes.h"
+#include "core/I18n.h"
 #include "document/Commands.h"
 #include "document/LoftFeature.h"
 #include "document/Origin.h"
@@ -71,7 +72,7 @@ bool FeatureOperationEditor::Commit(AppContext& app, Session& session) {
     if (!f) return false;
     session.RebuildIfNeeded();
     if (f->status.state == doc::FeatureState::Error) {
-        app.notes.Error(f->status.message);
+        app.notes.Error(Tr(f->status.message));
         return false;
     }
     if (myIsNew) {
@@ -214,10 +215,10 @@ void FeatureOperationEditor::PlaneChoice(AppContext& app, Session& session, Obje
         Changed(session);
     }
     if (const auto* wp = session.doc.FindAs<doc::WorkPlaneFeature>(plane)) {
-        const std::string text = "Рабочая плоскость: " + wp->name;
+        const std::string text = Trf("Рабочая плоскость: {}", wp->name);
         Caption(app, text.c_str(), width);
     } else {
-        Caption(app, "Или щёлкните рабочую плоскость в окне модели.", width);
+        Caption(app, Tr("Или щёлкните рабочую плоскость в окне модели."), width);
     }
 }
 
@@ -258,7 +259,7 @@ bool FeatureOperationEditor::ParameterField(AppContext& app, Session& session, c
     if (r.fxClicked) ImGui::OpenPopup("##fx");
     ui::FontScope font(ui.fonts.body);   // before Begin: must outlive the End call
     if (ImGui::BeginPopup("##fx")) {
-        ImGui::TextDisabled("Вставить переменную");
+        ImGui::TextDisabled("%s", Tr("Вставить переменную"));
         for (const Parameter* p : session.doc.AllParameters()) {
             if (p->name.empty() || p == &parameter || p->quantity != parameter.quantity) continue;
             const std::string item = p->name + "  =  " + FormatValue(p->value, p->quantity, session.doc.units);
@@ -294,7 +295,7 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
         dl->AddText(ui.fonts.title, ui.S(14), {p.x + ui.S(48), p.y + (h - ui.S(14)) / 2 - ui.S(1)}, ui::ToU32(c.text),
                     myIsNew ? Title() : f->name.c_str());
         ImGui::SetCursorScreenPos({p.x + width - ui.S(38), p.y + ui.S(9)});
-        if (ui::IconButton(ui, "##close-op", "ui-close", 30, 14, "Отмена (Esc)"))
+        if (ui::IconButton(ui, "##close-op", "ui-close", 30, 14, Tr("Отмена (Esc)")))
             app.Later([&app, &session, this] { Cancel(app, session); });
         ImGui::SetCursorScreenPos({p.x, p.y + h});
         ui::Divider(ui, c.dividerSoft);
@@ -316,7 +317,7 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
             ImGui::PushStyleColor(ImGuiCol_Text,
                                   ui::ToVec4(f->status.state == doc::FeatureState::Error ? c.danger : c.warning));
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inner);
-            ImGui::TextUnformatted(f->status.message.c_str());
+            ImGui::TextUnformatted(Tr(f->status.message).c_str());
             ImGui::PopTextWrapPos();
             ImGui::PopStyleColor();
         }
@@ -331,13 +332,13 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
     const float bw = (width - ui.S(28) - ui.S(16)) / 3.0f;
     const float bh = ui.S(36);
     ImGui::SetCursorScreenPos({fp.x + ui.S(14), fp.y + ui.S(12)});
-    if (ui::SecondaryButton(ui, "##cancel", "Отмена", nullptr, {bw, bh})) app.Later([&app, &session, this] { Cancel(app, session); });
+    if (ui::SecondaryButton(ui, "##cancel", Tr("Отмена"), nullptr, {bw, bh})) app.Later([&app, &session, this] { Cancel(app, session); });
     ui::ItemTooltip(ui, "Esc");
     ImGui::SameLine(0, ui.S(8));
-    if (ui::SecondaryButton(ui, "##apply", "Применить", nullptr, {bw, bh})) app.Later([&app, &session, this] { Apply(app, session); });
-    ui::ItemTooltip(ui, "Создать и сразу начать следующую такую же операцию");
+    if (ui::SecondaryButton(ui, "##apply", Tr("Применить"), nullptr, {bw, bh})) app.Later([&app, &session, this] { Apply(app, session); });
+    ui::ItemTooltip(ui, Tr("Создать и сразу начать следующую такую же операцию"));
     ImGui::SameLine(0, ui.S(8));
-    if (ui::PrimaryButton(ui, "##done", "Готово", "Enter", {bw, bh})) app.Later([&app, &session, this] { Done(app, session); });
+    if (ui::PrimaryButton(ui, "##done", Tr("Готово"), "Enter", {bw, bh})) app.Later([&app, &session, this] { Done(app, session); });
 }
 
 } // namespace bz::app

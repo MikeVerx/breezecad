@@ -16,6 +16,7 @@
 #include <Standard_Failure.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
+#include <format>
 #include <gp_Ax3.hxx>
 
 #include <algorithm>
@@ -118,7 +119,7 @@ Expected<TopoDS_Shape> MakeCoil(const std::vector<TopoDS_Face>& faces, const doc
         if (!BRepCheck_Analyzer(result).IsValid()) return Error{"Пружина получилась некорректной"};
         return result;
     } catch (const Standard_Failure& failure) {
-        return Error{std::string("Ошибка пружины: ") + failure.GetMessageString()};
+        return Error{std::format("Ошибка пружины: {}", failure.GetMessageString())};
     }
 }
 

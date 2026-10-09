@@ -1,6 +1,7 @@
 #include "app/features/LoftEditor.h"
 
 #include "app/sketch/SketchOverlay.h"
+#include "core/I18n.h"
 #include "document/SketchFeature.h"
 #include "ui/Widgets.h"
 
@@ -16,7 +17,7 @@ bool IsSketch(const doc::Feature& f) { return dynamic_cast<const doc::SketchFeat
 bool LoftEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::LoftFeature*>(&f) != nullptr; }
 
 std::string LoftEditor::Hint() const {
-    return "Отметьте эскизы-сечения (по одному замкнутому контуру в каждом). Enter — готово, Esc — отмена";
+    return Tr("Отметьте эскизы-сечения (по одному замкнутому контуру в каждом). Enter — готово, Esc — отмена");
 }
 
 void LoftEditor::StartNew(AppContext& app, Session& session) {
@@ -25,7 +26,7 @@ void LoftEditor::StartNew(AppContext& app, Session& session) {
     for (std::size_t i = 0; i < session.doc.EndMarker(); ++i)
         if (IsSketch(*session.doc.Features()[i])) sketches.push_back(session.doc.Features()[i]->id);
     if (sketches.size() < 2) {
-        app.notes.Info("Для лофта нужны хотя бы два эскиза — например, на рабочих плоскостях одна над другой");
+        app.notes.Info(Tr("Для лофта нужны хотя бы два эскиза — например, на рабочих плоскостях одна над другой"));
         return;
     }
     auto f = std::make_unique<doc::LoftFeature>();
@@ -48,8 +49,8 @@ void LoftEditor::DrawInViewport(AppContext& app, Session& session, const Viewpor
 
 void LoftEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::LoftFeature&>(feature);
-    Section(app, "Операция");
-    static constexpr std::array<const char*, 3> ops{"Новое тело", "Добавить", "Вырезать"};
+    Section(app, Tr("Операция"));
+    static constexpr std::array<const char*, 3> ops{N_("Новое тело"), N_("Добавить"), N_("Вырезать")};
     const bool bodyBefore = HasSolidBefore(session.doc, static_cast<std::size_t>(session.doc.IndexOf(f.id)));
     const int current = std::min(static_cast<int>(f.operation), 2);
     const int chosen = ui::Segmented(app.ui, "op", ops, current, 3, width, bodyBefore ? 0 : 0b110);
@@ -59,12 +60,12 @@ void LoftEditor::DrawBody(AppContext& app, Session& session, doc::Feature& featu
     }
     Gap(app);
 
-    Section(app, "Сечения (по порядку дерева)");
-    FeatureChecklist(app, session, f.sections, IsSketch, width, "Нет эскизов. Нарисуйте сечения на разных плоскостях.");
+    Section(app, Tr("Сечения (по порядку дерева)"));
+    FeatureChecklist(app, session, f.sections, IsSketch, width, Tr("Нет эскизов. Нарисуйте сечения на разных плоскостях."));
     Gap(app);
 
-    Section(app, "Переходы");
-    static constexpr std::array<const char*, 2> kinds{"Плавные", "Прямые"};
+    Section(app, Tr("Переходы"));
+    static constexpr std::array<const char*, 2> kinds{N_("Плавные"), N_("Прямые")};
     const int ruled = f.ruled ? 1 : 0;
     const int pick = ui::Segmented(app.ui, "ruled", kinds, ruled, 2, width);
     if (pick != ruled) {

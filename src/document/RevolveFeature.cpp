@@ -3,6 +3,7 @@
 #include "document/JsonIO.h"
 
 #include <array>
+#include <format>
 #include <utility>
 
 namespace bz::doc {
@@ -45,8 +46,8 @@ Status RevolveFeature::LoadFields(const Json& in) {
     if (axisIt == in.end() || !ReadMember(*axisIt, "kind", kind) || !ReadMember(*axisIt, "line", f.axis.line) ||
         !ReadMember(in, "extent", ext) || !ReadMember(in, "reversed", f.reversed) || !ReadMember(in, "angle", f.angle))
         return Error{"Вращение: повреждены параметры"};
-    if (!FromId(kAxisIds, kind, f.axis.kind)) return Error{"Вращение: неизвестная ось «" + kind + "»"};
-    if (!FromId(kExtentIds, ext, f.extent)) return Error{"Вращение: неизвестный способ «" + ext + "»"};
+    if (!FromId(kAxisIds, kind, f.axis.kind)) return Error{std::format("Вращение: неизвестная ось «{}»", kind)};
+    if (!FromId(kExtentIds, ext, f.extent)) return Error{std::format("Вращение: неизвестный способ «{}»", ext)};
 
     sketch    = f.sketch;
     profiles  = std::move(f.profiles);

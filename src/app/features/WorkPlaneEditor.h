@@ -4,6 +4,7 @@
 
 #include "app/features/DragArrow.h"
 #include "app/features/FeatureOperationEditor.h"
+#include "core/I18n.h"
 #include "document/WorkPlaneFeature.h"
 
 namespace bz::app {
@@ -12,7 +13,7 @@ class WorkPlaneEditor final : public FeatureOperationEditor {
 public:
     void        StartNew(AppContext& app, Session& session);
     bool        CanEdit(const doc::Feature& f) const override;
-    const char* Title() const override { return "Плоскость"; }
+    const char* Title() const override { return Tr("Плоскость"); }
     std::string Hint() const override;
     bool        PicksFaces() const override { return true; }
     bool        DrawsPlanes() const override { return true; }

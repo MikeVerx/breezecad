@@ -1,5 +1,7 @@
 #include "ui/Widgets.h"
 
+#include "core/I18n.h"
+
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
 
@@ -150,9 +152,9 @@ int Segmented(Ui& ui, const char* id, std::span<const char* const> labels, int c
             dl->AddRectFilled(p, Add(p, {cellW, cellH}), ToU32(ui.C().hover.WithAlpha(0.6f)), ui.S(6));
         }
         const Color tc = disabled ? ui.C().textDisabled : on ? ui.C().text : ui.C().textSecondary;
-        const ImVec2 ts = font->CalcTextSizeA(fontSize, FLT_MAX, 0, labels[static_cast<std::size_t>(i)]);
-        dl->AddText(font, fontSize, {p.x + (cellW - ts.x) / 2, p.y + (cellH - ts.y) / 2}, ToU32(tc),
-                    labels[static_cast<std::size_t>(i)]);
+        const char* label = Tr(labels[static_cast<std::size_t>(i)]);   // tables keep the Russian (N_)
+        const ImVec2 ts = font->CalcTextSizeA(fontSize, FLT_MAX, 0, label);
+        dl->AddText(font, fontSize, {p.x + (cellW - ts.x) / 2, p.y + (cellH - ts.y) / 2}, ToU32(tc), label);
     }
     ImGui::SetCursorScreenPos(origin);
     ImGui::Dummy({width, height});
@@ -298,7 +300,7 @@ FieldResult ExpressionField(Ui& ui, const char* id, std::string& text, std::stri
                           ImDrawFlags_RoundCornersRight);
         dl->AddLine(fxPos, {fxPos.x, fxPos.y + h}, ToU32(c.divider), ui.S(1));
         ui.icons.Draw(dl, "ui-fx", {fxPos.x + (fxW - ui.S(16)) / 2, fxPos.y + (h - ui.S(16)) / 2}, ui.S(16), c.textSecondary);
-        ItemTooltip(ui, "Связать с переменной");
+        ItemTooltip(ui, Tr("Связать с переменной"));
     }
 
     // Border: accent with a soft glow while editing, red on error.
@@ -313,7 +315,7 @@ FieldResult ExpressionField(Ui& ui, const char* id, std::string& text, std::stri
         ImGui::PushFont(ui.fonts.caption);
         ImGui::PushStyleColor(ImGuiCol_Text, ToVec4(c.danger));
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
-        ImGui::TextUnformatted(error.c_str());
+        ImGui::TextUnformatted(Tr(error).c_str());
         ImGui::PopTextWrapPos();
         ImGui::PopStyleColor();
         ImGui::PopFont();

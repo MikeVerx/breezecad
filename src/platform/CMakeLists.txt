@@ -1,5 +1,6 @@
 add_library(bz_platform STATIC
     FileDialogs.cpp
+    Launch.cpp
     Paths.cpp
     ProcessInfo.cpp
     SystemTheme.cpp

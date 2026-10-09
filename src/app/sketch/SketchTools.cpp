@@ -5,10 +5,11 @@
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
 #include "core/Expression.h"
+#include "core/I18n.h"
 #include "sketch/Mirror.h"
 #include "sketch/Shapes.h"
-#include "sketch/Trim.h"
 #include "sketch/Solver.h"
+#include "sketch/Trim.h"
 
 #include <algorithm>
 #include <array>
@@ -342,12 +343,12 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
         ++added;
     }
     if (added == 0) {
-        app.notes.Info(!problem.empty() ? problem : already > 0 ? "Это уже спроецировано" : "Здесь нечего проецировать");
+        app.notes.Info(!problem.empty() ? problem : already > 0 ? Tr("Это уже спроецировано") : Tr("Здесь нечего проецировать"));
         return;
     }
-    if (!problem.empty()) app.notes.Info("Часть рёбер не спроецирована: " + problem);
+    if (!problem.empty()) app.notes.Info(Trf("Часть рёбер не спроецирована: {}", Tr(problem)));
     session.doc.MarkChanged(static_cast<std::size_t>(index));
-    session.CommitInPlaceEdit(std::move(before), edges.size() > 1 ? "Проецирование грани" : "Проецирование геометрии");
+    session.CommitInPlaceEdit(std::move(before), edges.size() > 1 ? Tr("Проецирование грани") : Tr("Проецирование геометрии"));
 }
 
 std::size_t SketchEditor::ClicksNeeded() const {
@@ -475,13 +476,13 @@ void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchVie
     sketch::Sketch trial = f->sketch;
     if (!sketch::Trim(trial, session.doc.Ids(), *span)) return;
     if (!sketch::Solve(trial).converged) {
-        app.notes.Error("После обрезки эскиз не решается — кусок оставлен");
+        app.notes.Error(Tr("После обрезки эскиз не решается — кусок оставлен"));
         return;
     }
     f->sketch = std::move(trial);
     f->PruneProjections();
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
-    session.CommitInPlaceEdit(std::move(before), "Обрезка");
+    session.CommitInPlaceEdit(std::move(before), Tr("Обрезка"));
 }
 
 std::optional<sketch::Motion> SketchEditor::PendingMotion(const UnitSystem& units, bool withCursor) const {
@@ -508,7 +509,7 @@ void SketchEditor::ApplyMotion(AppContext& app, Session& session, const sketch::
     const std::vector<ObjectId> chosen(mySelection.begin(), mySelection.end());
     const std::vector<ObjectId> moved = sketch::MovedPoints(f->sketch, chosen);
     if (moved.empty()) {
-        app.notes.Info("Среди выбранного нет того, что можно сдвинуть (начало координат и проекции стоят на месте)");
+        app.notes.Info(Tr("Среди выбранного нет того, что можно сдвинуть (начало координат и проекции стоят на месте)"));
         return;
     }
     const Vec2 expected = motion.Apply(f->sketch.PositionOf(moved.front()));
@@ -517,17 +518,17 @@ void SketchEditor::ApplyMotion(AppContext& app, Session& session, const sketch::
     if (copying) sketch::CopyEntities(trial, session.doc.Ids(), chosen, motion);
     else sketch::MoveEntities(trial, session.doc.Ids(), chosen, motion);
     if (!sketch::Solve(trial).converged) {
-        app.notes.Error(copying ? "Копия противоречит ограничениям эскиза" : "Выбранное нельзя так сдвинуть: эскиз не решается");
+        app.notes.Error(copying ? Tr("Копия противоречит ограничениям эскиза") : Tr("Выбранное нельзя так сдвинуть: эскиз не решается"));
         return;
     }
     const Box2 extents = f->sketch.Extents();
     const double scale = extents.IsEmpty() ? 1.0 : std::max((extents.max - extents.min).Length(), 1.0);
     if (!copying && (trial.PositionOf(moved.front()) - expected).Length() > 1e-4 * scale)
-        app.notes.Info("Положение выбранного задано размерами или связями — сдвиг ограничен ими");
+        app.notes.Info(Tr("Положение выбранного задано размерами или связями — сдвиг ограничен ими"));
     auto before = f->Clone();
     f->sketch = std::move(trial);
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
-    session.CommitInPlaceEdit(std::move(before), InfoOf(myTool).label);
+    session.CommitInPlaceEdit(std::move(before), Tr(InfoOf(myTool).label));
     myClicks.clear();
     myOptions.moveX.clear();
     myOptions.moveY.clear();
@@ -572,13 +573,13 @@ void SketchEditor::ApplyPattern(AppContext& app, Session& session) {
     sketch::Sketch trial = f->sketch;
     for (const sketch::Motion& m : motions) sketch::CopyEntities(trial, session.doc.Ids(), chosen, m);
     if (!sketch::Solve(trial).converged) {
-        app.notes.Error("Массив противоречит ограничениям эскиза");
+        app.notes.Error(Tr("Массив противоречит ограничениям эскиза"));
         return;
     }
     auto before = f->Clone();
     f->sketch = std::move(trial);
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
-    session.CommitInPlaceEdit(std::move(before), "Массив в эскизе");
+    session.CommitInPlaceEdit(std::move(before), Tr("Массив в эскизе"));
     mySelection.clear();
     myClicks.clear();
 }
@@ -589,19 +590,19 @@ void SketchEditor::ApplyScale(AppContext& app, Session& session) {
     const Expected<double> k = EvaluateExpression(myOptions.factor, Quantity::Scalar, session.doc.units,
                                                   [](std::string_view) { return std::optional<NamedValue>{}; });
     if (!k || *k <= 0) {
-        app.notes.Info("Коэффициент масштаба должен быть больше нуля");
+        app.notes.Info(Tr("Коэффициент масштаба должен быть больше нуля"));
         return;
     }
     const std::vector<ObjectId> chosen(mySelection.begin(), mySelection.end());
     sketch::Sketch trial = f->sketch;
     if (!sketch::ScaleEntities(trial, chosen, myClicks.front().pos, *k) || !sketch::Solve(trial).converged) {
-        app.notes.Error("Выбранное нельзя так отмасштабировать: мешают размеры или связи");
+        app.notes.Error(Tr("Выбранное нельзя так отмасштабировать: мешают размеры или связи"));
         return;
     }
     auto before = f->Clone();
     f->sketch = std::move(trial);
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
-    session.CommitInPlaceEdit(std::move(before), "Масштаб");
+    session.CommitInPlaceEdit(std::move(before), Tr("Масштаб"));
     myClicks.clear();
 }
 
@@ -709,25 +710,25 @@ void SketchEditor::HandleMirror(AppContext& app, Session& session, const SketchV
         return;
     }
     if (myHover.kind != EntityKind::Line) {
-        app.notes.Info("Линия зеркала — это отрезок: щёлкните отрезок (обычно осевую)");
+        app.notes.Info(Tr("Линия зеркала — это отрезок: щёлкните отрезок (обычно осевую)"));
         return;
     }
     const std::vector<ObjectId> chosen(mySelection.begin(), mySelection.end());
     sketch::Sketch trial = f->sketch;
     const std::vector<ObjectId> created = sketch::MirrorEntities(trial, session.doc.Ids(), chosen, myHover.id);
     if (created.empty()) {
-        app.notes.Info(mySelection.contains(myHover.id) ? "Линия зеркала не может быть среди отражаемых элементов"
-                                                        : "Среди выбранного нет кривых для отражения");
+        app.notes.Info(mySelection.contains(myHover.id) ? Tr("Линия зеркала не может быть среди отражаемых элементов")
+                                                        : Tr("Среди выбранного нет кривых для отражения"));
         return;
     }
     if (!sketch::Solve(trial).converged) {
-        app.notes.Error("Отражение противоречит ограничениям эскиза");
+        app.notes.Error(Tr("Отражение противоречит ограничениям эскиза"));
         return;
     }
     auto before = f->Clone();
     f->sketch = std::move(trial);
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
-    session.CommitInPlaceEdit(std::move(before), "Зеркальное отражение");
+    session.CommitInPlaceEdit(std::move(before), Tr("Зеркальное отражение"));
     mySelection.clear();
     myMirrorAxisStep = false;
 }
@@ -751,7 +752,7 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
     auto before = f->Clone();
     sketch::Sketch& sk = f->sketch;
     IdGenerator& ids = d.Ids();
-    const char* label = InfoOf(myTool).label;
+    const char* label = Tr(InfoOf(myTool).label);
     const std::size_t linesBefore = sk.lines.size(), circlesBefore = sk.circles.size(), arcsBefore = sk.arcs.size();
     std::optional<PointRef> continueFrom;
     std::vector<TypedDimension> dims;
@@ -784,14 +785,14 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
                 const sketch::PolygonIds p = sketch::AddPolygon(sk, ids, Resolve(d, sk, myClicks[0]), myClicks[1].pos,
                                                                 myOptions.polygonSides, myOptions.polygonInscribed);
                 dims.push_back({Make(ConstraintType::Diameter, p.circle), myOptions.size, {}});
-                label = "Многоугольник";
+                label = Tr("Многоугольник");
                 break;
             }
             if (IsSlot(mode)) {
                 std::vector<Vec2> pts;
                 for (const PointRef& c : myClicks) pts.push_back(c.pos);
                 const auto plan = PlanSlot(mode, pts, TypedValue(myOptions.width, Quantity::Length, d.units).value_or(0.0));
-                if (!plan) return refuse("Паз не получится: проверьте точки и ширину");
+                if (!plan) return refuse(Tr("Паз не получится: проверьте точки и ширину"));
                 sketch::SlotIds slot;
                 if (plan->arc) {
                     const bool byCentre = mode == RectangleMode::SlotArcCentre;
@@ -816,16 +817,16 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
                         sk.AddConstraint(ids, Make(ConstraintType::Midpoint, Resolve(d, sk, myClicks[0]), slot.axis));
                 }
                 dims.push_back({Make(ConstraintType::Diameter, slot.cap), myOptions.width, {}});
-                label = "Паз";
+                label = Tr("Паз");
                 break;
             }
             std::optional<sketch::RectangleIds> r;
             if (mode == RectangleMode::ThreePoints) {
                 r = sketch::AddThreePointRectangle(sk, ids, Resolve(d, sk, myClicks[0]), Resolve(d, sk, myClicks[1]), myClicks[2].pos);
-                if (!r) return refuse("Третья точка лежит на первой стороне — прямоугольник не получится");
+                if (!r) return refuse(Tr("Третья точка лежит на первой стороне — прямоугольник не получится"));
             } else if (mode == RectangleMode::ThreePointsCentre) {
                 r = sketch::AddThreePointCentredRectangle(sk, ids, Resolve(d, sk, myClicks[0]), myClicks[1].pos, myClicks[2].pos);
-                if (!r) return refuse("Точки на одной прямой — прямоугольник не получится");
+                if (!r) return refuse(Tr("Точки на одной прямой — прямоугольник не получится"));
             } else {
                 const Vec2 p = myClicks[0].pos, q = myClicks[1].pos;
                 if (std::abs(p.x - q.x) < 1e-9 || std::abs(p.y - q.y) < 1e-9) {
@@ -844,7 +845,7 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
         case SketchTool::Circle: {
             if (myOptions.circle == CircleMode::ThreePoints) {
                 const auto through = sketch::CircleThroughPoints(myClicks[0].pos, myClicks[1].pos, myClicks[2].pos);
-                if (!through) return refuse("Три точки на одной прямой — окружность через них не проходит");
+                if (!through) return refuse(Tr("Три точки на одной прямой — окружность через них не проходит"));
                 const ObjectId circle = sk.AddCircle(ids, sk.AddPoint(ids, through->centre), through->radius);
                 for (const PointRef& click : myClicks)
                     if (click.id) sk.AddConstraint(ids, Make(ConstraintType::PointOnCurve, click.id, circle));
@@ -863,7 +864,7 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
             if (myOptions.arc == ArcMode::ThreePoints) {
                 // Start, end, then a point the arc passes through.
                 const auto through = sketch::CircleThroughPoints(myClicks[0].pos, myClicks[1].pos, myClicks[2].pos);
-                if (!through) return refuse("Три точки на одной прямой — дуга через них не проходит");
+                if (!through) return refuse(Tr("Три точки на одной прямой — дуга через них не проходит"));
                 c = through->centre;
                 startRef = myClicks[0];
                 endRef = myClicks[1];
@@ -902,7 +903,7 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
         f->sketch = static_cast<const doc::SketchFeature&>(*before).sketch;
         d.EvaluateParameters();
         myClicks.clear();
-        app.notes.Error("Введённые размеры не сходятся с другими ограничениями эскиза");
+        app.notes.Error(Tr("Введённые размеры не сходятся с другими ограничениями эскиза"));
         return;
     }
     d.MarkChanged(static_cast<std::size_t>(d.IndexOf(f->id)));
@@ -923,16 +924,16 @@ bool SketchEditor::AddConstraint(AppContext& app, Session& session, sketch::Cons
     if (!f) return false;
     if (sketch::IsRedundant(f->sketch, c)) {
         if (!sketch::IsDimensional(c.type)) {
-            app.notes.Info("Это ограничение уже следует из других — оно не нужно");
+            app.notes.Info(Tr("Это ограничение уже следует из других — оно не нужно"));
             return false;
         }
         c.reference = true;   // a driven dimension only shows the value
-        app.notes.Info("Размер уже определён другими — добавлен как справочный");
+        app.notes.Info(Tr("Размер уже определён другими — добавлен как справочный"));
     }
     sketch::Sketch trial = f->sketch;
     const ObjectId id = trial.AddConstraint(session.doc.Ids(), c);
     if (!sketch::Solve(trial).converged) {
-        app.notes.Error("Ограничение противоречит существующим");
+        app.notes.Error(Tr("Ограничение противоречит существующим"));
         return false;
     }
     auto before = f->Clone();
@@ -954,7 +955,7 @@ void SketchEditor::TryApplyToSelection(AppContext& app, Session& session) {
     });
     bool needMore = false;
     if (auto c = ConstraintFromPicks(myTool, f->sketch, picks, needMore)) {
-        if (AddConstraint(app, session, *c, InfoOf(myTool).label)) {
+        if (AddConstraint(app, session, *c, Tr(InfoOf(myTool).label))) {
             mySelection.clear();
             myTool = SketchTool::Select;
         }
@@ -989,7 +990,7 @@ void SketchEditor::HandleConstraint(AppContext& app, Session& session, const Ske
             sketch::Constraint second = Make(ConstraintType::Symmetric, l1->end, straight ? l2->end : l2->start);
             first.refs[2] = second.refs[2] = line;
             myPicks.clear();
-            if (AddConstraint(app, session, first, "Симметрия")) AddConstraint(app, session, second, "Симметрия");
+            if (AddConstraint(app, session, first, Tr("Симметрия"))) AddConstraint(app, session, second, Tr("Симметрия"));
             return;
         }
     }
@@ -997,10 +998,10 @@ void SketchEditor::HandleConstraint(AppContext& app, Session& session, const Ske
     bool needMore = false;
     const auto c = ConstraintFromPicks(myTool, f->sketch, myPicks, needMore);
     if (c) {
-        AddConstraint(app, session, *c, InfoOf(myTool).label);
+        AddConstraint(app, session, *c, Tr(InfoOf(myTool).label));
         myPicks.clear();
     } else if (!needMore) {
-        app.notes.Info(std::string("Не подходит для «") + InfoOf(myTool).label + "». " + InfoOf(myTool).hint);
+        app.notes.Info(Trf("Не подходит для «{}». {}", Tr(InfoOf(myTool).label), Tr(InfoOf(myTool).hint)));
         myPicks.clear();
     }
 }
@@ -1030,7 +1031,7 @@ void SketchEditor::HandleDimension(AppContext& app, Session& session, const Sket
     c->parameter.value = c->type == ConstraintType::Angle ? *measured : value;
     c->parameter.expression = FormatValue(value, c->parameter.quantity, session.doc.units, 3);
     if (c->type == ConstraintType::Angle && *measured < 0) c->parameter.expression = "-" + c->parameter.expression;
-    AddConstraint(app, session, *c, "Размер");
+    AddConstraint(app, session, *c, Tr("Размер"));
     (void)view;
 }
 

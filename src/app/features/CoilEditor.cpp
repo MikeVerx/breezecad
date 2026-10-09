@@ -2,6 +2,7 @@
 
 #include "app/features/SketchAxis.h"
 #include "app/sketch/SketchPick.h"
+#include "core/I18n.h"
 #include "document/SketchFeature.h"
 #include "ui/Widgets.h"
 
@@ -12,7 +13,7 @@ namespace bz::app {
 bool CoilEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::CoilFeature*>(&f) != nullptr; }
 
 std::string CoilEditor::Hint() const {
-    return "Щёлкните осевую линию эскиза — вокруг неё навивается профиль; задайте шаг и число витков. Enter — готово, Esc — отмена";
+    return Tr("Щёлкните осевую линию эскиза — вокруг неё навивается профиль; задайте шаг и число витков. Enter — готово, Esc — отмена");
 }
 
 std::unique_ptr<doc::SketchSolidFeature> CoilEditor::Create(Session& session, ObjectId sketch) const {
@@ -36,19 +37,19 @@ void CoilEditor::CarryOver(const doc::SketchSolidFeature& previous, doc::SketchS
 
 void CoilEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSolidFeature& feature, float width) {
     auto& f = static_cast<doc::CoilFeature&>(feature);
-    Section(app, "Ось");
+    Section(app, Tr("Ось"));
     const auto* sk = session.doc.FindAs<doc::SketchFeature>(f.sketch);
     SketchAxisChip(app, sk ? sk->sketch.FindLine(f.axisLine) : nullptr, false, width);
     Gap(app);
 
-    Section(app, "Шаг");
+    Section(app, Tr("Шаг"));
     ParameterField(app, session, "pitch", myPitch, f.pitch, width, myFocusFirstField);
-    Section(app, "Число витков");
+    Section(app, Tr("Число витков"));
     ParameterField(app, session, "turns", myTurns, f.turns, width, false);
     Gap(app);
 
-    Section(app, "Навивка");
-    static constexpr std::array<const char*, 2> hands{"Правая", "Левая"};
+    Section(app, Tr("Навивка"));
+    static constexpr std::array<const char*, 2> hands{N_("Правая"), N_("Левая")};
     const int current = f.leftHanded ? 1 : 0;
     const int chosen = ui::Segmented(app.ui, "hand", hands, current, 2, width);
     if (chosen != current) {

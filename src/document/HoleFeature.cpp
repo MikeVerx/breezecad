@@ -3,6 +3,7 @@
 #include "document/JsonIO.h"
 
 #include <array>
+#include <format>
 #include <utility>
 
 namespace bz::doc {
@@ -46,7 +47,7 @@ Status HoleFeature::LoadFields(const Json& in) {
         !ReadMember(in, "diameter", f.diameter) || !ReadMember(in, "depth", f.depth) || !ReadMember(in, "headDiameter", f.headDiameter) ||
         !ReadMember(in, "headDepth", f.headDepth) || !ReadMember(in, "sinkDiameter", f.sinkDiameter))
         return Error{"Отверстие: повреждены параметры"};
-    if (!json_io::FromId(kTypeIds, typeId, f.type)) return Error{"Отверстие: неизвестный тип «" + typeId + "»"};
+    if (!json_io::FromId(kTypeIds, typeId, f.type)) return Error{std::format("Отверстие: неизвестный тип «{}»", typeId)};
     for (const Json& c : in.value("centres", Json::array())) {
         Vec2 v;
         if (!json_io::Read(c, v)) return Error{"Отверстие: повреждены центры"};

@@ -134,11 +134,13 @@ std::vector<const Action*> ActionRegistry::Search(std::string_view query) const 
     std::vector<const Action*> found;
     for (const auto& a : myActions) {
         if (!a.run || a.label.empty()) continue;
-        if (q.empty() || Lower(a.label).find(q) != std::string::npos) found.push_back(&a);
+        // The shown label, and the Russian one too: commands are found either way.
+        if (q.empty() || Lower(a.Label()).find(q) != std::string::npos || Lower(a.label).find(q) != std::string::npos)
+            found.push_back(&a);
     }
     // Labels that start with the query first.
     std::stable_sort(found.begin(), found.end(), [&](const Action* x, const Action* y) {
-        return (Lower(x->label).rfind(q, 0) == 0) > (Lower(y->label).rfind(q, 0) == 0);
+        return (Lower(x->Label()).rfind(q, 0) == 0) > (Lower(y->Label()).rfind(q, 0) == 0);
     });
     return found;
 }

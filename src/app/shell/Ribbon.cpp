@@ -1,8 +1,9 @@
 // Mode tabs and the ribbon. Commands that are not built yet are shown
 // greyed out with a note, so the layout matches the approved mockup.
 
-#include "app/sketch/SketchEditor.h"
 #include "app/shell/Shell.h"
+#include "app/sketch/SketchEditor.h"
+#include "core/I18n.h"
 #include "ui/Widgets.h"
 
 #include <algorithm>
@@ -10,7 +11,7 @@
 namespace bz::app {
 namespace {
 
-constexpr const char* kLater = "Появится в следующих версиях";
+constexpr const char* kLater = N_("Появится в следующих версиях");
 
 /// Lays ribbon groups out left to right.
 class RibbonBuilder {
@@ -69,7 +70,7 @@ public:
         const Action* a = myApp.actions.Find(actionId);
         ImGui::SetCursorScreenPos({myColumnX, myColumnY});
         const std::string tip = Tooltip(*a);
-        if (ui::RibbonSmallButton(myUi, actionId, a->icon, label ? label : a->label.c_str(), tip.c_str(), a->IsEnabled(), active))
+        if (ui::RibbonSmallButton(myUi, actionId, a->icon, label ? label : a->Label(), tip.c_str(), a->IsEnabled(), active))
             Run(actionId);
         NextRow();
     }
@@ -111,9 +112,9 @@ private:
     }
 
     static std::string Tooltip(const Action& a) {
-        std::string tip = a.label;
+        std::string tip = a.Label();
         if (const std::string sc = ActionRegistry::ChordText(a.chord); !sc.empty()) tip += " (" + sc + ")";
-        if (!a.tooltip.empty()) tip += "\n" + a.tooltip;
+        if (!a.tooltip.empty()) tip += std::string("\n") + a.Tooltip();
         return tip;
     }
 
@@ -136,13 +137,13 @@ private:
 };
 
 void ModelRibbon(RibbonBuilder& r) {
-    r.BeginGroup("Эскиз");
-    r.Large("sketch.start", "Начать\nэскиз");
+    r.BeginGroup(Tr("Эскиз"));
+    r.Large("sketch.start", Tr("Начать\nэскиз"));
     r.EndGroup();
 
-    r.BeginGroup("Создать");
-    r.Large("feature.extrude", "Выдав-\nливание");
-    r.Large("feature.revolve", "Вращение");
+    r.BeginGroup(Tr("Создать"));
+    r.Large("feature.extrude", Tr("Выдав-\nливание"));
+    r.Large("feature.revolve", Tr("Вращение"));
     r.BeginColumn();
     r.Small("feature.sweep");
     r.Small("feature.loft");
@@ -150,10 +151,10 @@ void ModelRibbon(RibbonBuilder& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup("Изменить");
-    r.Large("feature.hole", "Отверстие");
-    r.Large("feature.fillet", "Сопря-\nжение");
-    r.LargeLater("thread", "Резьба");
+    r.BeginGroup(Tr("Изменить"));
+    r.Large("feature.hole", Tr("Отверстие"));
+    r.Large("feature.fillet", Tr("Сопря-\nжение"));
+    r.LargeLater("thread", Tr("Резьба"));
     r.BeginColumn();
     r.Small("feature.chamfer");
     r.EndColumn();
@@ -162,7 +163,7 @@ void ModelRibbon(RibbonBuilder& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup("Массив");
+    r.BeginGroup(Tr("Массив"));
     r.BeginColumn();
     r.Small("feature.patternRect");
     r.Small("feature.patternCircular");
@@ -170,19 +171,19 @@ void ModelRibbon(RibbonBuilder& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup("Раб. элементы");
+    r.BeginGroup(Tr("Раб. элементы"));
     r.BeginColumn();
     r.Small("feature.workPlane");
-    r.SmallLater("work-axis", "Ось");
-    r.SmallLater("work-point", "Точка");
+    r.SmallLater("work-axis", Tr("Ось"));
+    r.SmallLater("work-point", Tr("Точка"));
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup("Ст. изделия");
-    r.LargeLater("library", "Библиотека");
+    r.BeginGroup(Tr("Ст. изделия"));
+    r.LargeLater("library", Tr("Библиотека"));
     r.EndGroup();
 
-    r.BeginGroup("Экспорт");
+    r.BeginGroup(Tr("Экспорт"));
     r.BeginColumn();
     r.Small("file.exportStep", "STEP");
     r.Small("file.exportStl", "STL");
@@ -190,14 +191,14 @@ void ModelRibbon(RibbonBuilder& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup("Диагностика");
+    r.BeginGroup(Tr("Диагностика"));
     r.BeginColumn();
     r.Small("tools.measure", nullptr, r.App().shell.measuring);
     r.Small("view.section", nullptr, r.App().shell.section.on);
     r.EndColumn();
     r.BeginColumn();
     r.Small("tools.massProperties");
-    r.SmallLater("interference", "Коллизии");
+    r.SmallLater("interference", Tr("Коллизии"));
     r.EndColumn();
     r.EndGroup();
 }
@@ -208,25 +209,25 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     const auto active = [&](SketchTool t) { return sketching && tool == t; };
 
     if (!sketching) {
-        r.BeginGroup("Эскиз");
-        r.Large("sketch.start", "Начать\nэскиз");
+        r.BeginGroup(Tr("Эскиз"));
+        r.Large("sketch.start", Tr("Начать\nэскиз"));
         r.EndGroup();
     }
-    r.BeginGroup("Создать");
-    r.Large("sketch.line", "Отрезок", active(SketchTool::Line));
-    r.Large("sketch.circle", "Окруж-\nность", active(SketchTool::Circle));
-    r.Large("sketch.arc", "Дуга", active(SketchTool::Arc));
-    r.Large("sketch.rectangle", "Прямо-\nугольник", active(SketchTool::Rectangle));
+    r.BeginGroup(Tr("Создать"));
+    r.Large("sketch.line", Tr("Отрезок"), active(SketchTool::Line));
+    r.Large("sketch.circle", Tr("Окруж-\nность"), active(SketchTool::Circle));
+    r.Large("sketch.arc", Tr("Дуга"), active(SketchTool::Arc));
+    r.Large("sketch.rectangle", Tr("Прямо-\nугольник"), active(SketchTool::Rectangle));
     r.BeginColumn();
     r.Small("sketch.point", nullptr, active(SketchTool::Point));
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup("Модель");
-    r.Large("sketch.project", "Проеци-\nровать", active(SketchTool::Project));
+    r.BeginGroup(Tr("Модель"));
+    r.Large("sketch.project", Tr("Проеци-\nровать"), active(SketchTool::Project));
     r.EndGroup();
 
-    r.BeginGroup("Массив");
+    r.BeginGroup(Tr("Массив"));
     r.BeginColumn();
     r.Small("sketch.patternRect", nullptr, active(SketchTool::PatternRect));
     r.Small("sketch.patternCircular", nullptr, active(SketchTool::PatternCircular));
@@ -234,7 +235,7 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup("Изменить");
+    r.BeginGroup(Tr("Изменить"));
     r.BeginColumn();
     r.Small("sketch.move", nullptr, active(SketchTool::Move));
     r.Small("sketch.rotate", nullptr, active(SketchTool::Rotate));
@@ -249,7 +250,7 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup("Зависимости");
+    r.BeginGroup(Tr("Зависимости"));
     r.BeginGrid(5);
     r.Icon("sketch.coincident", active(SketchTool::Coincident));
     r.Icon("sketch.horizontal", active(SketchTool::Horizontal));
@@ -267,28 +268,28 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.EndGrid();
     r.EndGroup();
 
-    r.BeginGroup("Размеры");
-    r.Large("sketch.dimension", "Размер", active(SketchTool::Dimension));
+    r.BeginGroup(Tr("Размеры"));
+    r.Large("sketch.dimension", Tr("Размер"), active(SketchTool::Dimension));
     r.EndGroup();
 
-    r.BeginGroup("Формат");
+    r.BeginGroup(Tr("Формат"));
     r.BeginColumn();
     r.Small("sketch.construction");
     r.Small("sketch.centerline");
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup("Выход");
-    r.Large("sketch.finish", "Принять\nэскиз");
+    r.BeginGroup(Tr("Выход"));
+    r.Large("sketch.finish", Tr("Принять\nэскиз"));
     r.BeginColumn();
-    r.Small("sketch.lookAt", "На эскиз");
+    r.Small("sketch.lookAt", Tr("На эскиз"));
     r.EndColumn();
     r.EndGroup();
 }
 
 void ViewRibbon(AppContext& app, RibbonBuilder& r) {
     const render::DisplayStyle style = app.shell.displayStyle;
-    r.BeginGroup("Стиль отображения");
+    r.BeginGroup(Tr("Стиль отображения"));
     r.BeginColumn();
     r.Small("view.shaded", nullptr, style == render::DisplayStyle::Shaded);
     r.Small("view.edges", nullptr, style == render::DisplayStyle::ShadedWithEdges);
@@ -300,21 +301,21 @@ void ViewRibbon(AppContext& app, RibbonBuilder& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup("Ориентация");
-    r.Large("view.home", "Домой");
-    r.Large("view.fit", "Показать\nвсё");
+    r.BeginGroup(Tr("Ориентация"));
+    r.Large("view.home", Tr("Домой"));
+    r.Large("view.fit", Tr("Показать\nвсё"));
     r.BeginColumn();
-    r.Small("view.front", "Спереди");
-    r.Small("view.top", "Сверху");
-    r.Small("view.right", "Справа");
+    r.Small("view.front", Tr("Спереди"));
+    r.Small("view.top", Tr("Сверху"));
+    r.Small("view.right", Tr("Справа"));
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup("Оформление");
+    r.BeginGroup(Tr("Оформление"));
     r.BeginColumn();
-    r.Small("view.themeSystem", "Как в системе", app.settings.theme == ThemeChoice::System);
-    r.Small("view.themeLight", "Светлая", app.settings.theme == ThemeChoice::Light);
-    r.Small("view.themeDark", "Тёмная", app.settings.theme == ThemeChoice::Dark);
+    r.Small("view.themeSystem", Tr("Как в системе"), app.settings.theme == ThemeChoice::System);
+    r.Small("view.themeLight", Tr("Светлая"), app.settings.theme == ThemeChoice::Light);
+    r.Small("view.themeDark", Tr("Тёмная"), app.settings.theme == ThemeChoice::Dark);
     r.EndColumn();
     r.EndGroup();
 }
@@ -331,7 +332,7 @@ void DrawModeBar(AppContext& app, ImVec2 pos, float width) {
         const char* label;
         RibbonTab   tab;
     };
-    const Tab tabs[] = {{"3D-модель", RibbonTab::Model}, {"Эскиз", RibbonTab::Sketch}, {"Вид", RibbonTab::View}};
+    const Tab tabs[] = {{Tr("3D-модель"), RibbonTab::Model}, {Tr("Эскиз"), RibbonTab::Sketch}, {Tr("Вид"), RibbonTab::View}};
     float x = pos.x + ui.S(12);
     for (const Tab& t : tabs) {
         const bool on = app.shell.ribbonTab == t.tab;

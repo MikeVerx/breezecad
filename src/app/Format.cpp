@@ -1,5 +1,7 @@
 #include "app/Format.h"
 
+#include "core/I18n.h"
+
 #include <cmath>
 #include <format>
 
@@ -29,15 +31,15 @@ std::string FormatValue(double internal, Quantity quantity, const UnitSystem& un
 }
 
 std::string UnitLabel(Quantity quantity, const UnitSystem& units) {
-    if (quantity == Quantity::Angle) return units.angle == AngleUnit::Degree ? "\xC2\xB0" : "рад";
+    if (quantity == Quantity::Angle) return units.angle == AngleUnit::Degree ? "\xC2\xB0" : Tr("рад");
     if (quantity == Quantity::Scalar) return {};
     switch (units.length) {
-        case LengthUnit::Millimeter: return "мм";
-        case LengthUnit::Centimeter: return "см";
-        case LengthUnit::Meter:      return "м";
-        case LengthUnit::Inch:       return "дюйм";
+        case LengthUnit::Millimeter: return Tr("мм");
+        case LengthUnit::Centimeter: return Tr("см");
+        case LengthUnit::Meter:      return Tr("м");
+        case LengthUnit::Inch:       return Tr("дюйм");
     }
-    return "мм";
+    return Tr("мм");
 }
 
 } // namespace bz::app

@@ -1,6 +1,7 @@
 add_executable(bz_tests
     main.cpp
     core/ExpressionTests.cpp
+    core/I18nTests.cpp
     document/DocumentTests.cpp
     kernel/BracketTests.cpp
     kernel/CoilTests.cpp

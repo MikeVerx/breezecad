@@ -3,6 +3,7 @@
 #include "document/JsonIO.h"
 
 #include <array>
+#include <format>
 #include <utility>
 
 namespace bz::doc {
@@ -17,10 +18,10 @@ void EdgeFeature::SaveEdges(Json& out) const {
 Status EdgeFeature::LoadEdges(const Json& in, const std::string& what) {
     std::vector<EdgeReference> read;
     const auto it = in.find("edges");
-    if (it == in.end() || !it->is_array()) return Error{what + ": нет списка рёбер"};
+    if (it == in.end() || !it->is_array()) return Error{std::format("{}: нет списка рёбер", what)};
     for (const Json& j : *it) {
         EdgeReference e;
-        if (!json_io::Read(j, e)) return Error{what + ": повреждено описание ребра"};
+        if (!json_io::Read(j, e)) return Error{std::format("{}: повреждено описание ребра", what)};
         read.push_back(e);
     }
     edges = std::move(read);

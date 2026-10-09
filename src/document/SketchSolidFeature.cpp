@@ -2,6 +2,8 @@
 
 #include "document/JsonIO.h"
 
+#include <format>
+
 namespace bz::doc {
 namespace {
 
@@ -40,16 +42,16 @@ Status SketchSolidFeature::LoadSolidFields(const Json& in, const std::string& wh
     ObjectId readSketch;
     std::string op = "newBody";
     if (!json_io::ReadMember(in, "sketch", readSketch) || !json_io::ReadMember(in, "operation", op))
-        return Error{what + ": повреждены параметры"};
+        return Error{std::format("{}: повреждены параметры", what)};
     BooleanOp readOp = BooleanOp::NewBody;
-    if (!BooleanOpFromId(op, readOp)) return Error{what + ": неизвестная операция «" + op + "»"};
+    if (!BooleanOpFromId(op, readOp)) return Error{std::format("{}: неизвестная операция «{}»", what, op)};
 
     ProfileSelection readProfiles;
     if (const auto it = in.find("profiles"); it != in.end()) {
-        if (!json_io::ReadMember(*it, "automatic", readProfiles.automatic)) return Error{what + ": повреждён профиль"};
+        if (!json_io::ReadMember(*it, "automatic", readProfiles.automatic)) return Error{std::format("{}: повреждён профиль", what)};
         for (const Json& p : it->value("regions", Json::array())) {
             Vec2 v;
-            if (!json_io::Read(p, v)) return Error{what + ": повреждён профиль"};
+            if (!json_io::Read(p, v)) return Error{std::format("{}: повреждён профиль", what)};
             readProfiles.regions.push_back(v);
         }
     }

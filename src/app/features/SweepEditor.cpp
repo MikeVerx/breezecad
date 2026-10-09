@@ -1,6 +1,7 @@
 #include "app/features/SweepEditor.h"
 
 #include "app/sketch/SketchOverlay.h"
+#include "core/I18n.h"
 #include "document/SketchFeature.h"
 #include "ui/Widgets.h"
 
@@ -11,7 +12,7 @@ namespace bz::app {
 bool SweepEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::SweepFeature*>(&f) != nullptr; }
 
 std::string SweepEditor::Hint() const {
-    return "Выберите в панели эскиз траектории; щелчок по контуру профиля выбирает его. Enter — готово, Esc — отмена";
+    return Tr("Выберите в панели эскиз траектории; щелчок по контуру профиля выбирает его. Enter — готово, Esc — отмена");
 }
 
 namespace {
@@ -62,14 +63,14 @@ void SweepEditor::DrawInViewport(AppContext& app, Session& session, const Viewpo
 
 void SweepEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSolidFeature& feature, float width) {
     auto& f = static_cast<doc::SweepFeature&>(feature);
-    Section(app, "Траектория");
+    Section(app, Tr("Траектория"));
     // One sketch: a ticked list where a new tick replaces the old one.
     std::vector<ObjectId> picked;
     if (f.path) picked.push_back(f.path);
     const auto isPath = [&f](const doc::Feature& candidate) {
         return dynamic_cast<const doc::SketchFeature*>(&candidate) && candidate.id != f.sketch;
     };
-    if (FeatureChecklist(app, session, picked, isPath, width, "Нарисуйте траекторию в другом эскизе.")) {
+    if (FeatureChecklist(app, session, picked, isPath, width, Tr("Нарисуйте траекторию в другом эскизе."))) {
         const auto added = std::ranges::find_if(picked, [&](ObjectId id) { return id != f.path; });
         f.path = added != picked.end() ? *added : ObjectId{};
     }

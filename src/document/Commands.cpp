@@ -1,5 +1,6 @@
 #include "document/Commands.h"
 
+#include <format>
 #include <utility>
 
 namespace bz::doc {
@@ -65,7 +66,7 @@ public:
     RemoveFeatureCommand(ObjectId id, std::size_t index, std::string label)
         : myId(id), myIndex(index), myLabel(std::move(label)) {}
 
-    std::string Label() const override { return "Удалить " + myLabel; }
+    std::string Label() const override { return std::format("Удалить {}", myLabel); }
     void Do(Document& doc) override { myFeature = doc.Take(myId); }
     void Undo(Document& doc) override { doc.Insert(std::move(myFeature), myIndex); }
 
@@ -96,7 +97,7 @@ public:
     MoveFeatureCommand(ObjectId id, std::size_t from, std::size_t to, std::string label)
         : myId(id), myFrom(from), myTo(to), myLabel(std::move(label)) {}
 
-    std::string Label() const override { return "Переместить " + myLabel; }
+    std::string Label() const override { return std::format("Переместить {}", myLabel); }
     void Do(Document& doc) override { doc.Move(myId, myTo); }
     void Undo(Document& doc) override { doc.Move(myId, myFrom); }
 

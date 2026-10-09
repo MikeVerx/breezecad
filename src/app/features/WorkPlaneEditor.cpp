@@ -2,6 +2,7 @@
 
 #include "app/Format.h"
 #include "app/viewport/Planes.h"
+#include "core/I18n.h"
 #include "document/Origin.h"
 #include "ui/Widgets.h"
 
@@ -12,10 +13,10 @@ namespace {
 
 /// What the plane starts from, for the panel.
 std::string BaseName(const Session& session, const doc::WorkPlaneFeature& f) {
-    if (f.face.IsSet()) return "Грань тела";
-    if (f.base == doc::origin::kPlaneXY) return "Плоскость XY";
-    if (f.base == doc::origin::kPlaneXZ) return "Плоскость XZ";
-    if (f.base == doc::origin::kPlaneYZ) return "Плоскость YZ";
+    if (f.face.IsSet()) return Tr("Грань тела");
+    if (f.base == doc::origin::kPlaneXY) return Tr("Плоскость XY");
+    if (f.base == doc::origin::kPlaneXZ) return Tr("Плоскость XZ");
+    if (f.base == doc::origin::kPlaneYZ) return Tr("Плоскость YZ");
     if (const doc::Feature* base = session.doc.Find(f.base)) return base->name;
     return {};
 }
@@ -25,7 +26,7 @@ std::string BaseName(const Session& session, const doc::WorkPlaneFeature& f) {
 bool WorkPlaneEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::WorkPlaneFeature*>(&f) != nullptr; }
 
 std::string WorkPlaneEditor::Hint() const {
-    return "Щёлкните плоскость или плоскую грань, от которой строить, введите смещение. Enter — готово, Esc — отмена";
+    return Tr("Щёлкните плоскость или плоскую грань, от которой строить, введите смещение. Enter — готово, Esc — отмена");
 }
 
 void WorkPlaneEditor::StartNew(AppContext& app, Session& session) {
@@ -108,7 +109,7 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
 
-    Section(app, "От чего строить");
+    Section(app, Tr("От чего строить"));
     {
         const std::string base = BaseName(session, f);
         const ImVec2 p = ImGui::GetCursorScreenPos();
@@ -117,19 +118,19 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
         dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoft), ui.S(8));
         dl->AddRect(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoftBorder), ui.S(8));
         ui.icons.Draw(dl, base.empty() ? "status-warning" : "ui-check", {p.x + ui.S(10), p.y + (h - ui.S(14)) / 2}, ui.S(14), c.accent);
-        const std::string chip = base.empty() ? std::string("Ничего не выбрано") : base;
+        const std::string chip = base.empty() ? std::string(Tr("Ничего не выбрано")) : base;
         dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(32), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), chip.c_str());
         ImGui::Dummy({width, h});
     }
-    Caption(app, "Щёлкните плоскость начала координат, рабочую плоскость или плоскую грань тела.", width);
+    Caption(app, Tr("Щёлкните плоскость начала координат, рабочую плоскость или плоскую грань тела."), width);
     Gap(app);
 
-    Section(app, "Смещение");
+    Section(app, Tr("Смещение"));
     ParameterField(app, session, "offset", myOffset, f.offset, width, myFocusFirstField);
     Gap(app);
 
-    Section(app, "Направление");
-    static constexpr std::array<const char*, 2> labels{"По нормали", "Обратно"};
+    Section(app, Tr("Направление"));
+    static constexpr std::array<const char*, 2> labels{N_("По нормали"), N_("Обратно")};
     const int current = f.reversed ? 1 : 0;
     const int chosen = ui::Segmented(ui, "direction", labels, current, 2, width);
     if (chosen != current) {

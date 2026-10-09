@@ -1,5 +1,6 @@
 #include "app/Application.h"
 
+#include "app/Language.h"
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
 #include "app/viewport/ViewportPanel.h"
@@ -80,6 +81,8 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     std::ofstream(config / "running.lock") << "running";
 
     mySettings = Settings::Load(config / "settings.json");
+    if (const std::string problem = ApplyLanguage(mySettings); !problem.empty())
+        myNotes.Error(Tr(problem));
     platform::WindowConfig windowConfig;
     if (mySettings.windowW > 0 && mySettings.windowH > 0) {
         windowConfig.width = mySettings.windowW;
@@ -147,7 +150,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
 
     for (const auto& file : files) myWorkspace.Open(file, myNotes, mySettings);
     if (myShell.crashedLastTime && !myShell.recoverable.empty())
-        myNotes.Info("Прошлый сеанс завершился неожиданно. Несохранённую работу можно восстановить на главной странице.");
+        myNotes.Info(Tr("Прошлый сеанс завершился неожиданно. Несохранённую работу можно восстановить на главной странице."));
     return true;
 }
 

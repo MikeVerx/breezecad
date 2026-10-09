@@ -4,6 +4,7 @@
 // the panel.
 
 #include "app/features/SketchOperationEditor.h"
+#include "core/I18n.h"
 #include "document/SweepFeature.h"
 
 namespace bz::app {
@@ -11,7 +12,7 @@ namespace bz::app {
 class SweepEditor final : public SketchOperationEditor {
 public:
     bool        CanEdit(const doc::Feature& f) const override;
-    const char* Title() const override { return "Сдвиг"; }
+    const char* Title() const override { return Tr("Сдвиг"); }
     std::string Hint() const override;
     void        DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;
 

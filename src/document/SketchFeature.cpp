@@ -4,6 +4,7 @@
 #include "document/Origin.h"
 
 #include <array>
+#include <format>
 #include <utility>
 
 namespace bz::doc {
@@ -37,7 +38,7 @@ constexpr std::array<std::pair<ConstraintType, std::string_view>, 20> kConstrain
     {ConstraintType::Angle, "angle"},
 }};
 
-Error Bad(std::string_view what) { return Error{"Эскиз: повреждено поле «" + std::string(what) + "»"}; }
+Error Bad(std::string_view what) { return Error{std::format("Эскиз: повреждено поле «{}»", what)}; }
 
 } // namespace
 

@@ -1,5 +1,6 @@
 #include "ui/ViewCube.h"
 
+#include "core/I18n.h"
 #include "ui/Widgets.h"
 
 #include <imgui_internal.h>
@@ -19,12 +20,12 @@ struct CubeFace {
 
 // Z-up model, the front face looks toward -Y.
 constexpr std::array<CubeFace, 6> kFaces{{
-    {{0, 0, 1}, {1, 0, 0}, {0, -1, 0}, "СВЕРХУ"},
-    {{0, 0, -1}, {1, 0, 0}, {0, 1, 0}, "СНИЗУ"},
-    {{0, -1, 0}, {1, 0, 0}, {0, 0, -1}, "СПЕРЕДИ"},
-    {{0, 1, 0}, {-1, 0, 0}, {0, 0, -1}, "СЗАДИ"},
-    {{1, 0, 0}, {0, 1, 0}, {0, 0, -1}, "СПРАВА"},
-    {{-1, 0, 0}, {0, -1, 0}, {0, 0, -1}, "СЛЕВА"},
+    {{0, 0, 1}, {1, 0, 0}, {0, -1, 0}, N_("СВЕРХУ")},
+    {{0, 0, -1}, {1, 0, 0}, {0, 1, 0}, N_("СНИЗУ")},
+    {{0, -1, 0}, {1, 0, 0}, {0, 0, -1}, N_("СПЕРЕДИ")},
+    {{0, 1, 0}, {-1, 0, 0}, {0, 0, -1}, N_("СЗАДИ")},
+    {{1, 0, 0}, {0, 1, 0}, {0, 0, -1}, N_("СПРАВА")},
+    {{-1, 0, 0}, {0, -1, 0}, {0, 0, -1}, N_("СЛЕВА")},
 }};
 
 constexpr double kBevel = 0.7;   // faces are split at +-0.7 into 9 regions
@@ -163,14 +164,15 @@ ViewCubeAction DrawViewCube(Ui& ui, const ViewProjection& view, ImVec2 topLeft, 
         if (f.n.Dot(v) < 0.32) continue;   // too oblique to read
         ImFont* font = ui.fonts.strong;
         const float fs = ui.S(11);
-        const ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0, f.text);
+        const char* text = Tr(f.text);
+        const ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0, text);
         const float fit = std::min(1.0f, 1.25f * cs / ts.x);
         const ImVec2 o = project(f.n);
         const ImVec2 a1 = project(f.n + f.t1), a2 = project(f.n + f.t2);
         const ImVec2 e1{a1.x - o.x, a1.y - o.y}, e2{a2.x - o.x, a2.y - o.y};
         const int start = dl->VtxBuffer.Size;
         const ImVec2 at{o.x - ts.x / 2, o.y - ts.y / 2};
-        dl->AddText(font, fs, at, ToU32(c.cubeText), f.text);
+        dl->AddText(font, fs, at, ToU32(c.cubeText), text);
         for (int vi = start; vi < dl->VtxBuffer.Size; ++vi) {
             ImDrawVert& vert = dl->VtxBuffer[vi];
             const float lx = (vert.pos.x - o.x) * fit / cs;
@@ -246,7 +248,7 @@ ViewCubeAction DrawViewCube(Ui& ui, const ViewProjection& view, ImVec2 topLeft, 
 
     // Home button.
     const ImVec2 homeCenter{center.x - reach * 0.86f, center.y - reach * 0.86f};
-    if (FloatingButton(ui, "##cube-home", homeCenter, ui.S(26), "Домой: изометрия (Home)")) action.home = true;
+    if (FloatingButton(ui, "##cube-home", homeCenter, ui.S(26), Tr("Домой: изометрия (Home)"))) action.home = true;
     ui.icons.Draw(dl, "ui-home", {homeCenter.x - ui.S(8), homeCenter.y - ui.S(8)}, ui.S(16), c.floatingInk);
 
     // Axis triad in the bottom-left corner, far axes first.

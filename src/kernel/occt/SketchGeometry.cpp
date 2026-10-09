@@ -12,13 +12,14 @@
 #include <GCPnts_TangentialDeflection.hxx>
 #include <IntTools_Context.hxx>
 #include <NCollection_List.hxx>
+#include <ShapeAnalysis_FreeBounds.hxx>
 #include <Standard_Failure.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopTools_HSequenceOfShape.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Wire.hxx>
-#include <ShapeAnalysis_FreeBounds.hxx>
-#include <TopTools_HSequenceOfShape.hxx>
+#include <format>
 #include <gp_Ax2.hxx>
 #include <gp_Circ.hxx>
 #include <gp_Pln.hxx>
@@ -130,7 +131,7 @@ Expected<TopoDS_Wire> BuildPath(const doc::SketchFeature& feature) {
             return Error{"Траектория должна быть одной цепочкой линий и дуг без разветвлений"};
         return TopoDS::Wire(wires->Value(1));
     } catch (const Standard_Failure& failure) {
-        return Error{std::string("Ошибка траектории: ") + failure.GetMessageString()};
+        return Error{std::format("Ошибка траектории: {}", failure.GetMessageString())};
     }
 }
 
@@ -196,7 +197,7 @@ Expected<SketchProfile> BuildProfile(const doc::SketchFeature& feature) {
 
         for (auto& region : profile.regions) region.automatic = InsideEvenOdd(region.sample, boundary);
     } catch (const Standard_Failure& failure) {
-        return Error{std::string("Ошибка геометрии эскиза: ") + failure.GetMessageString()};
+        return Error{std::format("Ошибка геометрии эскиза: {}", failure.GetMessageString())};
     }
     return profile;
 }

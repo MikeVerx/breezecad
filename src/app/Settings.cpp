@@ -37,6 +37,7 @@ Settings Settings::Load(const std::filesystem::path& file) {
     s.showAllConstraints = j.value("showAllConstraints", s.showAllConstraints);
     s.gridStep        = std::max(0.0, j.value("gridStep", s.gridStep));
     s.uiScale         = j.value("uiScale", s.uiScale);
+    s.language        = j.value("language", s.language);
     if (s.uiScale != 0.0) s.uiScale = std::clamp(s.uiScale, 0.75, 3.0);
     if (const auto w = j.find("window"); w != j.end() && w->is_object()) {
         s.windowX = w->value("x", -1);
@@ -88,6 +89,7 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"showAllConstraints", showAllConstraints},
         {"gridStep", gridStep},
         {"uiScale", uiScale},
+        {"language", language},
         {"window", {{"x", windowX}, {"y", windowY}, {"width", windowW}, {"height", windowH}, {"maximized", windowMaximized}}},
         {"shortcuts", ShortcutsJson(shortcuts)},
         {"shortcutPreset", shortcutPreset},

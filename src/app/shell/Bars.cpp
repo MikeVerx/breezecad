@@ -3,8 +3,9 @@
 #include "app/Format.h"
 #include "app/Operations.h"
 #include "app/features/OperationEditors.h"
-#include "app/sketch/SketchEditor.h"
 #include "app/shell/Shell.h"
+#include "app/sketch/SketchEditor.h"
+#include "core/I18n.h"
 #include "document/SketchFeature.h"
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
@@ -22,7 +23,7 @@ void DrawProjectTabs(AppContext& app, ImVec2 pos, float width) {
 
     float x = pos.x + ui.S(8);
     ImGui::SetCursorScreenPos({x, pos.y + (h - ui.S(30)) / 2});
-    if (ui::IconButton(ui, "##tab-home", "ui-home", 32, 16, "Главная страница", true, app.workspace.ShowsHome()))
+    if (ui::IconButton(ui, "##tab-home", "ui-home", 32, 16, Tr("Главная страница"), true, app.workspace.ShowsHome()))
         app.workspace.ShowHome(true);
     x += ui.S(40);
     dl->AddLine({x, pos.y + ui.S(8)}, {x, pos.y + h - ui.S(8)}, ui::ToU32(c.fieldBorder));
@@ -58,7 +59,7 @@ void DrawProjectTabs(AppContext& app, ImVec2 pos, float width) {
         const ImVec2 mark{x + ui.S(12) + tw + ui.S(14), pos.y + h / 2};
         if (hovered) {
             ImGui::SetCursorScreenPos({mark.x - ui.S(9), mark.y - ui.S(9)});
-            if (ui::IconButton(ui, "##close-tab", "ui-close", 18, 10, "Закрыть (Ctrl+W)")) {
+            if (ui::IconButton(ui, "##close-tab", "ui-close", 18, 10, Tr("Закрыть (Ctrl+W)"))) {
                 const int index = static_cast<int>(i);
                 app.Later([&app, index] { RequestClose(app, index); });
             }
@@ -69,7 +70,7 @@ void DrawProjectTabs(AppContext& app, ImVec2 pos, float width) {
         x += w + ui.S(2);
     }
     ImGui::SetCursorScreenPos({x + ui.S(2), pos.y + (h - ui.S(28)) / 2});
-    if (ui::IconButton(ui, "##tab-new", "ui-plus", 28, 12, "Новая деталь (Ctrl+N)")) app.Later([&app] { NewDocument(app); });
+    if (ui::IconButton(ui, "##tab-new", "ui-plus", 28, 12, Tr("Новая деталь (Ctrl+N)"))) app.Later([&app] { NewDocument(app); });
     EndArea();
 }
 
@@ -91,27 +92,27 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
 
     Session* s = app.Doc();
     if (!s || app.workspace.ShowsHome()) {
-        text("Главная страница", c.text, ui.fonts.medium);
-        text("Создайте деталь (Ctrl+N) или откройте документ (Ctrl+O)", c.textSecondary);
+        text(Tr("Главная страница"), c.text, ui.fonts.medium);
+        text(Tr("Создайте деталь (Ctrl+N) или откройте документ (Ctrl+O)"), c.textSecondary);
         EndArea();
         return;
     }
 
     // Mode and what to do next.
-    std::string mode = "Деталь", hint;
+    std::string mode = Tr("Деталь"), hint;
     if (const OperationEditor* operation = app.ops.Active()) {
         mode = operation->Title();
         hint = operation->Hint();
     } else if (s->mode == EditMode::Sketch) {
-        mode = std::string("Эскиз: ") + InfoOf(app.sketch.Tool()).label;
+        mode = Trf("Эскиз: {}", Tr(InfoOf(app.sketch.Tool()).label));
         hint = app.sketch.Hint(*s);
     } else if (s->mode == EditMode::PickPlane) {
-        mode = "Новый эскиз";
-        hint = "Выберите плоскость начала координат или плоскую грань модели. Esc — отмена";
+        mode = Tr("Новый эскиз");
+        hint = Tr("Выберите плоскость начала координат или плоскую грань модели. Esc — отмена");
     } else {
         const MouseNavigation& m = app.settings.mouse;
-        hint = GestureText(m.orbit) + " — вращение, " + GestureText(m.pan) + " — сдвиг, прокрутка — масштаб, "
-               "двойной щелчок в дереве — редактировать";
+        hint = Trf("{} — вращение, {} — сдвиг, прокрутка — масштаб, двойной щелчок в дереве — редактировать",
+                   GestureText(m.orbit), GestureText(m.pan));
     }
     text(mode, c.text, ui.fonts.medium);
 
@@ -128,14 +129,14 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
     const ObjectId editing = operation ? operation->EditedFeature() : ObjectId{};
     int errors = 0;
     for (const auto& f : s->doc.Features()) errors += f->status.state == doc::FeatureState::Error && f->id != editing ? 1 : 0;
-    rightText(errors ? std::format("Ошибок: {}", errors) : "Готово", errors ? c.danger : c.success);
+    rightText(errors ? Trf("Ошибок: {}", errors) : Tr("Готово"), errors ? c.danger : c.success);
     rightText(UnitLabel(Quantity::Length, s->doc.units), c.textSecondary);
     if (s->mode == EditMode::Sketch) {
         if (const auto* sk = s->doc.FindAs<doc::SketchFeature>(s->activeSketch)) {
             const int dof = sk->analysis.degreesOfFreedom;
-            if (dof == 0) rightText("Эскиз полностью определён", c.success);
-            else if (dof > 0) rightText(std::format("Степеней свободы: {}", dof), c.textSecondary);
-            else rightText("Ограничения противоречат", c.danger);
+            if (dof == 0) rightText(Tr("Эскиз полностью определён"), c.success);
+            else if (dof > 0) rightText(Trf("Степеней свободы: {}", dof), c.textSecondary);
+            else rightText(Tr("Ограничения противоречат"), c.danger);
         }
         if (const auto cursor = app.sketch.Cursor()) {
             const std::string coords = "X " + FormatValue(cursor->x, Quantity::Length, s->doc.units, 2) + "   Y " +
@@ -145,10 +146,10 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
             dl->AddText(ui.fonts.mono, fs, {right, ty}, ui::ToU32(c.textSecondary), coords.c_str());
             right -= ui.S(18);
         }
-        const std::string snaps = std::string("Привязки: ") + (app.settings.pointSnap ? "точки" : "") +
-                                  (app.settings.pointSnap && app.settings.gridSnap ? ", " : "") +
-                                  (app.settings.gridSnap ? "сетка" : "") +
-                                  (!app.settings.pointSnap && !app.settings.gridSnap ? "выкл" : "");
+        const std::string snaps = Trf("Привязки: {}", app.settings.pointSnap && app.settings.gridSnap ? Tr("точки, сетка")
+                                                       : app.settings.pointSnap                       ? Tr("точки")
+                                                       : app.settings.gridSnap                        ? Tr("сетка")
+                                                                                                      : Tr("выкл"));
         const float w = font->CalcTextSizeA(fs, FLT_MAX, 0, snaps.c_str()).x;
         right -= w;
         ImGui::SetCursorScreenPos({right, pos.y});
@@ -157,9 +158,9 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
         right -= ui.S(18);
         ui::MenuStyle style(ui);   // before Begin: must outlive the End call
         if (ImGui::BeginPopup("##snap-menu")) {
-            if (ui::MenuItem(ui, "Привязка к точкам и кривым", nullptr, {}, app.settings.pointSnap))
+            if (ui::MenuItem(ui, Tr("Привязка к точкам и кривым"), nullptr, {}, app.settings.pointSnap))
                 app.settings.pointSnap = !app.settings.pointSnap;
-            if (ui::MenuItem(ui, "Привязка к сетке", nullptr, {}, app.settings.gridSnap)) app.settings.gridSnap = !app.settings.gridSnap;
+            if (ui::MenuItem(ui, Tr("Привязка к сетке"), nullptr, {}, app.settings.gridSnap)) app.settings.gridSnap = !app.settings.gridSnap;
             ImGui::EndPopup();
         }
     }

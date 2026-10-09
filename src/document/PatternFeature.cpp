@@ -4,6 +4,7 @@
 #include "document/Origin.h"
 
 #include <cmath>
+#include <format>
 
 namespace bz::doc {
 namespace {
@@ -26,7 +27,7 @@ Expected<int> Count(const Parameter& p) {
     if (p.HasError()) return Error{p.error};
     const double n = std::round(p.value);
     if (n < 1 || std::abs(p.value - n) > 1e-9) return Error{"Количество должно быть целым числом не меньше 1"};
-    if (n > kMaxCopies) return Error{"Слишком много копий (больше " + std::to_string(kMaxCopies) + ")"};
+    if (n > kMaxCopies) return Error{std::format("Слишком много копий (больше {})", kMaxCopies)};
     return static_cast<int>(n);
 }
 
@@ -58,7 +59,7 @@ Status CopyFeature::LoadSources(const Json& in, const std::string& what) {
     std::vector<ObjectId> ids;
     for (const Json& j : in.value("sources", Json::array())) {
         ObjectId source;
-        if (!json_io::Read(j, source)) return Error{what + ": повреждён список операций"};
+        if (!json_io::Read(j, source)) return Error{std::format("{}: повреждён список операций", what)};
         ids.push_back(source);
     }
     sources = std::move(ids);

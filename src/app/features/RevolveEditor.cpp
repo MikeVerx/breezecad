@@ -5,6 +5,7 @@
 #include "app/Format.h"
 #include "app/sketch/SketchOverlay.h"
 #include "app/sketch/SketchPick.h"
+#include "core/I18n.h"
 #include "document/SketchFeature.h"
 #include "ui/Widgets.h"
 
@@ -34,7 +35,7 @@ std::optional<std::pair<Vec2, Vec2>> AxisPoints(const doc::RevolveAxis& axis, co
 bool RevolveEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::RevolveFeature*>(&f) != nullptr; }
 
 std::string RevolveEditor::Hint() const {
-    return "Щёлкните отрезок эскиза — это ось вращения; щелчок по контуру выбирает профиль. Enter — готово, Esc — отмена";
+    return Tr("Щёлкните отрезок эскиза — это ось вращения; щелчок по контуру выбирает профиль. Enter — готово, Esc — отмена");
 }
 
 std::unique_ptr<doc::SketchSolidFeature> RevolveEditor::Create(Session& session, ObjectId sketch) const {
@@ -63,7 +64,7 @@ void RevolveEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
     auto& f = static_cast<doc::RevolveFeature&>(feature);
     ui::Ui& ui = app.ui;
 
-    Section(app, "Ось");
+    Section(app, Tr("Ось"));
     {
         const auto* sk = session.doc.FindAs<doc::SketchFeature>(f.sketch);
         const sketch::Line* line = sk && f.axis.kind == RevolveAxisKind::SketchLine ? sk->sketch.FindLine(f.axis.line) : nullptr;
@@ -71,9 +72,9 @@ void RevolveEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
     }
     Gap(app);
 
-    Section(app, "Угол");
+    Section(app, Tr("Угол"));
     {
-        static constexpr std::array<const char*, 3> labels{"Полный", "Угол", "Симметрично"};
+        static constexpr std::array<const char*, 3> labels{N_("Полный"), N_("Угол"), N_("Симметрично")};
         const int current = static_cast<int>(f.extent);
         const int chosen = ui::Segmented(ui, "extent", labels, current, 3, width);
         if (chosen != current) {
@@ -87,8 +88,8 @@ void RevolveEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
     }
     if (f.extent == RevolveExtent::Angle) {
         Gap(app);
-        Section(app, "Направление");
-        static constexpr std::array<const char*, 2> labels{"Прямое", "Обратное"};
+        Section(app, Tr("Направление"));
+        static constexpr std::array<const char*, 2> labels{N_("Прямое"), N_("Обратное")};
         const int current = f.reversed ? 1 : 0;
         const int chosen = ui::Segmented(ui, "dir", labels, current, 2, width);
         if (chosen != current) {

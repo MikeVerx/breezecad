@@ -2,6 +2,7 @@
 
 #include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
+#include "core/I18n.h"
 #include "ui/Widgets.h"
 
 #include <array>
@@ -27,11 +28,11 @@ using Items = std::array<Item, 8>;
 
 Items ItemsFor(AppContext& app, const Session& session) {
     if (app.ops.Active())
-        return {{{"edit.confirm", "Готово", "ui-check"},
+        return {{{"edit.confirm", Tr("Готово"), "ui-check"},
                  {"view.home"},
                  {nullptr},
                  {"view.fit"},
-                 {"edit.escape", "Отмена", "ui-close"},
+                 {"edit.escape", Tr("Отмена"), "ui-close"},
                  {nullptr},
                  {"tools.measure"},
                  {nullptr}}};
@@ -150,7 +151,7 @@ void DrawMarkingMenu(AppContext& app, Session& session) {
         if (!a) continue;
         const bool enabled = a->IsEnabled();
         const bool hot = slot == i && enabled;
-        const char* label = item.label ? item.label : a->label.c_str();
+        const char* label = item.label ? Tr(item.label) : a->Label();
         const std::string_view icon = item.icon ? item.icon : a->icon;
 
         const ImVec2 d = SlotDirection(i);

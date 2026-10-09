@@ -74,7 +74,7 @@ std::vector<Triangle> Triangulate(const std::vector<Body>& bodies, MeshQuality q
 
 Status WriteBytes(const std::filesystem::path& path, const std::string& bytes) {
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    if (!out) return Error{"Не удалось создать файл: " + ToUtf8(path)};
+    if (!out) return Error{std::format("Не удалось создать файл: {}", ToUtf8(path))};
     out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     if (!out) return Error{"Не удалось записать файл (диск заполнен?)"};
     return Status::Ok();
@@ -107,16 +107,16 @@ Status Model::ExportStep(const std::filesystem::path& path) const {
         // Our own stream: opened with the wide path on Windows and closed
         // here, so the file is never left locked by the writer.
         std::ofstream out(path, std::ios::binary | std::ios::trunc);
-        if (!out) return Error{"Не удалось создать файл: " + ToUtf8(path)};
+        if (!out) return Error{std::format("Не удалось создать файл: {}", ToUtf8(path))};
         if (writer.WriteStream(out) != IFSelect_RetDone || !out.flush())
-            return Error{"Не удалось записать STEP: " + ToUtf8(path)};
+            return Error{std::format("Не удалось записать STEP: {}", ToUtf8(path))};
 #else
         // Older OCCT writes by name only; it expects UTF-8 on every platform.
         const std::string utf8 = ToUtf8(path);
-        if (writer.Write(utf8.c_str()) != IFSelect_RetDone) return Error{"Не удалось записать STEP: " + utf8};
+        if (writer.Write(utf8.c_str()) != IFSelect_RetDone) return Error{std::format("Не удалось записать STEP: {}", utf8)};
 #endif
     } catch (const Standard_Failure& failure) {
-        return Error{std::string("Ошибка экспорта STEP: ") + failure.GetMessageString()};
+        return Error{std::format("Ошибка экспорта STEP: {}", failure.GetMessageString())};
     }
     return Status::Ok();
 }

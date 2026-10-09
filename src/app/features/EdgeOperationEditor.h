@@ -6,6 +6,7 @@
 // ones picked, so an edge already rounded off can be clicked again to drop it.
 
 #include "app/features/FeatureOperationEditor.h"
+#include "core/I18n.h"
 #include "document/EdgeFeature.h"
 
 namespace bz::app {
@@ -32,7 +33,7 @@ private:
 class FilletEditor final : public EdgeOperationEditor {
 public:
     bool        CanEdit(const doc::Feature& f) const override;
-    const char* Title() const override { return "Сопряжение"; }
+    const char* Title() const override { return Tr("Сопряжение"); }
 
 protected:
     const char* Icon() const override { return "tree-fillet"; }
@@ -47,7 +48,7 @@ private:
 class ChamferEditor final : public EdgeOperationEditor {
 public:
     bool        CanEdit(const doc::Feature& f) const override;
-    const char* Title() const override { return "Фаска"; }
+    const char* Title() const override { return Tr("Фаска"); }
 
 protected:
     const char* Icon() const override { return "tree-chamfer"; }

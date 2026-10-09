@@ -1,5 +1,7 @@
 #include "app/ShortcutPresets.h"
 
+#include "core/I18n.h"
+
 namespace bz::app {
 
 const std::vector<ShortcutPreset>& ShortcutPresets() {
@@ -7,9 +9,9 @@ const std::vector<ShortcutPreset>& ShortcutPresets() {
     // shortcuts are taken (multi-letter aliases such as Inventor's "TR" are
     // not chords).
     static const std::vector<ShortcutPreset> presets{
-        {"breezecad", "BreezeCAD (по умолчанию)", {}},
+        {"breezecad", N_("BreezeCAD (по умолчанию)"), {}},
         {"inventor",
-         "Как в Autodesk Inventor",
+         N_("Как в Autodesk Inventor"),
          {{"sketch.start", "S"},
           {"sketch.line", "L"},
           {"sketch.circle", "C"},
@@ -26,13 +28,13 @@ const std::vector<ShortcutPreset>& ShortcutPresets() {
           {"sketch.lookAt", "PageUp"},
           {"edit.redo", "Ctrl+Y"}}},
         {"kompas",
-         "Как в КОМПАС-3D",
+         N_("Как в КОМПАС-3D"),
          {{"view.fit", "F9"},
           {"edit.redo", "Ctrl+Y"},
           {"file.close", "Ctrl+W"},
           {"app.search", "Alt+Slash"}}},
         {"blender",
-         "Как в Blender",
+         N_("Как в Blender"),
          {{"sketch.move", "G"},
           {"sketch.rotate", "R"},
           {"sketch.scale", "S"},

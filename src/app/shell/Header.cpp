@@ -3,6 +3,7 @@
 
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
+#include "core/I18n.h"
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
 
@@ -33,7 +34,7 @@ void MenuAction(AppContext& app, const char* id) {
     const Action* a = app.actions.Find(id);
     if (!a) return;
     const std::string shortcut = ActionRegistry::ChordText(a->chord);
-    if (ui::MenuItem(app.ui, a->label.c_str(), shortcut.empty() ? nullptr : shortcut.c_str(), a->icon, false, a->IsEnabled())) {
+    if (ui::MenuItem(app.ui, a->Label(), shortcut.empty() ? nullptr : shortcut.c_str(), a->icon, false, a->IsEnabled())) {
         const std::string action = a->id;
         app.Later([&app, action] { app.actions.Run(action); });
     }
@@ -45,7 +46,7 @@ void MainMenu(AppContext& app) {
     if (!ImGui::BeginPopup("##main-menu")) return;
     MenuAction(app, "file.new");
     MenuAction(app, "file.open");
-    if (ui::BeginSubmenu(ui, "Последние", "ui-file", !app.settings.recentFiles.empty())) {
+    if (ui::BeginSubmenu(ui, Tr("Последние"), "ui-file", !app.settings.recentFiles.empty())) {
         for (const auto& file : app.settings.recentFiles) {
             const std::u8string name = file.filename().u8string();
             if (ui::MenuItem(ui, reinterpret_cast<const char*>(name.c_str()), nullptr, "ui-file")) {
@@ -58,7 +59,7 @@ void MainMenu(AppContext& app) {
     ImGui::Separator();
     MenuAction(app, "file.save");
     MenuAction(app, "file.saveAs");
-    if (ui::BeginSubmenu(ui, "Экспорт", "ui-export", app.Doc() != nullptr)) {
+    if (ui::BeginSubmenu(ui, Tr("Экспорт"), "ui-export", app.Doc() != nullptr)) {
         MenuAction(app, "file.exportStep");
         MenuAction(app, "file.exportStl");
         MenuAction(app, "file.export3mf");
@@ -66,17 +67,17 @@ void MainMenu(AppContext& app) {
     }
     ImGui::Separator();
     MenuAction(app, "app.settings");
-    if (ui::BeginSubmenu(ui, "Оформление", "theme")) {
-        if (ui::MenuItem(ui, "Как в системе", nullptr, {}, app.settings.theme == ThemeChoice::System)) SetTheme(app, ThemeChoice::System);
-        if (ui::MenuItem(ui, "Светлая", nullptr, {}, app.settings.theme == ThemeChoice::Light)) SetTheme(app, ThemeChoice::Light);
-        if (ui::MenuItem(ui, "Тёмная", nullptr, {}, app.settings.theme == ThemeChoice::Dark)) SetTheme(app, ThemeChoice::Dark);
+    if (ui::BeginSubmenu(ui, Tr("Оформление"), "theme")) {
+        if (ui::MenuItem(ui, Tr("Как в системе"), nullptr, {}, app.settings.theme == ThemeChoice::System)) SetTheme(app, ThemeChoice::System);
+        if (ui::MenuItem(ui, Tr("Светлая"), nullptr, {}, app.settings.theme == ThemeChoice::Light)) SetTheme(app, ThemeChoice::Light);
+        if (ui::MenuItem(ui, Tr("Тёмная"), nullptr, {}, app.settings.theme == ThemeChoice::Dark)) SetTheme(app, ThemeChoice::Dark);
         ImGui::Separator();
-        if (ui::MenuItem(ui, "Анимации камеры", nullptr, {}, app.settings.animations)) app.settings.animations = !app.settings.animations;
+        if (ui::MenuItem(ui, Tr("Анимации камеры"), nullptr, {}, app.settings.animations)) app.settings.animations = !app.settings.animations;
         ImGui::EndMenu();
     }
-    if (ui::BeginSubmenu(ui, "Автосохранение", "ui-save")) {
+    if (ui::BeginSubmenu(ui, Tr("Автосохранение"), "ui-save")) {
         for (int minutes : {0, 1, 5, 10, 15}) {
-            const std::string label = minutes == 0 ? "Выключено" : std::format("Каждые {} мин", minutes);
+            const std::string label = minutes == 0 ? Tr("Выключено") : Trf("Каждые {} мин", minutes);
             if (ui::MenuItem(ui, label.c_str(), nullptr, {}, app.settings.autosaveMinutes == minutes))
                 app.settings.autosaveMinutes = minutes;
         }
@@ -100,7 +101,7 @@ void DisplayStyleMenu(AppContext& app) {
             const ImVec2 p = ImGui::GetCursorScreenPos();
             if (ImGui::Selectable("##style", false, 0, {ui.S(200), ui.S(28)})) a->run();
             ui.icons.Draw(ImGui::GetWindowDrawList(), a->icon, {p.x + ui.S(4), p.y + ui.S(4)}, ui.S(20), {1, 1, 1, 1});
-            ImGui::GetWindowDrawList()->AddText({p.x + ui.S(32), p.y + ui.S(6)}, ui::ToU32(ui.C().text), a->label.c_str());
+            ImGui::GetWindowDrawList()->AddText({p.x + ui.S(32), p.y + ui.S(6)}, ui::ToU32(ui.C().text), a->Label());
             ImGui::PopID();
         }
         ImGui::EndPopup();
@@ -130,7 +131,7 @@ void CommandSearch(AppContext& app, ImVec2 pos, float width) {
         app.shell.focusPalette = false;
     }
     ImGui::SetNextItemWidth(width - ui.S(80));
-    ImGui::InputTextWithHint("##search", "Поиск команд", &app.shell.paletteQuery);
+    ImGui::InputTextWithHint("##search", Tr("Поиск команд"), &app.shell.paletteQuery);
     if (ImGui::IsItemActivated()) app.shell.paletteOpen = true;
     const bool fieldActive = ImGui::IsItemActive();
     ImGui::PopFont();
@@ -167,7 +168,7 @@ void CommandSearch(AppContext& app, ImVec2 pos, float width) {
                                               enabled ? 0 : ImGuiSelectableFlags_Disabled, {width + ui.S(108), ui.S(28)});
         ImDrawList* pdl = ImGui::GetWindowDrawList();
         if (!a->icon.empty()) ui.icons.Draw(pdl, a->icon, {rp.x + ui.S(4), rp.y + ui.S(5)}, ui.S(18), c.textSecondary);
-        pdl->AddText({rp.x + ui.S(30), rp.y + ui.S(6)}, ui::ToU32(enabled ? c.text : c.textDisabled), a->label.c_str());
+        pdl->AddText({rp.x + ui.S(30), rp.y + ui.S(6)}, ui::ToU32(enabled ? c.text : c.textDisabled), a->Label());
         const std::string sc = ActionRegistry::ChordText(a->chord);
         if (!sc.empty()) {
             const ImVec2 ss = ui.fonts.mono->CalcTextSizeA(ui.S(11), FLT_MAX, 0, sc.c_str());
@@ -181,7 +182,7 @@ void CommandSearch(AppContext& app, ImVec2 pos, float width) {
         }
         ImGui::PopID();
     }
-    if (shown == 0) ImGui::TextDisabled("Ничего не найдено");
+    if (shown == 0) ImGui::TextDisabled("%s", Tr("Ничего не найдено"));
     const bool hovered = ImGui::IsWindowHovered();
     ImGui::End();
     ImGui::PopStyleVar(3);
@@ -209,7 +210,7 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
     if (ImGui::IsItemHovered()) dl->AddRectFilled(mp, {mp.x + ui.S(46), mp.y + ui.S(30)}, ui::ToU32(c.hover), ui.S(6));
     ui.icons.Draw(dl, "brand-mark", {mp.x + ui.S(6), mp.y + ui.S(4)}, ui.S(22), {1, 1, 1, 1});
     ui.icons.Draw(dl, "ui-chevron-down", {mp.x + ui.S(30), mp.y + ui.S(10)}, ui.S(10), c.textMuted);
-    ui::ItemTooltip(ui, "Меню BreezeCAD");
+    ui::ItemTooltip(ui, Tr("Меню BreezeCAD"));
     MainMenu(app);
 
     float x = mp.x + ui.S(54);
@@ -220,9 +221,9 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
     const auto qat = [&](const char* actionId) {
         const Action* a = app.actions.Find(actionId);
         ImGui::SetCursorScreenPos({x, cy});
-        std::string tip = a->label;
+        std::string tip = a->Label();
         if (const std::string sc = ActionRegistry::ChordText(a->chord); !sc.empty()) tip += " (" + sc + ")";
-        if (std::string undo = actionId == std::string("edit.undo") && app.Doc() ? app.Doc()->history.UndoLabel() : "";
+        if (std::string undo = actionId == std::string("edit.undo") && app.Doc() ? Tr(app.Doc()->history.UndoLabel()) : "";
             !undo.empty())
             tip += ": " + undo;
         if (ui::IconButton(ui, actionId, a->icon, 30, 18, tip.c_str(), a->IsEnabled())) {
@@ -245,20 +246,20 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
     qat("app.home");
     {
         ImGui::SetCursorScreenPos({x, cy});
-        if (ui::IconButton(ui, "##qat-style", "ui-display-style", 30, 18, "Стиль отображения", app.Doc() != nullptr))
+        if (ui::IconButton(ui, "##qat-style", "ui-display-style", 30, 18, Tr("Стиль отображения"), app.Doc() != nullptr))
             ImGui::OpenPopup("##display-style");
         DisplayStyleMenu(app);
         x += ui.S(32);
     }
     ImGui::SetCursorScreenPos({x, cy});
-    ui::IconButton(ui, "##qat-materials", "ui-materials", 30, 18, "Материалы и текстуры — в следующей версии", false);
+    ui::IconButton(ui, "##qat-materials", "ui-materials", 30, 18, Tr("Материалы и текстуры — в следующей версии"), false);
     x += ui.S(32);
     ImGui::SetCursorScreenPos({x, cy});
-    if (ui::IconButton(ui, "##qat-fx", "ui-fx", 30, 18, "Переменные (fx)", app.Doc() != nullptr))
+    if (ui::IconButton(ui, "##qat-fx", "ui-fx", 30, 18, Tr("Переменные (fx)"), app.Doc() != nullptr))
         app.shell.leftTab = LeftTab::Variables;
     x += ui.S(32);
     ImGui::SetCursorScreenPos({x, cy});
-    ui::IconButton(ui, "##qat-measure", "ui-ruler", 30, 18, "Измерение — в следующей версии", false);
+    ui::IconButton(ui, "##qat-measure", "ui-ruler", 30, 18, Tr("Измерение — в следующей версии"), false);
     x += ui.S(32);
 
     // Right side: search and stats.
@@ -284,17 +285,18 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
             sx += ui.fonts.mono->CalcTextSizeA(ui.S(11), FLT_MAX, 0, unit).x + ui.S(12);
         };
         const float statsLeft = sx;
-        stat(fps, "мс", workMs < 8 ? c.success : workMs < 25 ? c.warning : c.danger);
-        stat(mem, "МБ", c.text);
+        stat(fps, Tr("мс"), workMs < 8 ? c.success : workMs < 25 ? c.warning : c.danger);
+        stat(mem, Tr("МБ"), c.text);
         stat(obj, "OBJ", c.text);
         // Where a frame's time goes, for performance reports.
         if (ImGui::IsMouseHoveringRect({statsLeft, pos.y}, {right, pos.y + h})) {
             const FrameStats& st = app.stats;
-            ImGui::SetTooltip("Работа над кадром: %.1f мс интерфейс (из них %.2f мс — поиск под курсором),\n"
-                              "%.1f мс модель; вывод на экран %.1f мс (включает ожидание монитора)\n"
-                              "Кадров за секунду: %.0f, перерисовок модели: %d\n"
-                              "Кадр рисуется только когда что-то меняется.",
-                              st.uiMs, st.hoverMs, st.sceneMs, st.presentMs, st.fps, st.sceneFrames);
+            const std::string tip = Trf("Работа над кадром: {:.1f} мс интерфейс (из них {:.2f} мс — поиск под курсором),\n"
+                                        "{:.1f} мс модель; вывод на экран {:.1f} мс (включает ожидание монитора)\n"
+                                        "Кадров за секунду: {:.0f}, перерисовок модели: {}\n"
+                                        "Кадр рисуется только когда что-то меняется.",
+                                        st.uiMs, st.hoverMs, st.sceneMs, st.presentMs, st.fps, st.sceneFrames);
+            ImGui::SetTooltip("%s", tip.c_str());
         }
     }
     const float searchX = right - statsWidth - searchWidth;
@@ -302,7 +304,7 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
     // Title in the middle of what is left.
     {
         Session* s = app.Doc();
-        const std::string name = s && !app.workspace.ShowsHome() ? s->Title() : "Главная";
+        const std::string name = s && !app.workspace.ShowsHome() ? s->Title() : Tr("Главная");
         const char* suffix = " \xE2\x80\x94 BreezeCAD";
         ImFont* f1 = ui.fonts.medium;
         ImFont* f2 = ui.fonts.body;

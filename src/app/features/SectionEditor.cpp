@@ -1,5 +1,6 @@
 #include "app/features/SectionEditor.h"
 
+#include "core/I18n.h"
 #include "document/Origin.h"
 #include "ui/Widgets.h"
 
@@ -10,12 +11,12 @@ namespace bz::app {
 bool SectionEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::SectionFeature*>(&f) != nullptr; }
 
 std::string SectionEditor::Hint() const {
-    return "Выберите плоскость и сторону, которая останется. Enter — готово, Esc — отмена";
+    return Tr("Выберите плоскость и сторону, которая останется. Enter — готово, Esc — отмена");
 }
 
 void SectionEditor::StartNew(AppContext& app, Session& session) {
     if (session.model.Bodies().empty()) {
-        app.notes.Info("Сначала создайте тело: эскиз и выдавливание или вращение");
+        app.notes.Info(Tr("Сначала создайте тело: эскиз и выдавливание или вращение"));
         return;
     }
     auto f = std::make_unique<doc::SectionFeature>();
@@ -41,19 +42,19 @@ void SectionEditor::DrawInViewport(AppContext& app, Session& session, const View
 
 void SectionEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::SectionFeature&>(feature);
-    Section(app, "Плоскость");
+    Section(app, Tr("Плоскость"));
     const ObjectId before = f.plane;
     PlaneChoice(app, session, f.plane, width);
     if (f.plane != before) {
         f.face = {};
         Changed(session);
     }
-    if (f.face.IsSet()) Caption(app, "Сечение по грани детали.", width);
-    Caption(app, "Или щёлкните в окне модели рабочую плоскость или плоскую грань детали.", width);
+    if (f.face.IsSet()) Caption(app, Tr("Сечение по грани детали."), width);
+    Caption(app, Tr("Или щёлкните в окне модели рабочую плоскость или плоскую грань детали."), width);
     Gap(app);
 
-    Section(app, "Остаётся");
-    static constexpr std::array<const char*, 2> sides{"За плоскостью", "Перед плоскостью"};
+    Section(app, Tr("Остаётся"));
+    static constexpr std::array<const char*, 2> sides{N_("За плоскостью"), N_("Перед плоскостью")};
     const int current = f.flipped ? 1 : 0;
     const int chosen = ui::Segmented(app.ui, "side", sides, current, 2, width);
     if (chosen != current) {
@@ -62,8 +63,8 @@ void SectionEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fe
     }
     Gap(app);
     Caption(app,
-            "Сечение — обычная операция дерева: погасите её, чтобы увидеть деталь целиком, или удалите. "
-            "Рёбра и грани среза можно выбирать для следующих операций.",
+            Tr("Сечение — обычная операция дерева: погасите её, чтобы увидеть деталь целиком, или удалите. "
+            "Рёбра и грани среза можно выбирать для следующих операций."),
             width);
 }
 

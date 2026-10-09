@@ -4,6 +4,7 @@
 
 #include "app/features/DragArrow.h"
 #include "app/features/SketchOperationEditor.h"
+#include "core/I18n.h"
 #include "document/RevolveFeature.h"
 
 namespace bz::app {
@@ -11,7 +12,7 @@ namespace bz::app {
 class RevolveEditor final : public SketchOperationEditor {
 public:
     bool        CanEdit(const doc::Feature& f) const override;
-    const char* Title() const override { return "Вращение"; }
+    const char* Title() const override { return Tr("Вращение"); }
     std::string Hint() const override;
 
 protected:

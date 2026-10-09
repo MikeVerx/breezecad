@@ -2,6 +2,7 @@
 // The "Сечение" operation panel: the plane and which side of it stays.
 
 #include "app/features/FeatureOperationEditor.h"
+#include "core/I18n.h"
 #include "document/SectionFeature.h"
 
 namespace bz::app {
@@ -10,7 +11,7 @@ class SectionEditor final : public FeatureOperationEditor {
 public:
     void        StartNew(AppContext& app, Session& session);
     bool        CanEdit(const doc::Feature& f) const override;
-    const char* Title() const override { return "Сечение"; }
+    const char* Title() const override { return Tr("Сечение"); }
     std::string Hint() const override;
     bool        DrawsPlanes() const override { return true; }
     bool        PicksOriginal() const override { return true; }

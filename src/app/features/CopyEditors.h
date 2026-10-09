@@ -4,6 +4,7 @@
 // operations to copy; the preview shows the copies at once.
 
 #include "app/features/FeatureOperationEditor.h"
+#include "core/I18n.h"
 #include "document/PatternFeature.h"
 
 namespace bz::app {
@@ -26,7 +27,7 @@ class PatternEditor final : public CopyEditor {
 public:
     void        StartNew(AppContext& app, Session& session, doc::PatternKind kind);
     bool        CanEdit(const doc::Feature& f) const override;
-    const char* Title() const override { return "Массив"; }
+    const char* Title() const override { return Tr("Массив"); }
     std::string Hint() const override;
 
 protected:
@@ -46,7 +47,7 @@ class MirrorEditor final : public CopyEditor {
 public:
     void        StartNew(AppContext& app, Session& session);
     bool        CanEdit(const doc::Feature& f) const override;
-    const char* Title() const override { return "Зеркало"; }
+    const char* Title() const override { return Tr("Зеркало"); }
     std::string Hint() const override;
     bool        DrawsPlanes() const override { return true; }
     void        DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;

@@ -2,10 +2,11 @@
 // the variables table. The tree is in TreePanel.cpp.
 
 #include "app/Format.h"
-#include "core/Expression.h"
 #include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
+#include "core/Expression.h"
+#include "core/I18n.h"
 #include "document/Commands.h"
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
@@ -45,21 +46,21 @@ void PropertyField(AppContext& app, Session& session, const char* label, const c
 
 void DrawPropertiesPanel(AppContext& app, Session& session, float width) {
     ui::Ui& ui = app.ui;
-    PanelHeader(ui, "Свойства детали", width);
+    PanelHeader(ui, Tr("Свойства детали"), width);
     const float inner = width - ui.S(28);
     ImGui::SetCursorPos({ui.S(14), ImGui::GetCursorPosY() + ui.S(14)});
     ImGui::BeginGroup();
-    PropertyField(app, session, "Наименование", "##name", &doc::PartInfo::name, inner, session.Title().c_str());
-    PropertyField(app, session, "Обозначение", "##designation", &doc::PartInfo::designation, inner, "[ОБОЗНАЧЕНИЕ]");
-    PropertyField(app, session, "Материал", "##material", &doc::PartInfo::material, inner, "Не задан");
+    PropertyField(app, session, Tr("Наименование"), "##name", &doc::PartInfo::name, inner, session.Title().c_str());
+    PropertyField(app, session, Tr("Обозначение"), "##designation", &doc::PartInfo::designation, inner, Tr("[ОБОЗНАЧЕНИЕ]"));
+    PropertyField(app, session, Tr("Материал"), "##material", &doc::PartInfo::material, inner, Tr("Не задан"));
 
-    ui::FieldLabel(ui, "Единицы длины");
-    static constexpr std::array<const char*, 4> lengths{"мм", "см", "м", "дюйм"};
+    ui::FieldLabel(ui, Tr("Единицы длины"));
+    static constexpr std::array<const char*, 4> lengths{N_("мм"), N_("см"), N_("м"), N_("дюйм")};
     const int length = static_cast<int>(session.doc.units.length);
     const int newLength = ui::Segmented(ui, "units", lengths, length, 4, inner);
     ImGui::Dummy({0, ui.S(10)});
-    ui::FieldLabel(ui, "Углы");
-    static constexpr std::array<const char*, 2> angles{"градусы", "радианы"};
+    ui::FieldLabel(ui, Tr("Углы"));
+    static constexpr std::array<const char*, 2> angles{N_("градусы"), N_("радианы")};
     const int angle = static_cast<int>(session.doc.units.angle);
     const int newAngle = ui::Segmented(ui, "angles", angles, angle, 2, inner);
     if (newLength != length || newAngle != angle) {
@@ -74,12 +75,12 @@ void DrawPropertiesPanel(AppContext& app, Session& session, float width) {
     {
         ui::FontScope font(ui.fonts.bodySmall);
         ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textSecondary));
-        ImGui::Text("Операций: %d", static_cast<int>(session.doc.FeatureCount()));
-        ImGui::Text("Тел: %d", static_cast<int>(session.model.Bodies().size()));
+        ImGui::TextUnformatted(Trf("Операций: {}", session.doc.FeatureCount()).c_str());
+        ImGui::TextUnformatted(Trf("Тел: {}", session.model.Bodies().size()).c_str());
         const double volume = session.model.Volume();
         const double scale = MillimetersPer(session.doc.units.length);
         const std::string v = FormatNumber(volume / (scale * scale * scale), 2) + " " + UnitLabel(Quantity::Length, session.doc.units) + "\xC2\xB3";
-        ImGui::Text("Объём: %s", v.c_str());
+        ImGui::TextUnformatted(Trf("Объём: {}", v).c_str());
         ImGui::PopStyleColor();
     }
     ImGui::EndGroup();
@@ -90,10 +91,10 @@ void DrawVariablesPanel(AppContext& app, Session& session, float width) {
     const ui::ThemeColors& c = ui.C();
     {
         const ImVec2 p = ImGui::GetCursorScreenPos();
-        PanelHeader(ui, "Переменные", width);
+        PanelHeader(ui, Tr("Переменные"), width);
         const ImVec2 after = ImGui::GetCursorScreenPos();
         ImGui::SetCursorScreenPos({p.x + width - ui.S(108), p.y + ui.S(7)});
-        if (ui::LinkButton(ui, "##add-var", "+ Добавить")) {
+        if (ui::LinkButton(ui, "##add-var", Tr("+ Добавить"))) {
             std::vector<Parameter> vars = session.doc.variables;
             int n = 1;
             const auto taken = [&](const std::string& name) {
@@ -136,14 +137,14 @@ void DrawVariablesPanel(AppContext& app, Session& session, float width) {
         }
         ImGui::SetCursorScreenPos({x0 + colName, rp.y});
         if (ui::CommitInput(ui, "##expr", p.expression, app.shell.edit, colExpr - ui.S(4), true)) result = app.shell.edit.text;
-        const std::string value = p.HasError() ? "ошибка" : FormatValue(p.value, p.quantity, session.doc.units, 3) + " " +
+        const std::string value = p.HasError() ? Tr("ошибка") : FormatValue(p.value, p.quantity, session.doc.units, 3) + " " +
                                                               UnitLabel(p.quantity, session.doc.units);
         const float vw = ui.fonts.mono->CalcTextSizeA(ui.S(12), FLT_MAX, 0, value.c_str()).x;
         dl->AddText(ui.fonts.mono, ui.S(12), {x0 + inner - vw - ui.S(6), rp.y + ui.S(7)},
                     ui::ToU32(p.HasError() ? c.danger : c.textSecondary), value.c_str());
         ImGui::SetCursorScreenPos({x0, rp.y});
         ImGui::Dummy({inner, ui.S(28)});
-        if (p.HasError()) ui::ItemTooltip(ui, p.error.c_str());
+        if (p.HasError()) ui::ItemTooltip(ui, Tr(p.error).c_str());
         dl->AddLine({x0, rp.y + ui.S(29)}, {x0 + inner, rp.y + ui.S(29)}, ui::ToU32(c.dividerSoft));
         ImGui::Dummy({0, ui.S(2)});
         ImGui::PopID();
@@ -151,12 +152,12 @@ void DrawVariablesPanel(AppContext& app, Session& session, float width) {
     };
 
     ImGui::Dummy({0, ui.S(6)});
-    headerRow("Имя", "Выражение", "Значение");
+    headerRow(Tr("Имя"), Tr("Выражение"), Tr("Значение"));
     if (session.doc.variables.empty()) {
         ui::FontScope font(ui.fonts.bodySmall);
         ImGui::SetCursorScreenPos({x0 + ui.S(6), ImGui::GetCursorScreenPos().y + ui.S(4)});
         ImGui::PushTextWrapPos(x0 + inner - ImGui::GetWindowPos().x);
-        ImGui::TextColored(ui::ToVec4(c.textMuted), "Переменных пока нет. Добавьте, например, ширину детали и используйте её в размерах: w / 2.");
+        ImGui::TextColored(ui::ToVec4(c.textMuted), "%s", Tr("Переменных пока нет. Добавьте, например, ширину детали и используйте её в размерах: w / 2."));
         ImGui::PopTextWrapPos();
     }
     for (std::size_t i = 0; i < session.doc.variables.size(); ++i) {
@@ -168,7 +169,7 @@ void DrawVariablesPanel(AppContext& app, Session& session, float width) {
         {
             ui::MenuStyle style(app.ui);   // before Begin: must outlive the End call
             if (ImGui::BeginPopupContextItem(("##ctx" + id).c_str())) {
-                erase = ui::MenuItem(app.ui, "Удалить переменную", nullptr, "ui-trash");
+                erase = ui::MenuItem(app.ui, Tr("Удалить переменную"), nullptr, "ui-trash");
                 ImGui::EndPopup();
             }
         }
@@ -183,7 +184,7 @@ void DrawVariablesPanel(AppContext& app, Session& session, float width) {
             if (expr) vars[i].expression = *expr;
             if (!newName.empty()) {
                 if (!IsValidVariableName(newName)) {
-                    app.notes.Error("Имя «" + newName + "» не подходит: буквы, цифры и «_», начинается с буквы");
+                    app.notes.Error(Trf("Имя «{}» не подходит: буквы, цифры и «_», начинается с буквы", newName));
                     break;
                 }
                 vars[i].name = newName;
@@ -197,10 +198,10 @@ void DrawVariablesPanel(AppContext& app, Session& session, float width) {
     ImGui::Dummy({0, ui.S(14)});
     {
         const ImVec2 p = ImGui::GetCursorScreenPos();
-        dl->AddText(ui.fonts.strong, ui.S(12), {x0 + ui.S(6), p.y}, ui::ToU32(c.text), "Размеры модели");
+        dl->AddText(ui.fonts.strong, ui.S(12), {x0 + ui.S(6), p.y}, ui::ToU32(c.text), Tr("Размеры модели"));
         ImGui::Dummy({inner, ui.S(18)});
     }
-    headerRow("Имя", "Выражение", "Значение");
+    headerRow(Tr("Имя"), Tr("Выражение"), Tr("Значение"));
     std::unique_ptr<doc::Feature> edited;   // applied after the loop: never edit while iterating
     std::string                   label;
     for (const auto& feature : session.doc.Features()) {
@@ -235,9 +236,9 @@ void DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             const char* icon;
             const char* tip;
             LeftTab     tab;
-        } tabs[] = {{"##rail-tree", "ui-tree", "Дерево построения", LeftTab::Tree},
-                    {"##rail-props", "ui-sliders", "Свойства детали", LeftTab::Properties},
-                    {"##rail-vars", "ui-variables", "Переменные", LeftTab::Variables}};
+        } tabs[] = {{"##rail-tree", "ui-tree", Tr("Дерево построения"), LeftTab::Tree},
+                    {"##rail-props", "ui-sliders", Tr("Свойства детали"), LeftTab::Properties},
+                    {"##rail-vars", "ui-variables", Tr("Переменные"), LeftTab::Variables}};
         float y = pos.y + ui.S(8);
         for (const auto& t : tabs) {
             ImGui::SetCursorScreenPos({pos.x + (railW - ui.S(36)) / 2, y});

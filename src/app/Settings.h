@@ -20,6 +20,7 @@ struct Settings {
     bool        showAllConstraints = false;   ///< sketch: every constraint glyph, or only those of the selection (F8 / F9)
     double      gridStep       = 0.0;     ///< mm; 0 = adaptive to zoom
     double      uiScale        = 0.0;     ///< interface scale; 0 = automatic (screen density and size)
+    std::string language;                 ///< interface language code ("ru", "en"); empty = as the system
     /// The window as last left (windowed size and place; maximized flag).
     int         windowX = -1, windowY = -1, windowW = 0, windowH = 0;
     bool        windowMaximized = true;

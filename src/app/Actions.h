@@ -2,6 +2,8 @@
 
 #include <imgui.h>
 
+#include "core/I18n.h"
+
 #include <functional>
 #include <string>
 #include <string_view>
@@ -22,6 +24,9 @@ struct Action {
     ImGuiKeyChord         defaultChord = 0;   ///< as shipped (set by Add), for Сбросить
 
     bool IsEnabled() const { return !enabled || enabled(); }
+    /// Label and tooltip in the interface language (the fields keep the Russian).
+    const char* Label() const { return Tr(label.c_str()); }
+    const char* Tooltip() const { return Tr(tooltip.c_str()); }
 };
 
 class ActionRegistry {

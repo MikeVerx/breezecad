@@ -5,6 +5,7 @@
 
 #include "app/features/DragArrow.h"
 #include "app/features/SketchOperationEditor.h"
+#include "core/I18n.h"
 #include "document/ExtrudeFeature.h"
 
 namespace bz::app {
@@ -12,7 +13,7 @@ namespace bz::app {
 class ExtrudeEditor final : public SketchOperationEditor {
 public:
     bool        CanEdit(const doc::Feature& f) const override;
-    const char* Title() const override { return "Выдавливание"; }
+    const char* Title() const override { return Tr("Выдавливание"); }
     std::string Hint() const override;
 
 protected:

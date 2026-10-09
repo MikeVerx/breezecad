@@ -10,6 +10,7 @@
 #include <Standard_Failure.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
+#include <format>
 #include <gp_Ax1.hxx>
 #include <gp_Trsf.hxx>
 
@@ -99,7 +100,7 @@ Expected<TopoDS_Shape> MakeRevolution(const std::vector<TopoDS_Face>& faces, con
         if (!BRepCheck_Analyzer(result).IsValid()) return Error{"Вращение дало некорректное тело"};
         return result;
     } catch (const Standard_Failure& failure) {
-        return Error{std::string("Ошибка вращения: ") + failure.GetMessageString()};
+        return Error{std::format("Ошибка вращения: {}", failure.GetMessageString())};
     }
 }
 

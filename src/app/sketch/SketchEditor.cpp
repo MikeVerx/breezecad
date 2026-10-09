@@ -3,6 +3,7 @@
 #include "app/Format.h"
 #include "app/sketch/DimensionLayout.h"
 #include "app/sketch/SketchOverlay.h"
+#include "core/I18n.h"
 #include "document/Commands.h"
 #include "sketch/Solver.h"
 #include "ui/Widgets.h"
@@ -16,33 +17,33 @@ namespace bz::app {
 namespace {
 
 constexpr std::array<SketchToolInfo, 27> kTools{{
-    {SketchTool::Select, "Выбор", "ui-check", "Выберите или перетащите элементы эскиза"},
-    {SketchTool::Line, "Отрезок", "sk-line", "Укажите начальную точку отрезка"},
-    {SketchTool::Rectangle, "Прямоугольник", "sk-rectangle", "Укажите первый угол прямоугольника"},
-    {SketchTool::Circle, "Окружность", "sk-circle", "Укажите центр окружности"},
-    {SketchTool::Arc, "Дуга", "sk-arc", "Укажите центр дуги"},
-    {SketchTool::Point, "Точка", "sk-point", "Укажите положение точки"},
-    {SketchTool::Project, "Проецировать", "sk-project", "Щёлкните ребро модели или грань (весь её контур) — проекция появится в эскизе и будет следовать за моделью"},
-    {SketchTool::Trim, "Обрезка", "sk-trim", "Щёлкните лишний кусок кривой — он удалится до ближайших пересечений"},
-    {SketchTool::Move, "Перенос", "sk-move", "Выберите элементы (Ctrl+щелчок), затем укажите базовую точку"},
-    {SketchTool::Rotate, "Поворот", "sk-rotate", "Выберите элементы (Ctrl+щелчок), затем укажите центр поворота"},
-    {SketchTool::Copy, "Копировать", "sk-copy", "Выберите элементы, затем базовую точку и место копии"},
-    {SketchTool::Scale, "Масштаб", "sk-scale", "Выберите элементы, щёлкните базовую точку и введите коэффициент"},
-    {SketchTool::PatternRect, "Прямоугольный", "sk-pattern-rect", "Выберите элементы и задайте число копий и шаг"},
-    {SketchTool::PatternCircular, "Круговой", "sk-pattern-circular", "Выберите элементы, щёлкните центр и задайте число копий"},
-    {SketchTool::Mirror, "Зеркало", "sk-mirror", "Выберите элементы, затем «Линия зеркала» и щёлкните линию"},
-    {SketchTool::Dimension, "Размер", "sk-dimension", "Выберите отрезок, окружность или две точки"},
-    {SketchTool::Coincident, "Совпадение", "c-coincident", "Выберите две точки или точку и кривую"},
-    {SketchTool::Horizontal, "Горизонтальность", "c-horizontal", "Выберите отрезок или две точки"},
-    {SketchTool::Vertical, "Вертикальность", "c-vertical", "Выберите отрезок или две точки"},
-    {SketchTool::Parallel, "Параллельность", "c-parallel", "Выберите два отрезка"},
-    {SketchTool::Perpendicular, "Перпендикулярность", "c-perpendicular", "Выберите два отрезка"},
-    {SketchTool::Equal, "Равенство", "c-equal", "Выберите два отрезка или две окружности"},
-    {SketchTool::Tangent, "Касательность", "c-tangent", "Выберите кривую и окружность или дугу"},
-    {SketchTool::Fix, "Фиксация", "c-fix", "Выберите точку, которую нужно закрепить"},
-    {SketchTool::Midpoint, "Середина", "c-midpoint", "Выберите точку и отрезок"},
-    {SketchTool::Concentric, "Концентричность", "c-concentric", "Выберите две окружности или дуги"},
-    {SketchTool::Symmetric, "Симметрия", "c-symmetric", "Выберите две точки или два отрезка, затем линию симметрии"},
+    {SketchTool::Select, N_("Выбор"), "ui-check", N_("Выберите или перетащите элементы эскиза")},
+    {SketchTool::Line, N_("Отрезок"), "sk-line", N_("Укажите начальную точку отрезка")},
+    {SketchTool::Rectangle, N_("Прямоугольник"), "sk-rectangle", N_("Укажите первый угол прямоугольника")},
+    {SketchTool::Circle, N_("Окружность"), "sk-circle", N_("Укажите центр окружности")},
+    {SketchTool::Arc, N_("Дуга"), "sk-arc", N_("Укажите центр дуги")},
+    {SketchTool::Point, N_("Точка"), "sk-point", N_("Укажите положение точки")},
+    {SketchTool::Project, N_("Проецировать"), "sk-project", N_("Щёлкните ребро модели или грань (весь её контур) — проекция появится в эскизе и будет следовать за моделью")},
+    {SketchTool::Trim, N_("Обрезка"), "sk-trim", N_("Щёлкните лишний кусок кривой — он удалится до ближайших пересечений")},
+    {SketchTool::Move, N_("Перенос"), "sk-move", N_("Выберите элементы (Ctrl+щелчок), затем укажите базовую точку")},
+    {SketchTool::Rotate, N_("Поворот"), "sk-rotate", N_("Выберите элементы (Ctrl+щелчок), затем укажите центр поворота")},
+    {SketchTool::Copy, N_("Копировать"), "sk-copy", N_("Выберите элементы, затем базовую точку и место копии")},
+    {SketchTool::Scale, N_("Масштаб"), "sk-scale", N_("Выберите элементы, щёлкните базовую точку и введите коэффициент")},
+    {SketchTool::PatternRect, N_("Прямоугольный"), "sk-pattern-rect", N_("Выберите элементы и задайте число копий и шаг")},
+    {SketchTool::PatternCircular, N_("Круговой"), "sk-pattern-circular", N_("Выберите элементы, щёлкните центр и задайте число копий")},
+    {SketchTool::Mirror, N_("Зеркало"), "sk-mirror", N_("Выберите элементы, затем «Линия зеркала» и щёлкните линию")},
+    {SketchTool::Dimension, N_("Размер"), "sk-dimension", N_("Выберите отрезок, окружность или две точки")},
+    {SketchTool::Coincident, N_("Совпадение"), "c-coincident", N_("Выберите две точки или точку и кривую")},
+    {SketchTool::Horizontal, N_("Горизонтальность"), "c-horizontal", N_("Выберите отрезок или две точки")},
+    {SketchTool::Vertical, N_("Вертикальность"), "c-vertical", N_("Выберите отрезок или две точки")},
+    {SketchTool::Parallel, N_("Параллельность"), "c-parallel", N_("Выберите два отрезка")},
+    {SketchTool::Perpendicular, N_("Перпендикулярность"), "c-perpendicular", N_("Выберите два отрезка")},
+    {SketchTool::Equal, N_("Равенство"), "c-equal", N_("Выберите два отрезка или две окружности")},
+    {SketchTool::Tangent, N_("Касательность"), "c-tangent", N_("Выберите кривую и окружность или дугу")},
+    {SketchTool::Fix, N_("Фиксация"), "c-fix", N_("Выберите точку, которую нужно закрепить")},
+    {SketchTool::Midpoint, N_("Середина"), "c-midpoint", N_("Выберите точку и отрезок")},
+    {SketchTool::Concentric, N_("Концентричность"), "c-concentric", N_("Выберите две окружности или дуги")},
+    {SketchTool::Symmetric, N_("Симметрия"), "c-symmetric", N_("Выберите две точки или два отрезка, затем линию симметрии")},
 }};
 
 /// Sketch geometry plus dimension labels, in sketch coordinates.
@@ -107,7 +108,7 @@ void SketchEditor::Reset() {
 void SketchEditor::CreateAndEdit(AppContext& app, Session& session, const doc::SketchPlacement& placement) {
     auto feature = std::make_unique<doc::SketchFeature>();
     feature->id = session.doc.Ids().Next();
-    feature->name = session.doc.UniqueFeatureName("Эскиз");
+    feature->name = session.doc.UniqueFeatureName(Tr("Эскиз"));
     feature->placement = placement;
     feature->sketch.EnsureOrigin(session.doc.Ids());
     const ObjectId id = feature->id;
@@ -214,7 +215,7 @@ void SketchEditor::DeleteSelection(Session& session) {
     mySelection.clear();
     myHover = {};
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
-    session.CommitInPlaceEdit(std::move(before), "Удаление в эскизе");
+    session.CommitInPlaceEdit(std::move(before), Tr("Удаление в эскизе"));
 }
 
 void SketchEditor::ToggleConstruction(Session& session) {
@@ -231,7 +232,7 @@ void SketchEditor::ToggleConstruction(Session& session) {
             if (a.id == id) a.construction = !a.construction;
     }
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
-    session.CommitInPlaceEdit(std::move(before), "Вспомогательная геометрия");
+    session.CommitInPlaceEdit(std::move(before), Tr("Вспомогательная геометрия"));
 }
 
 void SketchEditor::UpdateShownGlyphs(const sketch::Sketch& sk, bool all) {
@@ -266,7 +267,7 @@ void SketchEditor::ToggleCenterline(Session& session) {
             l->construction = false;
         }
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
-    session.CommitInPlaceEdit(std::move(before), "Осевая линия");
+    session.CommitInPlaceEdit(std::move(before), Tr("Осевая линия"));
 }
 
 // --- per frame ----------------------------------------------------------------
@@ -407,7 +408,7 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
 
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
         if (myDragging) {
-            session.CommitInPlaceEdit(std::move(myDragBefore), "Перемещение в эскизе");
+            session.CommitInPlaceEdit(std::move(myDragBefore), Tr("Перемещение в эскизе"));
         } else if (myHover) {
             // Click: select; Shift or Ctrl add to the selection.
             if (!io.KeyShift && !io.KeyCtrl) mySelection.clear();
@@ -487,7 +488,7 @@ void SketchEditor::HandleInlineEdit(AppContext& app, Session& session, const Ske
     c->parameter.expression = myEditText;
     session.doc.EvaluateParameters();
     if (c->parameter.HasError()) {
-        app.notes.Error(c->parameter.error);
+        app.notes.Error(Tr(c->parameter.error));
         c->parameter.expression = previous;
         session.doc.EvaluateParameters();
         return;
@@ -502,69 +503,69 @@ void SketchEditor::HandleInlineEdit(AppContext& app, Session& session, const Ske
         }
     }
     if (!sketch::Solve(trial).converged) {
-        app.notes.Error("Такой размер противоречит другим ограничениям эскиза");
+        app.notes.Error(Tr("Такой размер противоречит другим ограничениям эскиза"));
         c->parameter.expression = previous;
         session.doc.EvaluateParameters();
         return;
     }
     f->sketch = std::move(trial);
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
-    session.CommitInPlaceEdit(std::move(before), "Размер " + c->parameter.name);
+    session.CommitInPlaceEdit(std::move(before), Trf("Размер {}", c->parameter.name));
     myEditDimension = {};
     KeepSketchInView(app, session);
 }
 
 std::string SketchEditor::Hint(const Session& session) const {
     (void)session;
-    if (myEditDimension) return "Введите значение или выражение, Enter — применить, Esc — отмена";
+    if (myEditDimension) return Tr("Введите значение или выражение, Enter — применить, Esc — отмена");
     const std::size_t step = myClicks.size();
     switch (myTool) {
         case SketchTool::Line:
-            return step == 0 ? InfoOf(myTool).hint : "Укажите конечную точку. Правый щелчок или Esc — закончить цепочку";
+            return step == 0 ? Tr(InfoOf(myTool).hint) : Tr("Укажите конечную точку. Правый щелчок или Esc — закончить цепочку");
         case SketchTool::Rectangle:
             switch (myOptions.rectangle) {
                 case RectangleMode::Polygon:
-                    return step == 0 ? "Укажите центр многоугольника"
-                                     : myOptions.polygonInscribed ? "Укажите вершину" : "Укажите середину стороны";
+                    return step == 0 ? Tr("Укажите центр многоугольника")
+                                     : myOptions.polygonInscribed ? Tr("Укажите вершину") : Tr("Укажите середину стороны");
                 case RectangleMode::ThreePointsCentre:
-                    return step == 0 ? "Укажите центр прямоугольника" : step == 1 ? "Укажите середину стороны" : "Укажите ширину";
+                    return step == 0 ? Tr("Укажите центр прямоугольника") : step == 1 ? Tr("Укажите середину стороны") : Tr("Укажите ширину");
                 case RectangleMode::SlotCentres:
-                    return step == 0 ? "Укажите центр первого скругления" : step == 1 ? "Укажите центр второго" : "Укажите ширину паза";
+                    return step == 0 ? Tr("Укажите центр первого скругления") : step == 1 ? Tr("Укажите центр второго") : Tr("Укажите ширину паза");
                 case RectangleMode::SlotOverall:
-                    return step == 0 ? "Укажите один край паза" : step == 1 ? "Укажите другой край" : "Укажите ширину паза";
+                    return step == 0 ? Tr("Укажите один край паза") : step == 1 ? Tr("Укажите другой край") : Tr("Укажите ширину паза");
                 case RectangleMode::SlotCentre:
-                    return step == 0 ? "Укажите середину паза" : step == 1 ? "Укажите центр скругления" : "Укажите ширину паза";
+                    return step == 0 ? Tr("Укажите середину паза") : step == 1 ? Tr("Укажите центр скругления") : Tr("Укажите ширину паза");
                 case RectangleMode::SlotArc3:
-                    return step == 0 ? "Укажите начало дуги паза" : step == 1 ? "Укажите конец"
-                         : step == 2 ? "Укажите точку, через которую идёт дуга" : "Укажите ширину паза";
+                    return step == 0 ? Tr("Укажите начало дуги паза") : step == 1 ? Tr("Укажите конец")
+                         : step == 2 ? Tr("Укажите точку, через которую идёт дуга") : Tr("Укажите ширину паза");
                 case RectangleMode::SlotArcCentre:
-                    return step == 0 ? "Укажите центр дуги паза" : step == 1 ? "Укажите начало" : step == 2 ? "Укажите конец"
-                                                                                                        : "Укажите ширину паза";
+                    return step == 0 ? Tr("Укажите центр дуги паза") : step == 1 ? Tr("Укажите начало") : step == 2 ? Tr("Укажите конец")
+                                                                                                        : Tr("Укажите ширину паза");
                 default: break;
             }
             if (myOptions.rectangle == RectangleMode::ThreePoints)
-                return step == 0 ? "Укажите начало первой стороны" : step == 1 ? "Укажите конец первой стороны" : "Укажите ширину прямоугольника";
+                return step == 0 ? Tr("Укажите начало первой стороны") : step == 1 ? Tr("Укажите конец первой стороны") : Tr("Укажите ширину прямоугольника");
             if (myOptions.rectangle == RectangleMode::Centre)
-                return step == 0 ? "Укажите центр прямоугольника" : "Укажите угол прямоугольника";
-            return step == 0 ? InfoOf(myTool).hint : "Укажите противоположный угол";
+                return step == 0 ? Tr("Укажите центр прямоугольника") : Tr("Укажите угол прямоугольника");
+            return step == 0 ? Tr(InfoOf(myTool).hint) : Tr("Укажите противоположный угол");
         case SketchTool::Circle:
             if (myOptions.circle == CircleMode::ThreePoints)
-                return step == 0 ? "Укажите первую точку окружности" : step == 1 ? "Укажите вторую точку" : "Укажите третью точку";
-            return step == 0 ? InfoOf(myTool).hint : "Укажите точку на окружности";
+                return step == 0 ? Tr("Укажите первую точку окружности") : step == 1 ? Tr("Укажите вторую точку") : Tr("Укажите третью точку");
+            return step == 0 ? Tr(InfoOf(myTool).hint) : Tr("Укажите точку на окружности");
         case SketchTool::Arc:
             if (myOptions.arc == ArcMode::ThreePoints)
-                return step == 0 ? "Укажите начало дуги" : step == 1 ? "Укажите конец дуги" : "Укажите точку, через которую идёт дуга";
-            return step == 0 ? InfoOf(myTool).hint : step == 1 ? "Укажите начало дуги" : "Укажите конец дуги";
+                return step == 0 ? Tr("Укажите начало дуги") : step == 1 ? Tr("Укажите конец дуги") : Tr("Укажите точку, через которую идёт дуга");
+            return step == 0 ? Tr(InfoOf(myTool).hint) : step == 1 ? Tr("Укажите начало дуги") : Tr("Укажите конец дуги");
         case SketchTool::Move:
-            if (mySelection.empty()) return InfoOf(myTool).hint;
-            return step == 0 ? "Укажите базовую точку (Ctrl+щелчок — изменить выбор)" : "Укажите новое место";
+            if (mySelection.empty()) return Tr(InfoOf(myTool).hint);
+            return step == 0 ? Tr("Укажите базовую точку (Ctrl+щелчок — изменить выбор)") : Tr("Укажите новое место");
         case SketchTool::Rotate:
-            if (mySelection.empty()) return InfoOf(myTool).hint;
-            return step == 0 ? "Укажите центр поворота (Ctrl+щелчок — изменить выбор)"
-                             : step == 1 ? "Укажите, откуда поворачивать" : "Укажите, куда повернуть";
+            if (mySelection.empty()) return Tr(InfoOf(myTool).hint);
+            return step == 0 ? Tr("Укажите центр поворота (Ctrl+щелчок — изменить выбор)")
+                             : step == 1 ? Tr("Укажите, откуда поворачивать") : Tr("Укажите, куда повернуть");
         case SketchTool::Dimension:
-            return myPicks.empty() ? InfoOf(myTool).hint : "Укажите место размера или второй элемент";
-        default: return InfoOf(myTool).hint;
+            return myPicks.empty() ? Tr(InfoOf(myTool).hint) : Tr("Укажите место размера или второй элемент");
+        default: return Tr(InfoOf(myTool).hint);
     }
 }
 

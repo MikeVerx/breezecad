@@ -2,6 +2,7 @@
 
 #include "app/Format.h"
 #include "app/sketch/SketchView.h"
+#include "core/I18n.h"
 #include "ui/Widgets.h"
 
 #include <array>
@@ -73,13 +74,13 @@ doc::HoleFeature* HoleEditor::Feature(Session& session) const { return dynamic_c
 bool HoleEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::HoleFeature*>(&f) != nullptr; }
 
 std::string HoleEditor::Hint() const {
-    return "Щёлкните плоскую грань — там встанет центр; ещё щелчки добавляют центры, щелчок по центру убирает. "
-           "Enter — готово, Esc — отмена";
+    return Tr("Щёлкните плоскую грань — там встанет центр; ещё щелчки добавляют центры, щелчок по центру убирает. "
+           "Enter — готово, Esc — отмена");
 }
 
 void HoleEditor::StartNew(AppContext& app, Session& session) {
     if (session.model.Bodies().empty()) {
-        app.notes.Info("Сначала создайте тело: эскиз и выдавливание или вращение");
+        app.notes.Info(Tr("Сначала создайте тело: эскиз и выдавливание или вращение"));
         return;
     }
     auto f = std::make_unique<doc::HoleFeature>();
@@ -150,7 +151,7 @@ void HoleEditor::DrawInViewport(AppContext& app, Session& session, const Viewpor
             dl->AddLine({p.x - arm, p.y}, {p.x + arm, p.y}, ink, app.ui.S(1.5f));
             dl->AddLine({p.x, p.y - arm}, {p.x, p.y + arm}, ink, app.ui.S(1.5f));
         }
-        if (myHoveredCentre) ImGui::SetTooltip("Убрать центр");
+        if (myHoveredCentre) ImGui::SetTooltip("%s", Tr("Убрать центр"));
 
         // Depth arrow from the first centre into the body.
         if (!f->centres.empty() && !f->throughAll && !f->depth.HasError()) {
@@ -186,13 +187,13 @@ void HoleEditor::ClickModel(AppContext& app, Session& session, doc::HoleFeature&
     const auto hit = app.viewport.Pick(vf.ToLocal(ImGui::GetMousePos()));
     if (!hit) return;
     if (!hit->plane) {
-        app.notes.Info("Отверстие ставится на плоскую грань");
+        app.notes.Info(Tr("Отверстие ставится на плоскую грань"));
         return;
     }
     if (!HasFace(f) || (f.centres.empty() && !OnSamePlane(f.face, *hit->plane, hit->point))) {
         f.face = {hit->plane->normal, hit->point};
     } else if (!OnSamePlane(f.face, *hit->plane, hit->point)) {
-        app.notes.Info("Все центры отверстия лежат на одной грани. Чтобы выбрать другую, нажмите «Другая грань»");
+        app.notes.Info(Tr("Все центры отверстия лежат на одной грани. Чтобы выбрать другую, нажмите «Другая грань»"));
         return;
     }
     const Vec2 local = doc::PlaneFrame(f.face).ToLocal(hit->point);
@@ -213,7 +214,7 @@ void HoleEditor::DrawBody(AppContext& app, Session& session, doc::Feature& featu
 void HoleEditor::DrawFaceSection(AppContext& app, Session& session, doc::HoleFeature& f, float width) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
-    Section(app, "Положение");
+    Section(app, Tr("Положение"));
     {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(34);
@@ -222,18 +223,18 @@ void HoleEditor::DrawFaceSection(AppContext& app, Session& session, doc::HoleFea
         dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoft), ui.S(8));
         dl->AddRect(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoftBorder), ui.S(8));
         ui.icons.Draw(dl, ready ? "ui-check" : "status-warning", {p.x + ui.S(10), p.y + (h - ui.S(14)) / 2}, ui.S(14), c.accent);
-        const std::string chip = !HasFace(f) ? std::string("Грань не выбрана")
-                                             : "Грань выбрана \xC2\xB7 центров: " + std::to_string(f.centres.size());
+        const std::string chip = !HasFace(f) ? std::string(Tr("Грань не выбрана"))
+                                             : Trf("Грань выбрана \xC2\xB7 центров: {}", f.centres.size());
         dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(32), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), chip.c_str());
         ImGui::Dummy({width, h});
     }
     Caption(app,
-            HasFace(f) ? "Щёлкните по грани, чтобы добавить центр; щелчок по центру убирает его. Координаты можно ввести точно."
-                       : "Щёлкните плоскую грань тела там, где нужно отверстие.",
+            HasFace(f) ? Tr("Щёлкните по грани, чтобы добавить центр; щелчок по центру убирает его. Координаты можно ввести точно.")
+                       : Tr("Щёлкните плоскую грань тела там, где нужно отверстие."),
             width);
     if (HasFace(f)) {
         DrawCentres(app, session, f, width);
-        if (ui::LinkButton(ui, "##other-face", "Другая грань")) {
+        if (ui::LinkButton(ui, "##other-face", Tr("Другая грань"))) {
             f.face = {};
             f.centres.clear();
             Changed(session);
@@ -273,7 +274,7 @@ void HoleEditor::DrawCentres(AppContext& app, Session& session, doc::HoleFeature
         ImGui::SameLine(0, gap);
         coordinate("Y", "##y", centre.y);
         ImGui::SameLine(0, gap);
-        if (ui::IconButton(ui, "##remove", "ui-close", 28, 12, "Убрать центр")) erase = i;
+        if (ui::IconButton(ui, "##remove", "ui-close", 28, 12, Tr("Убрать центр"))) erase = i;
         ImGui::PopID();
     }
     if (erase) {
@@ -285,9 +286,9 @@ void HoleEditor::DrawCentres(AppContext& app, Session& session, doc::HoleFeature
 void HoleEditor::DrawSizes(AppContext& app, Session& session, doc::HoleFeature& f, float width) {
     ui::Ui& ui = app.ui;
 
-    Section(app, "Тип");
+    Section(app, Tr("Тип"));
     {
-        static constexpr std::array<const char*, 3> labels{"Простое", "Цековка", "Зенковка"};
+        static constexpr std::array<const char*, 3> labels{N_("Простое"), N_("Цековка"), N_("Зенковка")};
         const int current = static_cast<int>(f.type);
         const int chosen = ui::Segmented(ui, "type", labels, current, 3, width);
         if (chosen != current) {
@@ -297,27 +298,27 @@ void HoleEditor::DrawSizes(AppContext& app, Session& session, doc::HoleFeature& 
     }
     Gap(app);
 
-    Section(app, "Диаметр");
+    Section(app, Tr("Диаметр"));
     // Not focused on open: it is below the centres, and focusing would scroll them away.
     ParameterField(app, session, "diameter", myDiameter, f.diameter, width, false);
     Gap(app);
 
     if (f.type == HoleType::Counterbore) {
-        Section(app, "Диаметр цековки");
+        Section(app, Tr("Диаметр цековки"));
         ParameterField(app, session, "head-diameter", myHeadDiameter, f.headDiameter, width, false);
         Gap(app);
-        Section(app, "Глубина цековки");
+        Section(app, Tr("Глубина цековки"));
         ParameterField(app, session, "head-depth", myHeadDepth, f.headDepth, width, false);
         Gap(app);
     } else if (f.type == HoleType::Countersink) {
-        Section(app, "Диаметр зенковки (90\xC2\xB0)");
+        Section(app, Tr("Диаметр зенковки (90\xC2\xB0)"));
         ParameterField(app, session, "sink-diameter", mySinkDiameter, f.sinkDiameter, width, false);
         Gap(app);
     }
 
-    Section(app, "Глубина");
+    Section(app, Tr("Глубина"));
     {
-        static constexpr std::array<const char*, 2> labels{"На расстояние", "Насквозь"};
+        static constexpr std::array<const char*, 2> labels{N_("На расстояние"), N_("Насквозь")};
         const int current = f.throughAll ? 1 : 0;
         const int chosen = ui::Segmented(ui, "depth-kind", labels, current, 2, width);
         if (chosen != current) {

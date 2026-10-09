@@ -15,6 +15,7 @@
 #include <TopExp_Explorer.hxx>
 #include <TopTools_ListOfShape.hxx>
 #include <TopoDS.hxx>
+#include <format>
 #include <gp_Trsf.hxx>
 #include <gp_Vec.hxx>
 
@@ -76,7 +77,7 @@ Expected<TopoDS_Shape> MakeExtrusion(const std::vector<TopoDS_Face>& faces, cons
         }
         return Clean(result);
     } catch (const Standard_Failure& failure) {
-        return Error{std::string("Ошибка выдавливания: ") + failure.GetMessageString()};
+        return Error{std::format("Ошибка выдавливания: {}", failure.GetMessageString())};
     }
 }
 
@@ -106,7 +107,7 @@ Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const TopoDS_Sha
         }
         return FinishBoolean(result, op);
     } catch (const Standard_Failure& failure) {
-        return Error{std::string("Ошибка булевой операции: ") + failure.GetMessageString()};
+        return Error{std::format("Ошибка булевой операции: {}", failure.GetMessageString())};
     }
 }
 
@@ -135,7 +136,7 @@ Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const std::vecto
         }
         return FinishBoolean(result, op);
     } catch (const Standard_Failure& failure) {
-        return Error{std::string("Ошибка булевой операции: ") + failure.GetMessageString()};
+        return Error{std::format("Ошибка булевой операции: {}", failure.GetMessageString())};
     }
 }
 

@@ -2,6 +2,7 @@
 
 #include "app/Notifications.h"
 #include "app/Settings.h"
+#include "core/I18n.h"
 #include "core/Log.h"
 #include "core/PathText.h"
 #include "document/BzcFile.h"
@@ -30,7 +31,7 @@ void Workspace::Activate(int index) {
 
 std::string Workspace::NextUntitledName() const {
     for (int n = 1;; ++n) {
-        const std::string name = "Деталь" + std::to_string(n);
+        const std::string name = Trf("Деталь{}", n);
         const bool used = std::any_of(sessions.begin(), sessions.end(), [&](const auto& s) { return s->Title() == name; });
         if (!used) return name;
     }
@@ -54,7 +55,7 @@ bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Se
     doc::LoadReport report;
     Expected<doc::Document> loaded = doc::LoadBzc(file, &report);
     if (!loaded) {
-        notes.Error("Не удалось открыть «" + ToUtf8(file.filename()) + "»: " + loaded.GetError().message);
+        notes.Error(Trf("Не удалось открыть «{}»: {}", ToUtf8(file.filename()), Tr(loaded.GetError().message)));
         settings.RemoveRecent(file);
         return false;
     }
@@ -64,7 +65,7 @@ bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Se
     sessions.push_back(std::move(session));
     Activate(static_cast<int>(sessions.size()) - 1);
     settings.AddRecent(file);
-    for (const auto& w : report.warnings) notes.Info(w);
+    for (const auto& w : report.warnings) notes.Info(Tr(w));
     log::Info("Opened {}", ToUtf8(file));
     return true;
 }
@@ -77,21 +78,21 @@ bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settin
             return false;
         }
         const std::filesystem::path folder = session.path.empty() ? platform::DocumentsDir() : session.path.parent_path();
-        const auto chosen = platform::ShowSaveDialog("Сохранить документ", folder / (session.Title() + ".bzc"),
-                                                     {{"Документ BreezeCAD", "*.bzc"}}, ".bzc");
+        const auto chosen = platform::ShowSaveDialog(Tr("Сохранить документ"), folder / (session.Title() + ".bzc"),
+                                                     {{Tr("Документ BreezeCAD"), "*.bzc"}}, ".bzc");
         if (!chosen) return false;
         target = *chosen;
     }
     const Status status = doc::SaveBzc(session.doc, target, kGenerator);
     if (!status) {
-        notes.Error("Не удалось сохранить: " + status.GetError().message);
+        notes.Error(Trf("Не удалось сохранить: {}", Tr(status.GetError().message)));
         return false;
     }
     session.path = target;
     session.history.MarkSaved();
     session.unsavedSince = -1.0;
     settings.AddRecent(target);
-    notes.Success("Сохранено: " + ToUtf8(target.filename()));
+    notes.Success(Trf("Сохранено: {}", ToUtf8(target.filename())));
     log::Info("Saved {}", ToUtf8(target));
     return true;
 }
@@ -104,9 +105,9 @@ bool Workspace::Export(Session& session, ExportFormat format, Notifications& not
     };
     const Info info = format == ExportFormat::Step ? Info{"STEP AP214", "*.step", ".step"}
                     : format == ExportFormat::Stl  ? Info{"STL", "*.stl", ".stl"}
-                                                   : Info{"3MF для 3D-печати", "*.3mf", ".3mf"};
+                                                   : Info{Tr("3MF для 3D-печати"), "*.3mf", ".3mf"};
     if (session.model.Bodies().empty()) {
-        notes.Info("В детали ещё нет тел для экспорта");
+        notes.Info(Tr("В детали ещё нет тел для экспорта"));
         return false;
     }
     if (const std::string problem = platform::FileDialogProblem(); !problem.empty()) {
@@ -114,17 +115,17 @@ bool Workspace::Export(Session& session, ExportFormat format, Notifications& not
         return false;
     }
     const std::filesystem::path folder = session.path.empty() ? platform::DocumentsDir() : session.path.parent_path();
-    const auto chosen = platform::ShowSaveDialog(std::string("Экспорт в ") + info.name,
+    const auto chosen = platform::ShowSaveDialog(Trf("Экспорт в {}", info.name),
                                                  folder / (session.Title() + info.ext), {{info.name, info.pattern}}, info.ext);
     if (!chosen) return false;
     const Status status = format == ExportFormat::Step ? session.model.ExportStep(*chosen)
                         : format == ExportFormat::Stl  ? session.model.ExportStl(*chosen)
                                                        : session.model.Export3mf(*chosen);
     if (!status) {
-        notes.Error(status.GetError().message);
+        notes.Error(Tr(status.GetError().message));
         return false;
     }
-    notes.Success("Экспортировано: " + ToUtf8(chosen->filename()));
+    notes.Success(Trf("Экспортировано: {}", ToUtf8(chosen->filename())));
     return true;
 }
 

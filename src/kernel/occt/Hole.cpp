@@ -9,6 +9,7 @@
 #include <BRepPrimAPI_MakeCylinder.hxx>
 #include <Bnd_Box.hxx>
 #include <Standard_Failure.hxx>
+#include <format>
 #include <gp_Ax2.hxx>
 
 #include <cmath>
@@ -76,7 +77,7 @@ Expected<TopoDS_Shape> HoleTools(const TopoDS_Shape& body, const doc::HoleFeatur
         }
         return tools;
     } catch (const Standard_Failure& failure) {
-        return Error{std::string("Ошибка отверстия: ") + failure.GetMessageString()};
+        return Error{std::format("Ошибка отверстия: {}", failure.GetMessageString())};
     }
 }
 

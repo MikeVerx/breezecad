@@ -4,6 +4,7 @@
 #include <BRepFilletAPI_MakeChamfer.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
 #include <Standard_Failure.hxx>
+#include <format>
 
 namespace bz::kernel::occt {
 namespace {
@@ -12,7 +13,7 @@ namespace {
 template <class Builder, class AddEdge>
 Expected<TopoDS_Shape> Build(const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges, double size, AddEdge add,
                              const char* what, const char* tooBig) {
-    if (edges.empty()) return Error{std::string("Выберите рёбра для операции «") + what + "»"};
+    if (edges.empty()) return Error{std::format("Выберите рёбра для операции «{}»", what)};
     if (size <= 1e-6) return Error{"Размер должен быть больше нуля"};
     try {
         Builder builder(body);

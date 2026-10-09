@@ -2,6 +2,7 @@
 
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
+#include "core/I18n.h"
 #include "document/SketchFeature.h"
 #include "ui/Widgets.h"
 
@@ -89,7 +90,7 @@ void SketchOperationEditor::StartNew(AppContext& app, Session& session, ObjectId
     if (!sketch) sketch = LastUnusedSketch(session.doc);
     if (sketch) sketch = ChooseSketch(session, sketch);
     if (!sketch) {
-        app.notes.Info("Сначала нарисуйте эскиз с замкнутым контуром");
+        app.notes.Info(Tr("Сначала нарисуйте эскиз с замкнутым контуром"));
         return;
     }
     std::unique_ptr<doc::SketchSolidFeature> f = Create(session, sketch);
@@ -191,7 +192,7 @@ void SketchOperationEditor::DrawInViewport(AppContext& app, Session& session, co
 void SketchOperationEditor::DrawProfileSection(AppContext& app, Session& session, doc::SketchSolidFeature& f, float width) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
-    Section(app, "Профиль");
+    Section(app, Tr("Профиль"));
     const auto* sk = session.doc.FindAs<doc::SketchFeature>(f.sketch);
     const auto* regions = session.model.Regions(f.sketch);
     int count = 0;
@@ -208,15 +209,15 @@ void SketchOperationEditor::DrawProfileSection(AppContext& app, Session& session
     dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoft), ui.S(8));
     dl->AddRect(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoftBorder), ui.S(8));
     ui.icons.Draw(dl, count > 0 ? "ui-check" : "status-warning", {p.x + ui.S(10), p.y + (h - ui.S(14)) / 2}, ui.S(14), c.accent);
-    const std::string chip = (sk ? sk->name : std::string("?")) + " \xC2\xB7 " + (f.profiles.automatic ? "авто" : "вручную") +
+    const std::string chip = (sk ? sk->name : std::string("?")) + " \xC2\xB7 " + (f.profiles.automatic ? Tr("авто") : Tr("вручную")) +
                              ": " + std::to_string(count);
     dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(32), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), chip.c_str());
     ImGui::Dummy({width, h});
     Caption(app,
-            f.profiles.automatic ? "Все замкнутые контуры, вложенные стали отверстиями. Щёлкните по контуру, чтобы выбрать вручную."
-                                 : "Щёлкните по контуру на модели, чтобы добавить или убрать его.",
+            f.profiles.automatic ? Tr("Все замкнутые контуры, вложенные стали отверстиями. Щёлкните по контуру, чтобы выбрать вручную.")
+                                 : Tr("Щёлкните по контуру на модели, чтобы добавить или убрать его."),
             width);
-    if (!f.profiles.automatic && ui::LinkButton(ui, "##auto-profile", "Выбрать автоматически")) {
+    if (!f.profiles.automatic && ui::LinkButton(ui, "##auto-profile", Tr("Выбрать автоматически"))) {
         f.profiles = {true, {}};
         Changed(session);
     }
@@ -225,9 +226,9 @@ void SketchOperationEditor::DrawProfileSection(AppContext& app, Session& session
 void SketchOperationEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::SketchSolidFeature&>(feature);
     // Operation: a new body, or combined with the body before it.
-    Section(app, "Операция");
+    Section(app, Tr("Операция"));
     const bool bodyBefore = HasSolidBefore(session.doc, static_cast<std::size_t>(session.doc.IndexOf(f.id)));
-    static constexpr std::array<const char*, 4> labels{"Новое тело", "Добавить", "Вырезать", "Пересечь"};
+    static constexpr std::array<const char*, 4> labels{N_("Новое тело"), N_("Добавить"), N_("Вырезать"), N_("Пересечь")};
     const int current = static_cast<int>(f.operation);
     const int chosen = ui::Segmented(app.ui, "op", labels, current, 2, width, bodyBefore ? 0 : 0b1110);
     if (chosen != current) {

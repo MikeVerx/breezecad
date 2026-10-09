@@ -4,6 +4,7 @@
 // the number of turns, the pitch and the hand.
 
 #include "app/features/SketchOperationEditor.h"
+#include "core/I18n.h"
 #include "document/CoilFeature.h"
 
 namespace bz::app {
@@ -11,7 +12,7 @@ namespace bz::app {
 class CoilEditor final : public SketchOperationEditor {
 public:
     bool        CanEdit(const doc::Feature& f) const override;
-    const char* Title() const override { return "Пружина"; }
+    const char* Title() const override { return Tr("Пружина"); }
     std::string Hint() const override;
 
 protected:
