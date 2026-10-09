@@ -3,7 +3,6 @@ add_library(bz_document STATIC
     Commands.cpp
     Document.cpp
     CoilFeature.cpp
-    DraftFeature.cpp
     SectionFeature.cpp
     EdgeFeature.cpp
     ExtrudeFeature.cpp
@@ -12,7 +11,6 @@ add_library(bz_document STATIC
     HoleFeature.cpp
     LoftFeature.cpp
     PatternFeature.cpp
-    ShellFeature.cpp
     WorkPlaneFeature.cpp
     JsonIO.cpp
     Recompute.cpp

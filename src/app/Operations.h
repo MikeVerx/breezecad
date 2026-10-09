@@ -31,13 +31,11 @@ void StartRevolve(AppContext& app);
 void StartFillet(AppContext& app);
 void StartChamfer(AppContext& app);
 void StartHole(AppContext& app);
-void StartShell(AppContext& app);
 void StartWorkPlane(AppContext& app);
 void StartPattern(AppContext& app, doc::PatternKind kind);
 void StartMirror(AppContext& app);
 void StartLoft(AppContext& app);
 void StartSweep(AppContext& app);
-void StartDraft(AppContext& app);
 void StartCoil(AppContext& app);
 void StartSection(AppContext& app);
 /// Double click in the tree: edit a sketch or an operation.

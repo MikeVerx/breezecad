@@ -2,14 +2,12 @@
 
 #include "core/Log.h"
 #include "document/CoilFeature.h"
-#include "document/DraftFeature.h"
 #include "document/SectionFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/HoleFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/Recompute.h"
 #include "document/RevolveFeature.h"
-#include "document/ShellFeature.h"
 #include "document/LoftFeature.h"
 #include "document/Origin.h"
 #include "document/PatternFeature.h"
@@ -17,7 +15,6 @@
 #include "document/SweepFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "kernel/occt/Coil.h"
-#include "kernel/occt/Draft.h"
 #include "kernel/occt/Section.h"
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Extrude.h"
@@ -28,7 +25,6 @@
 #include "kernel/occt/ModelImpl.h"
 #include "kernel/occt/Project.h"
 #include "kernel/occt/Revolve.h"
-#include "kernel/occt/Shell.h"
 #include "kernel/occt/Sweep.h"
 
 #include <BRepBndLib.hxx>
@@ -529,18 +525,8 @@ void Model::Rebuild(doc::Document& doc) {
                 ApplyLoft(*loft, impl, bodies, doc);
             } else if (auto* wp = dynamic_cast<doc::WorkPlaneFeature*>(&f)) {
                 PlaceWorkPlane(*wp, doc, bodies);
-            } else if (auto* draft = dynamic_cast<doc::DraftFeature*>(&f)) {
-                const std::optional<Frame> neutral = PlaneOf(draft->plane, doc);
-                if (!neutral)
-                    draft->status = {FeatureState::Error, "Выберите нейтральную плоскость"};
-                else
-                    ApplyToLastBody(bodies, draft->status, "Нет тела для уклона",
-                                    [&](const TopoDS_Shape& body) { return occt::MakeDraft(body, *draft, *neutral); });
             } else if (auto* section = dynamic_cast<doc::SectionFeature*>(&f)) {
                 ApplySection(*section, doc, bodies);
-            } else if (auto* shell = dynamic_cast<doc::ShellFeature*>(&f)) {
-                ApplyToLastBody(bodies, shell->status, "Нет тела для оболочки",
-                                [&](const TopoDS_Shape& body) { return occt::MakeShell(body, *shell); });
             } else if (f.status.state == FeatureState::NotComputed) {
                 f.status = {FeatureState::Error, "Операция этого типа не поддерживается"};
             }

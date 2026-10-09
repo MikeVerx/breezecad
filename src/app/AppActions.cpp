@@ -70,8 +70,6 @@ void RegisterActions(AppContext& app) {
     a.Add({"feature.fillet", "Сопряжение", "fillet", 0, "Скруглить рёбра тела", inModel, [&app] { StartFillet(app); }});
     a.Add({"feature.hole", "Отверстие", "hole", ImGuiKey_H, "Просверлить отверстия в плоской грани: простые, с цековкой или зенковкой (H)",
            inModel, [&app] { StartHole(app); }});
-    a.Add({"feature.shell", "Оболочка", "shell", 0, "Сделать деталь полой с заданной толщиной стенки", inModel,
-           [&app] { StartShell(app); }});
     a.Add({"feature.workPlane", "Плоскость", "work-plane", 0, "Рабочая плоскость со смещением — для эскизов не на гранях", inModel,
            [&app] { StartWorkPlane(app); }});
     a.Add({"feature.patternRect", "Прямоугольный", "pattern-rect", 0, "Повторить операции рядами вдоль осей", inModel,
@@ -87,8 +85,6 @@ void RegisterActions(AppContext& app) {
            [&app] { StartCoil(app); }});
     a.Add({"feature.section", "Сечение", "cut-section", 0, "Отсечь модель плоскостью — операция в дереве, гасится и удаляется как любая", inModel,
            [&app] { StartSection(app); }});
-    a.Add({"feature.draft", "Уклон", "draft", 0, "Наклонить боковые грани, чтобы деталь выходила из формы", inModel,
-           [&app] { StartDraft(app); }});
     a.Add({"feature.chamfer", "Фаска", "chamfer", 0, "Срезать рёбра тела под 45°", inModel, [&app] { StartChamfer(app); }});
 
     // --- sketch ---

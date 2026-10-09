@@ -8,14 +8,12 @@
 #include "document/Commands.h"
 #include "document/CoilFeature.h"
 #include "document/SectionFeature.h"
-#include "document/DraftFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
 #include "document/LoftFeature.h"
 #include "document/PatternFeature.h"
 #include "document/RevolveFeature.h"
-#include "document/ShellFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
@@ -121,8 +119,6 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
         if (hole->centres.size() > 1) meta += " \xC3\x97" + std::to_string(hole->centres.size());
         return meta;
     }
-    if (const auto* shell = dynamic_cast<const doc::ShellFeature*>(&f))
-        return FormatValue(shell->thickness.value, Quantity::Length, d.units) + " " + UnitLabel(Quantity::Length, d.units);
     if (const auto* wp = dynamic_cast<const doc::WorkPlaneFeature*>(&f))
         return (wp->reversed ? "\xE2\x88\x92" : "") + FormatValue(wp->offset.value, Quantity::Length, d.units) + " " +
                UnitLabel(Quantity::Length, d.units);
@@ -382,14 +378,12 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::FilletFeature*>(&f)) return "tree-fillet";
     if (dynamic_cast<const doc::ChamferFeature*>(&f)) return "tree-chamfer";
     if (dynamic_cast<const doc::HoleFeature*>(&f)) return "tree-hole";
-    if (dynamic_cast<const doc::ShellFeature*>(&f)) return "tree-shell";
     if (dynamic_cast<const doc::WorkPlaneFeature*>(&f)) return "tree-plane";
     if (const auto* p = dynamic_cast<const doc::PatternFeature*>(&f))
         return p->kind == doc::PatternKind::Circular ? "tree-pattern-circular" : "tree-pattern-rect";
     if (dynamic_cast<const doc::MirrorFeature*>(&f)) return "tree-mirror";
     if (dynamic_cast<const doc::LoftFeature*>(&f)) return "tree-loft";
     if (dynamic_cast<const doc::SweepFeature*>(&f)) return "tree-sweep";
-    if (dynamic_cast<const doc::DraftFeature*>(&f)) return "tree-draft";
     if (dynamic_cast<const doc::CoilFeature*>(&f)) return "tree-coil";
     if (dynamic_cast<const doc::SectionFeature*>(&f)) return "tree-cut-section";
     return "tree-unknown";

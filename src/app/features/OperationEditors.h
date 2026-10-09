@@ -3,14 +3,12 @@
 
 #include "app/features/CoilEditor.h"
 #include "app/features/CopyEditors.h"
-#include "app/features/DraftEditor.h"
 #include "app/features/EdgeOperationEditor.h"
 #include "app/features/ExtrudeEditor.h"
 #include "app/features/HoleEditor.h"
 #include "app/features/LoftEditor.h"
 #include "app/features/RevolveEditor.h"
 #include "app/features/SectionEditor.h"
-#include "app/features/ShellEditor.h"
 #include "app/features/SweepEditor.h"
 #include "app/features/WorkPlaneEditor.h"
 
@@ -24,18 +22,16 @@ struct OperationEditors {
     FilletEditor  fillet;
     ChamferEditor chamfer;
     HoleEditor    hole;
-    ShellEditor     shell;
     WorkPlaneEditor workPlane;
     PatternEditor   pattern;
     MirrorEditor    mirror;
     LoftEditor      loft;
     SweepEditor     sweep;
-    DraftEditor     draft;
     CoilEditor      coil;
     SectionEditor   section;
 
-    std::array<OperationEditor*, 14> All() {
-        return {&extrude, &revolve, &fillet, &chamfer, &hole, &shell, &workPlane, &pattern, &mirror, &loft, &sweep, &draft, &coil, &section};
+    std::array<OperationEditor*, 12> All() {
+        return {&extrude, &revolve, &fillet, &chamfer, &hole, &workPlane, &pattern, &mirror, &loft, &sweep, &coil, &section};
     }
 
     /// The open operation, or nullptr.

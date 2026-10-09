@@ -1,7 +1,6 @@
 add_library(bz_kernel STATIC
     Model.cpp
     occt/Coil.cpp
-    occt/Draft.cpp
     occt/Section.cpp
     occt/EdgeMatch.cpp
     occt/Export.cpp
@@ -13,7 +12,6 @@ add_library(bz_kernel STATIC
     occt/Measure.cpp
     occt/Project.cpp
     occt/Revolve.cpp
-    occt/Shell.cpp
     occt/SketchGeometry.cpp
     occt/Sweep.cpp)
 target_link_libraries(bz_kernel

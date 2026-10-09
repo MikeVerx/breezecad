@@ -154,8 +154,6 @@ void ModelRibbon(RibbonBuilder& r) {
     r.LargeLater("thread", "Резьба");
     r.BeginColumn();
     r.Small("feature.chamfer");
-    r.Small("feature.shell");
-    r.Small("feature.draft");
     r.EndColumn();
     r.BeginColumn();
     r.Small("feature.section");

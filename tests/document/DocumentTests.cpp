@@ -3,7 +3,6 @@
 #include "document/Commands.h"
 #include "document/CoilFeature.h"
 #include "document/SectionFeature.h"
-#include "document/DraftFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
@@ -12,7 +11,6 @@
 #include "document/PatternFeature.h"
 #include "document/Recompute.h"
 #include "document/RevolveFeature.h"
-#include "document/ShellFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
 #include "document/WorkPlaneFeature.h"
@@ -228,13 +226,11 @@ TEST_CASE("every feature type survives a file round trip") {
     made.push_back(std::make_unique<doc::FilletFeature>());
     made.push_back(std::make_unique<doc::ChamferFeature>());
     made.push_back(std::make_unique<doc::HoleFeature>());
-    made.push_back(std::make_unique<doc::ShellFeature>());
     made.push_back(std::make_unique<doc::WorkPlaneFeature>());
     made.push_back(std::make_unique<doc::PatternFeature>());
     made.push_back(std::make_unique<doc::MirrorFeature>());
     made.push_back(std::make_unique<doc::LoftFeature>());
     made.push_back(std::make_unique<doc::SweepFeature>());
-    made.push_back(std::make_unique<doc::DraftFeature>());
     made.push_back(std::make_unique<doc::CoilFeature>());
     made.push_back(std::make_unique<doc::SectionFeature>());
     std::vector<std::pair<ObjectId, std::string_view>> expected;

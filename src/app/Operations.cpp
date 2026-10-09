@@ -156,13 +156,6 @@ void StartHole(AppContext& app) {
     app.ops.hole.StartNew(app, *s);
 }
 
-void StartShell(AppContext& app) {
-    Session* s = app.Doc();
-    if (!s) return;
-    app.ops.Close(app, *s);
-    app.ops.shell.StartNew(app, *s);
-}
-
 void StartWorkPlane(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;
@@ -196,13 +189,6 @@ void StartSweep(AppContext& app) {
     if (!s) return;
     app.ops.Close(app, *s);
     app.ops.sweep.StartNew(app, *s);
-}
-
-void StartDraft(AppContext& app) {
-    Session* s = app.Doc();
-    if (!s) return;
-    app.ops.Close(app, *s);
-    app.ops.draft.StartNew(app, *s);
 }
 
 void StartCoil(AppContext& app) {
