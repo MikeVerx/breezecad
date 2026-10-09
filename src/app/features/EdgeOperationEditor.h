@@ -1,8 +1,9 @@
 #pragma once
 // Operations on edges of the existing body (Сопряжение, Фаска): edges are
 // clicked in the viewport (again to drop one), the size is typed in the panel.
-// While the panel is open the viewport picks edges of the body as it was
-// before the operation, and the preview shows the result.
+// While the panel is open the viewport shows the result live and draws the
+// edges of the body as it was before the operation over it; those are the
+// ones picked, so an edge already rounded off can be clicked again to drop it.
 
 #include "app/features/FeatureOperationEditor.h"
 #include "document/EdgeFeature.h"
@@ -25,6 +26,7 @@ protected:
 private:
     void DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) final;
     void StartNext(AppContext& app, Session& session, const doc::Feature& previous) final;
+    bool ShowStatus(const doc::Feature& feature) const final;
 };
 
 class FilletEditor final : public EdgeOperationEditor {

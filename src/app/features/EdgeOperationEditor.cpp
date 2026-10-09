@@ -37,6 +37,11 @@ void EdgeOperationEditor::StartNext(AppContext& app, Session& session, const doc
     }
 }
 
+bool EdgeOperationEditor::ShowStatus(const doc::Feature& feature) const {
+    // "Выберите рёбра" before any edge is picked just repeats the caption.
+    return !static_cast<const doc::EdgeFeature&>(feature).edges.empty();
+}
+
 std::string EdgeOperationEditor::Hint() const {
     return "Щёлкните рёбра модели (повторный щелчок убирает ребро), введите размер. Enter — готово, Esc — отмена";
 }

@@ -156,7 +156,7 @@ struct Viewport::Impl {
         std::uint64_t                   revision = 0;
         std::size_t                     featureIndex = 0;
         std::vector<TopoDS_Shape>       bodies;    ///< the bodies before the operation
-        std::vector<Handle(AIS_Shape)>  targets;   ///< invisible, edge-selectable copies
+        std::vector<Handle(AIS_Shape)>  targets;   ///< their edges as lines, selectable
         std::vector<doc::EdgeReference> markedRefs;
         std::vector<Handle(AIS_Shape)>  marked;    ///< chosen edges, drawn thick
         std::uint64_t                   markedRevision = static_cast<std::uint64_t>(-1);
@@ -572,10 +572,11 @@ void Viewport::BeginEdgePicking(const kernel::Model& model, std::size_t featureI
     Impl& m = *myImpl;
     Impl::EdgePicking& e = m.edgePick;
 
-    // The result is hidden meanwhile (also after it is rebuilt): the user
-    // picks edges on the body as it was, and sees the result on Готово.
+    // The result stays on screen as a live preview, but only the edges of
+    // the body as it was are pickable: they are drawn as lines over it, so
+    // an edge already rounded off is still there to click (again to drop it).
     if (!e.active || e.shownRevision != m.syncedRevision) {
-        for (const auto& s : m.shown) m.context->Erase(s.shape, false);
+        for (const auto& s : m.shown) m.context->Deactivate(s.shape);
         e.shownRevision = m.syncedRevision;
     }
     if (e.active && e.model == &model && e.revision == model.Revision() && e.featureIndex == featureIndex) return;
@@ -587,8 +588,15 @@ void Viewport::BeginEdgePicking(const kernel::Model& model, std::size_t featureI
     if (featureIndex > 0 && featureIndex <= after.size())
         for (const kernel::Body& body : after[featureIndex - 1]) e.bodies.push_back(body.shape);
     for (const TopoDS_Shape& body : e.bodies) {
+        // Shaded (a wireframe presentation is never found by the selector),
+        // but with fully transparent faces: only its edges show, over the
+        // preview, in the edge colour.
         Handle(AIS_Shape) ais = new AIS_Shape(body);
         m.ApplyStyle(ais, false);
+        Handle(Prs3d_Drawer) drawer = ais->Attributes();
+        drawer->SetFaceBoundaryDraw(true);
+        drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(m.colors.edges), Aspect_TOL_SOLID, 1.2));
+        ais->SetTransparency(1.0);
         m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_EDGE), false);
         e.targets.push_back(ais);
     }
