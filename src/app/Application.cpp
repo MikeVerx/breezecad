@@ -174,7 +174,7 @@ void Application::ApplyTheme(bool force) {
     // The view background: the theme's gradient, or one of its two ends.
     const Color top = mySettings.viewBackground == 2 ? c.viewportBottom : c.viewportTop;
     const Color bottom = mySettings.viewBackground == 1 ? c.viewportTop : c.viewportBottom;
-    myViewport.SetColors({top, bottom, c.body, c.bodyEdges, c.hoverHighlight, c.selection});
+    myViewport.SetColors({top, bottom, c.body, c.bodyEdges, c.hoverHighlight, c.selection, c.danger});
     myFramesToDraw = 3;
 }
 

@@ -40,6 +40,7 @@ struct ViewportColors {
     Color edges            = Color::Hex(0x3D4552);
     Color hover            = Color::Hex(0x38A9E8);
     Color selection        = Color::Hex(0x1D4ED8);
+    Color interference     = Color::Hex(0xE5484D);
 };
 
 /// A translucent square drawn in the scene, hidden where the body is in
@@ -117,6 +118,10 @@ public:
     bool StepAnimation(double now);
 
     std::optional<PickResult> Pick(Vec2 pixel);
+
+    /// Shows where the bodies of `model` overlap (Model::Interferences),
+    /// over everything else; nullptr hides it. Cheap when unchanged.
+    void ShowInterferences(const kernel::Model* model);
 
     // --- measuring ---------------------------------------------------------
     /// While on, vertices, edges and faces of the shown bodies are hovered

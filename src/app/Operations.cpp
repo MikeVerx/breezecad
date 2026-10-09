@@ -1,5 +1,6 @@
 #include "app/Operations.h"
 
+#include "app/Format.h"
 #include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
 #include "core/I18n.h"
@@ -177,6 +178,31 @@ void StartThread(AppContext& app) {
     if (!s) return;
     app.ops.Close(app, *s);
     app.ops.thread.StartNew(app, *s);
+}
+
+void ToggleInterference(AppContext& app) {
+    app.shell.interference = !app.shell.interference;
+    Session* s = app.Doc();
+    if (!app.shell.interference || !s) return;
+    const auto& bodies = s->model.Bodies();
+    if (bodies.size() < 2) {
+        app.notes.Info(Tr("В детали одно тело — пересекаться не с чем"));
+        return;
+    }
+    const std::vector<kernel::Interference>& found = s->model.Interferences();
+    if (found.empty()) {
+        app.notes.Success(Tr("Тела не пересекаются"));
+        return;
+    }
+    const UnitSystem& units = s->doc.units;
+    const double k = units.ToDisplay(1.0, Quantity::Length);
+    std::string list;
+    for (const kernel::Interference& i : found) {
+        if (!list.empty()) list += "; ";
+        list += Trf("{} и {}: {} {}\xC2\xB3", bodies[i.first].name, bodies[i.second].name, FormatGrouped(i.volume * k * k * k, 2),
+                    UnitLabel(Quantity::Length, units));
+    }
+    app.notes.Error(Trf("Пересечения (показаны красным): {}", list));
 }
 
 void StartPattern(AppContext& app, doc::PatternKind kind) {

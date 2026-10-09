@@ -38,6 +38,11 @@ struct Model::Impl {
     std::vector<Body>     bodies;   ///< final result (at the end-of-part marker)
     std::vector<BodyInfo> infos;
     std::uint64_t         revision = 0;
+
+    /// Interferences of `bodies` and the shared solids, computed for `interferenceRevision`.
+    std::vector<Interference> interferences;
+    std::vector<TopoDS_Shape> overlaps;
+    std::uint64_t             interferenceRevision = ~std::uint64_t{0};
 };
 
 } // namespace bz::kernel

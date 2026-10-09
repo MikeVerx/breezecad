@@ -307,6 +307,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     // The section bar sits over the model, under the context menu.
     const bool modelMode = session.mode == EditMode::Model;
     app.viewport.SetSection(modelMode ? SectionFrame(session, app.shell.section) : std::nullopt);
+    app.viewport.ShowInterferences(modelMode && app.shell.interference ? &session.model : nullptr);
     if (modelMode) DrawSectionBar(app, session, vf);
     if (measuring) DrawMeasure(app, session, vf);
     ContextMenu(app, session);

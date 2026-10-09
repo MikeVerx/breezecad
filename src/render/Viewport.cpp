@@ -226,6 +226,8 @@ struct Viewport::Impl {
 
     std::vector<PlaneQuad>         planes;        ///< as last set
     std::vector<Handle(AIS_Shape)> planeShapes;   ///< their presentations
+    std::vector<Handle(AIS_Shape)> overlapShapes;           ///< interferences shown
+    std::uint64_t                  overlapRevision = 0;     ///< of the model they were taken from
     std::uint64_t      syncedRevision = static_cast<std::uint64_t>(-1);
     const kernel::Model* syncedModel = nullptr;
     std::optional<Vec2>  hoverPixel;
@@ -766,6 +768,26 @@ void Viewport::ClearMeasure() {
 const Viewport::Measured& Viewport::Measurement() const { return myImpl->measuring.result; }
 
 // --- section --------------------------------------------------------------------
+
+void Viewport::ShowInterferences(const kernel::Model* model) {
+    Impl& m = *myImpl;
+    const std::uint64_t revision = model ? model->Revision() + 1 : 0;   // 0: hidden
+    if (revision == m.overlapRevision) return;
+    m.overlapRevision = revision;
+    for (const auto& s : m.overlapShapes) m.context->Remove(s, false);
+    m.overlapShapes.clear();
+    m.dirty = true;
+    if (!model) return;
+    model->Interferences();
+    for (const TopoDS_Shape& overlap : model->GetImpl().overlaps) {
+        Handle(AIS_Shape) ais = new AIS_Shape(overlap);
+        ais->SetColor(ToQuantity(m.colors.interference));
+        ais->SetTransparency(0.25);
+        ais->SetZLayer(Graphic3d_ZLayerId_Topmost);   // seen through the bodies around it
+        m.context->Display(ais, AIS_Shaded, -1, false);
+        m.overlapShapes.push_back(ais);
+    }
+}
 
 void Viewport::SetSection(const std::optional<Frame>& plane) {
     Impl& m = *myImpl;

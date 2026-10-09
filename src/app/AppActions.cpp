@@ -44,6 +44,9 @@ void RegisterActions(AppContext& app) {
                if (Session* s = app.Doc()) app.ops.Close(app, *s);
                app.shell.measuring = !app.shell.measuring;
            }});
+    a.Add({"tools.interference", N_("Коллизии"), "interference", 0, N_("Показать красным, где тела детали заходят друг в друга"),
+           [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
+           [&app] { ToggleInterference(app); }});
     a.Add({"view.section", N_("Разрез вида"), "section", 0, N_("Разрезать вид плоскостью, чтобы заглянуть внутрь детали"),
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { app.shell.section.on = !app.shell.section.on; }});

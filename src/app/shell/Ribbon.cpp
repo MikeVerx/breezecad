@@ -198,7 +198,7 @@ void ModelRibbon(RibbonBuilder& r) {
     r.EndColumn();
     r.BeginColumn();
     r.Small("tools.massProperties");
-    r.SmallLater("interference", Tr("Коллизии"));
+    r.Small("tools.interference", nullptr, r.App().shell.interference);
     r.EndColumn();
     r.EndGroup();
 }

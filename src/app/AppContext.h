@@ -58,6 +58,7 @@ struct ShellState {
         bool  flipped = false;     ///< keep the other half
     } section;
     bool measuring = false;   ///< "Измерить" is on
+    bool interference = false;   ///< "Коллизии": overlaps of the bodies shown
 
     /// The radial menu (see viewport/MarkingMenu).
     struct MarkingMenu {

@@ -30,6 +30,7 @@
 #include "kernel/occt/Sweep.h"
 #include "kernel/occt/Thread.h"
 
+#include <BRepAlgoAPI_Common.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepGProp.hxx>
@@ -37,6 +38,7 @@
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
 #include <Message.hxx>
+#include <Standard_Failure.hxx>
 #include <Message_Messenger.hxx>
 #include <Message_Printer.hxx>
 #include <format>
@@ -748,6 +750,33 @@ std::optional<MassProperties> Model::Properties() const {
     box.Get(xmin, ymin, zmin, xmax, ymax, zmax);
     p.bounds = {{xmin, ymin, zmin}, {xmax, ymax, zmax}};
     return p;
+}
+
+const std::vector<Interference>& Model::Interferences() const {
+    Impl& m = *myImpl;
+    if (m.interferenceRevision == m.revision) return m.interferences;
+    m.interferences.clear();
+    m.overlaps.clear();
+    m.interferenceRevision = m.revision;
+    std::vector<Bnd_Box> boxes(m.bodies.size());
+    for (std::size_t i = 0; i < m.bodies.size(); ++i) BRepBndLib::Add(m.bodies[i].shape, boxes[i]);
+    for (std::size_t i = 0; i < m.bodies.size(); ++i)
+        for (std::size_t j = i + 1; j < m.bodies.size(); ++j) {
+            if (boxes[i].IsOut(boxes[j])) continue;
+            try {
+                BRepAlgoAPI_Common common(m.bodies[i].shape, m.bodies[j].shape);
+                if (!common.IsDone()) continue;
+                GProp_GProps props;
+                BRepGProp::VolumeProperties(common.Shape(), props);
+                if (props.Mass() < 1e-6) continue;   // only touching
+                const gp_Pnt c = props.CentreOfMass();
+                m.interferences.push_back({i, j, props.Mass(), {c.X(), c.Y(), c.Z()}});
+                m.overlaps.push_back(common.Shape());
+            } catch (const Standard_Failure&) {
+                // a pair OCCT cannot intersect is left out rather than failing the check
+            }
+        }
+    return m.interferences;
 }
 
 double Model::Volume() const {

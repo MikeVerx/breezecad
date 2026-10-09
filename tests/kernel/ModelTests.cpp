@@ -269,3 +269,25 @@ TEST_CASE("an ellipse extrudes into an elliptic cylinder; its axes stay perpendi
     model.Rebuild(d);
     CHECK(model.Volume() == doctest::Approx(kPi * u.Length() * v.Length() * 5).epsilon(1e-3));
 }
+
+TEST_CASE("interferences: overlapping bodies are found, touching ones are not") {
+    doc::Document d;
+    auto& a = AddSketch(d);
+    AddRect(d, a, {0, 0}, {10, 10});
+    AddExtrude(d, a.id, "10");
+    auto& b = AddSketch(d);
+    AddRect(d, b, {8, 0}, {18, 10});   // 2 mm into the first
+    AddExtrude(d, b.id, "10");
+    auto& c = AddSketch(d);
+    AddRect(d, c, {-10, 0}, {0, 10});   // touches the first along a face
+    AddExtrude(d, c.id, "10");
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(model.Bodies().size() == 3);
+    const auto& found = model.Interferences();
+    REQUIRE(found.size() == 1);
+    CHECK(found[0].first == 0);
+    CHECK(found[0].second == 1);
+    CHECK(found[0].volume == doctest::Approx(200));
+    CHECK(found[0].centre.x == doctest::Approx(9));
+}

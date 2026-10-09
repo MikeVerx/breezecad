@@ -34,6 +34,8 @@ void StartHole(AppContext& app);
 void StartWorkPlane(AppContext& app);
 void StartWorkAxis(AppContext& app);
 void StartThread(AppContext& app);
+/// "Коллизии": shows or hides the overlaps of the bodies and says what was found.
+void ToggleInterference(AppContext& app);
 void StartPattern(AppContext& app, doc::PatternKind kind);
 void StartMirror(AppContext& app);
 void StartLoft(AppContext& app);

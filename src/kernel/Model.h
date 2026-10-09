@@ -42,6 +42,13 @@ struct MassProperties {
     Bounds bounds;         ///< tight box around the bodies
 };
 
+/// Where two bodies overlap ("Коллизии").
+struct Interference {
+    std::size_t first = 0, second = 0;   ///< indices into Bodies()
+    double      volume = 0.0;            ///< of the shared material, mm^3
+    Vec3        centre;                  ///< its centre, mm
+};
+
 /// Mesh quality for STL and 3MF export.
 struct MeshQuality {
     double chordal = 0.02;   ///< max distance between mesh and surface, mm
@@ -76,6 +83,10 @@ public:
 
     /// Volume of all bodies, mm^3 (status bar, tests).
     double Volume() const;
+
+    /// Every pair of bodies that share material (touching does not count).
+    /// Computed on demand and kept until the geometry changes.
+    const std::vector<Interference>& Interferences() const;
     /// A model edge as it would appear on `plane`, taken from the bodies as
     /// they were before feature number `featureIndex` (a sketch projecting it).
     Expected<ProjectedCurve> ProjectEdge(const doc::EdgeReference& edge, const Frame& plane, std::size_t featureIndex) const;
