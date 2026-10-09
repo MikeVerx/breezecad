@@ -54,10 +54,16 @@ public:
     // Circular: copies around a model axis, spread evenly over `angle`
     // (a full turn closes the circle, so its last copy is not doubled).
     ModelAxis axis = ModelAxis::Z;
+    ObjectId  workAxis;   ///< a work axis to turn around instead of `axis` (set: wins)
     Parameter circularCount{.name = "", .expression = "6", .quantity = Quantity::Scalar, .value = 6.0, .error = {}};
     Parameter angle{.name = "", .expression = "360", .quantity = Quantity::Angle, .value = 2 * kPi, .error = {}};
 
     std::string_view Type() const override { return kType; }
+    std::vector<ObjectId> Dependencies() const override {
+        std::vector<ObjectId> out = sources;
+        if (workAxis) out.push_back(workAxis);
+        return out;
+    }
     void CollectParameters(std::vector<Parameter*>& out) override;
     void SaveFields(nlohmann::json& out) const override;
     Status LoadFields(const nlohmann::json& in) override;

@@ -10,6 +10,7 @@
 #include "document/RevolveFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
+#include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
 
 namespace bz::doc {
@@ -30,6 +31,7 @@ FeatureRegistry& FeatureRegistry::Default() {
         r.Register(std::string(PatternFeature::kType), [] { return std::make_unique<PatternFeature>(); });
         r.Register(std::string(MirrorFeature::kType), [] { return std::make_unique<MirrorFeature>(); });
         r.Register(std::string(WorkPlaneFeature::kType), [] { return std::make_unique<WorkPlaneFeature>(); });
+        r.Register(std::string(WorkAxisFeature::kType), [] { return std::make_unique<WorkAxisFeature>(); });
         return r;
     }();
     return registry;

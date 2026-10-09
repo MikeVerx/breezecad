@@ -18,6 +18,7 @@
 #include "document/SectionFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
+#include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
@@ -380,6 +381,7 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::ChamferFeature*>(&f)) return "tree-chamfer";
     if (dynamic_cast<const doc::HoleFeature*>(&f)) return "tree-hole";
     if (dynamic_cast<const doc::WorkPlaneFeature*>(&f)) return "tree-plane";
+    if (dynamic_cast<const doc::WorkAxisFeature*>(&f)) return "tree-axis";
     if (const auto* p = dynamic_cast<const doc::PatternFeature*>(&f))
         return p->kind == doc::PatternKind::Circular ? "tree-pattern-circular" : "tree-pattern-rect";
     if (dynamic_cast<const doc::MirrorFeature*>(&f)) return "tree-mirror";

@@ -23,24 +23,6 @@ std::string StartName(const Session& session, ObjectId base, const doc::FaceRefe
     return {};
 }
 
-/// A chosen thing as a row: what it is, a check or a warning; the active one
-/// (where the next click goes) has a stronger border. True when clicked.
-bool Chip(ui::Ui& ui, const char* id, const std::string& caption, const std::string& value, bool active, float width) {
-    const ui::ThemeColors& c = ui.C();
-    const ImVec2 p = ImGui::GetCursorScreenPos();
-    const float h = ui.S(34);
-    const bool clicked = ImGui::InvisibleButton(id, {width, h});
-    const bool hovered = ImGui::IsItemHovered();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(active ? c.accentSoft : hovered ? c.hover : c.panel), ui.S(8));
-    dl->AddRect(p, {p.x + width, p.y + h}, ui::ToU32(active ? c.accent : c.accentSoftBorder), ui.S(8), 0, ui.S(active ? 1.6f : 1.0f));
-    ui.icons.Draw(dl, value.empty() ? "status-warning" : "ui-check", {p.x + ui.S(10), p.y + (h - ui.S(14)) / 2}, ui.S(14),
-                  value.empty() ? c.warning : c.accent);
-    const std::string text = caption + ": " + (value.empty() ? std::string(Tr("не выбрано")) : value);
-    dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(32), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), text.c_str());
-    return clicked;
-}
-
 } // namespace
 
 bool WorkPlaneEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::WorkPlaneFeature*>(&f) != nullptr; }
@@ -227,7 +209,7 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
     switch (f.method) {
         case WorkPlaneMethod::Offset:
             Section(app, Tr("От чего строить"));
-            Chip(ui, "##start", Tr("Плоскость"), first, true, width);
+            PickChip(ui, "##start", Tr("Плоскость"), first, true, width);
             Caption(app, Tr("Щёлкните плоскость начала координат, рабочую плоскость или плоскую грань тела."), width);
             Gap(app);
             Section(app, Tr("Смещение"));
@@ -235,16 +217,16 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
             break;
         case WorkPlaneMethod::Midplane:
             Section(app, Tr("Между"));
-            if (Chip(ui, "##first", Tr("Первая"), first, mySlot == 0, width)) mySlot = 0;
+            if (PickChip(ui, "##first", Tr("Первая"), first, mySlot == 0, width)) mySlot = 0;
             ImGui::Dummy({0, ui.S(4)});
-            if (Chip(ui, "##second", Tr("Вторая"), StartName(session, f.base2, f.face2), mySlot == 1, width)) mySlot = 1;
+            if (PickChip(ui, "##second", Tr("Вторая"), StartName(session, f.base2, f.face2), mySlot == 1, width)) mySlot = 1;
             Caption(app, Tr("Две параллельные плоскости или плоские грани. Щелчок в окне попадает в выделенное поле."), width);
             break;
         case WorkPlaneMethod::Angle:
             Section(app, Tr("Через ребро"));
-            if (Chip(ui, "##first", Tr("Плоскость"), first, mySlot == 0, width)) mySlot = 0;
+            if (PickChip(ui, "##first", Tr("Плоскость"), first, mySlot == 0, width)) mySlot = 0;
             ImGui::Dummy({0, ui.S(4)});
-            if (Chip(ui, "##edge", Tr("Ребро"), f.edge ? std::string(Tr("выбрано")) : std::string(), mySlot == 1, width)) mySlot = 1;
+            if (PickChip(ui, "##edge", Tr("Ребро"), f.edge ? std::string(Tr("выбрано")) : std::string(), mySlot == 1, width)) mySlot = 1;
             Caption(app, Tr("Прямое ребро, параллельное плоскости: новая плоскость проходит через него под углом к ней."), width);
             Gap(app);
             Section(app, Tr("Угол"));
@@ -252,14 +234,14 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
             break;
         case WorkPlaneMethod::Tangent:
             Section(app, Tr("Касательно"));
-            Chip(ui, "##cylinder", Tr("Цилиндр"), f.cylinder ? std::string(Tr("выбран")) : std::string(), true, width);
+            PickChip(ui, "##cylinder", Tr("Цилиндр"), f.cylinder ? std::string(Tr("выбран")) : std::string(), true, width);
             Caption(app, Tr("Щёлкните цилиндрическую грань: плоскость коснётся её в этом месте и пойдёт вдоль оси."), width);
             break;
         case WorkPlaneMethod::ThreePoints: {
             Section(app, Tr("Через вершины"));
             const std::string count = f.points.size() >= 3 ? std::string(Tr("выбраны")) : f.points.empty() ? std::string()
                                                                                             : Trf("{} из 3", f.points.size());
-            Chip(ui, "##points", Tr("Вершины"), count, true, width);
+            PickChip(ui, "##points", Tr("Вершины"), count, true, width);
             Caption(app, Tr("Щёлкните три вершины тела. Четвёртый щелчок начинает выбор заново. Плоскость остаётся там, где были вершины, и за изменениями детали не следует."), width);
             break;
         }

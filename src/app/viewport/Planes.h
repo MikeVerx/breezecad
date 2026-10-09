@@ -29,6 +29,11 @@ std::optional<double> HitPlane(const ViewportFrame& vf, ImVec2 mouse, const Show
 /// The plane under the cursor nearest the eye, or nullptr.
 const ShownPlane* PlaneUnderCursor(const ViewportFrame& vf, ImVec2 mouse, const std::vector<ShownPlane>& planes);
 
+/// Draws the placed work axes before index `before` (all by default): a long
+/// dash-dot line through the part with its name. `hot` is drawn stronger.
+void DrawWorkAxes(AppContext& app, ImDrawList* dl, const ViewportFrame& vf, const Session& session,
+                  std::size_t before = static_cast<std::size_t>(-1), ObjectId hot = {});
+
 /// Queues the plane for this frame's 3D view (DrawViewport hands the queue
 /// to the viewport) and draws its label. `hot`: hovered or chosen. `faint`:
 /// stepped back so a body stays readable.

@@ -3,6 +3,8 @@
 #include "document/EdgeFeature.h"
 #include "document/HoleFeature.h"
 #include "document/PatternFeature.h"
+#include "document/WorkAxisFeature.h"
+#include "document/WorkPlaneFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "kernel/Model.h"
 
@@ -186,4 +188,48 @@ TEST_CASE("pattern placements") {
     REQUIRE(copies);
     REQUIRE(copies->size() == 2);   // 3 along X, one row
     CHECK((*copies)[1].offset.x == doctest::Approx(-40.0));
+}
+
+TEST_CASE("work axes: two planes, a cylinder; a circular pattern around one") {
+    Plate p;
+    p.hole->centres = {{50, 10}};
+    // Where planes XZ and YZ meet: the Z axis.
+    auto& z = p.Add<doc::WorkAxisFeature>();
+    z.method = doc::WorkAxisMethod::Planes;
+    z.plane1 = doc::origin::kPlaneXZ;
+    z.plane2 = doc::origin::kPlaneYZ;
+    // The axis of the hole, now at (50, 10).
+    auto& holeAxis = p.Add<doc::WorkAxisFeature>();
+    holeAxis.cylinder = doc::CylinderTouch{{50, 10, 0}, {0, 0, 1}, 3.0, {}};
+    // Three holes around the plate's middle (50, 30), on a work axis there.
+    auto& wx = p.Add<doc::WorkPlaneFeature>();
+    wx.base = doc::origin::kPlaneYZ;
+    wx.offset.expression = "50";
+    auto& wy = p.Add<doc::WorkPlaneFeature>();
+    wy.base = doc::origin::kPlaneXZ;
+    wy.offset.expression = "30";
+    wy.reversed = true;   // the XZ plane faces -Y
+    auto& middle = p.Add<doc::WorkAxisFeature>();
+    middle.method = doc::WorkAxisMethod::Planes;
+    middle.plane1 = wx.id;
+    middle.plane2 = wy.id;
+    auto& circular = p.Add<doc::PatternFeature>();
+    circular.kind = doc::PatternKind::Circular;
+    circular.sources = {p.hole->id};
+    circular.circularCount.expression = "3";
+    circular.angle.expression = "360";
+    circular.workAxis = middle.id;
+    kernel::Model model;
+    model.Rebuild(p.d);
+    REQUIRE(z.line);
+    CHECK(std::abs(z.line->second.z) == doctest::Approx(1.0));
+    CHECK(z.line->first.Length() == doctest::Approx(0.0));
+    REQUIRE(holeAxis.line);
+    CHECK(holeAxis.line->first.x == doctest::Approx(50.0));
+    CHECK(holeAxis.line->first.y == doctest::Approx(10.0));
+    REQUIRE(middle.line);
+    CHECK(middle.line->first.x == doctest::Approx(50.0));
+    CHECK(middle.line->first.y == doctest::Approx(30.0));
+    REQUIRE(circular.status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(kPlate - 3 * kHole).epsilon(1e-6));
 }

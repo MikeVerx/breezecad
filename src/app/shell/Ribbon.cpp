@@ -174,7 +174,7 @@ void ModelRibbon(RibbonBuilder& r) {
     r.BeginGroup(Tr("Раб. элементы"));
     r.BeginColumn();
     r.Small("feature.workPlane");
-    r.SmallLater("work-axis", Tr("Ось"));
+    r.Small("feature.workAxis");
     r.SmallLater("work-point", Tr("Точка"));
     r.EndColumn();
     r.EndGroup();

@@ -13,6 +13,7 @@
 #include "document/PatternFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
+#include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "kernel/occt/Coil.h"
 #include "kernel/occt/Section.h"
@@ -251,11 +252,17 @@ void ApplyCopies(const doc::CopyFeature& f, const std::vector<gp_Trsf>& placemen
 }
 
 /// Placements of a pattern's copies.
-Expected<std::vector<gp_Trsf>> PatternPlacements(const doc::PatternFeature& f) {
+Expected<std::vector<gp_Trsf>> PatternPlacements(const doc::PatternFeature& f, const doc::Document& doc) {
     const auto copies = f.Copies();
     if (!copies) return copies.GetError();
-    const Vec3 a = doc::AxisDirection(f.axis);
-    const gp_Ax1 axis(gp_Pnt(0, 0, 0), gp_Dir(a.x, a.y, a.z));
+    Vec3 base{}, a = doc::AxisDirection(f.axis);
+    if (f.workAxis) {
+        const auto* wa = doc.FindAs<doc::WorkAxisFeature>(f.workAxis);
+        if (!wa || !wa->line) return Error{"Рабочая ось массива не построена"};
+        base = wa->line->first;
+        a = wa->line->second;
+    }
+    const gp_Ax1 axis(gp_Pnt(base.x, base.y, base.z), gp_Dir(a.x, a.y, a.z));
     std::vector<gp_Trsf> placements;
     for (const doc::PatternFeature::Copy& c : *copies) {
         gp_Trsf turn, move;
@@ -271,6 +278,45 @@ std::optional<Frame> PlaneOf(ObjectId id, const doc::Document& doc) {
     if (const auto origin = doc::origin::PlaneFrame(id)) return origin;
     if (const auto* wp = doc.FindAs<doc::WorkPlaneFeature>(id); wp && wp->frame) return wp->frame;
     return std::nullopt;
+}
+
+/// Puts a work axis where its edge, cylinder or two planes say.
+void PlaceWorkAxis(doc::WorkAxisFeature& wa, const doc::Document& doc, const std::vector<Body>& bodies) {
+    const auto fail = [&](const char* message) {
+        wa.line.reset();
+        wa.status = {FeatureState::Error, message};
+    };
+    switch (wa.method) {
+        case doc::WorkAxisMethod::Edge: {
+            if (!wa.edge) return fail("Щёлкните прямое ребро");
+            std::optional<std::pair<Vec3, Vec3>> line;
+            for (auto it = bodies.rbegin(); it != bodies.rend() && !line; ++it) line = occt::ResolveLine(*wa.edge, it->shape);
+            if (!line) return fail("Ребро не найдено или оно не прямое");
+            wa.line = line;
+            break;
+        }
+        case doc::WorkAxisMethod::Cylinder: {
+            if (!wa.cylinder) return fail("Щёлкните цилиндрическую грань");
+            std::optional<doc::CylinderTouch> now;
+            for (auto it = bodies.rbegin(); it != bodies.rend() && !now; ++it) now = occt::ResolveCylinder(it->shape, *wa.cylinder);
+            if (!now) return fail("Цилиндрическая грань не найдена: модель изменилась слишком сильно");
+            wa.line = std::make_pair(now->axisPoint, now->axisDir.Normalized());
+            break;
+        }
+        case doc::WorkAxisMethod::Planes: {
+            const std::optional<Frame> a = PlaneOf(wa.plane1, doc), b = PlaneOf(wa.plane2, doc);
+            if (!a || !b) return fail("Выберите две плоскости");
+            const Vec3 dir = a->normal.Cross(b->normal);
+            const double len2 = dir.Dot(dir);
+            if (len2 < 1e-12) return fail("Плоскости параллельны — линии пересечения нет");
+            // The point of the line nearest the origin.
+            const double d1 = a->normal.Dot(a->origin), d2 = b->normal.Dot(b->origin);
+            const Vec3 p = (b->normal.Cross(dir) * d1 + dir.Cross(a->normal) * d2) * (1.0 / len2);
+            wa.line = std::make_pair(p, dir.Normalized());
+            break;
+        }
+    }
+    wa.status = {FeatureState::Ok, {}};
 }
 
 /// Every body cut by the section plane; bodies wholly on the far side go.
@@ -572,7 +618,7 @@ void Model::Rebuild(doc::Document& doc) {
                                     return occt::ApplyBoolean(body, *tools, doc::BooleanOp::Cut);
                                 });
             } else if (auto* pattern = dynamic_cast<doc::PatternFeature*>(&f)) {
-                if (const auto placements = PatternPlacements(*pattern))
+                if (const auto placements = PatternPlacements(*pattern, doc))
                     ApplyCopies(*pattern, *placements, impl, bodies, pattern->status, doc);
                 else
                     pattern->status = {FeatureState::Error, placements.GetError().message};
@@ -601,6 +647,8 @@ void Model::Rebuild(doc::Document& doc) {
                 ApplyLoft(*loft, impl, bodies, doc);
             } else if (auto* wp = dynamic_cast<doc::WorkPlaneFeature*>(&f)) {
                 PlaceWorkPlane(*wp, doc, bodies);
+            } else if (auto* wa = dynamic_cast<doc::WorkAxisFeature*>(&f)) {
+                PlaceWorkAxis(*wa, doc, bodies);
             } else if (auto* section = dynamic_cast<doc::SectionFeature*>(&f)) {
                 ApplySection(*section, doc, bodies);
             } else if (f.status.state == FeatureState::NotComputed) {

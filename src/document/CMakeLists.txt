@@ -18,7 +18,8 @@ add_library(bz_document STATIC
     SketchFeature.cpp
     SketchSolidFeature.cpp
     SweepFeature.cpp
-    UnknownFeature.cpp)
+    UnknownFeature.cpp
+    WorkAxisFeature.cpp)
 target_link_libraries(bz_document
     PUBLIC  bz::core bz::sketch bz::json
     PRIVATE bz::miniz)

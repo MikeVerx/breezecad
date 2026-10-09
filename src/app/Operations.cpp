@@ -165,6 +165,13 @@ void StartWorkPlane(AppContext& app) {
     app.ops.workPlane.StartNew(app, *s);
 }
 
+void StartWorkAxis(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.workAxis.StartNew(app, *s);
+}
+
 void StartPattern(AppContext& app, doc::PatternKind kind) {
     Session* s = app.Doc();
     if (!s) return;

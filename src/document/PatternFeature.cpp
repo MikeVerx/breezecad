@@ -111,6 +111,7 @@ void PatternFeature::SaveFields(Json& out) const {
     out["count2"]        = json_io::ToJson(count2);
     out["spacing2"]      = json_io::ToJson(spacing2);
     out["axis"]          = IdOf(kAxisIds, axis);
+    out["workAxis"]      = json_io::ToJson(workAxis);
     out["circularCount"] = json_io::ToJson(circularCount);
     out["angle"]         = json_io::ToJson(angle);
 }
@@ -123,13 +124,15 @@ Status PatternFeature::LoadFields(const Json& in) {
         !ReadMember(in, "spacing1", f.spacing1) || !ReadMember(in, "useDirection2", f.useDirection2) ||
         !ReadAxis(in, "direction2", f.direction2) || !ReadMember(in, "reversed2", f.reversed2) ||
         !ReadMember(in, "count2", f.count2) || !ReadMember(in, "spacing2", f.spacing2) || !ReadAxis(in, "axis", f.axis) ||
-        !ReadMember(in, "circularCount", f.circularCount) || !ReadMember(in, "angle", f.angle))
+        !ReadMember(in, "circularCount", f.circularCount) || !ReadMember(in, "angle", f.angle) ||
+        !ReadMember(in, "workAxis", f.workAxis))
         return Error{"Массив: повреждены параметры"};
     if (Status s = f.LoadSources(in, "Массив"); !s) return s;
     // Only the type's own fields: id, name and suppressed are already read.
     sources       = std::move(f.sources);
     kind          = f.kind;
     direction1    = f.direction1;
+    workAxis      = f.workAxis;
     reversed1     = f.reversed1;
     count1        = std::move(f.count1);
     spacing1      = std::move(f.spacing1);

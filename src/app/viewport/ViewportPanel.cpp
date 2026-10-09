@@ -269,6 +269,8 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
                     if (pointedAt(p.id) || session.doc.FeatureCount() == 0) DrawPlane(app, dl, vf, p, pointedAt(p.id));
                 for (const ShownPlane& p : WorkPlanes(session)) DrawPlane(app, dl, vf, p, pointedAt(p.id), !pointedAt(p.id));
             }
+            DrawWorkAxes(app, dl, vf, session, static_cast<std::size_t>(-1),
+                         app.shell.hoveredTreeItem ? app.shell.hoveredTreeItem : session.selectedFeature);
             // Sketches not used by an operation stay visible, like in Inventor.
             // (An open sketch operation draws its own sketch.)
             for (std::size_t i = 0; i < session.doc.EndMarker(); ++i) {

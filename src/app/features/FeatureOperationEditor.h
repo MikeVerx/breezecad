@@ -77,6 +77,11 @@ protected:
     void PlaneChoice(AppContext& app, Session& session, ObjectId& plane, float width);
     void PickPlane(AppContext& app, Session& session, ObjectId& plane, const ViewportFrame& vf);
 
+    /// A chosen thing as a row ("Ребро: выбрано"), a warning when `value` is
+    /// empty; the active one (where the next click goes) has a stronger
+    /// border. True when clicked.
+    static bool PickChip(ui::Ui& ui, const char* id, const std::string& caption, const std::string& value, bool active, float width);
+
     bool myFocusFirstField = false;   ///< focus the main value when the panel opens
 
 private:

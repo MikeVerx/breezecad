@@ -4,6 +4,7 @@
 #include "document/HoleFeature.h"
 #include "document/Origin.h"
 #include "document/SketchSolidFeature.h"
+#include "document/WorkAxisFeature.h"
 #include "ui/Widgets.h"
 
 #include <algorithm>
@@ -160,8 +161,31 @@ void PatternEditor::DrawRectangular(AppContext& app, Session& session, doc::Patt
 void PatternEditor::DrawCircular(AppContext& app, Session& session, doc::PatternFeature& f, float width) {
     ui::Ui& ui = app.ui;
     const float half = (width - ui.S(8)) / 2;
-    Section(app, Tr("Ось (через начало координат)"));
-    if (AxisChoice(ui, "axis", f.axis, width)) Changed(session);
+    // X, Y, Z through the origin, or a work axis made before the pattern.
+    Section(app, Tr("Ось"));
+    std::vector<const doc::WorkAxisFeature*> axes;
+    const int index = session.doc.IndexOf(f.id);
+    for (int i = 0; i < index; ++i)
+        if (const auto* wa = dynamic_cast<const doc::WorkAxisFeature*>(session.doc.Features()[static_cast<std::size_t>(i)].get());
+            wa && !wa->suppressed)
+            axes.push_back(wa);
+    std::vector<const char*> labels(kAxisLabels.begin(), kAxisLabels.end());
+    int current = static_cast<int>(f.axis);
+    for (std::size_t i = 0; i < axes.size(); ++i) {
+        labels.push_back(axes[i]->name.c_str());
+        if (axes[i]->id == f.workAxis) current = 3 + static_cast<int>(i);
+    }
+    const int chosen = ui::Segmented(ui, "axis", labels, current, std::min<int>(static_cast<int>(labels.size()), 3), width);
+    if (chosen != current) {
+        if (chosen < 3) {
+            f.axis = static_cast<ModelAxis>(chosen);
+            f.workAxis = {};
+        } else {
+            f.workAxis = axes[static_cast<std::size_t>(chosen - 3)]->id;
+        }
+        Changed(session);
+    }
+    if (axes.empty()) Caption(app, Tr("X, Y, Z проходят через начало координат. Другую ось задайте командой «Ось»."), width);
     Gap(app);
     Section(app, Tr("Количество и угол"));
     ParameterField(app, session, "count", myCircularCount, f.circularCount, half, false, false);

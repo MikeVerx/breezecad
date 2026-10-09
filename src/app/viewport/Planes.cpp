@@ -1,6 +1,7 @@
 #include "app/viewport/Planes.h"
 
 #include "document/Origin.h"
+#include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "ui/Widgets.h"
 
@@ -95,6 +96,35 @@ void DrawPlane(AppContext& app, ImDrawList* dl, const ViewportFrame& vf, const S
     const ImVec2 label = vf.Project(f.ToWorld({m.x - h * 0.92, m.y + h * 0.86}));
     dl->AddText(hot ? app.ui.fonts.title : app.ui.fonts.strong, app.ui.S(hot ? 14.0f : 12.0f), label,
                 ui::ToU32(tint.WithAlpha(fade)), plane.label.c_str());
+}
+
+void DrawWorkAxes(AppContext& app, ImDrawList* dl, const ViewportFrame& vf, const Session& session, std::size_t before,
+                  ObjectId hot) {
+    const ui::ThemeColors& c = app.ui.C();
+    const double reach = PlaneHalfSize(session) * 1.2;
+    const auto& features = session.doc.Features();
+    for (std::size_t i = 0; i < features.size() && i < before; ++i) {
+        const auto* wa = dynamic_cast<const doc::WorkAxisFeature*>(features[i].get());
+        if (!wa || wa->suppressed || !wa->line) continue;
+        const auto& [point, dir] = *wa->line;
+        const ImVec2 a = vf.Project(point - dir * reach), b = vf.Project(point + dir * reach);
+        const bool strong = wa->id == hot;
+        const ImU32 ink = ui::ToU32(strong ? c.accent : c.planeEdge);
+        // Dash-dot, as an axis is drawn on paper.
+        const float len = std::hypot(b.x - a.x, b.y - a.y);
+        if (len < 1) continue;
+        const ImVec2 u{(b.x - a.x) / len, (b.y - a.y) / len};
+        const float dash = app.ui.S(14), gap = app.ui.S(4), dot = app.ui.S(2);
+        for (float t = 0; t < len; t += dash + gap + dot + gap) {
+            const float e = std::min(t + dash, len);
+            dl->AddLine({a.x + u.x * t, a.y + u.y * t}, {a.x + u.x * e, a.y + u.y * e}, ink, app.ui.S(strong ? 2.2f : 1.4f));
+            const float d0 = e + gap;
+            if (d0 < len)
+                dl->AddLine({a.x + u.x * d0, a.y + u.y * d0}, {a.x + u.x * std::min(d0 + dot, len), a.y + u.y * std::min(d0 + dot, len)},
+                            ink, app.ui.S(strong ? 2.2f : 1.4f));
+        }
+        dl->AddText(app.ui.fonts.bodySmall, app.ui.S(12), {b.x + app.ui.S(4), b.y - app.ui.S(14)}, ink, wa->name.c_str());
+    }
 }
 
 } // namespace bz::app

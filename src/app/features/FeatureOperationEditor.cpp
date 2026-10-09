@@ -341,4 +341,21 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
     if (ui::PrimaryButton(ui, "##done", Tr("Готово"), "Enter", {bw, bh})) app.Later([&app, &session, this] { Done(app, session); });
 }
 
+bool FeatureOperationEditor::PickChip(ui::Ui& ui, const char* id, const std::string& caption, const std::string& value, bool active, float width) {
+    const ui::ThemeColors& c = ui.C();
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float h = ui.S(34);
+    const bool clicked = ImGui::InvisibleButton(id, {width, h});
+    const bool hovered = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(active ? c.accentSoft : hovered ? c.hover : c.panel), ui.S(8));
+    dl->AddRect(p, {p.x + width, p.y + h}, ui::ToU32(active ? c.accent : c.accentSoftBorder), ui.S(8), 0, ui.S(active ? 1.6f : 1.0f));
+    ui.icons.Draw(dl, value.empty() ? "status-warning" : "ui-check", {p.x + ui.S(10), p.y + (h - ui.S(14)) / 2}, ui.S(14),
+                  value.empty() ? c.warning : c.accent);
+    const std::string text = caption + ": " + (value.empty() ? std::string(Tr("не выбрано")) : value);
+    dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(32), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), text.c_str());
+    return clicked;
+}
+
+
 } // namespace bz::app
