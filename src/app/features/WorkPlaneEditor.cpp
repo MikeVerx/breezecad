@@ -51,6 +51,8 @@ std::string WorkPlaneEditor::Hint() const {
             return Tr("Щёлкните две параллельные плоскости или грани — плоскость встанет посередине. Enter — готово, Esc — отмена");
         case WorkPlaneMethod::Angle:
             return Tr("Щёлкните плоскость или грань, затем прямое ребро на ней, введите угол. Enter — готово, Esc — отмена");
+        case WorkPlaneMethod::ThreePoints:
+            return Tr("Щёлкните три вершины тела. Enter — готово, Esc — отмена");
         case WorkPlaneMethod::Offset: break;
     }
     return Tr("Щёлкните плоскость или плоскую грань, от которой строить, введите смещение. Enter — готово, Esc — отмена");
@@ -86,6 +88,27 @@ void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const Vi
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 mouse = ImGui::GetMousePos();
     const Vec2 local = vf.ToLocal(mouse);
+    // Through vertices: only the vertices of the body before this plane.
+    if (f->method == WorkPlaneMethod::ThreePoints) {
+        app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Vertices);
+        const ImU32 ink = ui::ToU32(app.ui.C().accent);
+        for (std::size_t i = 0; i < f->points.size(); ++i) {
+            const ImVec2 p = vf.Project(f->points[i]);
+            dl->AddCircleFilled(p, app.ui.S(5), ink);
+            const std::string n = std::to_string(i + 1);
+            dl->AddText(app.ui.fonts.strong, app.ui.S(12), {p.x + app.ui.S(7), p.y - app.ui.S(16)}, ink, n.c_str());
+        }
+        for (const ShownPlane& p : WorkPlanes(session, static_cast<std::size_t>(index) + 1))
+            if (p.id == f->id) DrawPlane(app, dl, vf, p, true);
+        myArrow.Release();
+        if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
+        if (const auto v = app.viewport.PickVertex(local)) {
+            if (f->points.size() >= 3) f->points.clear();   // a fourth click starts over
+            f->points.push_back(*v);
+            Changed(session);
+        }
+        return;
+    }
     // Through an edge: edges and faces of the body before this plane are picked.
     const bool byEdge = f->method == WorkPlaneMethod::Angle;
     if (byEdge) {
@@ -170,9 +193,9 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
 
     Section(app, Tr("Способ"));
     {
-        static constexpr std::array<const char*, 3> methods{N_("Смещение"), N_("Посередине"), N_("Под углом")};
+        static constexpr std::array<const char*, 4> methods{N_("Смещение"), N_("Посередине"), N_("Под углом"), N_("По 3 точкам")};
         const int current = static_cast<int>(f.method);
-        if (const int chosen = ui::Segmented(ui, "method", methods, current, 3, width); chosen != current) {
+        if (const int chosen = ui::Segmented(ui, "method", methods, current, 2, width); chosen != current) {
             f.method = static_cast<WorkPlaneMethod>(chosen);
             myMethod = f.method;
             // The start is kept; the next click goes to what the method still needs.
@@ -209,6 +232,14 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
             Section(app, Tr("Угол"));
             ParameterField(app, session, "angle", myAngle, f.angle, width, myFocusFirstField);
             break;
+        case WorkPlaneMethod::ThreePoints: {
+            Section(app, Tr("Через вершины"));
+            const std::string count = f.points.size() >= 3 ? std::string(Tr("выбраны")) : f.points.empty() ? std::string()
+                                                                                            : Trf("{} из 3", f.points.size());
+            Chip(ui, "##points", Tr("Вершины"), count, true, width);
+            Caption(app, Tr("Щёлкните три вершины тела. Четвёртый щелчок начинает выбор заново. Плоскость остаётся там, где были вершины, и за изменениями детали не следует."), width);
+            break;
+        }
     }
     if (f.method != WorkPlaneMethod::Midplane) {
         Gap(app);

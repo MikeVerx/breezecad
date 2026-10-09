@@ -14,10 +14,11 @@ using json_io::ReadMember;
 
 namespace {
 
-constexpr std::array<std::pair<WorkPlaneMethod, std::string_view>, 3> kMethodIds{{
+constexpr std::array<std::pair<WorkPlaneMethod, std::string_view>, 4> kMethodIds{{
     {WorkPlaneMethod::Offset, "offset"},
     {WorkPlaneMethod::Midplane, "midplane"},
     {WorkPlaneMethod::Angle, "angle"},
+    {WorkPlaneMethod::ThreePoints, "points"},
 }};
 
 } // namespace
@@ -45,6 +46,11 @@ void WorkPlaneFeature::SaveFields(Json& out) const {
         out["base2"] = json_io::ToJson(base2);
         if (face2.IsSet()) out["face2"] = json_io::ToJson(face2);
     }
+    if (method == WorkPlaneMethod::ThreePoints) {
+        Json pts = Json::array();
+        for (const Vec3& p : points) pts.push_back({p.x, p.y, p.z});
+        out["points"] = std::move(pts);
+    }
     if (method == WorkPlaneMethod::Angle) {
         if (edge) out["edge"] = json_io::ToJson(*edge);
         out["angle"] = json_io::ToJson(angle);
@@ -71,6 +77,13 @@ Status WorkPlaneFeature::LoadFields(const Json& in) {
         !ReadMember(in, "offset", off) || !ReadMember(in, "method", methodId) || !ReadMember(in, "base2", b2) ||
         !ReadMember(in, "face2", fr2) || !ReadMember(in, "angle", ang))
         return Error{"Рабочая плоскость: повреждены параметры"};
+    std::vector<Vec3> pts;
+    if (const auto it = in.find("points"); it != in.end() && it->is_array())
+        for (const Json& p : *it) {
+            if (!p.is_array() || p.size() != 3 || !p[0].is_number() || !p[1].is_number() || !p[2].is_number())
+                return Error{"Рабочая плоскость: повреждены точки"};
+            pts.push_back({p[0].get<double>(), p[1].get<double>(), p[2].get<double>()});
+        }
     WorkPlaneMethod m;
     if (!json_io::FromId(kMethodIds, methodId, m)) return Error{std::format("Рабочая плоскость: неизвестный способ «{}»", methodId)};
     // Only the type's own fields: id, name and suppressed are already read.
@@ -83,6 +96,7 @@ Status WorkPlaneFeature::LoadFields(const Json& in) {
     face2 = fr2;
     angle = std::move(ang);
     edge = e;
+    points = std::move(pts);
     return Status::Ok();
 }
 

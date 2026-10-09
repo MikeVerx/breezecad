@@ -180,3 +180,19 @@ TEST_CASE("work plane through an edge at an angle to a face") {
     model.Rebuild(d);
     CHECK(std::abs(wp.frame->normal.z) == doctest::Approx(std::sqrt(0.5)));
 }
+
+TEST_CASE("work plane through three points") {
+    doc::Document d;
+    auto& wp = AddWorkPlane(d, "0");
+    wp.method = doc::WorkPlaneMethod::ThreePoints;
+    wp.points = {{0, 0, 5}, {10, 0, 5}, {0, 10, 5}};
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(wp.status.state == FeatureState::Ok);
+    CHECK(wp.frame->origin.z == doctest::Approx(5.0));
+    CHECK(wp.frame->normal.z == doctest::Approx(1.0));
+    wp.points[2] = {20, 0, 5};   // in one line
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(wp.id)));
+    model.Rebuild(d);
+    CHECK(wp.status.state == FeatureState::Error);
+}

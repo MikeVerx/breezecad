@@ -8,6 +8,7 @@
 
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>
+#include <BRep_Tool.hxx>
 #include <Aspect_DisplayConnection.hxx>
 #include <Aspect_NeutralWindow.hxx>
 #include <BRepAdaptor_Surface.hxx>
@@ -845,7 +846,9 @@ void Viewport::BeginPickingOriginal(const kernel::Model& model, std::size_t feat
     const auto& after = model.GetImpl().bodiesAfter;
     if (featureIndex > 0 && featureIndex <= after.size())
         for (const kernel::Body& body : after[featureIndex - 1]) o.bodies.push_back(body.shape);
-    const int mode = AIS_Shape::SelectionMode(target == PickTarget::Faces ? TopAbs_FACE : TopAbs_EDGE);
+    const int mode = AIS_Shape::SelectionMode(target == PickTarget::Faces      ? TopAbs_FACE
+                                              : target == PickTarget::Vertices ? TopAbs_VERTEX
+                                                                               : TopAbs_EDGE);
     for (const TopoDS_Shape& body : o.bodies) {
         // Shaded (a wireframe presentation is never found by the selector),
         // but with fully transparent faces: only its edges show, over the
@@ -920,6 +923,21 @@ std::vector<doc::EdgeReference> Viewport::PickFaceEdges(Vec2 pixel) {
             out.push_back(kernel::occt::DescribeEdge(TopoDS::Edge(edges(i)), m.original.bodies[b]));
     }
     return out;
+}
+
+std::optional<Vec3> Viewport::PickVertex(Vec2 pixel) {
+    Impl& m = *myImpl;
+    if (!m.original.active || m.original.target != PickTarget::Vertices) return std::nullopt;
+    const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
+    const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->Pick(px, py, m.view);
+    for (int i = 1; i <= selector->NbPicked(); ++i) {
+        const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
+        if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_VERTEX) continue;
+        return ToVec(BRep_Tool::Pnt(TopoDS::Vertex(owner->Shape())).XYZ());
+    }
+    return std::nullopt;
 }
 
 std::optional<doc::FaceReference> Viewport::PickFace(Vec2 pixel) {

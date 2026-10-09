@@ -4,7 +4,9 @@
 //   Offset    the start moved along its normal;
 //   Midplane  half way between two parallel starts;
 //   Angle     through a straight edge, turned from the start by an angle
-//             (the edge must lie parallel to the start).
+//             (the edge must lie parallel to the start);
+//   ThreePoints through three vertices of the body (kept where they were
+//             picked: the plane does not follow later changes of the part).
 // Sketches placed on it follow it when it moves.
 
 #include "document/EdgeReference.h"
@@ -12,10 +14,11 @@
 #include "document/Feature.h"
 
 #include <optional>
+#include <vector>
 
 namespace bz::doc {
 
-enum class WorkPlaneMethod : unsigned char { Offset, Midplane, Angle };
+enum class WorkPlaneMethod : unsigned char { Offset, Midplane, Angle, ThreePoints };
 
 class WorkPlaneFeature final : public FeatureBase<WorkPlaneFeature> {
 public:
@@ -35,6 +38,8 @@ public:
     /// Angle: the edge it turns about, and by how much (reversed: the other way).
     std::optional<EdgeReference> edge;
     Parameter angle{.name = "", .expression = "90", .quantity = Quantity::Angle, .value = kPi / 2, .error = {}};
+    /// ThreePoints: the picked vertices, model space (up to three).
+    std::vector<Vec3> points;
 
     /// Where the plane is after the last rebuild (runtime, never saved).
     std::optional<Frame> frame;

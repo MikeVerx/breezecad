@@ -340,6 +340,19 @@ void PlaceWorkPlane(doc::WorkPlaneFeature& wp, const doc::Document& doc, const s
         if (const auto* other = doc.FindAs<doc::WorkPlaneFeature>(base); other && other->frame) return other->frame;
         return std::nullopt;
     };
+    if (wp.method == WorkPlaneMethod::ThreePoints) {
+        if (wp.points.size() < 3) return fail("Выберите три вершины");
+        const Vec3 a = wp.points[0], u = wp.points[1] - a, v = wp.points[2] - a;
+        const Vec3 n = u.Cross(v);
+        if (n.Length() < 1e-9 * std::max(1.0, u.Length() * v.Length())) return fail("Точки лежат на одной прямой — плоскость через них не одна");
+        Frame f;
+        f.origin = a;
+        f.xDir = u.Normalized();
+        f.normal = n.Normalized() * (wp.reversed ? -1.0 : 1.0);
+        wp.frame = f;
+        wp.status = {FeatureState::Ok, {}};
+        return;
+    }
     const std::optional<Frame> first = start(wp.base, wp.face);
     if (!first) {
         return fail(wp.face.IsSet() ? "Грань рабочей плоскости не найдена: модель изменилась слишком сильно"
@@ -360,6 +373,7 @@ void PlaceWorkPlane(doc::WorkPlaneFeature& wp, const doc::Document& doc, const s
             wp.frame = doc::OffsetFrame(*first, gap / 2);
             break;
         }
+        case WorkPlaneMethod::ThreePoints: break;   // handled above
         case WorkPlaneMethod::Angle: {
             if (!wp.edge) return fail("Выберите прямое ребро — ось поворота плоскости");
             if (wp.angle.HasError()) return fail("Угол задан с ошибкой");
