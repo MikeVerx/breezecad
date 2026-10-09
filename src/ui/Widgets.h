@@ -29,6 +29,10 @@ bool RibbonSmallButton(Ui& ui, const char* id, std::string_view icon, const char
 int Segmented(Ui& ui, const char* id, std::span<const char* const> labels, int current, int columns, float width,
               int disabledMask = 0);
 
+/// Horizontal slider for a value in 0..1, `width` wide. Returns true when
+/// the value changed this frame (while dragging or on a click on the track).
+bool Slider(Ui& ui, const char* id, float& value, float width);
+
 /// Filled accent button. `hint` (e.g. "Enter") is drawn small after the label.
 bool PrimaryButton(Ui& ui, const char* id, const char* label, const char* hint, ImVec2 size, bool enabled = true);
 /// Outlined neutral button.

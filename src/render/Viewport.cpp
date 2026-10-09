@@ -16,6 +16,7 @@
 #include <Bnd_Box.hxx>
 #include <GeomAbs_Shape.hxx>
 #include <Graphic3d_Camera.hxx>
+#include <Graphic3d_ClipPlane.hxx>
 #include <Graphic3d_Mat4d.hxx>
 #include <Graphic3d_Vec2.hxx>
 #include <OpenGl_Context.hxx>
@@ -143,6 +144,9 @@ struct Viewport::Impl {
         Handle(AIS_Shape)  shape;
     };
     std::vector<Shown> shown;
+
+    Handle(Graphic3d_ClipPlane) section;        ///< null: no section
+    std::optional<Frame>        sectionFrame;   ///< as last set
 
     std::vector<PlaneQuad>         planes;        ///< as last set
     std::vector<Handle(AIS_Shape)> planeShapes;   ///< their presentations
@@ -617,6 +621,38 @@ std::optional<PickResult> Viewport::Pick(Vec2 pixel) {
         !brep.IsNull() && brep->Shape().ShapeType() == TopAbs_FACE)
         result.plane = PlanarFaceFrame(TopoDS::Face(brep->Shape()));
     return result;
+}
+
+// --- section --------------------------------------------------------------------
+
+void Viewport::SetSection(const std::optional<Frame>& plane) {
+    Impl& m = *myImpl;
+    const bool same = plane.has_value() == m.sectionFrame.has_value() &&
+                      (!plane || ((plane->origin - m.sectionFrame->origin).Length() < 1e-9 &&
+                                  (plane->normal - m.sectionFrame->normal).Length() < 1e-9));
+    if (same) return;
+    m.sectionFrame = plane;
+    if (!plane) {
+        if (!m.section.IsNull()) m.view->RemoveClipPlane(m.section);
+        m.section.Nullify();
+        m.dirty = true;
+        return;
+    }
+    if (m.section.IsNull()) {
+        m.section = new Graphic3d_ClipPlane();
+        // Filled cut faces in the body colour, a little darker, so the cut reads as solid material.
+        m.section->SetCapping(true);
+        Graphic3d_MaterialAspect material(Graphic3d_NameOfMaterial_UserDefined);
+        const Color body = m.colors.body;
+        material.SetColor(Quantity_Color(body.r * 0.82, body.g * 0.82, body.b * 0.82, Quantity_TOC_sRGB));
+        m.section->SetCappingMaterial(material);
+        m.view->AddClipPlane(m.section);
+    }
+    // OCCT keeps the side the equation is positive on: flip the normal so
+    // what lies ahead of `normal` is cut away.
+    const Vec3 n = -plane->normal;
+    m.section->SetEquation(gp_Pln(gp_Pnt(plane->origin.x, plane->origin.y, plane->origin.z), gp_Dir(n.x, n.y, n.z)));
+    m.dirty = true;
 }
 
 // --- planes -------------------------------------------------------------------

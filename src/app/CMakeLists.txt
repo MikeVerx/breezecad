@@ -33,6 +33,7 @@ add_executable(breezecad WIN32
     sketch/SketchPick.cpp
     sketch/SketchTools.cpp
     viewport/Planes.cpp
+    viewport/Section.cpp
     viewport/ViewportPanel.cpp)
 if(WIN32)
     target_sources(breezecad PRIVATE ${PROJECT_SOURCE_DIR}/resources/app.rc)

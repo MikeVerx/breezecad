@@ -160,6 +160,32 @@ int Segmented(Ui& ui, const char* id, std::span<const char* const> labels, int c
     return result;
 }
 
+bool Slider(Ui& ui, const char* id, float& value, float width) {
+    const float height = ui.S(28);
+    const float knob = ui.S(7);
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(id, {width, height});
+    const bool active = ImGui::IsItemActive();
+    const bool hovered = ImGui::IsItemHovered();
+    bool changed = false;
+    // The knob's centre runs between the track ends.
+    const float x0 = pos.x + knob, x1 = pos.x + width - knob;
+    if (active) {
+        const float v = std::clamp((ImGui::GetIO().MousePos.x - x0) / std::max(1.0f, x1 - x0), 0.0f, 1.0f);
+        changed = v != value;
+        value = v;
+    }
+    const ThemeColors& c = ui.C();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float y = pos.y + height / 2;
+    const float x = x0 + (x1 - x0) * std::clamp(value, 0.0f, 1.0f);
+    dl->AddRectFilled({x0, y - ui.S(2)}, {x1, y + ui.S(2)}, ToU32(c.segmentTrack), ui.S(2));
+    dl->AddRectFilled({x0, y - ui.S(2)}, {x, y + ui.S(2)}, ToU32(c.accent), ui.S(2));
+    dl->AddCircleFilled({x, y}, knob, ToU32(c.segmentActive));
+    dl->AddCircle({x, y}, knob, ToU32(active || hovered ? c.accent : c.fieldBorder), 0, ui.S(1.5f));
+    return changed;
+}
+
 namespace {
 
 bool ButtonBody(Ui& ui, const char* id, const char* label, const char* hint, ImVec2 size, bool enabled, bool primary) {

@@ -117,6 +117,11 @@ public:
 
     std::optional<PickResult> Pick(Vec2 pixel);
 
+    /// Cuts the view with a plane: what lies on the side its normal points
+    /// to is hidden, and the cut faces are filled. nullopt: no section.
+    /// Cheap when unchanged.
+    void SetSection(const std::optional<Frame>& plane);
+
     /// Planes to show this frame; cheap when they did not change. They are
     /// never picked (the UI hit-tests them itself).
     void SetPlanes(const std::vector<PlaneQuad>& planes);

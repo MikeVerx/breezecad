@@ -19,6 +19,8 @@ public:
         myX = origin.x + myUi.S(8);
     }
 
+    AppContext& App() const { return myApp; }
+
     void BeginGroup(const char* caption) {
         myCaption = caption;
         myGroupStart = myX + myUi.S(8);
@@ -166,7 +168,7 @@ void ModelRibbon(RibbonBuilder& r) {
     r.BeginGroup("Диагностика");
     r.BeginColumn();
     r.SmallLater("measure", "Измерить");
-    r.SmallLater("section", "Сечение");
+    r.Small("view.section", nullptr, r.App().shell.section.on);
     r.EndColumn();
     r.BeginColumn();
     r.Small("tools.massProperties");

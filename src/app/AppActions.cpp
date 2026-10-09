@@ -38,6 +38,9 @@ void RegisterActions(AppContext& app) {
                app.shell.paletteOpen = true;
                app.shell.focusPalette = true;
            }});
+    a.Add({"view.section", "Сечение", "section", 0, "Разрезать вид плоскостью, чтобы заглянуть внутрь детали",
+           [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
+           [&app] { app.shell.section.on = !app.shell.section.on; }});
     a.Add({"tools.massProperties", "МЦХ", "mass-properties", 0, "Масса, объём, площадь, центр масс и габариты детали",
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { app.shell.showMassProperties = true; }});

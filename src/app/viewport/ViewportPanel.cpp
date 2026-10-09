@@ -5,6 +5,7 @@
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
 #include "app/viewport/Planes.h"
+#include "app/viewport/Section.h"
 #include "app/shell/Shell.h"
 #include "document/ExtrudeFeature.h"
 #include "document/Origin.h"
@@ -242,6 +243,10 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             break;
         }
     }
+    // The section bar sits over the model, under the context menu.
+    const bool modelMode = session.mode == EditMode::Model;
+    app.viewport.SetSection(modelMode ? SectionFrame(session, app.shell.section) : std::nullopt);
+    if (modelMode) DrawSectionBar(app, session, vf);
     ContextMenu(app, session);
     app.viewport.SetPlanes(app.shell.planeQuads);
 

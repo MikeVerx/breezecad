@@ -42,6 +42,14 @@ struct ShellState {
 
     render::DisplayStyle displayStyle = render::DisplayStyle::ShadedWithEdges;
 
+    /// "Сечение": the view cut by an origin plane moved through the part.
+    struct Section {
+        bool  on = false;
+        int   plane = 1;           ///< 0 XY, 1 XZ, 2 YZ
+        float position = 0.5f;     ///< 0..1 across the part
+        bool  flipped = false;     ///< keep the other half
+    } section;
+
     ObjectId    renaming;              ///< tree row being renamed
     std::string renameText;
     bool        renameFocus = false;
