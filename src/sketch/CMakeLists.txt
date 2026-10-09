@@ -1,5 +1,6 @@
 add_library(bz_sketch STATIC
     EquationSystem.cpp
+    Shapes.cpp
     Sketch.cpp
     Solver.cpp)
 target_link_libraries(bz_sketch PUBLIC bz::core)
