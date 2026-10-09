@@ -9,12 +9,15 @@
 #include "app/shell/Shell.h"
 #include "core/I18n.h"
 #include "document/Commands.h"
+#include "platform/FileDialogs.h"
 #include "platform/Launch.h"
 #include "ui/Widgets.h"
 
 #include <array>
 #include <cmath>
 #include <format>
+#include <nlohmann/json.hpp>
+#include <fstream>
 #include <vector>
 
 namespace bz::app {
@@ -143,7 +146,6 @@ void StoreShortcuts(AppContext& app) {
         if (a.chord != a.defaultChord) app.settings.shortcuts.emplace_back(a.id, ActionRegistry::ChordText(a.chord));
 }
 
-/// The "Мышь" tab: a ready-made set of view gestures, or each one by hand.
 /// Язык: as the system, Russian or an installed catalog; packs are files the
 /// user downloads and puts in a folder (the program stays offline).
 void DrawLanguageSettings(AppContext& app, float width) {
@@ -174,6 +176,7 @@ void DrawLanguageSettings(AppContext& app, float width) {
     }
 }
 
+/// The "Мышь" tab: a ready-made set of view gestures, or each one by hand.
 void DrawMouseSettings(AppContext& app, float width) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
@@ -417,12 +420,41 @@ void DrawSettings(AppContext& app) {
             ImGui::TextUnformatted(Tr("Щёлкните сочетание и нажмите новое. Esc — отмена, Backspace — убрать. Точка — изменено."));
             ImGui::PopStyleColor();
         }
-        if (ui::SecondaryButton(ui, "##reset-keys", Tr("Сбросить все сочетания"), nullptr, {ui.S(220), ui.S(32)})) {
+        if (ui::SecondaryButton(ui, "##reset-keys", Tr("Сбросить все сочетания"), nullptr, {ui.S(196), ui.S(32)})) {
             app.actions.ResetChords();
             app.settings.shortcutPreset = "breezecad";
             app.settings.shortcutsCustom = false;
             StoreShortcuts(app);
             app.shell.shortcutNote.clear();
+        }
+        // A set of shortcuts as a file: to carry to another computer or share.
+        ImGui::SameLine(0, ui.S(8));
+        if (ui::SecondaryButton(ui, "##export-keys", Tr("Сохранить в файл…"), nullptr, {ui.S(176), ui.S(32)})) {
+            if (const auto file = platform::ShowSaveDialog(Tr("Сочетания клавиш"), "breezecad-keys.json",
+                                                           {{Tr("Сочетания клавиш"), "*.json"}}, ".json")) {
+                nlohmann::json j = nlohmann::json::object();
+                for (const Action& a : app.actions.All())
+                    if (!a.label.empty() && a.run) j[a.id] = ActionRegistry::ChordText(a.chord);
+                std::ofstream(*file, std::ios::binary) << j.dump(2);
+                app.notes.Success(Tr("Сочетания сохранены"));
+            }
+        }
+        ImGui::SameLine(0, ui.S(8));
+        if (ui::SecondaryButton(ui, "##import-keys", Tr("Загрузить из файла…"), nullptr, {ui.S(176), ui.S(32)})) {
+            if (const auto file = platform::ShowOpenDialog(Tr("Сочетания клавиш"), {{Tr("Сочетания клавиш"), "*.json"}}, {})) {
+                std::ifstream in(*file, std::ios::binary);
+                const nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
+                if (j.is_discarded() || !j.is_object()) {
+                    app.notes.Error(Tr("Файл сочетаний повреждён"));
+                } else {
+                    app.actions.ResetChords();
+                    for (const auto& [id, chord] : j.items())
+                        if (chord.is_string()) app.actions.SetChord(id, ActionRegistry::ParseChord(chord.get<std::string>()));
+                    app.settings.shortcutsCustom = true;
+                    StoreShortcuts(app);
+                    app.notes.Success(Tr("Сочетания загружены"));
+                }
+            }
         }
     }
     ImGui::Dummy({0, ui.S(8)});
