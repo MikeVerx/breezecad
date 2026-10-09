@@ -244,6 +244,13 @@ UI не знает об OCCT, документ не знает ни об OCCT, �
   (`ShellState::section`). OCCT `Graphic3d_ClipPlane` с заливкой разреза
   (`Viewport::SetSection`); панель — `app/viewport/Section`. Новый виджет
   `ui::Slider`, иконка `ui-swap`.
+- Измерить (лента → Диагностика, Esc — закончить): вершины, рёбра, грани
+  модели; первый элемент — его размеры (длина, радиус/диаметр, площадь,
+  координаты вершины), второй — кратчайшее расстояние (линия-размер в
+  окне) и угол между плоскими гранями / прямыми рёбрами. Расчёт —
+  `kernel/occt/Measure` (+2 теста), выбор — `Viewport::MeasurePick`,
+  карточка — `app/viewport/Measure`.
+- UI-сценарий: `scripts/ui-test/scenario-measure.sh`.
 
 ## Как продолжить
 

@@ -254,6 +254,8 @@ void EscapePressed(AppContext& app) {
     if (!s) return;
     if (OperationEditor* open = app.ops.Active()) {
         open->Cancel(app, *s);
+    } else if (app.shell.measuring) {
+        app.shell.measuring = false;
     } else if (s->mode == EditMode::Sketch) {
         app.sketch.Escape(app, *s);
     } else if (s->mode == EditMode::PickPlane) {

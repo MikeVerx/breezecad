@@ -3,6 +3,7 @@
 #include "core/Log.h"
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/FaceMatch.h"
+#include "kernel/occt/Measure.h"
 #include "kernel/occt/ModelImpl.h"
 
 #include <AIS_InteractiveContext.hxx>
@@ -144,6 +145,27 @@ struct Viewport::Impl {
         Handle(AIS_Shape)  shape;
     };
     std::vector<Shown> shown;
+
+    /// Measuring (see SetMeasuring).
+    struct Measuring {
+        bool                           on = false;
+        std::vector<TopoDS_Shape>      picked;   ///< at most two
+        std::vector<Handle(AIS_Shape)> marks;    ///< the picked entities, highlighted
+        Viewport::Measured             result;
+    } measuring;
+
+    /// Selection modes of the shown bodies for the current state.
+    void ActivateShown() {
+        for (const auto& s : shown) {
+            context->Deactivate(s.shape);
+            if (original.active) continue;
+            context->Activate(s.shape, AIS_Shape::SelectionMode(TopAbs_FACE));
+            if (measuring.on) {
+                context->Activate(s.shape, AIS_Shape::SelectionMode(TopAbs_EDGE));
+                context->Activate(s.shape, AIS_Shape::SelectionMode(TopAbs_VERTEX));
+            }
+        }
+    }
 
     Handle(Graphic3d_ClipPlane) section;        ///< null: no section
     std::optional<Frame>        sectionFrame;   ///< as last set
@@ -374,9 +396,11 @@ void Viewport::Sync(const kernel::Model& model) {
         Handle(AIS_Shape) ais = new AIS_Shape(body.shape);
         m.ApplyStyle(ais, body.id == m.hovered);
         m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
-        if (m.original.active) m.context->Deactivate(ais);
         m.shown.push_back({body.id, ais});
     }
+    m.ActivateShown();
+    // Picked entities belonged to the old shapes.
+    if (!m.measuring.picked.empty()) ClearMeasure();
     m.bounds = model.BoundingBox();
     m.view->SetComputedMode(m.style == DisplayStyle::HiddenLines);
     m.dirty = true;
@@ -623,6 +647,60 @@ std::optional<PickResult> Viewport::Pick(Vec2 pixel) {
     return result;
 }
 
+// --- measuring ------------------------------------------------------------------
+
+void Viewport::SetMeasuring(bool on) {
+    Impl& m = *myImpl;
+    if (m.measuring.on == on) return;
+    m.measuring.on = on;
+    if (!on) ClearMeasure();
+    m.ActivateShown();
+    m.hoverPixel.reset();
+    m.dirty = true;
+}
+
+bool Viewport::MeasurePick(Vec2 pixel) {
+    Impl& m = *myImpl;
+    Impl::Measuring& ms = m.measuring;
+    if (!ms.on) return false;
+    const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
+    const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->Pick(px, py, m.view);
+    if (selector->NbPicked() < 1) return false;
+    const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(1));
+    if (owner.IsNull()) return false;
+    if (ms.picked.size() >= 2) ClearMeasure();   // a third click starts over
+
+    const TopoDS_Shape entity = owner->Shape();
+    const kernel::EntityInfo info = kernel::occt::Describe(entity, ToVec(selector->PickedPoint(1).XYZ()));
+    ms.picked.push_back(entity);
+    (ms.picked.size() == 1 ? ms.result.first : ms.result.second) = info;
+    if (ms.picked.size() == 2) ms.result.between = kernel::occt::Measure(ms.picked[0], ms.picked[1]);
+
+    Handle(AIS_Shape) mark = new AIS_Shape(entity);
+    mark->SetColor(ToQuantity(m.colors.selection));
+    mark->SetWidth(3.5);
+    mark->SetTransparency(entity.ShapeType() == TopAbs_FACE ? 0.6 : 0.0);
+    mark->Attributes()->SetFaceBoundaryDraw(false);
+    mark->SetZLayer(Graphic3d_ZLayerId_Topmost);
+    m.context->Display(mark, entity.ShapeType() == TopAbs_FACE ? AIS_Shaded : AIS_WireFrame, -1, false);
+    ms.marks.push_back(mark);
+    m.dirty = true;
+    return true;
+}
+
+void Viewport::ClearMeasure() {
+    Impl& m = *myImpl;
+    for (const auto& mark : m.measuring.marks) m.context->Remove(mark, false);
+    m.measuring.marks.clear();
+    m.measuring.picked.clear();
+    m.measuring.result = {};
+    m.dirty = true;
+}
+
+const Viewport::Measured& Viewport::Measurement() const { return myImpl->measuring.result; }
+
 // --- section --------------------------------------------------------------------
 
 void Viewport::SetSection(const std::optional<Frame>& plane) {
@@ -734,10 +812,7 @@ void Viewport::EndPickingOriginal() {
     for (const auto& t : o.targets) m.context->Remove(t, false);
     for (const auto& h : o.marked) m.context->Remove(h, false);
     o = {};
-    for (const auto& s : m.shown) {
-        m.context->Display(s.shape, false);
-        m.context->Activate(s.shape, AIS_Shape::SelectionMode(TopAbs_FACE));
-    }
+    m.ActivateShown();
     m.hoverPixel.reset();
     m.dirty = true;
 }

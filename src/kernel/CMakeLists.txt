@@ -6,6 +6,7 @@ add_library(bz_kernel STATIC
     occt/FaceMatch.cpp
     occt/Fillet.cpp
     occt/Hole.cpp
+    occt/Measure.cpp
     occt/Revolve.cpp
     occt/Shell.cpp
     occt/SketchGeometry.cpp)

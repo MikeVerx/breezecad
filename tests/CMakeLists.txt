@@ -4,6 +4,7 @@ add_executable(bz_tests
     document/DocumentTests.cpp
     kernel/FilletTests.cpp
     kernel/HoleTests.cpp
+    kernel/MeasureTests.cpp
     kernel/ModelTests.cpp
     kernel/PatternTests.cpp
     kernel/RevolveTests.cpp

@@ -10,6 +10,7 @@
 #include "core/ViewProjection.h"
 #include "document/EdgeReference.h"
 #include "document/FaceReference.h"
+#include "kernel/Measure.h"
 
 #include <array>
 #include <memory>
@@ -116,6 +117,20 @@ public:
     bool StepAnimation(double now);
 
     std::optional<PickResult> Pick(Vec2 pixel);
+
+    // --- measuring ---------------------------------------------------------
+    /// While on, vertices, edges and faces of the shown bodies are hovered
+    /// and picked for measuring (not while picking on an original body).
+    void SetMeasuring(bool on);
+    /// Picks the entity under the cursor: the first one, then the second,
+    /// then the first again. Returns false when nothing is there.
+    bool MeasurePick(Vec2 pixel);
+    void ClearMeasure();
+    struct Measured {
+        std::optional<kernel::EntityInfo>  first, second;
+        std::optional<kernel::Measurement> between;   ///< when both are picked
+    };
+    const Measured& Measurement() const;
 
     /// Cuts the view with a plane: what lies on the side its normal points
     /// to is hidden, and the cut faces are filled. nullopt: no section.

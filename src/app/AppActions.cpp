@@ -38,6 +38,11 @@ void RegisterActions(AppContext& app) {
                app.shell.paletteOpen = true;
                app.shell.focusPalette = true;
            }});
+    a.Add({"tools.measure", "Измерить", "measure", 0, "Размеры элемента и расстояние между двумя (Esc — закончить)",
+           [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); }, [&app] {
+               if (Session* s = app.Doc()) app.ops.Close(app, *s);
+               app.shell.measuring = !app.shell.measuring;
+           }});
     a.Add({"view.section", "Сечение", "section", 0, "Разрезать вид плоскостью, чтобы заглянуть внутрь детали",
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { app.shell.section.on = !app.shell.section.on; }});

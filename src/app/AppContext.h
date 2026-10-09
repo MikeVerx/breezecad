@@ -49,6 +49,7 @@ struct ShellState {
         float position = 0.5f;     ///< 0..1 across the part
         bool  flipped = false;     ///< keep the other half
     } section;
+    bool measuring = false;   ///< "Измерить" is on
 
     ObjectId    renaming;              ///< tree row being renamed
     std::string renameText;

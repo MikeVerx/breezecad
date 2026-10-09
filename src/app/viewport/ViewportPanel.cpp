@@ -4,6 +4,7 @@
 #include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
+#include "app/viewport/Measure.h"
 #include "app/viewport/Planes.h"
 #include "app/viewport/Section.h"
 #include "app/shell/Shell.h"
@@ -189,6 +190,9 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     OperationEditor* operation = app.ops.Active();
     const bool pickingOriginal = operation && operation->PicksOriginal();
     if (!pickingOriginal) app.viewport.EndPickingOriginal();
+    // Measuring makes vertices and edges pickable too.
+    const bool measuring = app.shell.measuring && session.mode == EditMode::Model && !operation;
+    app.viewport.SetMeasuring(measuring);
     // Pre-highlight the face (or, for fillets, the edge) under the cursor.
     const bool hoverMatters = session.mode != EditMode::Sketch && (!operation || pickingOriginal || operation->PicksFaces());
     app.viewport.Hover(vf.hovered && hoverMatters ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);
@@ -235,7 +239,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
                 dl->AddText(font, ui.S(13), {p.x + ui.S(14), p.y + ui.S(9)}, ui::ToU32(ui.C().textSecondary), text);
             }
             // Double click on the model: edit the operation that made the body.
-            if (vf.hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            if (!measuring && vf.hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                 if (const auto hit = app.viewport.Pick(vf.ToLocal(ImGui::GetMousePos())); hit && hit->body) {
                     const ObjectId body = hit->body;
                     app.Later([&app, &session, body] { EditFeature(app, session, body); });
@@ -247,6 +251,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const bool modelMode = session.mode == EditMode::Model;
     app.viewport.SetSection(modelMode ? SectionFrame(session, app.shell.section) : std::nullopt);
     if (modelMode) DrawSectionBar(app, session, vf);
+    if (measuring) DrawMeasure(app, session, vf);
     ContextMenu(app, session);
     app.viewport.SetPlanes(app.shell.planeQuads);
 

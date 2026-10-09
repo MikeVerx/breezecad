@@ -167,7 +167,7 @@ void ModelRibbon(RibbonBuilder& r) {
 
     r.BeginGroup("Диагностика");
     r.BeginColumn();
-    r.SmallLater("measure", "Измерить");
+    r.Small("tools.measure", nullptr, r.App().shell.measuring);
     r.Small("view.section", nullptr, r.App().shell.section.on);
     r.EndColumn();
     r.BeginColumn();
