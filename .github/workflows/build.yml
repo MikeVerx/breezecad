@@ -44,7 +44,7 @@ jobs:
         id: build
         run: cmake --build --preset windows-mingw 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Test
-        run: ctest --preset windows-mingw 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+        run: ctest --preset windows-mingw --output-on-failure 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
       - name: Report failures
         if: failure()
         run: bash scripts/ci-annotate.sh build.log test.log
@@ -72,7 +72,7 @@ jobs:
       - name: Build
         run: cmake --build --preset macos 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Test
-        run: ctest --preset macos 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+        run: ctest --preset macos --output-on-failure 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
       - name: Report failures
         if: failure()
         run: bash scripts/ci-annotate.sh build.log test.log
@@ -93,7 +93,7 @@ jobs:
       - name: Build
         run: cmake --build --preset linux-release 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Test
-        run: ctest --preset linux-release 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+        run: ctest --preset linux-release --output-on-failure 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
       - name: Report failures
         if: failure()
         run: bash scripts/ci-annotate.sh build.log test.log
