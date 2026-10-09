@@ -167,6 +167,20 @@ void StartWorkPlane(AppContext& app) {
     app.ops.workPlane.StartNew(app, *s);
 }
 
+void StartPattern(AppContext& app, doc::PatternKind kind) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.pattern.StartNew(app, *s, kind);
+}
+
+void StartMirror(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.mirror.StartNew(app, *s);
+}
+
 void StartRevolve(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;

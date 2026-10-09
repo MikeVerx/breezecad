@@ -1,0 +1,275 @@
+#include "app/features/CopyEditors.h"
+
+#include "app/shell/Shell.h"
+#include "app/viewport/Planes.h"
+#include "document/HoleFeature.h"
+#include "document/Origin.h"
+#include "document/SketchSolidFeature.h"
+#include "document/WorkPlaneFeature.h"
+#include "ui/Widgets.h"
+
+#include <algorithm>
+#include <array>
+
+namespace bz::app {
+namespace {
+
+using doc::ModelAxis;
+using doc::PatternKind;
+
+/// Operations whose result can be copied (the kernel keeps their tools).
+bool IsCopyable(const doc::Feature& f) {
+    if (const auto* solid = dynamic_cast<const doc::SketchSolidFeature*>(&f)) return solid->operation != doc::BooleanOp::Intersect;
+    return dynamic_cast<const doc::HoleFeature*>(&f) != nullptr;
+}
+
+constexpr std::array<const char*, 3> kAxisLabels{"X", "Y", "Z"};
+
+/// Segmented X / Y / Z. Returns true when changed.
+bool AxisChoice(ui::Ui& ui, const char* id, ModelAxis& axis, float width) {
+    const int current = static_cast<int>(axis);
+    const int chosen = ui::Segmented(ui, id, kAxisLabels, current, 3, width);
+    if (chosen == current) return false;
+    axis = static_cast<ModelAxis>(chosen);
+    return true;
+}
+
+/// Segmented "Прямо" / "Обратно". Returns true when changed.
+bool DirectionChoice(ui::Ui& ui, const char* id, bool& reversed, float width) {
+    static constexpr std::array<const char*, 2> labels{"Прямо", "Обратно"};
+    const int current = reversed ? 1 : 0;
+    const int chosen = ui::Segmented(ui, id, labels, current, 2, width);
+    if (chosen == current) return false;
+    reversed = chosen == 1;
+    return true;
+}
+
+} // namespace
+
+// --- CopyEditor ---------------------------------------------------------------
+
+void CopyEditor::DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) {
+    (void)app;
+    (void)session;
+    (void)vf;
+}
+
+void CopyEditor::ChooseDefaultSource(const Session& session, doc::CopyFeature& f) {
+    if (const doc::Feature* selected = session.doc.Find(session.selectedFeature); selected && IsCopyable(*selected)) {
+        f.sources = {selected->id};
+        return;
+    }
+    for (std::size_t i = session.doc.EndMarker(); i-- > 0;)
+        if (IsCopyable(*session.doc.Features()[i]) && session.doc.IsActive(i)) {
+            f.sources = {session.doc.Features()[i]->id};
+            return;
+        }
+}
+
+bool CopyEditor::DrawSources(AppContext& app, Session& session, doc::CopyFeature& f, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    Section(app, "Что копировать");
+    const int self = session.doc.IndexOf(f.id);
+    bool changed = false;
+    bool any = false;
+    for (int i = 0; i < self; ++i) {
+        const doc::Feature& source = *session.doc.Features()[static_cast<std::size_t>(i)];
+        if (!IsCopyable(source) || source.suppressed) continue;
+        any = true;
+        const auto it = std::ranges::find(f.sources, source.id);
+        const bool on = it != f.sources.end();
+
+        ImGui::PushID(static_cast<int>(source.id.value));
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float h = ui.S(30);
+        if (ImGui::InvisibleButton("##source", {width, h})) {
+            if (on) {
+                f.sources.erase(it);
+            } else {
+                // Keep document order: copies are applied in the order the originals were.
+                f.sources.push_back(source.id);
+                std::ranges::sort(f.sources, {}, [&](ObjectId id) { return session.doc.IndexOf(id); });
+            }
+            changed = true;
+        }
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        if (ImGui::IsItemHovered()) dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.hoverRow), ui.S(6));
+        // Check box.
+        const float box = ui.S(16);
+        const ImVec2 b{p.x + ui.S(8), p.y + (h - box) / 2};
+        if (on) {
+            dl->AddRectFilled(b, {b.x + box, b.y + box}, ui::ToU32(c.accent), ui.S(4));
+            ui.icons.Draw(dl, "ui-check", {b.x + ui.S(2), b.y + ui.S(2)}, ui.S(12), c.textOnAccent);
+        } else {
+            dl->AddRect(b, {b.x + box, b.y + box}, ui::ToU32(c.fieldBorder), ui.S(4), 0, ui.S(1.2f));
+        }
+        ui.icons.Draw(dl, FeatureIcon(source), {p.x + ui.S(34), p.y + (h - ui.S(18)) / 2}, ui.S(18), {1, 1, 1, 1});
+        dl->AddText(ui.fonts.body, ui.S(13), {p.x + ui.S(60), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text),
+                    source.name.c_str());
+        ImGui::PopID();
+    }
+    if (!any) Caption(app, "Нет операций, которые можно скопировать: выдавливание, вращение или отверстие.", width);
+    if (changed) Changed(session);
+    return changed;
+}
+
+// --- PatternEditor --------------------------------------------------------------
+
+bool PatternEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::PatternFeature*>(&f) != nullptr; }
+
+std::string PatternEditor::Hint() const {
+    return "Отметьте операции, которые нужно повторить, задайте направление, количество и шаг. Enter — готово, Esc — отмена";
+}
+
+const char* PatternEditor::Icon() const {
+    return myKind == PatternKind::Circular ? "tree-pattern-circular" : "tree-pattern-rect";
+}
+
+void PatternEditor::StartNew(AppContext& app, Session& session, PatternKind kind) {
+    if (session.model.Bodies().empty()) {
+        app.notes.Info("Сначала создайте тело и операцию, которую нужно повторить");
+        return;
+    }
+    auto f = std::make_unique<doc::PatternFeature>();
+    f->kind = kind;
+    ChooseDefaultSource(session, *f);
+    OpenNew(app, session, std::move(f));
+}
+
+void PatternEditor::LoadTexts(const doc::Feature& feature) {
+    const auto& f = static_cast<const doc::PatternFeature&>(feature);
+    myKind = f.kind;
+    myCount1 = f.count1.expression;
+    mySpacing1 = f.spacing1.expression;
+    myCount2 = f.count2.expression;
+    mySpacing2 = f.spacing2.expression;
+    myCircularCount = f.circularCount.expression;
+    myAngle = f.angle.expression;
+}
+
+void PatternEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
+    auto& f = static_cast<doc::PatternFeature&>(feature);
+    DrawSources(app, session, f, width);
+    Gap(app);
+
+    Section(app, "Вид массива");
+    static constexpr std::array<const char*, 2> kinds{"Прямоугольный", "Круговой"};
+    const int current = static_cast<int>(f.kind);
+    const int chosen = ui::Segmented(app.ui, "kind", kinds, current, 2, width);
+    if (chosen != current) {
+        f.kind = static_cast<PatternKind>(chosen);
+        myKind = f.kind;
+        Changed(session);
+    }
+    Gap(app);
+    if (f.kind == PatternKind::Rectangular) DrawRectangular(app, session, f, width);
+    else DrawCircular(app, session, f, width);
+}
+
+void PatternEditor::DrawRectangular(AppContext& app, Session& session, doc::PatternFeature& f, float width) {
+    ui::Ui& ui = app.ui;
+    const float half = (width - ui.S(8)) / 2;
+    Section(app, "Направление 1");
+    if (AxisChoice(ui, "dir1", f.direction1, half)) Changed(session);
+    ImGui::SameLine(0, ui.S(8));
+    if (DirectionChoice(ui, "rev1", f.reversed1, half)) Changed(session);
+    ImGui::Dummy({0, ui.S(4)});
+    Section(app, "Количество и шаг");
+    ParameterField(app, session, "count1", myCount1, f.count1, half, myFocusFirstField, false);
+    ImGui::SameLine(0, ui.S(8));
+    ParameterField(app, session, "spacing1", mySpacing1, f.spacing1, half, false);
+    Gap(app);
+
+    Section(app, "Направление 2");
+    static constexpr std::array<const char*, 4> second{"Нет", "X", "Y", "Z"};
+    const int current = f.useDirection2 ? static_cast<int>(f.direction2) + 1 : 0;
+    const int chosen = ui::Segmented(ui, "dir2", second, current, 4, width);
+    if (chosen != current) {
+        f.useDirection2 = chosen > 0;
+        if (chosen > 0) f.direction2 = static_cast<ModelAxis>(chosen - 1);
+        Changed(session);
+    }
+    if (!f.useDirection2) return;
+    ImGui::Dummy({0, ui.S(4)});
+    if (DirectionChoice(ui, "rev2", f.reversed2, width)) Changed(session);
+    ImGui::Dummy({0, ui.S(4)});
+    ParameterField(app, session, "count2", myCount2, f.count2, half, false, false);
+    ImGui::SameLine(0, ui.S(8));
+    ParameterField(app, session, "spacing2", mySpacing2, f.spacing2, half, false);
+}
+
+void PatternEditor::DrawCircular(AppContext& app, Session& session, doc::PatternFeature& f, float width) {
+    ui::Ui& ui = app.ui;
+    const float half = (width - ui.S(8)) / 2;
+    Section(app, "Ось (через начало координат)");
+    if (AxisChoice(ui, "axis", f.axis, width)) Changed(session);
+    Gap(app);
+    Section(app, "Количество и угол");
+    ParameterField(app, session, "count", myCircularCount, f.circularCount, half, myFocusFirstField, false);
+    ImGui::SameLine(0, ui.S(8));
+    ParameterField(app, session, "angle", myAngle, f.angle, half, false);
+    Caption(app, "360° — копии по кругу; меньший угол — первая и последняя на его концах.", width);
+}
+
+// --- MirrorEditor ---------------------------------------------------------------
+
+bool MirrorEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::MirrorFeature*>(&f) != nullptr; }
+
+std::string MirrorEditor::Hint() const {
+    return "Отметьте операции, которые нужно отразить, и щёлкните плоскость симметрии. Enter — готово, Esc — отмена";
+}
+
+void MirrorEditor::StartNew(AppContext& app, Session& session) {
+    if (session.model.Bodies().empty()) {
+        app.notes.Info("Сначала создайте тело и операцию, которую нужно отразить");
+        return;
+    }
+    auto f = std::make_unique<doc::MirrorFeature>();
+    f->plane = doc::origin::kPlaneYZ;
+    ChooseDefaultSource(session, *f);
+    OpenNew(app, session, std::move(f));
+}
+
+void MirrorEditor::DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) {
+    auto* f = dynamic_cast<doc::MirrorFeature*>(Edited(session));
+    if (!f) return;
+    const int index = session.doc.IndexOf(f->id);
+    if (index < 0) return;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    std::vector<ShownPlane> planes = OriginPlanes(session);
+    const std::vector<ShownPlane> work = WorkPlanes(session, static_cast<std::size_t>(index));
+    planes.insert(planes.end(), work.begin(), work.end());
+    const ShownPlane* hot = vf.hovered ? PlaneUnderCursor(vf, ImGui::GetMousePos(), planes) : nullptr;
+    // Only the chosen plane and the one under the cursor: the rest would hide the preview.
+    for (const ShownPlane& p : planes)
+        if (&p == hot || p.id == f->plane) DrawPlane(app, dl, vf, p, &p == hot || p.id == f->plane);
+    if (hot && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        f->plane = hot->id;
+        Changed(session);
+    }
+}
+
+void MirrorEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
+    auto& f = static_cast<doc::MirrorFeature&>(feature);
+    DrawSources(app, session, f, width);
+    Gap(app);
+    Section(app, "Плоскость симметрии");
+    static constexpr std::array<const char*, 3> labels{"XY", "XZ", "YZ"};
+    static constexpr std::array<ObjectId, 3> ids{doc::origin::kPlaneXY, doc::origin::kPlaneXZ, doc::origin::kPlaneYZ};
+    const auto at = std::ranges::find(ids, f.plane);
+    const int current = at != ids.end() ? static_cast<int>(at - ids.begin()) : -1;
+    const int chosen = ui::Segmented(app.ui, "plane", labels, current, 3, width);
+    if (chosen != current && chosen >= 0) {
+        f.plane = ids[static_cast<std::size_t>(chosen)];
+        Changed(session);
+    }
+    if (const auto* wp = session.doc.FindAs<doc::WorkPlaneFeature>(f.plane)) {
+        const std::string text = "Рабочая плоскость: " + wp->name;
+        Caption(app, text.c_str(), width);
+    } else {
+        Caption(app, "Или щёлкните рабочую плоскость в окне модели.", width);
+    }
+}
+
+} // namespace bz::app

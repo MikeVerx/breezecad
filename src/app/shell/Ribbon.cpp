@@ -137,9 +137,9 @@ void ModelRibbon(RibbonBuilder& r) {
 
     r.BeginGroup("Массив");
     r.BeginColumn();
-    r.SmallLater("pattern-rect", "Прямоугольный");
-    r.SmallLater("pattern-circular", "Круговой");
-    r.SmallLater("mirror", "Зеркало");
+    r.Small("feature.patternRect");
+    r.Small("feature.patternCircular");
+    r.Small("feature.mirror");
     r.EndColumn();
     r.EndGroup();
 

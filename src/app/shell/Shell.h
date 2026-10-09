@@ -22,6 +22,9 @@ void DrawTreePanel(AppContext& app, Session& session, float width);
 void DrawPropertiesPanel(AppContext& app, Session& session, float width);
 void DrawVariablesPanel(AppContext& app, Session& session, float width);
 
+/// Tree icon of a feature ("tree-extrude").
+const char* FeatureIcon(const doc::Feature& f);
+
 /// A fixed-size region of the root window that clips its contents.
 /// Begins a child window at `pos`; returns its draw list.
 ImDrawList* BeginArea(const char* id, ImVec2 pos, ImVec2 size, const Color& background, bool scroll = false);

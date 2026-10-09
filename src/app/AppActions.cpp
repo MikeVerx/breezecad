@@ -66,6 +66,12 @@ void RegisterActions(AppContext& app) {
            [&app] { StartShell(app); }});
     a.Add({"feature.workPlane", "Плоскость", "work-plane", 0, "Рабочая плоскость со смещением — для эскизов не на гранях", inModel,
            [&app] { StartWorkPlane(app); }});
+    a.Add({"feature.patternRect", "Прямоугольный", "pattern-rect", 0, "Повторить операции рядами вдоль осей", inModel,
+           [&app] { StartPattern(app, doc::PatternKind::Rectangular); }});
+    a.Add({"feature.patternCircular", "Круговой", "pattern-circular", 0, "Повторить операции по кругу вокруг оси", inModel,
+           [&app] { StartPattern(app, doc::PatternKind::Circular); }});
+    a.Add({"feature.mirror", "Зеркало", "mirror", 0, "Отразить операции относительно плоскости", inModel,
+           [&app] { StartMirror(app); }});
     a.Add({"feature.chamfer", "Фаска", "chamfer", 0, "Срезать рёбра тела под 45°", inModel, [&app] { StartChamfer(app); }});
 
     // --- sketch ---

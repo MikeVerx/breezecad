@@ -9,6 +9,7 @@
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
+#include "document/PatternFeature.h"
 #include "document/RevolveFeature.h"
 #include "document/ShellFeature.h"
 #include "document/WorkPlaneFeature.h"
@@ -100,18 +101,6 @@ RowResult Row(AppContext& app, const char* id, const std::string& name, const Ro
     return r;
 }
 
-const char* FeatureIcon(const doc::Feature& f) {
-    if (dynamic_cast<const doc::SketchFeature*>(&f)) return "tree-sketch";
-    if (dynamic_cast<const doc::ExtrudeFeature*>(&f)) return "tree-extrude";
-    if (dynamic_cast<const doc::RevolveFeature*>(&f)) return "tree-revolve";
-    if (dynamic_cast<const doc::FilletFeature*>(&f)) return "tree-fillet";
-    if (dynamic_cast<const doc::ChamferFeature*>(&f)) return "tree-chamfer";
-    if (dynamic_cast<const doc::HoleFeature*>(&f)) return "tree-hole";
-    if (dynamic_cast<const doc::ShellFeature*>(&f)) return "tree-shell";
-    if (dynamic_cast<const doc::WorkPlaneFeature*>(&f)) return "tree-plane";
-    return "tree-unknown";
-}
-
 std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
     if (const auto* ex = dynamic_cast<const doc::ExtrudeFeature*>(&f)) {
         if (ex->extent == doc::ExtentType::ThroughAll) return "насквозь";
@@ -131,6 +120,10 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
     if (const auto* wp = dynamic_cast<const doc::WorkPlaneFeature*>(&f))
         return (wp->reversed ? "\xE2\x88\x92" : "") + FormatValue(wp->offset.value, Quantity::Length, d.units) + " " +
                UnitLabel(Quantity::Length, d.units);
+    if (const auto* p = dynamic_cast<const doc::PatternFeature*>(&f)) {
+        const auto copies = p->Copies();
+        return copies ? "\xC3\x97" + std::to_string(copies->size() + 1) : std::string();   // ×N
+    }
     if (const auto* rev = dynamic_cast<const doc::RevolveFeature*>(&f)) {
         if (rev->extent == doc::RevolveExtent::Full) return "360\xC2\xB0";
         return FormatValue(rev->angle.value, Quantity::Angle, d.units) + UnitLabel(Quantity::Angle, d.units);
@@ -371,6 +364,22 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         ImGui::PopTextWrapPos();
     }
     ImGui::EndGroup();
+}
+
+// Tree icon of a feature, also used by panels that list features.
+const char* FeatureIcon(const doc::Feature& f) {
+    if (dynamic_cast<const doc::SketchFeature*>(&f)) return "tree-sketch";
+    if (dynamic_cast<const doc::ExtrudeFeature*>(&f)) return "tree-extrude";
+    if (dynamic_cast<const doc::RevolveFeature*>(&f)) return "tree-revolve";
+    if (dynamic_cast<const doc::FilletFeature*>(&f)) return "tree-fillet";
+    if (dynamic_cast<const doc::ChamferFeature*>(&f)) return "tree-chamfer";
+    if (dynamic_cast<const doc::HoleFeature*>(&f)) return "tree-hole";
+    if (dynamic_cast<const doc::ShellFeature*>(&f)) return "tree-shell";
+    if (dynamic_cast<const doc::WorkPlaneFeature*>(&f)) return "tree-plane";
+    if (const auto* p = dynamic_cast<const doc::PatternFeature*>(&f))
+        return p->kind == doc::PatternKind::Circular ? "tree-pattern-circular" : "tree-pattern-rect";
+    if (dynamic_cast<const doc::MirrorFeature*>(&f)) return "tree-mirror";
+    return "tree-unknown";
 }
 
 } // namespace bz::app

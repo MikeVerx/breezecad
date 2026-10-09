@@ -2,6 +2,7 @@
 // User-level operations shared by actions, menus, panels and the viewport.
 
 #include "app/AppContext.h"
+#include "document/PatternFeature.h"
 
 #include <filesystem>
 #include <optional>
@@ -32,6 +33,8 @@ void StartChamfer(AppContext& app);
 void StartHole(AppContext& app);
 void StartShell(AppContext& app);
 void StartWorkPlane(AppContext& app);
+void StartPattern(AppContext& app, doc::PatternKind kind);
+void StartMirror(AppContext& app);
 /// Double click in the tree: edit a sketch or an operation.
 void EditFeature(AppContext& app, Session& session, ObjectId id);
 void DeleteFeature(AppContext& app, Session& session, ObjectId id);
