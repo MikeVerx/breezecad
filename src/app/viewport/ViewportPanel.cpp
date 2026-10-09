@@ -106,46 +106,79 @@ void ContextMenu(AppContext& app, Session& session) {
     ImGui::EndPopup();
 }
 
-/// Mouse navigation, KOMPAS style. Returns true while navigating.
+/// Whether the modifier keys held now are exactly `m`.
+bool ModifierHeld(ModifierChoice m) {
+    const ImGuiIO& io = ImGui::GetIO();
+    switch (m) {
+        case ModifierChoice::None:  return !io.KeyShift && !io.KeyCtrl && !io.KeyAlt;
+        case ModifierChoice::Shift: return io.KeyShift && !io.KeyCtrl && !io.KeyAlt;
+        case ModifierChoice::Ctrl:  return io.KeyCtrl && !io.KeyShift && !io.KeyAlt;
+        case ModifierChoice::Alt:   return io.KeyAlt && !io.KeyShift && !io.KeyCtrl;
+    }
+    return false;
+}
+
+int ImGuiButton(MouseButtonChoice b) {
+    return b == MouseButtonChoice::Right ? ImGuiMouseButton_Right : b == MouseButtonChoice::Middle ? ImGuiMouseButton_Middle : -1;
+}
+
+/// Mouse navigation with the gestures from the settings (orbit, pan, drag
+/// zoom; the wheel always zooms). Returns true while navigating.
 bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool sceneHovered) {
     ShellState::Navigation& nav = app.shell.nav;
     const ImGuiIO& io = ImGui::GetIO();
     const ImVec2 mouse = ImGui::GetMousePos();
+    const MouseNavigation& m = app.settings.mouse;
+    const bool busy = nav.orbiting || nav.panning || nav.zooming;
 
-    if (sceneHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-        nav.orbiting = true;
+    // A press starts the gesture bound to that button and the modifiers held.
+    for (int button : {ImGuiMouseButton_Right, ImGuiMouseButton_Middle}) {
+        if (busy || !sceneHovered || !ImGui::IsMouseClicked(button)) continue;
+        const auto matches = [&](const MouseGesture& g) { return ImGuiButton(g.button) == button && ModifierHeld(g.modifier); };
         nav.moved = false;
-        // Orbit around the model point under the cursor, else the model centre.
-        const auto hit = app.viewport.Pick(vf.ToLocal(mouse));
-        nav.pivot = hit ? hit->point : app.viewport.ModelCenter();
-        nav.facePlane = hit ? hit->plane : std::nullopt;
-        nav.faceBody = hit ? hit->body : ObjectId{};
-    }
-    if (sceneHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
-        nav.panning = true;
-        nav.moved = false;
-    }
-
-    if (nav.orbiting) {
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 3.0f)) nav.moved = true;
-        if (nav.moved && (io.MouseDelta.x != 0 || io.MouseDelta.y != 0))
-            app.viewport.Orbit(io.MouseDelta.x * kOrbitPerPixel, io.MouseDelta.y * kOrbitPerPixel, nav.pivot);
-        if (ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
-            nav.orbiting = false;
-            if (!nav.moved) ImGui::OpenPopup("##viewport-menu");   // a short right click: context menu
+        nav.button = button;
+        if (matches(m.orbit)) {
+            nav.orbiting = true;
+            // Orbit around the model point under the cursor, else the model centre.
+            const auto hit = app.viewport.Pick(vf.ToLocal(mouse));
+            nav.pivot = hit ? hit->point : app.viewport.ModelCenter();
+            nav.facePlane = hit ? hit->plane : std::nullopt;
+            nav.faceBody = hit ? hit->body : ObjectId{};
+        } else if (matches(m.pan)) {
+            nav.panning = true;
+        } else if (matches(m.zoom)) {
+            nav.zooming = true;
+            nav.zoomAt = mouse;
+        } else if (button == ImGuiMouseButton_Right) {
+            nav.button = -1;   // a right click not bound to a gesture: just the menu, on release
         }
     }
-    if (nav.panning) {
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 3.0f)) nav.moved = true;
-        if (nav.moved && (io.MouseDelta.x != 0 || io.MouseDelta.y != 0)) app.viewport.Pan(io.MouseDelta.x, io.MouseDelta.y);
-        if (ImGui::IsMouseReleased(ImGuiMouseButton_Middle)) {
-            nav.panning = false;
-            // A middle click confirms the operation, like in KOMPAS.
-            if (!nav.moved && app.ops.Active()) app.Later([&app, &session] { EnterPressed(app); });
+    if (nav.button < 0 && ImGui::IsMouseReleased(ImGuiMouseButton_Right) && sceneHovered && !busy &&
+        ImGui::GetMouseDragDelta(ImGuiMouseButton_Right).x == 0 && ImGui::GetMouseDragDelta(ImGuiMouseButton_Right).y == 0)
+        ImGui::OpenPopup("##viewport-menu");
+
+    if (nav.orbiting || nav.panning || nav.zooming) {
+        if (ImGui::IsMouseDragging(nav.button, 3.0f)) nav.moved = true;
+        if (nav.moved && (io.MouseDelta.x != 0 || io.MouseDelta.y != 0)) {
+            if (nav.orbiting) app.viewport.Orbit(io.MouseDelta.x * kOrbitPerPixel, io.MouseDelta.y * kOrbitPerPixel, nav.pivot);
+            if (nav.panning) app.viewport.Pan(io.MouseDelta.x, io.MouseDelta.y);
+            if (nav.zooming) app.viewport.ZoomAt(std::pow(1.01, static_cast<double>(-io.MouseDelta.y)), vf.ToLocal(nav.zoomAt));
+        }
+        if (ImGui::IsMouseReleased(nav.button)) {
+            // A short right click: the context menu; a short middle click
+            // confirms the operation, like in KOMPAS.
+            if (!nav.moved && nav.button == ImGuiMouseButton_Right) ImGui::OpenPopup("##viewport-menu");
+            if (!nav.moved && nav.button == ImGuiMouseButton_Middle && app.ops.Active())
+                app.Later([&app, &session] { EnterPressed(app); });
+            nav.orbiting = nav.panning = nav.zooming = false;
+            nav.button = -1;
         }
     }
-    if (sceneHovered && io.MouseWheel != 0.0f) app.viewport.ZoomAt(std::pow(1.15, static_cast<double>(io.MouseWheel)), vf.ToLocal(mouse));
-    return (nav.orbiting || nav.panning) && nav.moved;
+    if (sceneHovered && io.MouseWheel != 0.0f) {
+        const double steps = static_cast<double>(m.invertWheel ? -io.MouseWheel : io.MouseWheel);
+        app.viewport.ZoomAt(std::pow(1.15, steps), vf.ToLocal(mouse));
+    }
+    return (nav.orbiting || nav.panning || nav.zooming) && nav.moved;
 }
 
 } // namespace

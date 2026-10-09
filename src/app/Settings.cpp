@@ -46,6 +46,20 @@ Settings Settings::Load(const std::filesystem::path& file) {
         s.windowMaximized = w->value("maximized", true);
     }
     s.shortcutPreset = j.value("shortcutPreset", s.shortcutPreset);
+    if (const auto m = j.find("mouse"); m != j.end() && m->is_object()) {
+        const auto gesture = [&](const char* key, MouseGesture& g) {
+            if (const auto it = m->find(key); it != m->end() && it->is_array() && it->size() == 2) {
+                g.button = static_cast<MouseButtonChoice>(std::clamp((*it)[0].get<int>(), 0, 2));
+                g.modifier = static_cast<ModifierChoice>(std::clamp((*it)[1].get<int>(), 0, 3));
+            }
+        };
+        gesture("orbit", s.mouse.orbit);
+        gesture("pan", s.mouse.pan);
+        gesture("zoom", s.mouse.zoom);
+        s.mouse.invertWheel = m->value("invertWheel", false);
+        s.mousePreset = m->value("preset", s.mousePreset);
+        s.mouseCustom = m->value("custom", false);
+    }
     s.shortcutsCustom = j.value("shortcutsCustom", s.shortcutsCustom);
     for (const auto& [id, chord] : j.value("shortcuts", nlohmann::json::object()).items())
         if (chord.is_string()) s.shortcuts.emplace_back(id, chord.get<std::string>());
@@ -77,6 +91,12 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"window", {{"x", windowX}, {"y", windowY}, {"width", windowW}, {"height", windowH}, {"maximized", windowMaximized}}},
         {"shortcuts", ShortcutsJson(shortcuts)},
         {"shortcutPreset", shortcutPreset},
+        {"mouse", {{"orbit", {static_cast<int>(mouse.orbit.button), static_cast<int>(mouse.orbit.modifier)}},
+                   {"pan", {static_cast<int>(mouse.pan.button), static_cast<int>(mouse.pan.modifier)}},
+                   {"zoom", {static_cast<int>(mouse.zoom.button), static_cast<int>(mouse.zoom.modifier)}},
+                   {"invertWheel", mouse.invertWheel},
+                   {"preset", mousePreset},
+                   {"custom", mouseCustom}}},
         {"shortcutsCustom", shortcutsCustom},
         {"recentFiles", recent},
     };

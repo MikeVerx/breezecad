@@ -140,6 +140,75 @@ void StoreShortcuts(AppContext& app) {
         if (a.chord != a.defaultChord) app.settings.shortcuts.emplace_back(a.id, ActionRegistry::ChordText(a.chord));
 }
 
+/// The "Мышь" tab: a ready-made set of view gestures, or each one by hand.
+void DrawMouseSettings(AppContext& app, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    Settings& s = app.settings;
+    ui::FieldLabel(ui, "Управление видом");
+    const MousePreset* base = FindMousePreset(s.mousePreset);
+    if (!base) base = &MousePresets().front();
+    const std::string shown = s.mouseCustom ? "Своё (на основе: " + std::string(base->label) + ")" : std::string(base->label);
+    ImGui::SetNextItemWidth(width);
+    if (ImGui::BeginCombo("##mouse-preset", shown.c_str())) {
+        for (const MousePreset& p : MousePresets())
+            if (ImGui::Selectable(std::string(p.label).c_str(), !s.mouseCustom && &p == base)) {
+                s.mouse = p.navigation;
+                s.mousePreset = std::string(p.id);
+                s.mouseCustom = false;
+            }
+        ImGui::EndCombo();
+    }
+    ImGui::Dummy({0, ui.S(6)});
+
+    const auto gestureRow = [&](const char* label, const char* id, MouseGesture& g, bool optional) {
+        ui::FieldLabel(ui, label);
+        ImGui::PushID(id);
+        const float half = (width - ui.S(8)) / 2;
+        static constexpr std::array<const char*, 3> buttons{"нет", "ПКМ", "колесо"};
+        const int b = static_cast<int>(g.button);
+        const int nb = ui::Segmented(ui, "button", buttons, b, 3, half, optional ? 0 : 0b001);
+        ImGui::SameLine(0, ui.S(8));
+        static constexpr std::array<const char*, 4> mods{"—", "Shift", "Ctrl", "Alt"};
+        const int md = static_cast<int>(g.modifier);
+        const int nm = ui::Segmented(ui, "mod", mods, md, 4, half, g.button == MouseButtonChoice::None ? 0b1111 : 0);
+        ImGui::PopID();
+        if (nb != b || nm != md) {
+            g.button = static_cast<MouseButtonChoice>(nb);
+            g.modifier = static_cast<ModifierChoice>(nm);
+            s.mouseCustom = true;
+        }
+        ImGui::Dummy({0, ui.S(4)});
+    };
+    gestureRow("Вращение", "orbit", s.mouse.orbit, false);
+    gestureRow("Сдвиг", "pan", s.mouse.pan, false);
+    gestureRow("Масштаб перетаскиванием (колесо прокрутки масштабирует всегда)", "zoom", s.mouse.zoom, true);
+
+    // Two gestures on the same button and modifiers cannot both work.
+    const auto same = [](const MouseGesture& a, const MouseGesture& b) { return a.button != MouseButtonChoice::None && a == b; };
+    if (same(s.mouse.orbit, s.mouse.pan) || same(s.mouse.orbit, s.mouse.zoom) || same(s.mouse.pan, s.mouse.zoom)) {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.danger));
+        ImGui::TextUnformatted("Два действия на одном и том же жесте — сработает только первое (вращение, затем сдвиг).");
+        ImGui::PopStyleColor();
+    }
+    static constexpr std::array<const char*, 2> wheel{"Вперёд — приблизить", "Вперёд — отдалить"};
+    ui::FieldLabel(ui, "Колесо");
+    const int w = s.mouse.invertWheel ? 1 : 0;
+    if (const int nw = ui::Segmented(ui, "wheel", wheel, w, 2, width); nw != w) {
+        s.mouse.invertWheel = nw == 1;
+        s.mouseCustom = true;
+    }
+    {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted("Короткий щелчок ПКМ открывает меню, короткий щелчок колесом подтверждает операцию — при любом наборе.");
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    }
+}
+
 /// "Настройки": interface scale and theme; keyboard shortcuts.
 void DrawSettings(AppContext& app) {
     ui::Ui& ui = app.ui;
@@ -150,8 +219,8 @@ void DrawSettings(AppContext& app) {
         ImGui::TextUnformatted("Настройки");
     }
     const float width = ImGui::GetContentRegionAvail().x;
-    static constexpr std::array<const char*, 2> tabs{"Интерфейс", "Клавиши"};
-    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 2, width);
+    static constexpr std::array<const char*, 3> tabs{"Интерфейс", "Клавиши", "Мышь"};
+    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 3, width);
     ImGui::Dummy({0, ui.S(6)});
 
     if (app.shell.settingsTab == 0) {
@@ -182,6 +251,8 @@ void DrawSettings(AppContext& app) {
         static constexpr std::array<const char*, 2> anim{"Плавные повороты", "Без анимации"};
         const int a = app.settings.animations ? 0 : 1;
         if (const int n = ui::Segmented(ui, "anim", anim, a, 2, width); n != a) app.settings.animations = n == 0;
+    } else if (app.shell.settingsTab == 2) {
+        DrawMouseSettings(app, width);
     } else {
         // The set of shortcuts: a ready-made one, or "Свой" once changed by hand.
         ui::FieldLabel(ui, "Набор сочетаний");

@@ -93,6 +93,9 @@ struct ShellState {
     struct Navigation {
         bool                 orbiting = false;
         bool                 panning = false;
+        bool                 zooming = false;   ///< zoom by dragging
+        int                  button = -1;       ///< the ImGui button that started the gesture
+        ImVec2               zoomAt{};          ///< where the drag-zoom started
         bool                 moved = false;
         Vec3                 pivot;
         std::optional<Frame> facePlane;   ///< planar face under the cursor at the right click

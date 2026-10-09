@@ -109,7 +109,9 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
         mode = "Новый эскиз";
         hint = "Выберите плоскость начала координат или плоскую грань модели. Esc — отмена";
     } else {
-        hint = "ПКМ — вращение, зажатое колесо — сдвиг, прокрутка — масштаб, двойной щелчок в дереве — редактировать";
+        const MouseNavigation& m = app.settings.mouse;
+        hint = GestureText(m.orbit) + " — вращение, " + GestureText(m.pan) + " — сдвиг, прокрутка — масштаб, "
+               "двойной щелчок в дереве — редактировать";
     }
     text(mode, c.text, ui.fonts.medium);
 

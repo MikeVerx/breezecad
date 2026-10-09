@@ -32,6 +32,7 @@ add_executable(breezecad WIN32
     shell/Ribbon.cpp
     shell/TreePanel.cpp
     sketch/DimensionLayout.cpp
+    MouseNavigation.cpp
     ShortcutPresets.cpp
     sketch/SketchEditor.cpp
     sketch/SketchOverlay.cpp

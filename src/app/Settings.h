@@ -1,5 +1,7 @@
 #pragma once
 
+#include "app/MouseNavigation.h"
+
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -25,6 +27,9 @@ struct Settings {
     std::vector<std::pair<std::string, std::string>> shortcuts;
     std::string shortcutPreset = "breezecad";   ///< the set the shortcuts started from
     bool        shortcutsCustom = false;        ///< changed by hand after choosing the set
+    MouseNavigation mouse;                       ///< view gestures
+    std::string mousePreset = "breezecad";
+    bool        mouseCustom = false;
     std::vector<std::filesystem::path> recentFiles;   ///< most recent first
 
     static constexpr std::size_t kMaxRecent = 12;
