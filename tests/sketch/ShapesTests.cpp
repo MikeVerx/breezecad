@@ -127,3 +127,16 @@ TEST_CASE("arc slot solves around its centre") {
     CHECK(ArcSlotOutline({0, 0}, {20, 0}, {0, 20}, 4).size() > 20);
     CHECK(StraightSlotOutline({0, 0}, {10, 0}, 4).size() > 20);
 }
+
+TEST_CASE("circle tangent to three lines: the one near the picks") {
+    // A 3-4-5 right triangle: its incircle has radius 1, centre (1, 1).
+    const std::array<std::pair<Vec2, Vec2>, 3> lines{{{{0, 0}, {4, 0}}, {{0, 0}, {0, 3}}, {{4, 0}, {0, 3}}}};
+    const auto in = CircleTangentToLines(lines, {Vec2{1, 0}, Vec2{0, 1}, Vec2{1.6, 1.8}});
+    REQUIRE(in);
+    CHECK(in->radius == doctest::Approx(1.0));
+    CHECK((in->centre - Vec2{1, 1}).Length() == doctest::Approx(0.0));
+    // Picks outside, beyond the hypotenuse: the excircle there (radius 6).
+    const auto ex = CircleTangentToLines(lines, {Vec2{6, 0}, Vec2{0, 6}, Vec2{2.4, 4.8}});
+    REQUIRE(ex);
+    CHECK(ex->radius == doctest::Approx(6.0));
+}

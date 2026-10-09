@@ -1083,6 +1083,17 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
     doc::SketchFeature* f = Active(session);
     doc::Document& d = session.doc;
     const std::size_t need = ClicksNeeded();
+    // A circle touching three lines: every click must be on a line.
+    // (A click at a line's middle snaps to it as its midpoint: the same line.)
+    if (myTool == SketchTool::Circle && myOptions.circle == CircleMode::TangentLines && !myClicks.back().onCurve &&
+        f->sketch.KindOf(myClicks.back().midOf) == EntityKind::Line)
+        myClicks.back().onCurve = myClicks.back().midOf;
+    if (myTool == SketchTool::Circle && myOptions.circle == CircleMode::TangentLines &&
+        f->sketch.KindOf(myClicks.back().onCurve) != EntityKind::Line) {
+        myClicks.pop_back();
+        app.notes.Info(Tr("Щёлкните отрезок — окружность коснётся трёх отрезков"));
+        return;
+    }
     if (myClicks.size() < need) {
         // A rectangle's first side or a circle's chord must not be empty.
         if (myClicks.size() >= 2 && (myClicks.back().pos - myClicks[myClicks.size() - 2].pos).Length() < 1e-9) myClicks.pop_back();
@@ -1189,6 +1200,20 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
             break;
         }
         case SketchTool::Circle: {
+            if (myOptions.circle == CircleMode::TangentLines) {
+                std::array<std::pair<Vec2, Vec2>, 3> lines;
+                std::array<Vec2, 3> picks;
+                for (std::size_t i = 0; i < 3; ++i) {
+                    const sketch::Line* l = sk.FindLine(myClicks[i].onCurve);
+                    lines[i] = {sk.PositionOf(l->start), sk.PositionOf(l->end)};
+                    picks[i] = myClicks[i].pos;
+                }
+                const auto tangent = sketch::CircleTangentToLines(lines, picks);
+                if (!tangent) return refuse(Tr("Окружность, касающаяся этих трёх отрезков, не строится"));
+                const ObjectId circle = sk.AddCircle(ids, sk.AddPoint(ids, tangent->centre), tangent->radius);
+                for (std::size_t i = 0; i < 3; ++i) sk.AddConstraint(ids, Make(ConstraintType::Tangent, myClicks[i].onCurve, circle));
+                break;
+            }
             if (myOptions.circle == CircleMode::Ellipse) {
                 // Centre, the end of one axis, then how wide the other is.
                 const Vec2 c = myClicks[0].pos, m = myClicks[1].pos;
@@ -1481,7 +1506,9 @@ void SketchEditor::DrawShapePreview(AppContext& app, const SketchView& view, con
             break;
         }
         case SketchTool::Circle:
-            if (myOptions.circle == CircleMode::Ellipse) {
+            if (myOptions.circle == CircleMode::TangentLines) {
+                // Nothing to draw until the circle is made: the lines show the picks.
+            } else if (myOptions.circle == CircleMode::Ellipse) {
                 if (step == 1) {
                     segment(a, b);
                 } else {

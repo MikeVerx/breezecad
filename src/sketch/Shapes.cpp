@@ -201,4 +201,47 @@ PolygonIds AddPolygon(Sketch& sk, IdGenerator& ids, ObjectId centre, Vec2 toward
     return out;
 }
 
+std::optional<TangentCircle> CircleTangentToLines(const std::array<std::pair<Vec2, Vec2>, 3>& lines,
+                                                  const std::array<Vec2, 3>& picks) {
+    // Each line as n.p = d with a unit normal; a circle touching it from side
+    // s has n.c - d = s r. Try every side combination, keep the best fit.
+    std::array<Vec2, 3> n;
+    std::array<double, 3> d{};
+    for (std::size_t i = 0; i < 3; ++i) {
+        const Vec2 dir = lines[i].second - lines[i].first;
+        if (dir.Length() < 1e-12) return std::nullopt;
+        n[i] = Vec2{-dir.y, dir.x}.Normalized();
+        d[i] = n[i].Dot(lines[i].first);
+    }
+    std::optional<TangentCircle> best;
+    double bestMiss = 1e300;
+    for (int signs = 0; signs < 8; ++signs) {
+        const std::array<double, 3> s{signs & 1 ? -1.0 : 1.0, signs & 2 ? -1.0 : 1.0, signs & 4 ? -1.0 : 1.0};
+        // [nx ny -s] [cx cy r]^T = d, by Cramer's rule.
+        const auto det3 = [](const std::array<std::array<double, 3>, 3>& m) {
+            return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+                   m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+        };
+        std::array<std::array<double, 3>, 3> m{};
+        for (std::size_t i = 0; i < 3; ++i) m[i] = {n[i].x, n[i].y, -s[i]};
+        const double det = det3(m);
+        if (std::abs(det) < 1e-12) continue;
+        std::array<double, 3> sol{};
+        for (std::size_t k = 0; k < 3; ++k) {
+            auto mk = m;
+            for (std::size_t i = 0; i < 3; ++i) mk[i][k] = d[i];
+            sol[k] = det3(mk) / det;
+        }
+        if (sol[2] <= 1e-9) continue;
+        const Vec2 c{sol[0], sol[1]};
+        double miss = 0;
+        for (std::size_t i = 0; i < 3; ++i) miss += (c - n[i] * (n[i].Dot(c) - d[i]) - picks[i]).Length();
+        if (miss < bestMiss) {
+            bestMiss = miss;
+            best = TangentCircle{c, sol[2]};
+        }
+    }
+    return best;
+}
+
 } // namespace bz::sketch

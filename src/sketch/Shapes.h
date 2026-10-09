@@ -9,6 +9,7 @@
 
 #include <array>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace bz::sketch {
@@ -70,5 +71,16 @@ struct PolygonIds {
     std::vector<ObjectId> sides;
 };
 PolygonIds AddPolygon(Sketch& sk, IdGenerator& ids, ObjectId centre, Vec2 towards, int sideCount, bool inscribed);
+
+/// The circle tangent to three lines (each given by two points). Of the
+/// circles that touch all three (up to four), the one whose touching points
+/// are nearest the `picks` (where the lines were clicked). nullopt when the
+/// lines allow none (parallel ones, all through one point).
+struct TangentCircle {
+    Vec2   centre;
+    double radius = 0;
+};
+std::optional<TangentCircle> CircleTangentToLines(const std::array<std::pair<Vec2, Vec2>, 3>& lines,
+                                                  const std::array<Vec2, 3>& picks);
 
 } // namespace bz::sketch

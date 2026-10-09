@@ -145,8 +145,10 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
             break;
         }
         case SketchTool::Circle: {
-            static constexpr std::array<Way, 3> ways{
-                {{"sk-circle", N_("Центр и радиус")}, {"sk-circle-3pt", N_("По трём точкам")}, {"sk-ellipse", N_("Эллипс")}}};
+            static constexpr std::array<Way, 4> ways{{{"sk-circle", N_("Центр и радиус")},
+                                                      {"sk-circle-3pt", N_("По трём точкам")},
+                                                      {"sk-ellipse", N_("Эллипс")},   // order of CircleMode
+                                                      {"sk-circle-tangent", N_("Касательная к трём отрезкам")}}};
             const int chosen = WayRow(ui, "circle", ways, static_cast<int>(myOptions.circle), inner);
             if (chosen != static_cast<int>(myOptions.circle)) {
                 myOptions.circle = static_cast<CircleMode>(chosen);

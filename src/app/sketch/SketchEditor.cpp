@@ -580,6 +580,8 @@ std::string SketchEditor::Hint(const Session& session) const {
                 return step == 0 ? Tr("Укажите центр прямоугольника") : Tr("Укажите угол прямоугольника");
             return step == 0 ? Tr(InfoOf(myTool).hint) : Tr("Укажите противоположный угол");
         case SketchTool::Circle:
+            if (myOptions.circle == CircleMode::TangentLines)
+                return step == 0 ? Tr("Щёлкните первый отрезок") : step == 1 ? Tr("Щёлкните второй отрезок") : Tr("Щёлкните третий отрезок");
             if (myOptions.circle == CircleMode::Ellipse)
                 return step == 0 ? Tr("Укажите центр эллипса") : step == 1 ? Tr("Укажите конец первой оси") : Tr("Укажите ширину эллипса");
             if (myOptions.circle == CircleMode::ThreePoints)
