@@ -64,6 +64,8 @@ void RegisterActions(AppContext& app) {
            inModel, [&app] { StartHole(app); }});
     a.Add({"feature.shell", "Оболочка", "shell", 0, "Сделать деталь полой с заданной толщиной стенки", inModel,
            [&app] { StartShell(app); }});
+    a.Add({"feature.workPlane", "Плоскость", "work-plane", 0, "Рабочая плоскость со смещением — для эскизов не на гранях", inModel,
+           [&app] { StartWorkPlane(app); }});
     a.Add({"feature.chamfer", "Фаска", "chamfer", 0, "Срезать рёбра тела под 45°", inModel, [&app] { StartChamfer(app); }});
 
     // --- sketch ---

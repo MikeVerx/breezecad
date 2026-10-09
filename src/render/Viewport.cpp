@@ -10,6 +10,8 @@
 #include <Aspect_DisplayConnection.hxx>
 #include <Aspect_NeutralWindow.hxx>
 #include <BRepAdaptor_Surface.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_MakePolygon.hxx>
 #include <BRepBndLib.hxx>
 #include <Bnd_Box.hxx>
 #include <GeomAbs_Shape.hxx>
@@ -141,6 +143,9 @@ struct Viewport::Impl {
         Handle(AIS_Shape)  shape;
     };
     std::vector<Shown> shown;
+
+    std::vector<PlaneQuad>         planes;        ///< as last set
+    std::vector<Handle(AIS_Shape)> planeShapes;   ///< their presentations
     std::uint64_t      syncedRevision = static_cast<std::uint64_t>(-1);
     const kernel::Model* syncedModel = nullptr;
     std::optional<Vec2>  hoverPixel;
@@ -612,6 +617,33 @@ std::optional<PickResult> Viewport::Pick(Vec2 pixel) {
         !brep.IsNull() && brep->Shape().ShapeType() == TopAbs_FACE)
         result.plane = PlanarFaceFrame(TopoDS::Face(brep->Shape()));
     return result;
+}
+
+// --- planes -------------------------------------------------------------------
+
+void Viewport::SetPlanes(const std::vector<PlaneQuad>& planes) {
+    Impl& m = *myImpl;
+    if (planes == m.planes) return;
+    m.planes = planes;
+    for (const auto& p : m.planeShapes) m.context->Remove(p, false);
+    m.planeShapes.clear();
+    for (const PlaneQuad& q : planes) {
+        BRepBuilderAPI_MakePolygon polygon;
+        for (const Vec3& c : q.corners) polygon.Add(gp_Pnt(c.x, c.y, c.z));
+        polygon.Close();
+        const BRepBuilderAPI_MakeFace face(polygon.Wire(), true);
+        if (!face.IsDone()) continue;
+        Handle(AIS_Shape) ais = new AIS_Shape(face.Face());
+        ais->SetColor(ToQuantity(q.fill));
+        ais->SetMaterial(Graphic3d_MaterialAspect(Graphic3d_NameOfMaterial_UserDefined));
+        ais->SetTransparency(1.0 - q.fill.a);
+        Handle(Prs3d_Drawer) drawer = ais->Attributes();
+        drawer->SetFaceBoundaryDraw(true);
+        drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(q.edge), Aspect_TOL_SOLID, q.edgeWidth));
+        m.context->Display(ais, AIS_Shaded, -1, false);
+        m.planeShapes.push_back(ais);
+    }
+    m.dirty = true;
 }
 
 // --- picking on the original body -----------------------------------------

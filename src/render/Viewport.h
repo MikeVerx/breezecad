@@ -11,6 +11,7 @@
 #include "document/EdgeReference.h"
 #include "document/FaceReference.h"
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -38,6 +39,17 @@ struct ViewportColors {
     Color edges            = Color::Hex(0x3D4552);
     Color hover            = Color::Hex(0x38A9E8);
     Color selection        = Color::Hex(0x1D4ED8);
+};
+
+/// A translucent square drawn in the scene, hidden where the body is in
+/// front of it (origin and work planes).
+struct PlaneQuad {
+    std::array<Vec3, 4> corners;
+    Color               fill;
+    Color               edge;
+    float               edgeWidth = 1.2f;
+
+    bool operator==(const PlaneQuad&) const = default;
 };
 
 /// What BeginPickingOriginal makes pickable.
@@ -104,6 +116,10 @@ public:
     bool StepAnimation(double now);
 
     std::optional<PickResult> Pick(Vec2 pixel);
+
+    /// Planes to show this frame; cheap when they did not change. They are
+    /// never picked (the UI hit-tests them itself).
+    void SetPlanes(const std::vector<PlaneQuad>& planes);
 
     // --- picking on the body before an operation (fillet, shell) ------
     /// Makes the bodies as they were before feature number `featureIndex`

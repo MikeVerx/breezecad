@@ -160,6 +160,13 @@ void StartShell(AppContext& app) {
     app.ops.shell.StartNew(app, *s);
 }
 
+void StartWorkPlane(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.workPlane.StartNew(app, *s);
+}
+
 void StartRevolve(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;

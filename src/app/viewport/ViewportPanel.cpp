@@ -4,6 +4,7 @@
 #include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
+#include "app/viewport/Planes.h"
 #include "app/shell/Shell.h"
 #include "document/ExtrudeFeature.h"
 #include "document/Origin.h"
@@ -21,65 +22,22 @@ namespace {
 
 constexpr double kOrbitPerPixel = 0.0075;   // radians, KOMPAS-like sensitivity
 
-/// Half size of the origin plane squares: big enough to see around the part.
-double PlaneHalfSize(const Session& session) {
-    const auto box = session.model.BoundingBox();
-    if (!box) return 40.0;
-    const Vec3 d = box->max - box->min;
-    return std::max({40.0, d.x * 0.65, d.y * 0.65, d.z * 0.65});
-}
-
-/// Ray from the cursor hits an origin plane square: returns the distance.
-std::optional<double> HitPlane(const ViewportFrame& vf, ImVec2 mouse, const Frame& frame, double half) {
-    Vec3 origin, dir;
-    vf.projection.Unproject(vf.ToLocal(mouse), origin, dir);
-    const double denom = dir.Dot(frame.normal);
-    if (std::abs(denom) < 1e-9) return std::nullopt;
-    const double t = (frame.origin - origin).Dot(frame.normal) / denom;
-    const Vec2 local = frame.ToLocal(origin + dir * t);
-    if (std::abs(local.x) > half || std::abs(local.y) > half) return std::nullopt;
-    return t;
-}
-
-void DrawPlane(AppContext& app, ImDrawList* dl, const ViewportFrame& vf, ObjectId id, double half, bool hot,
-               bool faint = false) {
-    const Frame frame = *doc::origin::PlaneFrame(id);
-    ui::ThemeColors c = app.ui.C();
-    if (faint) {
-        c.planeFill = c.planeFill.WithAlpha(c.planeFill.a * 0.35f);
-        c.planeEdge = c.planeEdge.WithAlpha(c.planeEdge.a * 0.45f);
-    }
-    const ImVec2 q[4] = {vf.Project(frame.ToWorld({-half, -half})), vf.Project(frame.ToWorld({half, -half})),
-                         vf.Project(frame.ToWorld({half, half})), vf.Project(frame.ToWorld({-half, half}))};
-    dl->AddConvexPolyFilled(q, 4, ui::ToU32(hot ? c.regionFill : c.planeFill));
-    dl->AddPolyline(q, 4, ui::ToU32(hot ? c.sketchHover : c.planeEdge), ImDrawFlags_Closed, app.ui.S(hot ? 2.0f : 1.2f));
-    const char* name = id == doc::origin::kPlaneXY ? "XY" : id == doc::origin::kPlaneXZ ? "XZ" : "YZ";
-    const ImVec2 label = vf.Project(frame.ToWorld({-half * 0.92, half * 0.86}));
-    dl->AddText(app.ui.fonts.strong, app.ui.S(12), label, ui::ToU32(hot ? c.sketchHover : c.planeEdge), name);
-}
-
-/// "Начать эскиз": choose an origin plane or a flat face.
+/// "Начать эскиз": choose an origin plane, a work plane or a flat face.
 void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDrawList* dl) {
-    const double half = PlaneHalfSize(session);
     const ImVec2 mouse = ImGui::GetMousePos();
-    ObjectId hotPlane;
-    double hotDistance = 1e300;
-    if (vf.hovered)
-        for (ObjectId id : {doc::origin::kPlaneXY, doc::origin::kPlaneXZ, doc::origin::kPlaneYZ})
-            if (const auto t = HitPlane(vf, mouse, *doc::origin::PlaneFrame(id), half); t && *t < hotDistance) {
-                hotDistance = *t;
-                hotPlane = id;
-            }
-    // A flat face of the model under the cursor wins over the origin planes,
-    // even where a plane sticks out in front of it: pointing at the body
-    // means the body (as in Inventor).
+    std::vector<ShownPlane> planes = OriginPlanes(session);
+    const std::vector<ShownPlane> work = WorkPlanes(session);
+    planes.insert(planes.end(), work.begin(), work.end());
+    const ShownPlane* hot = vf.hovered ? PlaneUnderCursor(vf, mouse, planes) : nullptr;
+    // A flat face of the model under the cursor wins over the planes, even
+    // where a plane sticks out in front of it: pointing at the body means
+    // the body (as in Inventor).
     std::optional<render::PickResult> face;
     if (vf.hovered) face = app.viewport.Pick(vf.ToLocal(mouse));
-    if (face && face->plane) hotPlane = {};
+    if (face && face->plane) hot = nullptr;
     // With a body in the part the planes step back, so the body stays readable.
     const bool faint = !session.model.Bodies().empty();
-    for (ObjectId id : {doc::origin::kPlaneXY, doc::origin::kPlaneXZ, doc::origin::kPlaneYZ})
-        DrawPlane(app, dl, vf, id, half, id == hotPlane, faint && id != hotPlane);
+    for (const ShownPlane& p : planes) DrawPlane(app, dl, vf, p, &p == hot, faint && &p != hot);
 
     // Prompt at the top of the viewport.
     const char* prompt = "Выберите плоскость или плоскую грань для эскиза";
@@ -90,9 +48,9 @@ void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDra
     dl->AddText(font, app.ui.S(13), {p.x + app.ui.S(14), p.y + app.ui.S(9)}, ui::ToU32(app.ui.C().text), prompt);
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
-    if (hotPlane) {
-        const ObjectId id = hotPlane;
-        app.Later([&app, &session, id] { app.sketch.CreateAndEdit(app, session, {id, *doc::origin::PlaneFrame(id), false}); });
+    if (hot) {
+        const doc::SketchPlacement placement{hot->id, hot->frame, false};
+        app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
     } else if (face && face->plane) {
         const doc::SketchPlacement placement{face->body, *face->plane, true};
         app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
@@ -222,6 +180,8 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     vf.projection = app.viewport.Projection();
     vf.hovered = ImGui::IsItemHovered() && !navigating;
 
+    app.shell.planeQuads.clear();   // refilled by the overlays below
+
     // Pre-highlight faces under the cursor (not while sketching).
     OperationEditor* operation = app.ops.Active();
     const bool pickingOriginal = operation && operation->PicksOriginal();
@@ -239,10 +199,14 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             PickPlane(app, session, vf, dl);
             break;
         case EditMode::Model: {
-            const double half = PlaneHalfSize(session);
-            for (ObjectId id : {doc::origin::kPlaneXY, doc::origin::kPlaneXZ, doc::origin::kPlaneYZ})
-                if (app.shell.hoveredTreeItem == id || session.selectedFeature == id || session.doc.FeatureCount() == 0)
-                    DrawPlane(app, dl, vf, id, half, app.shell.hoveredTreeItem == id || session.selectedFeature == id);
+            // Origin planes only when pointed at in the tree (or in an empty
+            // part); work planes always, faint unless pointed at.
+            const auto pointedAt = [&](ObjectId id) { return app.shell.hoveredTreeItem == id || session.selectedFeature == id; };
+            if (!operation || !operation->DrawsPlanes()) {
+                for (const ShownPlane& p : OriginPlanes(session))
+                    if (pointedAt(p.id) || session.doc.FeatureCount() == 0) DrawPlane(app, dl, vf, p, pointedAt(p.id));
+                for (const ShownPlane& p : WorkPlanes(session)) DrawPlane(app, dl, vf, p, pointedAt(p.id), !pointedAt(p.id));
+            }
             // Sketches not used by an operation stay visible, like in Inventor.
             // (An open sketch operation draws its own sketch.)
             for (std::size_t i = 0; i < session.doc.EndMarker(); ++i) {
@@ -277,6 +241,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
         }
     }
     ContextMenu(app, session);
+    app.viewport.SetPlanes(app.shell.planeQuads);
 
     // View cube and triad on top of everything.
     const ui::ViewCubeAction cube = ui::DrawViewCube(ui, vf.projection, pos, {pos.x + size.x, pos.y + size.y});

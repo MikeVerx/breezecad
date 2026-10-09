@@ -59,6 +59,8 @@ struct ShellState {
     /// Set after an operation changes the model: once the rebuilt model is
     /// shown, zoom out if it no longer fits (KeepModelInView).
     bool   keepModelInView = false;
+    /// Planes queued for the 3D view this frame (see DrawPlane).
+    std::vector<render::PlaneQuad> planeQuads;
 
     /// Mouse navigation in the viewport (KOMPAS: right drag orbits,
     /// middle drag pans, wheel zooms; short clicks open a menu / confirm).

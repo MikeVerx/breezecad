@@ -14,6 +14,7 @@ add_executable(breezecad WIN32
     features/EdgeOperationEditor.cpp
     features/HoleEditor.cpp
     features/ShellEditor.cpp
+    features/WorkPlaneEditor.cpp
     features/ExtrudeEditor.cpp
     features/FeatureOperationEditor.cpp
     features/RevolveEditor.cpp
@@ -30,6 +31,7 @@ add_executable(breezecad WIN32
     sketch/SketchOverlay.cpp
     sketch/SketchPick.cpp
     sketch/SketchTools.cpp
+    viewport/Planes.cpp
     viewport/ViewportPanel.cpp)
 if(WIN32)
     target_sources(breezecad PRIVATE ${PROJECT_SOURCE_DIR}/resources/app.rc)
