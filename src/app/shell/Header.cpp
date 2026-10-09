@@ -3,6 +3,7 @@
 
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
+#include "ui/Menus.h"
 #include "ui/Widgets.h"
 
 #include <imgui_stdlib.h>
@@ -32,7 +33,7 @@ void MenuAction(AppContext& app, const char* id) {
     const Action* a = app.actions.Find(id);
     if (!a) return;
     const std::string shortcut = ActionRegistry::ChordText(a->chord);
-    if (ImGui::MenuItem(a->label.c_str(), shortcut.empty() ? nullptr : shortcut.c_str(), false, a->IsEnabled())) {
+    if (ui::MenuItem(app.ui, a->label.c_str(), shortcut.empty() ? nullptr : shortcut.c_str(), a->icon, false, a->IsEnabled())) {
         const std::string action = a->id;
         app.Later([&app, action] { app.actions.Run(action); });
     }
@@ -40,56 +41,51 @@ void MenuAction(AppContext& app, const char* id) {
 
 void MainMenu(AppContext& app) {
     ui::Ui& ui = app.ui;
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui.S(8, 8));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ui.S(8, 6));
-    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, ui.S(10));
-    ui::FontScope font(ui.fonts.body);   // before Begin: must outlive the End call
-    if (ImGui::BeginPopup("##main-menu")) {
-        MenuAction(app, "file.new");
-        MenuAction(app, "file.open");
-        if (ImGui::BeginMenu("Последние", !app.settings.recentFiles.empty())) {
-            for (const auto& file : app.settings.recentFiles) {
-                const std::u8string name = file.filename().u8string();
-                if (ImGui::MenuItem(reinterpret_cast<const char*>(name.c_str()))) {
-                    const std::filesystem::path chosen = file;
-                    app.Later([&app, chosen] { OpenDocument(app, chosen); });
-                }
+    ui::MenuStyle style(ui);   // before Begin: must outlive the End call
+    if (!ImGui::BeginPopup("##main-menu")) return;
+    MenuAction(app, "file.new");
+    MenuAction(app, "file.open");
+    if (ui::BeginSubmenu(ui, "Последние", "ui-file", !app.settings.recentFiles.empty())) {
+        for (const auto& file : app.settings.recentFiles) {
+            const std::u8string name = file.filename().u8string();
+            if (ui::MenuItem(ui, reinterpret_cast<const char*>(name.c_str()), nullptr, "ui-file")) {
+                const std::filesystem::path chosen = file;
+                app.Later([&app, chosen] { OpenDocument(app, chosen); });
             }
-            ImGui::EndMenu();
         }
-        ImGui::Separator();
-        MenuAction(app, "file.save");
-        MenuAction(app, "file.saveAs");
-        if (ImGui::BeginMenu("Экспорт", app.Doc() != nullptr)) {
-            MenuAction(app, "file.exportStep");
-            MenuAction(app, "file.exportStl");
-            MenuAction(app, "file.export3mf");
-            ImGui::EndMenu();
-        }
-        ImGui::Separator();
-        if (ImGui::BeginMenu("Оформление")) {
-            if (ImGui::MenuItem("Как в системе", nullptr, app.settings.theme == ThemeChoice::System)) SetTheme(app, ThemeChoice::System);
-            if (ImGui::MenuItem("Светлая", nullptr, app.settings.theme == ThemeChoice::Light)) SetTheme(app, ThemeChoice::Light);
-            if (ImGui::MenuItem("Тёмная", nullptr, app.settings.theme == ThemeChoice::Dark)) SetTheme(app, ThemeChoice::Dark);
-            ImGui::Separator();
-            ImGui::MenuItem("Анимации камеры", nullptr, &app.settings.animations);
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Автосохранение")) {
-            for (int minutes : {0, 1, 5, 10, 15}) {
-                const std::string label = minutes == 0 ? "Выключено" : std::format("Каждые {} мин", minutes);
-                if (ImGui::MenuItem(label.c_str(), nullptr, app.settings.autosaveMinutes == minutes))
-                    app.settings.autosaveMinutes = minutes;
-            }
-            ImGui::EndMenu();
-        }
-        ImGui::Separator();
-        MenuAction(app, "file.close");
-        MenuAction(app, "app.about");
-        MenuAction(app, "app.quit");
-        ImGui::EndPopup();
+        ImGui::EndMenu();
     }
-    ImGui::PopStyleVar(3);
+    ImGui::Separator();
+    MenuAction(app, "file.save");
+    MenuAction(app, "file.saveAs");
+    if (ui::BeginSubmenu(ui, "Экспорт", "ui-export", app.Doc() != nullptr)) {
+        MenuAction(app, "file.exportStep");
+        MenuAction(app, "file.exportStl");
+        MenuAction(app, "file.export3mf");
+        ImGui::EndMenu();
+    }
+    ImGui::Separator();
+    if (ui::BeginSubmenu(ui, "Оформление", "theme")) {
+        if (ui::MenuItem(ui, "Как в системе", nullptr, {}, app.settings.theme == ThemeChoice::System)) SetTheme(app, ThemeChoice::System);
+        if (ui::MenuItem(ui, "Светлая", nullptr, {}, app.settings.theme == ThemeChoice::Light)) SetTheme(app, ThemeChoice::Light);
+        if (ui::MenuItem(ui, "Тёмная", nullptr, {}, app.settings.theme == ThemeChoice::Dark)) SetTheme(app, ThemeChoice::Dark);
+        ImGui::Separator();
+        if (ui::MenuItem(ui, "Анимации камеры", nullptr, {}, app.settings.animations)) app.settings.animations = !app.settings.animations;
+        ImGui::EndMenu();
+    }
+    if (ui::BeginSubmenu(ui, "Автосохранение", "ui-save")) {
+        for (int minutes : {0, 1, 5, 10, 15}) {
+            const std::string label = minutes == 0 ? "Выключено" : std::format("Каждые {} мин", minutes);
+            if (ui::MenuItem(ui, label.c_str(), nullptr, {}, app.settings.autosaveMinutes == minutes))
+                app.settings.autosaveMinutes = minutes;
+        }
+        ImGui::EndMenu();
+    }
+    ImGui::Separator();
+    MenuAction(app, "file.close");
+    MenuAction(app, "app.about");
+    MenuAction(app, "app.quit");
+    ImGui::EndPopup();
 }
 
 void DisplayStyleMenu(AppContext& app) {

@@ -12,6 +12,7 @@
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
 #include "ui/ViewCube.h"
+#include "ui/Menus.h"
 #include "ui/Widgets.h"
 
 #include <GLFW/glfw3.h>
@@ -61,50 +62,47 @@ void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDra
 
 void ContextMenu(AppContext& app, Session& session) {
     ui::Ui& ui = app.ui;
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui.S(8, 8));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ui.S(8, 6));
-    ui::FontScope font(ui.fonts.body);   // before Begin: must outlive the End call
-    if (ImGui::BeginPopup("##viewport-menu")) {
-        const auto item = [&](const char* id, const char* label = nullptr) {
-            const Action* a = app.actions.Find(id);
-            const std::string sc = ActionRegistry::ChordText(a->chord);
-            if (ImGui::MenuItem(label ? label : a->label.c_str(), sc.empty() ? nullptr : sc.c_str(), false, a->IsEnabled())) {
-                const std::string action = id;
-                app.Later([&app, action] { app.actions.Run(action); });
-            }
-        };
-        if (session.mode == EditMode::Sketch) {
-            item("sketch.finish");
-            item("sketch.lookAt");
-            ImGui::Separator();
-            item("sketch.line");
-            item("sketch.rectangle");
-            item("sketch.circle");
-            item("sketch.dimension");
-            ImGui::Separator();
-            item("sketch.construction");
-            item("edit.delete");
-        } else {
-            if (app.shell.nav.facePlane) {
-                if (ImGui::MenuItem("Эскиз на этой грани")) {
-                    const doc::SketchPlacement placement{app.shell.nav.faceBody, *app.shell.nav.facePlane, true,
-                                                         {app.shell.nav.facePlane->normal, app.shell.nav.pivot}};
-                    app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
-                }
-            }
-            item("sketch.start");
-            item("feature.extrude");
-            ImGui::Separator();
-            item("view.home");
-            item("view.fit");
-            if (ImGui::BeginMenu("Стиль отображения")) {
-                for (const char* id : {"view.shaded", "view.edges", "view.wireframe", "view.hidden", "view.transparent"}) item(id);
-                ImGui::EndMenu();
-            }
+    ui::MenuStyle style(ui);   // before Begin: must outlive the End call
+    if (!ImGui::BeginPopup("##viewport-menu")) return;
+    const auto item = [&](const char* id) {
+        const Action* a = app.actions.Find(id);
+        const std::string sc = ActionRegistry::ChordText(a->chord);
+        if (ui::MenuItem(ui, a->label.c_str(), sc.empty() ? nullptr : sc.c_str(), a->icon, false, a->IsEnabled())) {
+            const std::string action = id;
+            app.Later([&app, action] { app.actions.Run(action); });
         }
-        ImGui::EndPopup();
+    };
+    if (session.mode == EditMode::Sketch) {
+        item("sketch.finish");
+        item("sketch.lookAt");
+        ImGui::Separator();
+        item("sketch.line");
+        item("sketch.rectangle");
+        item("sketch.circle");
+        item("sketch.dimension");
+        ImGui::Separator();
+        item("sketch.construction");
+        item("edit.delete");
+    } else {
+        if (app.shell.nav.facePlane && ui::MenuItem(ui, "Эскиз на этой грани", nullptr, "sketch")) {
+            const doc::SketchPlacement placement{app.shell.nav.faceBody, *app.shell.nav.facePlane, true,
+                                                 {app.shell.nav.facePlane->normal, app.shell.nav.pivot}};
+            app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
+        }
+        item("sketch.start");
+        item("feature.extrude");
+        ImGui::Separator();
+        item("tools.measure");
+        item("view.section");
+        ImGui::Separator();
+        item("view.home");
+        item("view.fit");
+        if (ui::BeginSubmenu(ui, "Стиль отображения", "ui-display-style")) {
+            for (const char* id : {"view.shaded", "view.edges", "view.wireframe", "view.hidden", "view.transparent"}) item(id);
+            ImGui::EndMenu();
+        }
     }
-    ImGui::PopStyleVar(2);
+    ImGui::EndPopup();
 }
 
 /// Mouse navigation, KOMPAS style. Returns true while navigating.

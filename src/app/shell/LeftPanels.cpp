@@ -6,6 +6,7 @@
 #include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
 #include "document/Commands.h"
+#include "ui/Menus.h"
 #include "ui/Widgets.h"
 
 #include <array>
@@ -163,9 +164,12 @@ void DrawVariablesPanel(AppContext& app, Session& session, float width) {
         const std::string id = "var" + std::to_string(i);
         const auto expr = row(p, id.c_str(), true, &newName);
         bool erase = false;
-        if (ImGui::BeginPopupContextItem(("##ctx" + id).c_str())) {
-            erase = ImGui::MenuItem("Удалить переменную");
-            ImGui::EndPopup();
+        {
+            ui::MenuStyle style(app.ui);   // before Begin: must outlive the End call
+            if (ImGui::BeginPopupContextItem(("##ctx" + id).c_str())) {
+                erase = ui::MenuItem(app.ui, "Удалить переменную", nullptr, "ui-trash");
+                ImGui::EndPopup();
+            }
         }
         if (erase) {
             std::vector<Parameter> vars = session.doc.variables;

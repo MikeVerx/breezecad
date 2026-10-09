@@ -6,6 +6,7 @@
 #include "app/sketch/SketchEditor.h"
 #include "app/shell/Shell.h"
 #include "document/SketchFeature.h"
+#include "ui/Menus.h"
 #include "ui/Widgets.h"
 
 #include <format>
@@ -152,9 +153,11 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
         if (ImGui::InvisibleButton("##snaps", {w, h})) ImGui::OpenPopup("##snap-menu");
         dl->AddText(font, fs, {right, ty}, ui::ToU32(ImGui::IsItemHovered() ? c.accent : c.textSecondary), snaps.c_str());
         right -= ui.S(18);
+        ui::MenuStyle style(ui);   // before Begin: must outlive the End call
         if (ImGui::BeginPopup("##snap-menu")) {
-            ImGui::MenuItem("Привязка к точкам и кривым", nullptr, &app.settings.pointSnap);
-            ImGui::MenuItem("Привязка к сетке", nullptr, &app.settings.gridSnap);
+            if (ui::MenuItem(ui, "Привязка к точкам и кривым", nullptr, {}, app.settings.pointSnap))
+                app.settings.pointSnap = !app.settings.pointSnap;
+            if (ui::MenuItem(ui, "Привязка к сетке", nullptr, {}, app.settings.gridSnap)) app.settings.gridSnap = !app.settings.gridSnap;
             ImGui::EndPopup();
         }
     }

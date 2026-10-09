@@ -3,6 +3,7 @@ add_library(bz_ui STATIC
     Icons.cpp
     Theme.cpp
     ViewCube.cpp
+    Menus.cpp
     Widgets.cpp)
 target_link_libraries(bz_ui
     PUBLIC  bz::core bz::imgui

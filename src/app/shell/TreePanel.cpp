@@ -15,6 +15,7 @@
 #include "document/WorkPlaneFeature.h"
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
+#include "ui/Menus.h"
 #include "ui/Widgets.h"
 
 #include <unordered_map>
@@ -134,20 +135,22 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
 }
 
 void ContextMenu(AppContext& app, Session& session, const doc::Feature& f, std::size_t index) {
-    ui::FontScope font(app.ui.fonts.body);   // before Begin: must outlive the End call
+    ui::Ui& ui = app.ui;
+    ui::MenuStyle style(ui);   // before Begin: must outlive the End call
     if (!ImGui::BeginPopupContextItem("##feature-menu")) return;
     const ObjectId id = f.id;
-    if (ImGui::MenuItem("Редактировать")) app.Later([&app, &session, id] { EditFeature(app, session, id); });
+    if (ui::MenuItem(ui, "Редактировать", nullptr, "ui-edit")) app.Later([&app, &session, id] { EditFeature(app, session, id); });
     if (const auto* op = dynamic_cast<const doc::SketchSolidFeature*>(&f)) {
         const ObjectId sk = op->sketch;
-        if (ImGui::MenuItem("Редактировать эскиз")) app.Later([&app, &session, sk] { EditFeature(app, session, sk); });
+        if (ui::MenuItem(ui, "Редактировать эскиз", nullptr, "tree-sketch"))
+            app.Later([&app, &session, sk] { EditFeature(app, session, sk); });
     }
-    if (ImGui::MenuItem("Переименовать", "F2")) {
+    if (ui::MenuItem(ui, "Переименовать", "F2", "ui-rename")) {
         app.shell.renaming = id;
         app.shell.renameText = f.name;
         app.shell.renameFocus = true;
     }
-    if (ImGui::MenuItem(f.suppressed ? "Включить" : "Подавить")) {
+    if (ui::MenuItem(ui, f.suppressed ? "Включить" : "Подавить", nullptr, f.suppressed ? "ui-eye" : "ui-eye-off")) {
         app.Later([&session, id] {
             const doc::Feature* current = session.doc.Find(id);
             if (!current) return;
@@ -157,10 +160,10 @@ void ContextMenu(AppContext& app, Session& session, const doc::Feature& f, std::
             session.Execute(doc::ReplaceFeature(std::move(edited), label));
         });
     }
-    if (ImGui::MenuItem("Переместить маркер конца сюда"))
+    if (ui::MenuItem(ui, "Переместить маркер конца сюда", nullptr, "ui-marker"))
         app.Later([&session, index] { session.Execute(doc::SetEndMarker(session.doc, index + 1)); });
     ImGui::Separator();
-    if (ImGui::MenuItem("Удалить", "Del")) app.Later([&app, &session, id] { DeleteFeature(app, session, id); });
+    if (ui::MenuItem(ui, "Удалить", "Del", "ui-trash")) app.Later([&app, &session, id] { DeleteFeature(app, session, id); });
     ImGui::EndPopup();
 }
 
