@@ -34,8 +34,9 @@ public:
     /// Overlays and picking in the viewport.
     virtual void DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) = 0;
 
-    /// True when the viewport should let the user pick edges (fillet, chamfer).
-    virtual bool PicksEdges() const { return false; }
+    /// True when the operation picks on the body as it was before it (fillet,
+    /// shell): the editor calls Viewport::BeginPickingOriginal each frame.
+    virtual bool PicksOriginal() const { return false; }
     /// True when the viewport should pre-highlight faces under the cursor (hole).
     virtual bool PicksFaces() const { return false; }
 

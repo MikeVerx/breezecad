@@ -62,6 +62,8 @@ void RegisterActions(AppContext& app) {
     a.Add({"feature.fillet", "Сопряжение", "fillet", 0, "Скруглить рёбра тела", inModel, [&app] { StartFillet(app); }});
     a.Add({"feature.hole", "Отверстие", "hole", ImGuiKey_H, "Просверлить отверстия в плоской грани: простые, с цековкой или зенковкой (H)",
            inModel, [&app] { StartHole(app); }});
+    a.Add({"feature.shell", "Оболочка", "shell", 0, "Сделать деталь полой с заданной толщиной стенки", inModel,
+           [&app] { StartShell(app); }});
     a.Add({"feature.chamfer", "Фаска", "chamfer", 0, "Срезать рёбра тела под 45°", inModel, [&app] { StartChamfer(app); }});
 
     // --- sketch ---

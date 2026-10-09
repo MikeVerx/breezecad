@@ -153,6 +153,13 @@ void StartHole(AppContext& app) {
     app.ops.hole.StartNew(app, *s);
 }
 
+void StartShell(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.shell.StartNew(app, *s);
+}
+
 void StartRevolve(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;

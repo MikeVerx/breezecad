@@ -2,6 +2,7 @@
 
 #include "core/Log.h"
 #include "kernel/occt/EdgeMatch.h"
+#include "kernel/occt/FaceMatch.h"
 #include "kernel/occt/ModelImpl.h"
 
 #include <AIS_InteractiveContext.hxx>
@@ -150,19 +151,53 @@ struct Viewport::Impl {
     ObjectId       hovered;
     bool           dirty = true;
 
-    /// Edge picking for fillets and chamfers (see BeginEdgePicking).
-    struct EdgePicking {
+    /// Picking on the body as it was before an operation (fillet, shell;
+    /// see BeginPickingOriginal).
+    struct OriginalPicking {
         bool                            active = false;
+        PickTarget                      target = PickTarget::Edges;
         const kernel::Model*            model = nullptr;
         std::uint64_t                   revision = 0;
         std::size_t                     featureIndex = 0;
         std::vector<TopoDS_Shape>       bodies;    ///< the bodies before the operation
         std::vector<Handle(AIS_Shape)>  targets;   ///< their edges as lines, selectable
-        std::vector<doc::EdgeReference> markedRefs;
-        std::vector<Handle(AIS_Shape)>  marked;    ///< chosen edges, drawn thick
+        std::vector<doc::EdgeReference> markedEdges;
+        std::vector<doc::FaceReference> markedFaces;
+        std::vector<Handle(AIS_Shape)>  marked;    ///< chosen edges (thick) and faces (tinted)
         std::uint64_t                   markedRevision = static_cast<std::uint64_t>(-1);
         std::uint64_t                   shownRevision = static_cast<std::uint64_t>(-1);
-    } edgePick;
+    } original;
+
+    /// Shows the chosen edges and faces on the most recent original body.
+    void ShowMarked() {
+        OriginalPicking& o = original;
+        for (const auto& h : o.marked) context->Remove(h, false);
+        o.marked.clear();
+        o.markedRevision = o.active ? o.revision : 0;
+        dirty = true;
+        if (!o.active || o.bodies.empty()) return;
+        const TopoDS_Shape& body = o.bodies.back();   // where the operation applies
+        for (const auto& edge : kernel::occt::ResolveEdges(o.markedEdges, body)) {
+            if (!edge) continue;
+            Handle(AIS_Shape) ais = new AIS_Shape(*edge);
+            ais->SetColor(ToQuantity(colors.selection));
+            ais->SetWidth(3.5);
+            ais->SetZLayer(Graphic3d_ZLayerId_Topmost);
+            context->Display(ais, AIS_WireFrame, -1, false);
+            o.marked.push_back(ais);
+        }
+        for (const doc::FaceReference& ref : o.markedFaces) {
+            const std::optional<TopoDS_Face> face = kernel::occt::ResolveFace(body, ref);
+            if (!face) continue;
+            Handle(AIS_Shape) ais = new AIS_Shape(*face);
+            ais->SetColor(ToQuantity(colors.selection));
+            ais->SetTransparency(0.75);   // a tint: the preview behind stays readable
+            ais->Attributes()->SetFaceBoundaryDraw(false);
+            ais->SetZLayer(Graphic3d_ZLayerId_Topmost);
+            context->Display(ais, AIS_Shaded, -1, false);
+            o.marked.push_back(ais);
+        }
+    }
 
     bool        animating = false;
     CameraState animFrom, animTo;
@@ -262,6 +297,9 @@ bool Viewport::Init(const NativeGlSurface& surface) {
         s->SetColor(ToQuantity(m.colors.hover));
         s->SetDisplayMode(AIS_Shaded);
         s->SetTransparency(0.6f);   // a soft tint: the body colour shows through
+        // In the body's own layer: the part of a face hidden behind a wall
+        // stays hidden (the default overlay layer shows it through the wall).
+        s->SetZLayer(Graphic3d_ZLayerId_UNKNOWN);
         // A hovered edge (fillet, chamfer) is drawn thick enough to see.
         const Handle(Prs3d_LineAspect) thick = new Prs3d_LineAspect(ToQuantity(m.colors.hover), Aspect_TOL_SOLID, 3.5);
         s->SetWireAspect(thick);
@@ -327,7 +365,7 @@ void Viewport::Sync(const kernel::Model& model) {
         Handle(AIS_Shape) ais = new AIS_Shape(body.shape);
         m.ApplyStyle(ais, body.id == m.hovered);
         m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
-        if (m.edgePick.active) m.context->Deactivate(ais);
+        if (m.original.active) m.context->Deactivate(ais);
         m.shown.push_back({body.id, ais});
     }
     m.bounds = model.BoundingBox();
@@ -576,28 +614,31 @@ std::optional<PickResult> Viewport::Pick(Vec2 pixel) {
     return result;
 }
 
-// --- edge picking -------------------------------------------------------------
+// --- picking on the original body -----------------------------------------
 
-void Viewport::BeginEdgePicking(const kernel::Model& model, std::size_t featureIndex) {
+void Viewport::BeginPickingOriginal(const kernel::Model& model, std::size_t featureIndex, PickTarget target) {
     Impl& m = *myImpl;
-    Impl::EdgePicking& e = m.edgePick;
+    Impl::OriginalPicking& o = m.original;
 
-    // The result stays on screen as a live preview, but only the edges of
-    // the body as it was are pickable: they are drawn as lines over it, so
-    // an edge already rounded off is still there to click (again to drop it).
-    if (!e.active || e.shownRevision != m.syncedRevision) {
+    // The result stays on screen as a live preview, but only the body as it
+    // was is pickable: its edges are drawn as lines over the preview, so an
+    // edge already rounded off or a face already opened is still there to
+    // click (again to drop it).
+    if (!o.active || o.shownRevision != m.syncedRevision) {
         for (const auto& s : m.shown) m.context->Deactivate(s.shape);
-        e.shownRevision = m.syncedRevision;
+        o.shownRevision = m.syncedRevision;
     }
-    if (e.active && e.model == &model && e.revision == model.Revision() && e.featureIndex == featureIndex) return;
+    if (o.active && o.model == &model && o.revision == model.Revision() && o.featureIndex == featureIndex && o.target == target)
+        return;
 
-    for (const auto& t : e.targets) m.context->Remove(t, false);
-    e.targets.clear();
-    e.bodies.clear();
+    for (const auto& t : o.targets) m.context->Remove(t, false);
+    o.targets.clear();
+    o.bodies.clear();
     const auto& after = model.GetImpl().bodiesAfter;
     if (featureIndex > 0 && featureIndex <= after.size())
-        for (const kernel::Body& body : after[featureIndex - 1]) e.bodies.push_back(body.shape);
-    for (const TopoDS_Shape& body : e.bodies) {
+        for (const kernel::Body& body : after[featureIndex - 1]) o.bodies.push_back(body.shape);
+    const int mode = AIS_Shape::SelectionMode(target == PickTarget::Edges ? TopAbs_EDGE : TopAbs_FACE);
+    for (const TopoDS_Shape& body : o.bodies) {
         // Shaded (a wireframe presentation is never found by the selector),
         // but with fully transparent faces: only its edges show, over the
         // preview, in the edge colour.
@@ -607,25 +648,24 @@ void Viewport::BeginEdgePicking(const kernel::Model& model, std::size_t featureI
         drawer->SetFaceBoundaryDraw(true);
         drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(m.colors.edges), Aspect_TOL_SOLID, 1.2));
         ais->SetTransparency(1.0);
-        m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_EDGE), false);
-        e.targets.push_back(ais);
+        m.context->Display(ais, AIS_Shaded, mode, false);
+        o.targets.push_back(ais);
     }
-    e.active = true;
-    e.model = &model;
-    e.revision = model.Revision();
-    e.featureIndex = featureIndex;
-    const std::vector<doc::EdgeReference> marked = e.markedRefs;
-    SetMarkedEdges(marked);   // re-resolve against the new bodies
-    m.dirty = true;
+    o.active = true;
+    o.target = target;
+    o.model = &model;
+    o.revision = model.Revision();
+    o.featureIndex = featureIndex;
+    m.ShowMarked();   // re-resolve against the new bodies
 }
 
-void Viewport::EndEdgePicking() {
+void Viewport::EndPickingOriginal() {
     Impl& m = *myImpl;
-    Impl::EdgePicking& e = m.edgePick;
-    if (!e.active) return;
-    for (const auto& t : e.targets) m.context->Remove(t, false);
-    for (const auto& h : e.marked) m.context->Remove(h, false);
-    e = {};
+    Impl::OriginalPicking& o = m.original;
+    if (!o.active) return;
+    for (const auto& t : o.targets) m.context->Remove(t, false);
+    for (const auto& h : o.marked) m.context->Remove(h, false);
+    o = {};
     for (const auto& s : m.shown) {
         m.context->Display(s.shape, false);
         m.context->Activate(s.shape, AIS_Shape::SelectionMode(TopAbs_FACE));
@@ -636,7 +676,7 @@ void Viewport::EndEdgePicking() {
 
 std::optional<doc::EdgeReference> Viewport::PickEdge(Vec2 pixel) {
     Impl& m = *myImpl;
-    if (!m.edgePick.active) return std::nullopt;
+    if (!m.original.active) return std::nullopt;
     const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
     const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
     const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
@@ -644,34 +684,52 @@ std::optional<doc::EdgeReference> Viewport::PickEdge(Vec2 pixel) {
     for (int i = 1; i <= selector->NbPicked(); ++i) {
         const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
         if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_EDGE) continue;
-        for (std::size_t b = 0; b < m.edgePick.targets.size(); ++b)
-            if (owner->Selectable() == m.edgePick.targets[b])
-                return kernel::occt::DescribeEdge(TopoDS::Edge(owner->Shape()), m.edgePick.bodies[b]);
+        for (std::size_t b = 0; b < m.original.targets.size(); ++b)
+            if (owner->Selectable() == m.original.targets[b])
+                return kernel::occt::DescribeEdge(TopoDS::Edge(owner->Shape()), m.original.bodies[b]);
     }
     return std::nullopt;
 }
 
+std::optional<doc::FaceReference> Viewport::PickFace(Vec2 pixel) {
+    Impl& m = *myImpl;
+    if (!m.original.active) return std::nullopt;
+    const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
+    const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->Pick(px, py, m.view);
+    for (int i = 1; i <= selector->NbPicked(); ++i) {
+        const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
+        if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_FACE) continue;
+        const std::optional<Vec3> normal = kernel::occt::PlanarNormal(TopoDS::Face(owner->Shape()));
+        if (!normal) return std::nullopt;   // the nearest face is curved
+        return doc::FaceReference{*normal, ToVec(selector->PickedPoint(i).XYZ())};
+    }
+    return std::nullopt;
+}
+
+bool Viewport::SameOriginalFace(const doc::FaceReference& a, const doc::FaceReference& b) const {
+    const Impl::OriginalPicking& o = myImpl->original;
+    if (o.bodies.empty()) return false;
+    const auto fa = kernel::occt::ResolveFace(o.bodies.back(), a);
+    const auto fb = kernel::occt::ResolveFace(o.bodies.back(), b);
+    return fa && fb && fa->IsSame(*fb);
+}
+
 void Viewport::SetMarkedEdges(const std::vector<doc::EdgeReference>& edges) {
     Impl& m = *myImpl;
-    Impl::EdgePicking& e = m.edgePick;
-    const std::uint64_t revision = e.active ? e.revision : 0;
-    if (edges == e.markedRefs && revision == e.markedRevision) return;
-    for (const auto& h : e.marked) m.context->Remove(h, false);
-    e.marked.clear();
-    e.markedRefs = edges;
-    e.markedRevision = revision;
-    if (!e.active || e.bodies.empty()) return;
-    // Chosen edges live on the most recent body (where the operation applies).
-    for (const auto& edge : kernel::occt::ResolveEdges(edges, e.bodies.back())) {
-        if (!edge) continue;
-        Handle(AIS_Shape) ais = new AIS_Shape(*edge);
-        ais->SetColor(ToQuantity(m.colors.selection));
-        ais->SetWidth(3.5);
-        ais->SetZLayer(Graphic3d_ZLayerId_Topmost);
-        m.context->Display(ais, AIS_WireFrame, -1, false);
-        e.marked.push_back(ais);
-    }
-    m.dirty = true;
+    Impl::OriginalPicking& o = m.original;
+    if (edges == o.markedEdges && (o.active ? o.revision : 0) == o.markedRevision) return;
+    o.markedEdges = edges;
+    m.ShowMarked();
+}
+
+void Viewport::SetMarkedFaces(const std::vector<doc::FaceReference>& faces) {
+    Impl& m = *myImpl;
+    Impl::OriginalPicking& o = m.original;
+    if (faces == o.markedFaces && (o.active ? o.revision : 0) == o.markedRevision) return;
+    o.markedFaces = faces;
+    m.ShowMarked();
 }
 
 } // namespace bz::render

@@ -9,6 +9,7 @@
 #include "core/NativeSurface.h"
 #include "core/ViewProjection.h"
 #include "document/EdgeReference.h"
+#include "document/FaceReference.h"
 
 #include <memory>
 #include <optional>
@@ -38,6 +39,9 @@ struct ViewportColors {
     Color hover            = Color::Hex(0x38A9E8);
     Color selection        = Color::Hex(0x1D4ED8);
 };
+
+/// What BeginPickingOriginal makes pickable.
+enum class PickTarget : unsigned char { Edges, Faces };
 
 /// What lies under the cursor.
 struct PickResult {
@@ -101,17 +105,23 @@ public:
 
     std::optional<PickResult> Pick(Vec2 pixel);
 
-    // --- edge picking (fillet, chamfer) ---------------------------------
-    /// Makes the edges of the bodies as they were before feature number
-    /// `featureIndex` hoverable and pickable; the shown result (with the
-    /// operation's preview) is not pickable meanwhile. Cheap to call every
-    /// frame.
-    void BeginEdgePicking(const kernel::Model& model, std::size_t featureIndex);
-    void EndEdgePicking();
-    /// Edge under the cursor while edge picking, described for storing.
+    // --- picking on the body before an operation (fillet, shell) ------
+    /// Makes the bodies as they were before feature number `featureIndex`
+    /// pickable (their edges or their faces); they are drawn as lines over
+    /// the shown result, which is not pickable meanwhile. Cheap to call
+    /// every frame.
+    void BeginPickingOriginal(const kernel::Model& model, std::size_t featureIndex, PickTarget target);
+    void EndPickingOriginal();
+    /// Edge under the cursor (PickTarget::Edges), described for storing.
     std::optional<doc::EdgeReference> PickEdge(Vec2 pixel);
-    /// Edges drawn as chosen while edge picking.
+    /// Flat face under the cursor (PickTarget::Faces); nullopt for a curved one.
+    std::optional<doc::FaceReference> PickFace(Vec2 pixel);
+    /// True when both references point at the same face of the original
+    /// body (a second click on a face drops it).
+    bool SameOriginalFace(const doc::FaceReference& a, const doc::FaceReference& b) const;
+    /// Edges and faces drawn as chosen while picking.
     void SetMarkedEdges(const std::vector<doc::EdgeReference>& edges);
+    void SetMarkedFaces(const std::vector<doc::FaceReference>& faces);
 
     struct Impl;
 

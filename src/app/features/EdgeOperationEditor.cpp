@@ -78,7 +78,7 @@ void EdgeOperationEditor::DrawInViewport(AppContext& app, Session& session, cons
     if (!f) return;
     const int index = session.doc.IndexOf(f->id);
     if (index < 0) return;
-    app.viewport.BeginEdgePicking(session.model, static_cast<std::size_t>(index));
+    app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Edges);
     app.viewport.SetMarkedEdges(f->edges);
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;

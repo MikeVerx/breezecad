@@ -30,6 +30,7 @@ void StartRevolve(AppContext& app);
 void StartFillet(AppContext& app);
 void StartChamfer(AppContext& app);
 void StartHole(AppContext& app);
+void StartShell(AppContext& app);
 /// Double click in the tree: edit a sketch or an operation.
 void EditFeature(AppContext& app, Session& session, ObjectId id);
 void DeleteFeature(AppContext& app, Session& session, ObjectId id);

@@ -14,7 +14,7 @@ class EdgeOperationEditor : public FeatureOperationEditor {
 public:
     void StartNew(AppContext& app, Session& session);
     void DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;
-    bool PicksEdges() const override { return true; }
+    bool PicksOriginal() const override { return true; }
     std::string Hint() const override;
 
 protected:

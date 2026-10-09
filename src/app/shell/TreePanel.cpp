@@ -10,6 +10,7 @@
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
 #include "document/RevolveFeature.h"
+#include "document/ShellFeature.h"
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
 #include "ui/Widgets.h"
@@ -105,6 +106,7 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::FilletFeature*>(&f)) return "tree-fillet";
     if (dynamic_cast<const doc::ChamferFeature*>(&f)) return "tree-chamfer";
     if (dynamic_cast<const doc::HoleFeature*>(&f)) return "tree-hole";
+    if (dynamic_cast<const doc::ShellFeature*>(&f)) return "tree-shell";
     return "tree-unknown";
 }
 
@@ -122,6 +124,8 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
         if (hole->centres.size() > 1) meta += " \xC3\x97" + std::to_string(hole->centres.size());
         return meta;
     }
+    if (const auto* shell = dynamic_cast<const doc::ShellFeature*>(&f))
+        return FormatValue(shell->thickness.value, Quantity::Length, d.units) + " " + UnitLabel(Quantity::Length, d.units);
     if (const auto* rev = dynamic_cast<const doc::RevolveFeature*>(&f)) {
         if (rev->extent == doc::RevolveExtent::Full) return "360\xC2\xB0";
         return FormatValue(rev->angle.value, Quantity::Angle, d.units) + UnitLabel(Quantity::Angle, d.units);

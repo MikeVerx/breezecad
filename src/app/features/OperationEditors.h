@@ -5,6 +5,7 @@
 #include "app/features/ExtrudeEditor.h"
 #include "app/features/HoleEditor.h"
 #include "app/features/RevolveEditor.h"
+#include "app/features/ShellEditor.h"
 
 #include <array>
 
@@ -16,8 +17,9 @@ struct OperationEditors {
     FilletEditor  fillet;
     ChamferEditor chamfer;
     HoleEditor    hole;
+    ShellEditor   shell;
 
-    std::array<OperationEditor*, 5> All() { return {&extrude, &revolve, &fillet, &chamfer, &hole}; }
+    std::array<OperationEditor*, 6> All() { return {&extrude, &revolve, &fillet, &chamfer, &hole, &shell}; }
 
     /// The open operation, or nullptr.
     OperationEditor* Active() {
