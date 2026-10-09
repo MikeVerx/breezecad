@@ -235,6 +235,7 @@ void FillAnalysis(const Sketch& sketch, const EquationSystem& sys, SolveResult& 
     for (const Line& l : sketch.lines) mark(l.id);
     for (const Circle& c : sketch.circles) mark(c.id);
     for (const Arc& a : sketch.arcs) mark(a.id);
+    for (const Spline& s : sketch.splines) mark(s.id);
 }
 
 void CollectFailing(const EquationSystem& sys, SolveResult& result) {

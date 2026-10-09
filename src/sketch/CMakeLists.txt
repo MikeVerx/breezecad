@@ -6,6 +6,7 @@ add_library(bz_sketch STATIC
     Sketch.cpp
     Fillet.cpp
     Offset.cpp
+    SplineGeometry.cpp
     Trim.cpp
     Solver.cpp)
 target_link_libraries(bz_sketch PUBLIC bz::core)

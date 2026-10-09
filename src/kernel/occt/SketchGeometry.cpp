@@ -1,5 +1,7 @@
 #include "kernel/occt/SketchGeometry.h"
 
+#include "sketch/SplineGeometry.h"
+
 #include <BOPTools_AlgoTools3D.hxx>
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAlgoAPI_Splitter.hxx>
@@ -10,10 +12,14 @@
 #include <BRepTools_WireExplorer.hxx>
 #include <BRep_Tool.hxx>
 #include <GCPnts_TangentialDeflection.hxx>
+#include <Geom_BSplineCurve.hxx>
 #include <IntTools_Context.hxx>
 #include <NCollection_List.hxx>
 #include <ShapeAnalysis_FreeBounds.hxx>
 #include <Standard_Failure.hxx>
+#include <TColStd_Array1OfInteger.hxx>
+#include <TColStd_Array1OfReal.hxx>
+#include <TColgp_Array1OfPnt.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopTools_HSequenceOfShape.hxx>
 #include <TopoDS.hxx>
@@ -66,6 +72,26 @@ std::vector<TopoDS_Edge> MakeEdges(const doc::SketchFeature& feature) {
         gp_Ax2 ax = axes;
         ax.SetLocation(world(a.center));
         edges.push_back(BRepBuilderAPI_MakeEdge(gp_Circ(ax, r), a1, a2).Edge());
+    }
+    for (const auto& s : sk.splines) {
+        if (s.construction) continue;
+        const sketch::BSpline b = sketch::SplineShape(sk, s);
+        if (b.poles.size() < 2) continue;
+        TColgp_Array1OfPnt poles(1, static_cast<int>(b.poles.size()));
+        for (std::size_t i = 0; i < b.poles.size(); ++i) poles.SetValue(static_cast<int>(i) + 1, ToPnt(frame.ToWorld(b.poles[i])));
+        TColStd_Array1OfReal knots(1, static_cast<int>(b.knots.size()));
+        TColStd_Array1OfInteger mults(1, static_cast<int>(b.knots.size()));
+        for (std::size_t i = 0; i < b.knots.size(); ++i) {
+            knots.SetValue(static_cast<int>(i) + 1, b.knots[i]);
+            mults.SetValue(static_cast<int>(i) + 1, b.mults[i]);
+        }
+        try {
+            const Handle(Geom_BSplineCurve) curve = new Geom_BSplineCurve(poles, knots, mults, b.degree);
+            BRepBuilderAPI_MakeEdge make(curve);
+            if (make.IsDone()) edges.push_back(make.Edge());
+        } catch (const Standard_Failure&) {
+            // A degenerate spline (points on top of each other) makes no edge.
+        }
     }
     return edges;
 }

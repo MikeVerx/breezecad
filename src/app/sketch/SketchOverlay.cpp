@@ -1,5 +1,7 @@
 #include "app/sketch/SketchOverlay.h"
 
+#include "sketch/SplineGeometry.h"
+
 #include <algorithm>
 #include <cmath>
 #include <span>
@@ -337,6 +339,18 @@ void DrawSketch(ui::Ui& ui, ImDrawList* dl, const doc::SketchFeature& feature, c
         if (a1 <= a0) a1 += 2 * kPi;
         DrawSketchArc(ui, dl, view, center, s.Length(), a0, a1, curveColor(a.id, a.construction, a.projected),
                       curveWidth(a.id, a.construction), a.construction);
+    }
+    for (const auto& sp : sk.splines) {
+        const std::vector<Vec2> pts = sketch::SampleSpline(sketch::SplineShape(sk, sp));
+        const Color ink = curveColor(sp.id, sp.construction, false);
+        const float width = curveWidth(sp.id, sp.construction);
+        for (std::size_t i = 0; i + 1 < pts.size(); ++i)
+            DrawSketchSegment(ui, dl, view, pts[i], pts[i + 1], ink, width, sp.construction ? LinePattern::Dashed : LinePattern::Solid);
+        // Control vertices pull the curve: show the polygon they make.
+        if (!sp.interpolate && !style.passive)
+            for (std::size_t i = 0; i + 1 < sp.points.size(); ++i)
+                DrawSketchSegment(ui, dl, view, sk.PositionOf(sp.points[i]), sk.PositionOf(sp.points[i + 1]),
+                                  ui.C().textMuted.WithAlpha(0.6f), 1.0f, LinePattern::Dashed);
     }
     if (style.passive) return;
 

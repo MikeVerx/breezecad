@@ -54,6 +54,12 @@ ObjectId Sketch::AddLine(IdGenerator& ids, ObjectId start, ObjectId end, bool co
     return id;
 }
 
+ObjectId Sketch::AddSpline(IdGenerator& ids, std::vector<ObjectId> pts, bool interpolate, bool construction) {
+    const ObjectId id = ids.Next();
+    splines.push_back({id, std::move(pts), interpolate, construction});
+    return id;
+}
+
 ObjectId Sketch::AddCircle(IdGenerator& ids, ObjectId center, double radius, bool construction) {
     const ObjectId id = ids.Next();
     circles.push_back({id, center, radius, construction});
@@ -84,6 +90,7 @@ EntityKind Sketch::KindOf(ObjectId id) const {
     if (FindIn(lines, id))       return EntityKind::Line;
     if (FindIn(circles, id))     return EntityKind::Circle;
     if (FindIn(arcs, id))        return EntityKind::Arc;
+    if (FindIn(splines, id))     return EntityKind::Spline;
     if (FindIn(constraints, id)) return EntityKind::Constraint;
     return EntityKind::None;
 }
@@ -95,6 +102,7 @@ const Line*       Sketch::FindLine(ObjectId id) const       { return FindIn(line
 Circle*           Sketch::FindCircle(ObjectId id)           { return FindIn(circles, id); }
 const Circle*     Sketch::FindCircle(ObjectId id) const     { return FindIn(circles, id); }
 const Arc*        Sketch::FindArc(ObjectId id) const        { return FindIn(arcs, id); }
+const Spline*     Sketch::FindSpline(ObjectId id) const     { return FindIn(splines, id); }
 Constraint*       Sketch::FindConstraint(ObjectId id)       { return FindIn(constraints, id); }
 const Constraint* Sketch::FindConstraint(ObjectId id) const { return FindIn(constraints, id); }
 
@@ -122,6 +130,8 @@ bool Sketch::IsPointUsed(ObjectId pointId) const {
         if (c.center == pointId) return true;
     for (const auto& a : arcs)
         if (a.center == pointId || a.start == pointId || a.end == pointId) return true;
+    for (const auto& s : splines)
+        if (std::find(s.points.begin(), s.points.end(), pointId) != s.points.end()) return true;
     return false;
 }
 
@@ -147,6 +157,8 @@ void Sketch::Remove(ObjectId id) {
                 if (c.center == id) curves.push_back(c.id);
             for (const auto& a : arcs)
                 if (a.center == id || a.start == id || a.end == id) curves.push_back(a.id);
+            for (const auto& s : splines)
+                if (std::find(s.points.begin(), s.points.end(), id) != s.points.end()) curves.push_back(s.id);
             for (ObjectId curve : curves) Remove(curve);
             RemoveConstraintsReferencing(id);
             EraseIf(points, [id](const Point& pt) { return pt.id == id; });
@@ -154,16 +166,19 @@ void Sketch::Remove(ObjectId id) {
         }
         case EntityKind::Line:
         case EntityKind::Circle:
-        case EntityKind::Arc: {
+        case EntityKind::Arc:
+        case EntityKind::Spline: {
             std::vector<ObjectId> ownPoints;
             if (const Line* l = FindLine(id)) ownPoints = {l->start, l->end};
             if (const Circle* c = FindCircle(id)) ownPoints = {c->center};
             if (const Arc* a = FindArc(id)) ownPoints = {a->center, a->start, a->end};
+            if (const Spline* s = FindSpline(id)) ownPoints = s->points;
 
             RemoveConstraintsReferencing(id);
             EraseIf(lines, [id](const Line& l) { return l.id == id; });
             EraseIf(circles, [id](const Circle& c) { return c.id == id; });
             EraseIf(arcs, [id](const Arc& a) { return a.id == id; });
+            EraseIf(splines, [id](const Spline& s) { return s.id == id; });
 
             for (ObjectId pid : ownPoints) {
                 const Point* p = FindPoint(pid);
@@ -192,6 +207,8 @@ void Sketch::MergePoints(ObjectId from, ObjectId into) {
         remap(a.start);
         remap(a.end);
     }
+    for (auto& s : splines)
+        for (ObjectId& p : s.points) remap(p);
     for (auto& c : constraints) {
         remap(c.refs[0]);
         remap(c.refs[1]);

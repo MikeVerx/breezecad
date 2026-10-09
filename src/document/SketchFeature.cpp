@@ -74,6 +74,7 @@ void SketchFeature::ReserveIds(IdGenerator& ids) const {
     for (const auto& l : sketch.lines) ids.Reserve(l.id);
     for (const auto& c : sketch.circles) ids.Reserve(c.id);
     for (const auto& a : sketch.arcs) ids.Reserve(a.id);
+    for (const auto& s : sketch.splines) ids.Reserve(s.id);
     for (const auto& c : sketch.constraints) ids.Reserve(c.id);
 }
 
@@ -111,6 +112,12 @@ void SketchFeature::SaveFields(Json& out) const {
         curves.push_back({{"id", ToJson(a.id)}, {"type", "arc"}, {"center", ToJson(a.center)},
                           {"start", ToJson(a.start)}, {"end", ToJson(a.end)}, {"construction", a.construction},
                           {"projected", a.projected}});
+    for (const auto& s : sketch.splines) {
+        Json pts = Json::array();
+        for (ObjectId p : s.points) pts.push_back(ToJson(p));
+        curves.push_back({{"id", ToJson(s.id)}, {"type", "spline"}, {"points", std::move(pts)},
+                          {"interpolate", s.interpolate}, {"construction", s.construction}});
+    }
 
     Json constraints = Json::array();
     for (const auto& c : sketch.constraints) {
@@ -167,6 +174,17 @@ Status SketchFeature::LoadFields(const Json& in) {
                  ReadMember(j, "end", a.end) && ReadMember(j, "construction", a.construction) &&
                  ReadMember(j, "projected", a.projected);
             sk.arcs.push_back(a);
+        } else if (type == "spline") {
+            sketch::Spline s;
+            ok = ReadMember(j, "id", s.id) && ReadMember(j, "interpolate", s.interpolate) &&
+                 ReadMember(j, "construction", s.construction);
+            for (const Json& p : j.value("points", Json::array())) {
+                ObjectId point;
+                ok = ok && json_io::Read(p, point);
+                s.points.push_back(point);
+            }
+            ok = ok && s.points.size() >= 2;
+            sk.splines.push_back(std::move(s));
         }
         // Unknown curve types from newer versions are skipped, not fatal.
         if (!ok) return Bad("curves");

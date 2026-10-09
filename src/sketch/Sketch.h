@@ -51,6 +51,18 @@ struct Arc {
     bool     projected = false;   ///< a model edge projected into the sketch: its radius is fixed too
 };
 
+/// A smooth curve through or along its points ("Сплайн"). The points are
+/// ordinary sketch points: constraints and dragging move them, the curve
+/// follows. Closed when the last point is the first one.
+struct Spline {
+    ObjectId              id;
+    std::vector<ObjectId> points;
+    bool                  interpolate = true;   ///< through the points; false: they are control vertices
+    bool                  construction = false;
+
+    bool Closed() const { return points.size() > 2 && points.front() == points.back(); }
+};
+
 // ---------------------------------------------------------------------------
 // Constraints. Geometric ones have no value; dimensional ones carry a
 // Parameter, which shows up in the variables table and may hold an
@@ -100,7 +112,7 @@ struct Constraint {
 };
 
 /// Kind of an entity found by id.
-enum class EntityKind : unsigned char { None, Point, Line, Circle, Arc, Constraint };
+enum class EntityKind : unsigned char { None, Point, Line, Circle, Arc, Constraint, Spline };
 
 /// A complete 2D sketch: geometry plus constraints.
 class Sketch {
@@ -109,6 +121,7 @@ public:
     std::vector<Line>       lines;
     std::vector<Circle>     circles;
     std::vector<Arc>        arcs;
+    std::vector<Spline>     splines;
     std::vector<Constraint> constraints;
 
     // --- creation (ids come from the document's generator) -------------
@@ -116,6 +129,7 @@ public:
     ObjectId AddLine(IdGenerator& ids, ObjectId start, ObjectId end, bool construction = false);
     ObjectId AddCircle(IdGenerator& ids, ObjectId center, double radius, bool construction = false);
     ObjectId AddArc(IdGenerator& ids, ObjectId center, ObjectId start, ObjectId end, bool construction = false);
+    ObjectId AddSpline(IdGenerator& ids, std::vector<ObjectId> points, bool interpolate, bool construction = false);
     ObjectId AddConstraint(IdGenerator& ids, Constraint constraint);
     /// Creates the fixed origin point if the sketch has none. Returns its id.
     ObjectId EnsureOrigin(IdGenerator& ids);
@@ -129,6 +143,7 @@ public:
     const Circle*     FindCircle(ObjectId id) const;
     Circle*           FindCircle(ObjectId id);
     const Arc*        FindArc(ObjectId id) const;
+    const Spline*     FindSpline(ObjectId id) const;
     const Constraint* FindConstraint(ObjectId id) const;
     Constraint*       FindConstraint(ObjectId id);
     const Point*      Origin() const;
@@ -149,7 +164,7 @@ public:
     /// onto an existing one.
     void MergePoints(ObjectId from, ObjectId into);
 
-    bool IsEmpty() const { return lines.empty() && circles.empty() && arcs.empty(); }
+    bool IsEmpty() const { return lines.empty() && circles.empty() && arcs.empty() && splines.empty(); }
 
     /// Box around all curves and points (empty for an empty sketch).
     /// Circles count with their full extent; arcs too, which is a bit generous.

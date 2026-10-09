@@ -332,6 +332,8 @@ std::vector<int> EquationSystem::UnknownsOf(const Sketch& sketch, ObjectId entit
         addPoint(c->center);
         out.push_back(RadiusIndex(entity));
     }
+    if (const Spline* s = sketch.FindSpline(entity))
+        for (const ObjectId p : s->points) addPoint(p);
     if (const Arc* a = sketch.FindArc(entity)) {
         addPoint(a->center);
         addPoint(a->start);
