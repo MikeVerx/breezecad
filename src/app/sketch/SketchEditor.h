@@ -8,6 +8,7 @@
 #include "app/AppContext.h"
 #include "app/sketch/SketchPick.h"
 #include "document/SketchFeature.h"
+#include "sketch/Move.h"
 #include "sketch/Solver.h"
 
 #include <memory>
@@ -22,7 +23,7 @@
 namespace bz::app {
 
 enum class SketchTool : unsigned char {
-    Select, Line, Rectangle, Circle, Arc, Point, Project, Trim, Dimension,
+    Select, Line, Rectangle, Circle, Arc, Point, Project, Trim, Move, Rotate, Dimension,
     Coincident, Horizontal, Vertical, Parallel, Perpendicular, Equal, Tangent, Fix, Midpoint, Concentric,
 };
 
@@ -38,10 +39,13 @@ struct DrawOptions {
     CircleMode    circle = CircleMode::CentreRadius;
     ArcMode       arc = ArcMode::CentreEnds;
     int           polygonSides = 6;
+    std::string   sides = "6";      ///< polygon side count as typed
     bool          polygonInscribed = true;
     std::string   length, angle;    ///< line
     std::string   width, height;    ///< rectangle
     std::string   size;             ///< circle / polygon diameter, arc radius
+    std::string   moveX, moveY;     ///< move
+    std::string   turn;             ///< rotate
 };
 
 struct SketchToolInfo {
@@ -105,6 +109,12 @@ private:
     void HandleProject(AppContext& app, Session& session, const SketchView& view);
     /// "Обрезка": the piece under the cursor is shown, a click removes it.
     void HandleTrim(AppContext& app, Session& session, const SketchView& view);
+    /// "Перенос" / "Поворот": the selection follows two (three) clicks.
+    void HandleMotion(AppContext& app, Session& session, const SketchView& view);
+    /// The motion the clicks so far and the cursor describe; nullopt when not ready.
+    std::optional<sketch::Motion> PendingMotion(const UnitSystem& units, bool withCursor) const;
+    /// Moves the selection as one undo step.
+    void ApplyMotion(AppContext& app, Session& session, const sketch::Motion& motion);
     void HandleDimension(AppContext& app, Session& session, const SketchView& view);
     void HandleConstraint(AppContext& app, Session& session, const SketchView& view);
     void HandleInlineEdit(AppContext& app, Session& session, const SketchView& view);
@@ -147,6 +157,7 @@ private:
 
     // drawing tools
     DrawOptions           myOptions;
+    std::string           mySidesError;          ///< polygon side count that is not a whole number
     double                myMmPerPixel = 0.1;   ///< of the last frame, to place automatic dimension labels
     std::vector<PointRef> myClicks;
     Snap                  mySnap;

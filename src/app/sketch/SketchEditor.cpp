@@ -15,7 +15,7 @@
 namespace bz::app {
 namespace {
 
-constexpr std::array<SketchToolInfo, 19> kTools{{
+constexpr std::array<SketchToolInfo, 21> kTools{{
     {SketchTool::Select, "Выбор", "ui-check", "Выберите или перетащите элементы эскиза"},
     {SketchTool::Line, "Отрезок", "sk-line", "Укажите начальную точку отрезка"},
     {SketchTool::Rectangle, "Прямоугольник", "sk-rectangle", "Укажите первый угол прямоугольника"},
@@ -24,6 +24,8 @@ constexpr std::array<SketchToolInfo, 19> kTools{{
     {SketchTool::Point, "Точка", "sk-point", "Укажите положение точки"},
     {SketchTool::Project, "Проецировать", "sk-project", "Щёлкните рёбра модели — их проекции появятся в эскизе и будут следовать за моделью"},
     {SketchTool::Trim, "Обрезка", "sk-trim", "Щёлкните лишний кусок кривой — он удалится до ближайших пересечений"},
+    {SketchTool::Move, "Перенос", "sk-move", "Выберите элементы (Ctrl+щелчок), затем укажите базовую точку"},
+    {SketchTool::Rotate, "Поворот", "sk-rotate", "Выберите элементы (Ctrl+щелчок), затем укажите центр поворота"},
     {SketchTool::Dimension, "Размер", "sk-dimension", "Выберите отрезок, окружность или две точки"},
     {SketchTool::Coincident, "Совпадение", "c-coincident", "Выберите две точки или точку и кривую"},
     {SketchTool::Horizontal, "Горизонтальность", "c-horizontal", "Выберите отрезок или две точки"},
@@ -268,6 +270,8 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
         case SketchTool::Point:     HandleDrawing(app, session, view); break;
         case SketchTool::Project:   HandleProject(app, session, view); break;
         case SketchTool::Trim:      HandleTrim(app, session, view); break;
+        case SketchTool::Move:
+        case SketchTool::Rotate:    HandleMotion(app, session, view); break;
         default:                    HandleConstraint(app, session, view); break;
     }
     if (doc::SketchFeature* still = Active(session)) DrawPreview(app, view, still->sketch, session.doc.units);
@@ -453,6 +457,13 @@ std::string SketchEditor::Hint(const Session& session) const {
             if (myOptions.arc == ArcMode::ThreePoints)
                 return step == 0 ? "Укажите начало дуги" : step == 1 ? "Укажите конец дуги" : "Укажите точку, через которую идёт дуга";
             return step == 0 ? InfoOf(myTool).hint : step == 1 ? "Укажите начало дуги" : "Укажите конец дуги";
+        case SketchTool::Move:
+            if (mySelection.empty()) return InfoOf(myTool).hint;
+            return step == 0 ? "Укажите базовую точку (Ctrl+щелчок — изменить выбор)" : "Укажите новое место";
+        case SketchTool::Rotate:
+            if (mySelection.empty()) return InfoOf(myTool).hint;
+            return step == 0 ? "Укажите центр поворота (Ctrl+щелчок — изменить выбор)"
+                             : step == 1 ? "Укажите, откуда поворачивать" : "Укажите, куда повернуть";
         case SketchTool::Dimension:
             return myPicks.empty() ? InfoOf(myTool).hint : "Укажите место размера или второй элемент";
         default: return InfoOf(myTool).hint;

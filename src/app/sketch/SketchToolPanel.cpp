@@ -3,11 +3,13 @@
 // cursor while drawing and becomes a dimension of the new shape.
 
 #include "app/Format.h"
+#include "core/Expression.h"
 #include "app/sketch/SketchEditor.h"
 #include "ui/Widgets.h"
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace bz::app {
 namespace {
@@ -41,11 +43,18 @@ void Caption(ui::Ui& ui, const char* text, float width) {
     ImGui::PopStyleColor();
 }
 
+/// A typed number of any sign; nullopt when empty or not a plain value.
+std::optional<double> PlainValue(const std::string& text, Quantity quantity, const UnitSystem& units) {
+    if (text.empty()) return std::nullopt;
+    const Expected<double> v = EvaluateExpression(text, quantity, units, [](std::string_view) { return std::optional<NamedValue>{}; });
+    return v ? std::optional<double>(*v) : std::nullopt;
+}
+
 } // namespace
 
 bool SketchEditor::HasToolPanel() const {
     return myTool == SketchTool::Line || myTool == SketchTool::Rectangle || myTool == SketchTool::Circle ||
-           myTool == SketchTool::Arc;
+           myTool == SketchTool::Arc || myTool == SketchTool::Move || myTool == SketchTool::Rotate;
 }
 
 void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width) {
@@ -135,12 +144,14 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
             if (polygon) {
                 ui::FieldLabel(ui, "Число сторон");
                 ImGui::Dummy({0, ui.S(2)});
-                static constexpr std::array<const char*, 6> counts{"3", "4", "5", "6", "8", "12"};
-                static constexpr std::array<int, 6> values{3, 4, 5, 6, 8, 12};
-                const auto at = std::find(values.begin(), values.end(), myOptions.polygonSides);
-                const int current = at == values.end() ? 3 : static_cast<int>(at - values.begin());
-                const int chosen = ui::Segmented(ui, "sides", counts, current, 6, inner);
-                if (chosen != current) myOptions.polygonSides = values[static_cast<std::size_t>(chosen)];
+                const ui::FieldResult r = ui::ExpressionField(ui, "##sides", myOptions.sides, "", mySidesError, inner, false, false);
+                if (r.edited || r.committed) {
+                    const Expected<double> n = EvaluateExpression(myOptions.sides, Quantity::Scalar, units,
+                                                                  [](std::string_view) { return std::optional<NamedValue>{}; });
+                    const bool whole = n && std::abs(*n - std::round(*n)) < 1e-9 && *n >= 3 && *n <= 200;
+                    mySidesError = whole ? std::string() : std::string("Целое число от 3 до 200");
+                    if (whole) myOptions.polygonSides = static_cast<int>(std::lround(*n));
+                }
                 ImGui::Dummy({0, ui.S(8)});
                 static constexpr std::array<const char*, 2> kinds{"Вписанный", "Описанный"};
                 const int kind = myOptions.polygonInscribed ? 0 : 1;
@@ -157,12 +168,44 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         case SketchTool::Arc:
             if (myOptions.arc == ArcMode::CentreEnds) field("Радиус", "##r", myOptions.size, Quantity::Length);
             break;
+        case SketchTool::Move:
+        case SketchTool::Rotate: {
+            const std::string chosen = mySelection.empty() ? std::string("Ничего не выбрано")
+                                                           : "Выбрано элементов: " + std::to_string(mySelection.size());
+            ui::FieldLabel(ui, chosen.c_str());
+            ImGui::Dummy({0, ui.S(10)});
+            if (myTool == SketchTool::Move) {
+                field("Сдвиг по X", "##dx", myOptions.moveX, Quantity::Length);
+                field("Сдвиг по Y", "##dy", myOptions.moveY, Quantity::Length);
+                const auto dx = PlainValue(myOptions.moveX, Quantity::Length, units);
+                const auto dy = PlainValue(myOptions.moveY, Quantity::Length, units);
+                const bool ready = !mySelection.empty() && (dx || dy);
+                if (ui::PrimaryButton(ui, "##move-now", "Сдвинуть", nullptr, {inner, ui.S(34)}, ready))
+                    app.Later([&app, &session, this, dx, dy] {
+                        ApplyMotion(app, session, {{}, 0, {dx.value_or(0), dy.value_or(0)}});
+                    });
+                ImGui::Dummy({0, ui.S(10)});
+            } else {
+                field("Угол", "##turn", myOptions.turn, Quantity::Angle);
+            }
+            break;
+        }
         default: break;
     }
 
     const bool sized = myTool == SketchTool::Line || myTool == SketchTool::Rectangle ||
                        (myTool == SketchTool::Circle && myOptions.circle != CircleMode::ThreePoints) ||
                        (myTool == SketchTool::Arc && myOptions.arc == ArcMode::CentreEnds);
+    if (myTool == SketchTool::Move) {
+        Caption(ui, "Ctrl+щелчок добавляет или убирает элемент. Затем базовая точка и новое место — или введите сдвиг.", inner);
+        ImGui::EndGroup();
+        return;
+    }
+    if (myTool == SketchTool::Rotate) {
+        Caption(ui, "Ctrl+щелчок добавляет или убирает элемент. С углом: щёлкните центр. Без угла: центр, откуда и куда.", inner);
+        ImGui::EndGroup();
+        return;
+    }
     Caption(ui,
             sized ? "Введённый размер фиксирует курсор и станет размером эскиза. Пустое поле — размер задаётся мышью."
                   : "Укажите три точки в поле эскиза.",

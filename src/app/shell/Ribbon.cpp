@@ -201,6 +201,10 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
 
     r.BeginGroup("Правка");
     r.Large("sketch.trim", "Обрезка", active(SketchTool::Trim));
+    r.BeginColumn();
+    r.Small("sketch.move", nullptr, active(SketchTool::Move));
+    r.Small("sketch.rotate", nullptr, active(SketchTool::Rotate));
+    r.EndColumn();
     r.EndGroup();
 
     r.BeginGroup("Модель");

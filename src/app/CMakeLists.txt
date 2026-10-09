@@ -57,5 +57,8 @@ target_link_libraries(breezecad PRIVATE
 bz_set_warnings(breezecad)
 
 # Assets next to the executable: the portable layout the app looks for first.
-add_custom_command(TARGET breezecad POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/assets $<TARGET_FILE_DIR:breezecad>/assets)
+# A target of its own, so an edited icon arrives even when nothing relinks.
+add_custom_target(bz_assets ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_SOURCE_DIR}/assets $<TARGET_FILE_DIR:breezecad>/assets
+    COMMENT "Copying assets")
+add_dependencies(breezecad bz_assets)

@@ -1,5 +1,6 @@
 add_library(bz_sketch STATIC
     EquationSystem.cpp
+    Move.cpp
     Shapes.cpp
     Sketch.cpp
     Trim.cpp

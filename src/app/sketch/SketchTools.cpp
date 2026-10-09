@@ -369,6 +369,101 @@ void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchVie
     session.CommitInPlaceEdit(std::move(before), "Обрезка");
 }
 
+std::optional<sketch::Motion> SketchEditor::PendingMotion(const UnitSystem& units, bool withCursor) const {
+    std::vector<Vec2> pts;
+    for (const PointRef& c : myClicks) pts.push_back(c.pos);
+    if (withCursor && myCursor) pts.push_back(mySnap.pos);
+    if (myTool == SketchTool::Move) {
+        if (pts.size() < 2) return std::nullopt;
+        return sketch::Motion{{}, 0, pts[1] - pts[0]};
+    }
+    if (pts.empty()) return std::nullopt;
+    // A typed angle needs only the centre; otherwise centre, from, to.
+    if (const auto typed = TypedValue(myOptions.turn, Quantity::Angle, units)) return sketch::Motion{pts[0], *typed, {}};
+    if (pts.size() < 3) return std::nullopt;
+    const Vec2 from = pts[1] - pts[0], to = pts[2] - pts[0];
+    if (from.Length() < 1e-9 || to.Length() < 1e-9) return std::nullopt;
+    return sketch::Motion{pts[0], std::atan2(from.Cross(to), from.Dot(to)), {}};
+}
+
+void SketchEditor::ApplyMotion(AppContext& app, Session& session, const sketch::Motion& motion) {
+    doc::SketchFeature* f = Active(session);
+    if (!f || mySelection.empty()) return;
+    const std::vector<ObjectId> chosen(mySelection.begin(), mySelection.end());
+    const std::vector<ObjectId> moved = sketch::MovedPoints(f->sketch, chosen);
+    if (moved.empty()) {
+        app.notes.Info("Среди выбранного нет того, что можно сдвинуть (начало координат и проекции стоят на месте)");
+        return;
+    }
+    const Vec2 expected = motion.Apply(f->sketch.PositionOf(moved.front()));
+    sketch::Sketch trial = f->sketch;
+    sketch::MoveEntities(trial, session.doc.Ids(), chosen, motion);
+    if (!sketch::Solve(trial).converged) {
+        app.notes.Error("Выбранное нельзя так сдвинуть: эскиз не решается");
+        return;
+    }
+    const Box2 extents = f->sketch.Extents();
+    const double scale = extents.IsEmpty() ? 1.0 : std::max((extents.max - extents.min).Length(), 1.0);
+    if ((trial.PositionOf(moved.front()) - expected).Length() > 1e-4 * scale)
+        app.notes.Info("Положение выбранного задано размерами или связями — сдвиг ограничен ими");
+    auto before = f->Clone();
+    f->sketch = std::move(trial);
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), InfoOf(myTool).label);
+    myClicks.clear();
+    myOptions.moveX.clear();
+    myOptions.moveY.clear();
+    myOptions.turn.clear();
+}
+
+void SketchEditor::HandleMotion(AppContext& app, Session& session, const SketchView& view) {
+    doc::SketchFeature* f = Active(session);
+    SnapOptions options;
+    options.points = app.settings.pointSnap;
+    options.grid = app.settings.gridSnap;
+    options.gridStep = app.settings.gridStep > 0 ? app.settings.gridStep : AdaptiveGridStep(view.MmPerPixel()) / 2;
+    mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
+    myCursor = mySnap.pos;
+
+    // The selection follows the cursor.
+    if (const auto motion = PendingMotion(session.doc.units, true); motion && !mySelection.empty()) {
+        ui::Ui& ui = app.ui;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const sketch::Sketch& sk = f->sketch;
+        const Color ink = ui.C().sketchHover;
+        for (ObjectId id : mySelection) {
+            if (const sketch::Line* l = sk.FindLine(id)) {
+                DrawSketchSegment(ui, dl, view, motion->Apply(sk.PositionOf(l->start)), motion->Apply(sk.PositionOf(l->end)), ink, 2.0f);
+            } else if (const sketch::Circle* c = sk.FindCircle(id)) {
+                DrawSketchArc(ui, dl, view, motion->Apply(sk.PositionOf(c->center)), c->radius, 0, 2 * kPi, ink, 2.0f);
+            } else if (const sketch::Arc* a = sk.FindArc(id)) {
+                const Vec2 centre = motion->Apply(sk.PositionOf(a->center));
+                const Vec2 p = motion->Apply(sk.PositionOf(a->start)) - centre, q = motion->Apply(sk.PositionOf(a->end)) - centre;
+                double a0 = std::atan2(p.y, p.x), a1 = std::atan2(q.y, q.x);
+                if (a1 <= a0) a1 += 2 * kPi;
+                DrawSketchArc(ui, dl, view, centre, p.Length(), a0, a1, ink, 2.0f);
+            }
+        }
+        if (!myClicks.empty()) DrawSketchSegment(ui, dl, view, myClicks.front().pos, mySnap.pos, ink.WithAlpha(0.6f), 1.2f, true);
+    }
+    DrawSnapMarker(app.ui, ImGui::GetWindowDrawList(), view.ToScreen(mySnap.pos), mySnap);
+
+    if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left) || !view.vf.hovered) return;
+    // Ctrl / Shift + click, or any click while nothing is chosen, picks elements.
+    const ImGuiIO& io = ImGui::GetIO();
+    if (myClicks.empty() && myHover && myHover.kind != EntityKind::Constraint && (io.KeyCtrl || io.KeyShift || mySelection.empty())) {
+        if (!mySelection.erase(myHover.id)) mySelection.insert(myHover.id);
+        return;
+    }
+    if (mySelection.empty()) return;
+    myClicks.push_back(RefFromSnap(mySnap));
+    const std::size_t need = myTool == SketchTool::Move ? 2 : TypedValue(myOptions.turn, Quantity::Angle, session.doc.units) ? 1 : 3;
+    if (myClicks.size() < need) return;
+    myClicks.pop_back();
+    if (const auto motion = PendingMotion(session.doc.units, true)) ApplyMotion(app, session, *motion);
+    myClicks.clear();
+}
+
 void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Snap& snap) {
     doc::SketchFeature* f = Active(session);
     doc::Document& d = session.doc;

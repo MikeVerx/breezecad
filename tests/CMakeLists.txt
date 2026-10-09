@@ -16,6 +16,7 @@ add_executable(bz_tests
     kernel/ShellTests.cpp
     kernel/SweepTests.cpp
     kernel/WorkPlaneTests.cpp
+    sketch/MoveTests.cpp
     sketch/ShapesTests.cpp
     sketch/SolverTests.cpp
     sketch/TrimTests.cpp)
