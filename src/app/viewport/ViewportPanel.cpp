@@ -4,6 +4,7 @@
 #include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
+#include "app/viewport/MarkingMenu.h"
 #include "app/viewport/Measure.h"
 #include "app/viewport/Planes.h"
 #include "app/viewport/Section.h"
@@ -181,6 +182,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const bool navigating = Navigate(app, session, vf, ImGui::IsItemHovered());
     vf.projection = app.viewport.Projection();
     vf.hovered = ImGui::IsItemHovered() && !navigating;
+    UpdateMarkingMenu(app, session, vf);   // may take the mouse from the overlays
 
     app.shell.planeQuads.clear();   // refilled by the overlays below
 
@@ -262,6 +264,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     if (modelMode) DrawSectionBar(app, session, vf);
     if (measuring) DrawMeasure(app, session, vf);
     ContextMenu(app, session);
+    DrawMarkingMenu(app, session);
     app.viewport.SetPlanes(app.shell.planeQuads);
 
     // View cube and triad on top of everything.

@@ -51,6 +51,16 @@ struct ShellState {
     } section;
     bool measuring = false;   ///< "Измерить" is on
 
+    /// The radial menu (see viewport/MarkingMenu).
+    struct MarkingMenu {
+        bool   armed = false;   ///< left button pressed over the model, waiting to see if it is held
+        bool   open = false;
+        bool   held = false;    ///< the press that opened it is still down
+        ImVec2 pressAt{0, 0};
+        ImVec2 centre{0, 0};
+        double pressTime = 0.0;
+    } marking;
+
     ObjectId    renaming;              ///< tree row being renamed
     std::string renameText;
     bool        renameFocus = false;

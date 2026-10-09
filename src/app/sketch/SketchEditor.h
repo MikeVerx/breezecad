@@ -51,6 +51,9 @@ public:
 
     // --- tools ------------------------------------------------------------
     SketchTool Tool() const { return myTool; }
+    /// Takes back the click a drawing tool took from the current press (the
+    /// radial menu opened on that press instead).
+    void DropPressClick();
     void SetTool(AppContext& app, Session& session, SketchTool tool);
     /// Esc: drops the current step, then the tool, then leaves the sketch.
     void Escape(AppContext& app, Session& session);
@@ -100,6 +103,7 @@ private:
     void DrawPreview(AppContext& app, const SketchView& view, const sketch::Sketch& sk, const UnitSystem& units);
 
     SketchTool myTool = SketchTool::Select;
+    double     myLastClickTime = -1.0;   ///< press time of the last drawing click (see DropPressClick)
 
     // drawing tools
     std::vector<PointRef> myClicks;
