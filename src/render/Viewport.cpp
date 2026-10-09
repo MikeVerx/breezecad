@@ -812,8 +812,8 @@ void Viewport::SetPlanes(const std::vector<PlaneQuad>& planes) {
         ais->SetMaterial(Graphic3d_MaterialAspect(Graphic3d_NameOfMaterial_UserDefined));
         ais->SetTransparency(1.0 - q.fill.a);
         Handle(Prs3d_Drawer) drawer = ais->Attributes();
-        drawer->SetFaceBoundaryDraw(true);
-        drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(q.edge), Aspect_TOL_SOLID, q.edgeWidth));
+        drawer->SetFaceBoundaryDraw(q.edgeWidth > 0);   // 0: the outline is drawn by the UI instead
+        if (q.edgeWidth > 0) drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(q.edge), Aspect_TOL_SOLID, q.edgeWidth));
         m.context->Display(ais, AIS_Shaded, -1, false);
         m.planeShapes.push_back(ais);
     }

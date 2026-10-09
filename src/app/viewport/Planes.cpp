@@ -5,6 +5,7 @@
 #include "ui/Widgets.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace bz::app {
@@ -65,25 +66,35 @@ const ShownPlane* PlaneUnderCursor(const ViewportFrame& vf, ImVec2 mouse, const 
 }
 
 void DrawPlane(AppContext& app, ImDrawList* dl, const ViewportFrame& vf, const ShownPlane& plane, bool hot, bool faint) {
-    ui::ThemeColors c = app.ui.C();
-    if (faint) {
-        c.planeFill = c.planeFill.WithAlpha(c.planeFill.a * 0.35f);
-        c.planeEdge = c.planeEdge.WithAlpha(c.planeEdge.a * 0.45f);
-    }
+    const ui::ThemeColors& c = app.ui.C();
+    // Origin planes in the colour of their normal's axis (as the triad):
+    // XY blue, XZ green, YZ red; work planes amber.
+    Color tint = c.planeEdge;
+    if (plane.id == doc::origin::kPlaneXY) tint = c.axisZ;
+    else if (plane.id == doc::origin::kPlaneXZ) tint = c.axisY;
+    else if (plane.id == doc::origin::kPlaneYZ) tint = c.axisX;
+    const float fade = faint ? 0.4f : 1.0f;
     const Frame& f = plane.frame;
     const Vec2 m = plane.centre;
     const double h = plane.half;
+    const std::array<Vec3, 4> corners{f.ToWorld({m.x - h, m.y - h}), f.ToWorld({m.x + h, m.y - h}), f.ToWorld({m.x + h, m.y + h}),
+                                      f.ToWorld({m.x - h, m.y + h})};
     // The square itself is drawn in 3D, so the body hides what is behind it.
     render::PlaneQuad quad;
-    quad.corners = {f.ToWorld({m.x - h, m.y - h}), f.ToWorld({m.x + h, m.y - h}), f.ToWorld({m.x + h, m.y + h}),
-                    f.ToWorld({m.x - h, m.y + h})};
-    quad.fill = hot ? c.regionFill : c.planeFill;
-    quad.edge = hot ? c.sketchHover : c.planeEdge;
-    quad.edgeWidth = hot ? 2.0f : 1.2f;
+    quad.corners = {corners[0], corners[1], corners[2], corners[3]};
+    quad.fill = tint.WithAlpha((hot ? 0.30f : 0.09f) * fade);
+    quad.edge = tint.WithAlpha(0.0f);
+    quad.edgeWidth = 0.0f;
     app.shell.planeQuads.push_back(quad);
-    // The label on top, in the UI.
+    // The border on top in the UI: overlapping planes keep clear outlines.
+    std::array<ImVec2, 4> pts;
+    for (std::size_t i = 0; i < 4; ++i) pts[i] = vf.Project(corners[i]);
+    dl->AddPolyline(pts.data(), 4, ui::ToU32(tint.WithAlpha((hot ? 1.0f : 0.75f) * fade)), ImDrawFlags_Closed,
+                    app.ui.S(hot ? 2.6f : 1.2f));
+    // The label in the corner.
     const ImVec2 label = vf.Project(f.ToWorld({m.x - h * 0.92, m.y + h * 0.86}));
-    dl->AddText(app.ui.fonts.strong, app.ui.S(12), label, ui::ToU32(hot ? c.sketchHover : c.planeEdge), plane.label.c_str());
+    dl->AddText(hot ? app.ui.fonts.title : app.ui.fonts.strong, app.ui.S(hot ? 14.0f : 12.0f), label,
+                ui::ToU32(tint.WithAlpha(fade)), plane.label.c_str());
 }
 
 } // namespace bz::app
