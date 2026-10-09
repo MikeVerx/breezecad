@@ -15,7 +15,7 @@
 namespace bz::app {
 namespace {
 
-constexpr std::array<SketchToolInfo, 23> kTools{{
+constexpr std::array<SketchToolInfo, 27> kTools{{
     {SketchTool::Select, "Выбор", "ui-check", "Выберите или перетащите элементы эскиза"},
     {SketchTool::Line, "Отрезок", "sk-line", "Укажите начальную точку отрезка"},
     {SketchTool::Rectangle, "Прямоугольник", "sk-rectangle", "Укажите первый угол прямоугольника"},
@@ -26,6 +26,10 @@ constexpr std::array<SketchToolInfo, 23> kTools{{
     {SketchTool::Trim, "Обрезка", "sk-trim", "Щёлкните лишний кусок кривой — он удалится до ближайших пересечений"},
     {SketchTool::Move, "Перенос", "sk-move", "Выберите элементы (Ctrl+щелчок), затем укажите базовую точку"},
     {SketchTool::Rotate, "Поворот", "sk-rotate", "Выберите элементы (Ctrl+щелчок), затем укажите центр поворота"},
+    {SketchTool::Copy, "Копировать", "sk-copy", "Выберите элементы, затем базовую точку и место копии"},
+    {SketchTool::Scale, "Масштаб", "sk-scale", "Выберите элементы, щёлкните базовую точку и введите коэффициент"},
+    {SketchTool::PatternRect, "Прямоугольный", "sk-pattern-rect", "Выберите элементы и задайте число копий и шаг"},
+    {SketchTool::PatternCircular, "Круговой", "sk-pattern-circular", "Выберите элементы, щёлкните центр и задайте число копий"},
     {SketchTool::Mirror, "Зеркало", "sk-mirror", "Выберите элементы, затем «Линия зеркала» и щёлкните линию"},
     {SketchTool::Dimension, "Размер", "sk-dimension", "Выберите отрезок, окружность или две точки"},
     {SketchTool::Coincident, "Совпадение", "c-coincident", "Выберите две точки или точку и кривую"},
@@ -317,6 +321,10 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
         case SketchTool::Move:
         case SketchTool::Rotate:    HandleMotion(app, session, view); break;
         case SketchTool::Mirror:    HandleMirror(app, session, view); break;
+        case SketchTool::Copy:
+        case SketchTool::Scale:
+        case SketchTool::PatternRect:
+        case SketchTool::PatternCircular: HandleMotion(app, session, view); break;
         default:                    HandleConstraint(app, session, view); break;
     }
     if (doc::SketchFeature* still = Active(session)) DrawPreview(app, view, still->sketch, session.doc.units);

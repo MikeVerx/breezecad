@@ -226,6 +226,8 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
 
     r.BeginGroup("Массив");
     r.BeginColumn();
+    r.Small("sketch.patternRect", nullptr, active(SketchTool::PatternRect));
+    r.Small("sketch.patternCircular", nullptr, active(SketchTool::PatternCircular));
     r.Small("sketch.mirror", nullptr, active(SketchTool::Mirror));
     r.EndColumn();
     r.EndGroup();
@@ -234,6 +236,10 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.BeginColumn();
     r.Small("sketch.move", nullptr, active(SketchTool::Move));
     r.Small("sketch.rotate", nullptr, active(SketchTool::Rotate));
+    r.EndColumn();
+    r.BeginColumn();
+    r.Small("sketch.copy", nullptr, active(SketchTool::Copy));
+    r.Small("sketch.scale", nullptr, active(SketchTool::Scale));
     r.EndColumn();
     r.BeginColumn();
     r.Small("sketch.trim", nullptr, active(SketchTool::Trim));

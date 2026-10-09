@@ -23,7 +23,7 @@
 namespace bz::app {
 
 enum class SketchTool : unsigned char {
-    Select, Line, Rectangle, Circle, Arc, Point, Project, Trim, Move, Rotate, Mirror, Dimension,
+    Select, Line, Rectangle, Circle, Arc, Point, Project, Trim, Move, Rotate, Copy, Scale, Mirror, PatternRect, PatternCircular, Dimension,
     Coincident, Horizontal, Vertical, Parallel, Perpendicular, Equal, Tangent, Fix, Midpoint, Concentric, Symmetric,
 };
 
@@ -56,6 +56,11 @@ struct DrawOptions {
     std::string   size;             ///< circle / polygon diameter, arc radius
     std::string   moveX, moveY;     ///< move
     std::string   turn;             ///< rotate
+    std::string   factor = "2";     ///< scale
+    std::string   count1 = "3", count2 = "1";      ///< patterns: copies along each direction / around
+    std::string   spacing1 = "20", spacing2 = "20";///< rectangular pattern spacing
+    bool          vertical1 = false;               ///< rectangular: first direction along Y
+    std::string   sweep = "360";                   ///< circular pattern: total angle
 };
 
 struct SketchToolInfo {
@@ -127,8 +132,14 @@ private:
     void HandleMirror(AppContext& app, Session& session, const SketchView& view);
     /// The motion the clicks so far and the cursor describe; nullopt when not ready.
     std::optional<sketch::Motion> PendingMotion(const UnitSystem& units, bool withCursor) const;
-    /// Moves the selection as one undo step.
+    /// Moves (or for Копировать copies) the selection as one undo step.
     void ApplyMotion(AppContext& app, Session& session, const sketch::Motion& motion);
+    /// Масштаб about the first click, by the typed factor.
+    void ApplyScale(AppContext& app, Session& session);
+    /// Массив: copies of the selection by the panel's settings.
+    void ApplyPattern(AppContext& app, Session& session);
+    /// The placements a pattern makes (none when the settings are not valid).
+    std::vector<sketch::Motion> PatternMotions(const UnitSystem& units) const;
     void HandleDimension(AppContext& app, Session& session, const SketchView& view);
     void HandleConstraint(AppContext& app, Session& session, const SketchView& view);
     /// Constraint tools' panel: the picked elements, each can be dropped.

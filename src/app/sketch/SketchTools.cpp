@@ -464,10 +464,11 @@ std::optional<sketch::Motion> SketchEditor::PendingMotion(const UnitSystem& unit
     std::vector<Vec2> pts;
     for (const PointRef& c : myClicks) pts.push_back(c.pos);
     if (withCursor && myCursor) pts.push_back(mySnap.pos);
-    if (myTool == SketchTool::Move) {
+    if (myTool == SketchTool::Move || myTool == SketchTool::Copy) {
         if (pts.size() < 2) return std::nullopt;
         return sketch::Motion{{}, 0, pts[1] - pts[0]};
     }
+    if (myTool != SketchTool::Rotate) return std::nullopt;
     if (pts.empty()) return std::nullopt;
     // A typed angle needs only the centre; otherwise centre, from, to.
     if (const auto typed = TypedValue(myOptions.turn, Quantity::Angle, units)) return sketch::Motion{pts[0], *typed, {}};
@@ -488,14 +489,16 @@ void SketchEditor::ApplyMotion(AppContext& app, Session& session, const sketch::
     }
     const Vec2 expected = motion.Apply(f->sketch.PositionOf(moved.front()));
     sketch::Sketch trial = f->sketch;
-    sketch::MoveEntities(trial, session.doc.Ids(), chosen, motion);
+    const bool copying = myTool == SketchTool::Copy;
+    if (copying) sketch::CopyEntities(trial, session.doc.Ids(), chosen, motion);
+    else sketch::MoveEntities(trial, session.doc.Ids(), chosen, motion);
     if (!sketch::Solve(trial).converged) {
-        app.notes.Error("Выбранное нельзя так сдвинуть: эскиз не решается");
+        app.notes.Error(copying ? "Копия противоречит ограничениям эскиза" : "Выбранное нельзя так сдвинуть: эскиз не решается");
         return;
     }
     const Box2 extents = f->sketch.Extents();
     const double scale = extents.IsEmpty() ? 1.0 : std::max((extents.max - extents.min).Length(), 1.0);
-    if ((trial.PositionOf(moved.front()) - expected).Length() > 1e-4 * scale)
+    if (!copying && (trial.PositionOf(moved.front()) - expected).Length() > 1e-4 * scale)
         app.notes.Info("Положение выбранного задано размерами или связями — сдвиг ограничен ими");
     auto before = f->Clone();
     f->sketch = std::move(trial);
@@ -507,6 +510,77 @@ void SketchEditor::ApplyMotion(AppContext& app, Session& session, const sketch::
     myOptions.turn.clear();
 }
 
+std::vector<sketch::Motion> SketchEditor::PatternMotions(const UnitSystem& units) const {
+    const auto count = [&](const std::string& text) {
+        const Expected<double> v = EvaluateExpression(text, Quantity::Scalar, units, [](std::string_view) { return std::optional<NamedValue>{}; });
+        return v && *v >= 1 && *v <= 500 && std::abs(*v - std::round(*v)) < 1e-9 ? static_cast<int>(std::lround(*v)) : 0;
+    };
+    const auto value = [&](const std::string& text, Quantity q) {
+        const Expected<double> v = EvaluateExpression(text, q, units, [](std::string_view) { return std::optional<NamedValue>{}; });
+        return v ? std::optional<double>(*v) : std::nullopt;
+    };
+    std::vector<sketch::Motion> out;
+    if (myTool == SketchTool::PatternRect) {
+        const int n1 = count(myOptions.count1), n2 = count(myOptions.count2);
+        const auto s1 = value(myOptions.spacing1, Quantity::Length), s2 = value(myOptions.spacing2, Quantity::Length);
+        if (!n1 || !n2 || !s1 || !s2) return out;
+        const Vec2 d1 = myOptions.vertical1 ? Vec2{0, 1} : Vec2{1, 0};
+        const Vec2 d2 = myOptions.vertical1 ? Vec2{1, 0} : Vec2{0, 1};
+        for (int j = 0; j < n2; ++j)
+            for (int i = 0; i < n1; ++i)
+                if (i || j) out.push_back({{}, 0, d1 * (*s1 * i) + d2 * (*s2 * j)});
+    } else if (myTool == SketchTool::PatternCircular && !myClicks.empty()) {
+        const int n = count(myOptions.count1);
+        const auto sweep = value(myOptions.sweep, Quantity::Angle);
+        if (n < 2 || !sweep) return out;
+        const bool full = std::abs(std::abs(*sweep) - 2 * kPi) < 1e-9;
+        const double step = full ? *sweep / n : *sweep / (n - 1);
+        for (int k = 1; k < n; ++k) out.push_back({myClicks.front().pos, step * k, {}});
+    }
+    return out;
+}
+
+void SketchEditor::ApplyPattern(AppContext& app, Session& session) {
+    doc::SketchFeature* f = Active(session);
+    const std::vector<sketch::Motion> motions = PatternMotions(session.doc.units);
+    if (!f || mySelection.empty() || motions.empty()) return;
+    const std::vector<ObjectId> chosen(mySelection.begin(), mySelection.end());
+    sketch::Sketch trial = f->sketch;
+    for (const sketch::Motion& m : motions) sketch::CopyEntities(trial, session.doc.Ids(), chosen, m);
+    if (!sketch::Solve(trial).converged) {
+        app.notes.Error("Массив противоречит ограничениям эскиза");
+        return;
+    }
+    auto before = f->Clone();
+    f->sketch = std::move(trial);
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), "Массив в эскизе");
+    mySelection.clear();
+    myClicks.clear();
+}
+
+void SketchEditor::ApplyScale(AppContext& app, Session& session) {
+    doc::SketchFeature* f = Active(session);
+    if (!f || mySelection.empty() || myClicks.empty()) return;
+    const Expected<double> k = EvaluateExpression(myOptions.factor, Quantity::Scalar, session.doc.units,
+                                                  [](std::string_view) { return std::optional<NamedValue>{}; });
+    if (!k || *k <= 0) {
+        app.notes.Info("Коэффициент масштаба должен быть больше нуля");
+        return;
+    }
+    const std::vector<ObjectId> chosen(mySelection.begin(), mySelection.end());
+    sketch::Sketch trial = f->sketch;
+    if (!sketch::ScaleEntities(trial, chosen, myClicks.front().pos, *k) || !sketch::Solve(trial).converged) {
+        app.notes.Error("Выбранное нельзя так отмасштабировать: мешают размеры или связи");
+        return;
+    }
+    auto before = f->Clone();
+    f->sketch = std::move(trial);
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), "Масштаб");
+    myClicks.clear();
+}
+
 void SketchEditor::HandleMotion(AppContext& app, Session& session, const SketchView& view) {
     doc::SketchFeature* f = Active(session);
     SnapOptions options;
@@ -516,8 +590,18 @@ void SketchEditor::HandleMotion(AppContext& app, Session& session, const SketchV
     mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
     myCursor = mySnap.pos;
 
-    // The selection follows the cursor.
-    if (const auto motion = PendingMotion(session.doc.units, true); motion && !mySelection.empty()) {
+    // The selection follows the cursor (patterns: every copy is shown).
+    std::vector<sketch::Motion> previews;
+    if (const auto motion = PendingMotion(session.doc.units, true)) previews.push_back(*motion);
+    if (myTool == SketchTool::PatternRect || myTool == SketchTool::PatternCircular) previews = PatternMotions(session.doc.units);
+    if (myTool == SketchTool::Scale && !myClicks.empty())
+        if (const Expected<double> k = EvaluateExpression(myOptions.factor, Quantity::Scalar, session.doc.units,
+                                                          [](std::string_view) { return std::optional<NamedValue>{}; });
+            k && *k > 0)
+            previews.clear();   // the scaled shape is shown below
+    for (const sketch::Motion& m : previews) {
+        const sketch::Motion* motion = &m;
+        if (mySelection.empty()) break;
         ui::Ui& ui = app.ui;
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const sketch::Sketch& sk = f->sketch;
@@ -535,7 +619,33 @@ void SketchEditor::HandleMotion(AppContext& app, Session& session, const SketchV
                 DrawSketchArc(ui, dl, view, centre, p.Length(), a0, a1, ink, 2.0f);
             }
         }
-        if (!myClicks.empty()) DrawSketchSegment(ui, dl, view, myClicks.front().pos, mySnap.pos, ink.WithAlpha(0.6f), 1.2f, true);
+        if (!myClicks.empty() && (myTool == SketchTool::Move || myTool == SketchTool::Copy || myTool == SketchTool::Rotate))
+            DrawSketchSegment(ui, dl, view, myClicks.front().pos, mySnap.pos, ink.WithAlpha(0.6f), 1.2f, true);
+    }
+    // Масштаб: the selection at the typed factor about the base point.
+    if (myTool == SketchTool::Scale && !myClicks.empty() && !mySelection.empty())
+        if (const Expected<double> k = EvaluateExpression(myOptions.factor, Quantity::Scalar, session.doc.units,
+                                                          [](std::string_view) { return std::optional<NamedValue>{}; });
+            k && *k > 0) {
+            sketch::Sketch scaled = f->sketch;
+            const std::vector<ObjectId> chosen(mySelection.begin(), mySelection.end());
+            sketch::ScaleEntities(scaled, chosen, myClicks.front().pos, *k);
+            for (ObjectId id : chosen) {
+                if (const sketch::Line* l = scaled.FindLine(id))
+                    DrawSketchSegment(app.ui, ImGui::GetWindowDrawList(), view, scaled.PositionOf(l->start), scaled.PositionOf(l->end),
+                                      app.ui.C().sketchHover, 2.0f);
+                else if (const sketch::Circle* c = scaled.FindCircle(id))
+                    DrawSketchArc(app.ui, ImGui::GetWindowDrawList(), view, scaled.PositionOf(c->center), c->radius, 0, 2 * kPi,
+                                  app.ui.C().sketchHover, 2.0f);
+            }
+        }
+    // The base point or centre chosen, shown until it is used.
+    if (!myClicks.empty() && (myTool == SketchTool::Scale || myTool == SketchTool::PatternCircular || myTool == SketchTool::Rotate)) {
+        const ImVec2 at = view.ToScreen(myClicks.front().pos);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddCircle(at, app.ui.S(8), ui::ToU32(app.ui.C().accent), 24, app.ui.S(2));
+        dl->AddLine({at.x - app.ui.S(12), at.y}, {at.x + app.ui.S(12), at.y}, ui::ToU32(app.ui.C().accent), app.ui.S(1.4f));
+        dl->AddLine({at.x, at.y - app.ui.S(12)}, {at.x, at.y + app.ui.S(12)}, ui::ToU32(app.ui.C().accent), app.ui.S(1.4f));
     }
     DrawSnapMarker(app.ui, ImGui::GetWindowDrawList(), view.ToScreen(mySnap.pos), mySnap);
 
@@ -547,8 +657,19 @@ void SketchEditor::HandleMotion(AppContext& app, Session& session, const SketchV
         return;
     }
     if (mySelection.empty()) return;
+    // Patterns along X / Y only pick; the scale base and the circular centre
+    // are one point, kept (and replaced by a new click) until applied.
+    if (myTool == SketchTool::PatternRect) {
+        if (myHover && myHover.kind != EntityKind::Constraint && !mySelection.erase(myHover.id)) mySelection.insert(myHover.id);
+        return;
+    }
+    if (myTool == SketchTool::Scale || myTool == SketchTool::PatternCircular) {
+        myClicks.assign(1, RefFromSnap(mySnap));
+        return;
+    }
     myClicks.push_back(RefFromSnap(mySnap));
-    const std::size_t need = myTool == SketchTool::Move ? 2 : TypedValue(myOptions.turn, Quantity::Angle, session.doc.units) ? 1 : 3;
+    const std::size_t need = myTool == SketchTool::Move || myTool == SketchTool::Copy ? 2
+                           : TypedValue(myOptions.turn, Quantity::Angle, session.doc.units) ? 1 : 3;
     if (myClicks.size() < need) return;
     myClicks.pop_back();
     if (const auto motion = PendingMotion(session.doc.units, true)) ApplyMotion(app, session, *motion);

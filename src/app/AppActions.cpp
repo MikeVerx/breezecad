@@ -128,6 +128,10 @@ void RegisterActions(AppContext& app) {
         {SketchTool::Concentric, "sketch.concentric", ImGuiKey_None},
         {SketchTool::Symmetric, "sketch.symmetric", ImGuiKey_None},
         {SketchTool::Mirror, "sketch.mirror", ImGuiKey_None},
+        {SketchTool::Copy, "sketch.copy", ImGuiKey_None},
+        {SketchTool::Scale, "sketch.scale", ImGuiKey_None},
+        {SketchTool::PatternRect, "sketch.patternRect", ImGuiKey_None},
+        {SketchTool::PatternCircular, "sketch.patternCircular", ImGuiKey_None},
     };
     for (const auto& t : tools) {
         const SketchToolInfo& info = InfoOf(t.tool);

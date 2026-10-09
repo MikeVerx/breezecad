@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace bz::sketch {
@@ -69,6 +70,97 @@ bool MoveEntities(Sketch& sk, IdGenerator& ids, std::span<const ObjectId> entiti
         });
         for (Constraint& r : replacements) sk.AddConstraint(ids, std::move(r));
     }
+    return true;
+}
+
+std::vector<ObjectId> CopyEntities(Sketch& sk, IdGenerator& ids, std::span<const ObjectId> entities, const Motion& motion) {
+    std::unordered_map<ObjectId, ObjectId> pointCopy, curveCopy;
+    const auto copyPoint = [&](ObjectId p) {
+        if (const auto it = pointCopy.find(p); it != pointCopy.end()) return it->second;
+        const ObjectId c = sk.AddPoint(ids, motion.Apply(sk.PositionOf(p)));
+        pointCopy[p] = c;
+        return c;
+    };
+    std::vector<Line> lines;
+    std::vector<Circle> circles;
+    std::vector<Arc> arcs;
+    for (ObjectId id : entities) {
+        if (const Line* l = sk.FindLine(id)) lines.push_back(*l);
+        else if (const Circle* c = sk.FindCircle(id)) circles.push_back(*c);
+        else if (const Arc* a = sk.FindArc(id)) arcs.push_back(*a);
+    }
+    std::vector<ObjectId> created;
+    for (const Line& l : lines) {
+        const ObjectId c = sk.AddLine(ids, copyPoint(l.start), copyPoint(l.end), l.construction);
+        sk.FindLine(c)->centerline = l.centerline;
+        curveCopy[l.id] = c;
+        created.push_back(c);
+    }
+    for (const Circle& ci : circles) {
+        const ObjectId c = sk.AddCircle(ids, copyPoint(ci.center), ci.radius, ci.construction);
+        curveCopy[ci.id] = c;
+        created.push_back(c);
+    }
+    for (const Arc& a : arcs) {
+        const ObjectId c = sk.AddArc(ids, copyPoint(a.center), copyPoint(a.start), copyPoint(a.end), a.construction);
+        curveCopy[a.id] = c;
+        created.push_back(c);
+    }
+    // Constraints wholly inside the copied set come along; a size becomes
+    // an equality with the original, so one dimension drives both.
+    const auto mapped = [&](ObjectId id) -> ObjectId {
+        if (const auto it = curveCopy.find(id); it != curveCopy.end()) return it->second;
+        if (const auto it = pointCopy.find(id); it != pointCopy.end()) return it->second;
+        return {};
+    };
+    const std::vector<Constraint> existing = sk.constraints;
+    for (const Constraint& c : existing) {
+        if (c.type == ConstraintType::Fix || c.type == ConstraintType::Symmetric) continue;
+        if (IsDimensional(c.type)) {
+            if ((c.type == ConstraintType::Length || c.type == ConstraintType::Radius || c.type == ConstraintType::Diameter) &&
+                curveCopy.contains(c.refs[0])) {
+                Constraint eq;
+                eq.type = ConstraintType::Equal;
+                eq.refs = {c.refs[0], curveCopy[c.refs[0]], {}};
+                sk.AddConstraint(ids, eq);
+            }
+            continue;
+        }
+        Constraint copy = c;
+        bool inside = true;
+        for (ObjectId& r : copy.refs)
+            if (r) {
+                const ObjectId m = mapped(r);
+                if (!m) inside = false;
+                r = m;
+            }
+        if (inside) sk.AddConstraint(ids, copy);
+    }
+    // A rotated copy cannot keep horizontal / vertical lines.
+    const double quarter = motion.angle / (kPi / 2);
+    if (std::abs(quarter - std::round(quarter)) > 1e-9) {
+        std::erase_if(sk.constraints, [&](const Constraint& c) {
+            const bool hv = c.type == ConstraintType::Horizontal || c.type == ConstraintType::Vertical;
+            if (!hv) return false;
+            for (ObjectId id : created)
+                if (c.refs[0] == id) return true;
+            return false;
+        });
+    }
+    return created;
+}
+
+bool ScaleEntities(Sketch& sk, std::span<const ObjectId> entities, Vec2 centre, double factor) {
+    if (factor <= 0) return false;
+    const std::vector<ObjectId> moved = MovedPoints(sk, entities);
+    if (moved.empty()) return false;
+    const std::unordered_set<ObjectId> set(moved.begin(), moved.end());
+    for (Point& p : sk.points)
+        if (set.contains(p.id)) p.pos = centre + (p.pos - centre) * factor;
+    for (Constraint& c : sk.constraints)
+        if (c.type == ConstraintType::Fix && set.contains(c.refs[0])) c.fixedAt = centre + (c.fixedAt - centre) * factor;
+    for (ObjectId id : entities)
+        if (Circle* c = sk.FindCircle(id)) c->radius *= factor;
     return true;
 }
 

@@ -57,7 +57,9 @@ std::optional<double> PlainValue(const std::string& text, Quantity quantity, con
 bool SketchEditor::HasToolPanel() const {
     if (myTool >= SketchTool::Coincident) return true;   // constraints: the picked elements
     return myTool == SketchTool::Line || myTool == SketchTool::Rectangle || myTool == SketchTool::Circle ||
-           myTool == SketchTool::Arc || myTool == SketchTool::Move || myTool == SketchTool::Rotate || myTool == SketchTool::Mirror;
+           myTool == SketchTool::Arc || myTool == SketchTool::Move || myTool == SketchTool::Rotate || myTool == SketchTool::Mirror ||
+           myTool == SketchTool::Copy || myTool == SketchTool::Scale || myTool == SketchTool::PatternRect ||
+           myTool == SketchTool::PatternCircular;
 }
 
 void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width) {
@@ -102,7 +104,10 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
     }
 
     // Line type: осевая only for lines, the others take основная / вспомогательная.
-    if (myTool != SketchTool::Move && myTool != SketchTool::Rotate && myTool != SketchTool::Mirror) {
+    const bool editing = myTool == SketchTool::Move || myTool == SketchTool::Rotate || myTool == SketchTool::Mirror ||
+                         myTool == SketchTool::Copy || myTool == SketchTool::Scale || myTool == SketchTool::PatternRect ||
+                         myTool == SketchTool::PatternCircular;
+    if (!editing) {
         const bool lines = myTool == SketchTool::Line;
         if (!lines && myOptions.style == LineStyle::Centerline) myOptions.style = LineStyle::Normal;
         ui::FieldLabel(ui, "Тип линии");
@@ -217,19 +222,60 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
             ImGui::EndGroup();
             return;
         }
+        case SketchTool::Scale:
+        case SketchTool::PatternRect:
+        case SketchTool::PatternCircular: {
+            const std::string chosen = mySelection.empty() ? std::string("Ничего не выбрано — щёлкайте элементы")
+                                                           : "Выбрано элементов: " + std::to_string(mySelection.size());
+            ui::FieldLabel(ui, chosen.c_str());
+            ImGui::Dummy({0, ui.S(10)});
+            bool ready = !mySelection.empty();
+            const char* button = "Создать";
+            if (myTool == SketchTool::Scale) {
+                field("Коэффициент", "##k", myOptions.factor, Quantity::Scalar);
+                ready = ready && !myClicks.empty();
+                button = "Масштабировать";
+                Caption(ui, myClicks.empty() ? "Щёлкните базовую точку — она останется на месте." : "Базовая точка выбрана (щелчок — другая).", inner);
+            } else if (myTool == SketchTool::PatternRect) {
+                static constexpr std::array<const char*, 2> dirs{"Вдоль X", "Вдоль Y"};
+                const int current = myOptions.vertical1 ? 1 : 0;
+                if (const int d = ui::Segmented(ui, "dir", dirs, current, 2, inner); d != current) myOptions.vertical1 = d == 1;
+                ImGui::Dummy({0, ui.S(8)});
+                field("Количество", "##n1", myOptions.count1, Quantity::Scalar);
+                field("Шаг", "##s1", myOptions.spacing1, Quantity::Length);
+                field("Количество во втором направлении", "##n2", myOptions.count2, Quantity::Scalar);
+                field("Шаг во втором направлении", "##s2", myOptions.spacing2, Quantity::Length);
+            } else {
+                field("Количество", "##n", myOptions.count1, Quantity::Scalar);
+                field("Угол", "##sweep", myOptions.sweep, Quantity::Angle);
+                ready = ready && !myClicks.empty();
+                Caption(ui, myClicks.empty() ? "Щёлкните центр массива." : "Центр выбран (щелчок — другой). 360° — равномерно по кругу.", inner);
+            }
+            ImGui::Dummy({0, ui.S(8)});
+            if (myTool != SketchTool::Scale) ready = ready && !PatternMotions(units).empty();
+            if (ui::PrimaryButton(ui, "##apply-edit", button, nullptr, {inner, ui.S(34)}, ready))
+                app.Later([&app, &session, this] {
+                    if (myTool == SketchTool::Scale) ApplyScale(app, session);
+                    else ApplyPattern(app, session);
+                });
+            ImGui::EndGroup();
+            return;
+        }
+        case SketchTool::Copy:
         case SketchTool::Move:
         case SketchTool::Rotate: {
             const std::string chosen = mySelection.empty() ? std::string("Ничего не выбрано")
                                                            : "Выбрано элементов: " + std::to_string(mySelection.size());
             ui::FieldLabel(ui, chosen.c_str());
             ImGui::Dummy({0, ui.S(10)});
-            if (myTool == SketchTool::Move) {
+            if (myTool == SketchTool::Move || myTool == SketchTool::Copy) {
                 field("Сдвиг по X", "##dx", myOptions.moveX, Quantity::Length);
                 field("Сдвиг по Y", "##dy", myOptions.moveY, Quantity::Length);
                 const auto dx = PlainValue(myOptions.moveX, Quantity::Length, units);
                 const auto dy = PlainValue(myOptions.moveY, Quantity::Length, units);
                 const bool ready = !mySelection.empty() && (dx || dy);
-                if (ui::PrimaryButton(ui, "##move-now", "Сдвинуть", nullptr, {inner, ui.S(34)}, ready))
+                if (ui::PrimaryButton(ui, "##move-now", myTool == SketchTool::Copy ? "Копировать" : "Сдвинуть", nullptr,
+                                      {inner, ui.S(34)}, ready))
                     app.Later([&app, &session, this, dx, dy] {
                         ApplyMotion(app, session, {{}, 0, {dx.value_or(0), dy.value_or(0)}});
                     });
@@ -245,7 +291,7 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
     const bool sized = myTool == SketchTool::Line || myTool == SketchTool::Rectangle ||
                        (myTool == SketchTool::Circle && myOptions.circle != CircleMode::ThreePoints) ||
                        (myTool == SketchTool::Arc && myOptions.arc == ArcMode::CentreEnds);
-    if (myTool == SketchTool::Move) {
+    if (myTool == SketchTool::Move || myTool == SketchTool::Copy) {
         Caption(ui, "Ctrl+щелчок добавляет или убирает элемент. Затем базовая точка и новое место — или введите сдвиг.", inner);
         ImGui::EndGroup();
         return;
