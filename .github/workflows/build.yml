@@ -1,6 +1,8 @@
 # Builds and tests BreezeCAD on Windows, macOS and Linux.
-# The Windows job also publishes a ready-to-run archive (exe + DLLs + assets)
-# as a workflow artifact: Actions → the run → Artifacts → BreezeCAD-windows.
+# The Windows job also publishes a ready-to-run archive (exe + DLLs + assets):
+# as a workflow artifact (Actions → the run → Artifacts → BreezeCAD-windows)
+# and, for pushes to `next` that pass the tests, as the pre-release
+# "next-build" on the Releases page — a stable link to the freshest build.
 name: build
 
 on:
@@ -16,6 +18,8 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
+    permissions:
+      contents: write   # to update the next-build pre-release
     defaults:
       run:
         shell: msys2 {0}
@@ -60,6 +64,19 @@ jobs:
           name: BreezeCAD-windows
           path: dist/BreezeCAD
           retention-days: 30
+      - name: Publish the next-build pre-release
+        if: ${{ success() && github.event_name == 'push' && github.ref == 'refs/heads/next' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist && 7z a -tzip -bso0 BreezeCAD-windows.zip BreezeCAD && cd ..
+          notes="Свежая сборка ветки next: коммит ${GITHUB_SHA::7}, $(date -u '+%Y-%m-%d %H:%M') UTC. Распаковать и запустить BreezeCAD/breezecad.exe."
+          if ! gh release view next-build >/dev/null 2>&1; then
+            gh release create next-build --prerelease --target "$GITHUB_SHA" --title "BreezeCAD — свежая сборка (next)" --notes "$notes"
+          fi
+          gh release upload next-build dist/BreezeCAD-windows.zip --clobber
+          gh release edit next-build --notes "$notes"
 
   macos:
     runs-on: macos-14
