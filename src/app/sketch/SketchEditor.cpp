@@ -15,13 +15,14 @@
 namespace bz::app {
 namespace {
 
-constexpr std::array<SketchToolInfo, 17> kTools{{
+constexpr std::array<SketchToolInfo, 18> kTools{{
     {SketchTool::Select, "Выбор", "ui-check", "Выберите или перетащите элементы эскиза"},
     {SketchTool::Line, "Отрезок", "sk-line", "Укажите начальную точку отрезка"},
     {SketchTool::Rectangle, "Прямоугольник", "sk-rectangle", "Укажите первый угол прямоугольника"},
     {SketchTool::Circle, "Окружность", "sk-circle", "Укажите центр окружности"},
     {SketchTool::Arc, "Дуга", "sk-arc", "Укажите центр дуги"},
     {SketchTool::Point, "Точка", "sk-point", "Укажите положение точки"},
+    {SketchTool::Project, "Проецировать", "sk-project", "Щёлкните рёбра модели — их проекции появятся в эскизе и будут следовать за моделью"},
     {SketchTool::Dimension, "Размер", "sk-dimension", "Выберите отрезок, окружность или две точки"},
     {SketchTool::Coincident, "Совпадение", "c-coincident", "Выберите две точки или точку и кривую"},
     {SketchTool::Horizontal, "Горизонтальность", "c-horizontal", "Выберите отрезок или две точки"},
@@ -194,6 +195,7 @@ void SketchEditor::DeleteSelection(Session& session) {
     if (!f || mySelection.empty()) return;
     auto before = f->Clone();
     for (ObjectId id : mySelection) f->sketch.Remove(id);
+    f->PruneProjections();
     mySelection.clear();
     myHover = {};
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
@@ -263,6 +265,7 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
         case SketchTool::Circle:
         case SketchTool::Arc:
         case SketchTool::Point:     HandleDrawing(app, session, view); break;
+        case SketchTool::Project:   HandleProject(app, session, view); break;
         default:                    HandleConstraint(app, session, view); break;
     }
     if (doc::SketchFeature* still = Active(session)) DrawPreview(app, view, still->sketch, session.doc.units);
@@ -295,7 +298,7 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
         myDragBefore = f->Clone();
         myDragOrigins.clear();
         const auto addPoint = [&](ObjectId p) {
-            if (const sketch::Point* pt = f->sketch.FindPoint(p); pt && !pt->isOrigin) myDragOrigins.push_back({p, pt->pos});
+            if (const sketch::Point* pt = f->sketch.FindPoint(p); pt && !pt->isOrigin && !pt->projected) myDragOrigins.push_back({p, pt->pos});
         };
         // The grabbed point goes first: the solver falls back to it alone.
         switch (f->sketch.KindOf(myDragEntity)) {

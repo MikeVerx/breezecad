@@ -57,6 +57,7 @@ struct ThemeColors {
     Color sketchFree;        ///< under-defined geometry
     Color sketchDefined;     ///< fully defined geometry
     Color sketchConstruction;
+    Color sketchProjected;    ///< model edges projected into the sketch
     Color sketchHover;
     Color sketchSelected;
     Color sketchPoint;

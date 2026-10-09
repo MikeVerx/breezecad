@@ -199,6 +199,10 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.EndColumn();
     r.EndGroup();
 
+    r.BeginGroup("Модель");
+    r.Large("sketch.project", "Проеци-\nровать", active(SketchTool::Project));
+    r.EndGroup();
+
     r.BeginGroup("Ограничения");
     r.BeginColumn();
     r.Small("sketch.coincident", nullptr, active(SketchTool::Coincident));

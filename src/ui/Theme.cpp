@@ -51,6 +51,7 @@ Theme Theme::Light() {
     c.sketchFree      = Color::Hex(0x1D4ED8);
     c.sketchDefined   = Color::Hex(0x1B1F24);
     c.sketchConstruction = Color::Hex(0x6F7884);
+    c.sketchProjected    = Color::Hex(0xC98A0B);
     c.sketchHover     = Color::Hex(0x38A9E8);
     c.sketchSelected  = Color::Hex(0xEA7A1E);
     c.sketchPoint     = Color::Hex(0x1680C4);
@@ -124,6 +125,7 @@ Theme Theme::Dark() {
     c.sketchFree      = Color::Hex(0x6E9BFF);
     c.sketchDefined   = Color::Hex(0xE6E8EB);
     c.sketchConstruction = Color::Hex(0x8E95A0);
+    c.sketchProjected    = Color::Hex(0xF0B43C);
     c.sketchHover     = Color::Hex(0x5BB6EE);
     c.sketchSelected  = Color::Hex(0xF59E4B);
     c.sketchPoint     = Color::Hex(0x5BB6EE);

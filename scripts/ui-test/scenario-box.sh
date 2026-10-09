@@ -13,7 +13,7 @@ sleep 1.5
 "$UI" clk 700 380
 "$UI" mousemove 900 500; sleep 0.3
 "$UI" clk 1080 640
-"$UI" clk 957 115            # Размер
+"$UI" key d                  # Размер
 "$UI" clk 800 380            # верхний отрезок
 "$UI" mousemove 800 340; sleep 0.3
 "$UI" clk 800 340
@@ -24,7 +24,7 @@ sleep 1
 "$UI" clk 510 600
 "$UI" key ctrl+a; "$UI" type 80; "$UI" key Return
 sleep 1
-"$UI" clk 1135 115           # Принять эскиз
+"$UI" clk 1224 115           # Принять эскиз
 sleep 1.5
 "$UI" clk 140 115            # Выдавливание
 sleep 1.5

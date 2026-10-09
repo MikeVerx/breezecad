@@ -105,6 +105,7 @@ void RegisterActions(AppContext& app) {
         {SketchTool::Line, "sketch.line", ImGuiKey_L},          {SketchTool::Rectangle, "sketch.rectangle", ImGuiKey_R},
         {SketchTool::Circle, "sketch.circle", ImGuiKey_C},      {SketchTool::Arc, "sketch.arc", ImGuiKey_A},
         {SketchTool::Point, "sketch.point", ImGuiKey_P},        {SketchTool::Dimension, "sketch.dimension", ImGuiKey_D},
+        {SketchTool::Project, "sketch.project", ImGuiKey_None},
         {SketchTool::Coincident, "sketch.coincident", ImGuiKey_None},
         {SketchTool::Horizontal, "sketch.horizontal", ImGuiKey_None},
         {SketchTool::Vertical, "sketch.vertical", ImGuiKey_None},

@@ -270,11 +270,12 @@ void DrawSketch(ui::Ui& ui, ImDrawList* dl, const doc::SketchFeature& feature, c
                 return true;
         return false;
     };
-    const auto curveColor = [&](ObjectId id, bool construction) -> Color {
+    const auto curveColor = [&](ObjectId id, bool construction, bool projected) -> Color {
         if (style.passive) return construction ? c.sketchConstruction.WithAlpha(0.45f) : c.sketchFree.WithAlpha(0.6f);
         if (Contains(style.selection, id) || Contains(style.picked, id)) return c.sketchSelected;
         if (style.hover == id) return c.sketchHover;
         if (failing(id)) return c.danger;
+        if (projected) return c.sketchProjected;   // held by the model, as in Inventor
         if (construction) return c.sketchConstruction;
         return defined(id) ? c.sketchDefined : c.sketchFree;
     };
@@ -285,17 +286,17 @@ void DrawSketch(ui::Ui& ui, ImDrawList* dl, const doc::SketchFeature& feature, c
     };
 
     for (const auto& l : sk.lines)
-        DrawSketchSegment(ui, dl, view, sk.PositionOf(l.start), sk.PositionOf(l.end), curveColor(l.id, l.construction),
+        DrawSketchSegment(ui, dl, view, sk.PositionOf(l.start), sk.PositionOf(l.end), curveColor(l.id, l.construction, l.projected),
                           curveWidth(l.id, l.construction), l.construction);
     for (const auto& ci : sk.circles)
-        DrawSketchArc(ui, dl, view, sk.PositionOf(ci.center), ci.radius, 0, 2 * kPi, curveColor(ci.id, ci.construction),
+        DrawSketchArc(ui, dl, view, sk.PositionOf(ci.center), ci.radius, 0, 2 * kPi, curveColor(ci.id, ci.construction, ci.projected),
                       curveWidth(ci.id, ci.construction), ci.construction);
     for (const auto& a : sk.arcs) {
         const Vec2 center = sk.PositionOf(a.center);
         const Vec2 s = sk.PositionOf(a.start) - center, e = sk.PositionOf(a.end) - center;
         double a0 = std::atan2(s.y, s.x), a1 = std::atan2(e.y, e.x);
         if (a1 <= a0) a1 += 2 * kPi;
-        DrawSketchArc(ui, dl, view, center, s.Length(), a0, a1, curveColor(a.id, a.construction),
+        DrawSketchArc(ui, dl, view, center, s.Length(), a0, a1, curveColor(a.id, a.construction, a.projected),
                       curveWidth(a.id, a.construction), a.construction);
     }
     if (style.passive) return;
@@ -309,7 +310,7 @@ void DrawSketch(ui::Ui& ui, ImDrawList* dl, const doc::SketchFeature& feature, c
             continue;
         }
         const bool hot = style.hover == p.id || Contains(style.selection, p.id) || Contains(style.picked, p.id);
-        const Color ring = curveColor(p.id, false);
+        const Color ring = curveColor(p.id, false, p.projected);
         const float r = ui.S(hot ? 4.5f : 3.0f);
         dl->AddCircleFilled(at, r, ui::ToU32(defined(p.id) && !hot ? ring : c.panel));
         dl->AddCircle(at, r, ui::ToU32(ring), 12, ui.S(1.4f));

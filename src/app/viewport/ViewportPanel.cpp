@@ -186,13 +186,24 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
 
     // Pre-highlight faces under the cursor (not while sketching).
     OperationEditor* operation = app.ops.Active();
-    const bool pickingOriginal = operation && operation->PicksOriginal();
-    if (!pickingOriginal) app.viewport.EndPickingOriginal();
+    // Model edges are picked on the bodies before an operation (fillet,
+    // shell) or before the sketch that projects them.
+    const bool projecting = session.mode == EditMode::Sketch && app.sketch.Tool() == SketchTool::Project;
+    const bool pickingOriginal = (operation && operation->PicksOriginal()) || projecting;
+    if (projecting) {
+        if (const int index = session.doc.IndexOf(session.activeSketch); index >= 0) {
+            app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Edges);
+            app.viewport.SetMarkedEdges({});
+        }
+    } else if (!pickingOriginal) {
+        app.viewport.EndPickingOriginal();
+    }
     // Measuring makes vertices and edges pickable too.
     const bool measuring = app.shell.measuring && session.mode == EditMode::Model && !operation;
     app.viewport.SetMeasuring(measuring);
     // Pre-highlight the face (or, for fillets, the edge) under the cursor.
-    const bool hoverMatters = session.mode != EditMode::Sketch && (!operation || pickingOriginal || operation->PicksFaces());
+    const bool hoverMatters =
+        projecting || (session.mode != EditMode::Sketch && (!operation || pickingOriginal || operation->PicksFaces()));
     app.viewport.Hover(vf.hovered && hoverMatters ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);
 
     // Mode overlays.

@@ -158,6 +158,55 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
     }
 }
 
+void SketchEditor::HandleProject(AppContext& app, Session& session, const SketchView& view) {
+    doc::SketchFeature* f = Active(session);
+    const int index = session.doc.IndexOf(f->id);
+    if (index < 0 || !view.vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
+    // The viewport picks edges of the bodies before this sketch (ViewportPanel
+    // turns that on while this tool is active).
+    const std::optional<doc::EdgeReference> edge = app.viewport.PickEdge(view.vf.ToLocal(ImGui::GetMousePos()));
+    if (!edge) return;
+    for (const doc::Projection& p : f->projections)
+        if (p.edge.curve == edge->curve && (p.edge.middle - edge->middle).Length() < 1e-6) {
+            app.notes.Info("Это ребро уже спроецировано");
+            return;
+        }
+    const Expected<kernel::ProjectedCurve> projected =
+        session.model.ProjectEdge(*edge, f->placement.frame, static_cast<std::size_t>(index));
+    if (!projected) {
+        app.notes.Info(projected.GetError().message);
+        return;
+    }
+
+    auto before = f->Clone();
+    sketch::Sketch& sk = f->sketch;
+    IdGenerator& ids = session.doc.Ids();
+    const auto point = [&](Vec2 at) {
+        const ObjectId id = sk.AddPoint(ids, at);
+        sk.FindPoint(id)->projected = true;
+        return id;
+    };
+    ObjectId curve;
+    switch (projected->kind) {
+        case kernel::ProjectedCurve::Kind::Line:
+            curve = sk.AddLine(ids, point(projected->start), point(projected->end));
+            sk.FindLine(curve)->projected = true;
+            break;
+        case kernel::ProjectedCurve::Kind::Circle:
+            curve = sk.AddCircle(ids, point(projected->centre), projected->radius);
+            sk.FindCircle(curve)->projected = true;
+            break;
+        case kernel::ProjectedCurve::Kind::Arc:
+            curve = sk.AddArc(ids, point(projected->centre), point(projected->start), point(projected->end));
+            for (auto& a : sk.arcs)
+                if (a.id == curve) a.projected = true;
+            break;
+    }
+    f->projections.push_back({*edge, curve});
+    session.doc.MarkChanged(static_cast<std::size_t>(index));
+    session.CommitInPlaceEdit(std::move(before), "Проецирование геометрии");
+}
+
 void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Snap& snap) {
     doc::SketchFeature* f = Active(session);
     doc::Document& d = session.doc;
