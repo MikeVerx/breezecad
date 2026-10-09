@@ -18,6 +18,7 @@ add_library(bz_document STATIC
     SketchFeature.cpp
     SketchSolidFeature.cpp
     SweepFeature.cpp
+    ThreadFeature.cpp
     UnknownFeature.cpp
     WorkAxisFeature.cpp)
 target_link_libraries(bz_document

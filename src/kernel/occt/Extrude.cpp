@@ -1,5 +1,6 @@
 #include "kernel/occt/Extrude.h"
 
+#include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
@@ -12,7 +13,9 @@
 #include <LocOpe_DPrism.hxx>
 #include <ShapeUpgrade_UnifySameDomain.hxx>
 #include <Standard_Failure.hxx>
+#include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
+#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 #include <TopTools_ListOfShape.hxx>
 #include <TopoDS.hxx>
 #include <format>
@@ -142,6 +145,20 @@ Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const std::vecto
 
 TopoDS_Shape Clean(const TopoDS_Shape& shape) {
     ShapeUpgrade_UnifySameDomain unify(shape, true, true, true);
+    // Curved faces next to free-form ones (a cylinder cut by a thread
+    // groove) are left as they are: merging them can take OCCT minutes.
+    TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+    TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
+    const auto typeOf = [](const TopoDS_Shape& face) { return BRepAdaptor_Surface(TopoDS::Face(face)).GetType(); };
+    const auto freeform = [&](const TopoDS_Shape& face) { return typeOf(face) > GeomAbs_Torus; };
+    for (TopExp_Explorer f(shape, TopAbs_FACE); f.More(); f.Next()) {
+        if (typeOf(f.Current()) == GeomAbs_Plane) continue;
+        bool touches = freeform(f.Current());
+        for (TopExp_Explorer e(f.Current(), TopAbs_EDGE); e.More() && !touches; e.Next())
+            for (const TopoDS_Shape& other : edgeFaces.FindFromKey(e.Current())) touches = touches || freeform(other);
+        if (touches)
+            for (TopExp_Explorer e(f.Current(), TopAbs_EDGE); e.More(); e.Next()) unify.KeepShape(e.Current());
+    }
     unify.Build();
     return unify.Shape();
 }

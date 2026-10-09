@@ -18,6 +18,7 @@
 #include "document/SectionFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
+#include "document/ThreadFeature.h"
 #include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "ui/Menus.h"
@@ -121,6 +122,9 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
         if (hole->centres.size() > 1) meta += " \xC3\x97" + std::to_string(hole->centres.size());
         return meta;
     }
+    if (const auto* thread = dynamic_cast<const doc::ThreadFeature*>(&f); thread && thread->site)
+        return "M" + FormatValue(thread->site->nominal, Quantity::Length, d.units) + "\xC3\x97" +
+               FormatValue(thread->pitch.value, Quantity::Length, d.units);   // M8×1.25
     if (const auto* wp = dynamic_cast<const doc::WorkPlaneFeature*>(&f))
         return (wp->reversed ? "\xE2\x88\x92" : "") + FormatValue(wp->offset.value, Quantity::Length, d.units) + " " +
                UnitLabel(Quantity::Length, d.units);
@@ -388,6 +392,7 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::LoftFeature*>(&f)) return "tree-loft";
     if (dynamic_cast<const doc::SweepFeature*>(&f)) return "tree-sweep";
     if (dynamic_cast<const doc::CoilFeature*>(&f)) return "tree-coil";
+    if (dynamic_cast<const doc::ThreadFeature*>(&f)) return "tree-thread";
     if (dynamic_cast<const doc::SectionFeature*>(&f)) return "tree-cut-section";
     return "tree-unknown";
 }

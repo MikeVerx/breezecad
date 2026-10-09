@@ -172,6 +172,13 @@ void StartWorkAxis(AppContext& app) {
     app.ops.workAxis.StartNew(app, *s);
 }
 
+void StartThread(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.thread.StartNew(app, *s);
+}
+
 void StartPattern(AppContext& app, doc::PatternKind kind) {
     Session* s = app.Doc();
     if (!s) return;

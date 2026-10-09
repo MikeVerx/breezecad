@@ -154,7 +154,7 @@ void ModelRibbon(RibbonBuilder& r) {
     r.BeginGroup(Tr("Изменить"));
     r.Large("feature.hole", Tr("Отверстие"));
     r.Large("feature.fillet", Tr("Сопря-\nжение"));
-    r.LargeLater("thread", Tr("Резьба"));
+    r.Large("feature.thread", Tr("Резьба"));
     r.BeginColumn();
     r.Small("feature.chamfer");
     r.EndColumn();

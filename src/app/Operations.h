@@ -33,6 +33,7 @@ void StartChamfer(AppContext& app);
 void StartHole(AppContext& app);
 void StartWorkPlane(AppContext& app);
 void StartWorkAxis(AppContext& app);
+void StartThread(AppContext& app);
 void StartPattern(AppContext& app, doc::PatternKind kind);
 void StartMirror(AppContext& app);
 void StartLoft(AppContext& app);

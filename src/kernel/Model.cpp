@@ -13,6 +13,7 @@
 #include "document/PatternFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
+#include "document/ThreadFeature.h"
 #include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "kernel/occt/Coil.h"
@@ -27,6 +28,7 @@
 #include "kernel/occt/Project.h"
 #include "kernel/occt/Revolve.h"
 #include "kernel/occt/Sweep.h"
+#include "kernel/occt/Thread.h"
 
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
@@ -211,6 +213,32 @@ void ApplyToLastBody(std::vector<Body>& bodies, doc::FeatureStatus& status, cons
     }
     bodies.back().shape = *result;
     status = {FeatureState::Ok, {}};
+}
+
+/// A thread is cut from the body that has its face (the most recent one first).
+void ApplyThread(doc::ThreadFeature& thread, Model::Impl& impl, std::vector<Body>& bodies) {
+    thread.site.reset();
+    if (bodies.empty()) {
+        thread.status = {FeatureState::Error, "Нет тела, на котором делать резьбу"};
+        return;
+    }
+    Body* target = &bodies.back();
+    if (thread.face)
+        for (auto it = bodies.rbegin(); it != bodies.rend(); ++it)
+            if (const auto site = occt::FindThreadSite(it->shape, *thread.face)) {
+                thread.site = doc::ThreadFeature::Site{site->external, site->nominal, site->length};
+                target = &*it;
+                break;
+            }
+    const Expected<TopoDS_Shape> tool = occt::ThreadTool(target->shape, thread);
+    Expected<TopoDS_Shape> result = tool ? occt::ApplyBoolean(target->shape, *tool, doc::BooleanOp::Cut) : tool;
+    if (!result) {
+        thread.status = {FeatureState::Error, result.GetError().message};
+        return;
+    }
+    impl.tools[thread.id] = {*tool, doc::BooleanOp::Cut};
+    target->shape = *result;
+    thread.status = {FeatureState::Ok, {}};
 }
 
 /// Patterns and mirrors: the tools of the source operations, moved by each
@@ -617,6 +645,8 @@ void Model::Rebuild(doc::Document& doc) {
                                     impl.tools[hole->id] = {*tools, doc::BooleanOp::Cut};
                                     return occt::ApplyBoolean(body, *tools, doc::BooleanOp::Cut);
                                 });
+            } else if (auto* thread = dynamic_cast<doc::ThreadFeature*>(&f)) {
+                ApplyThread(*thread, impl, bodies);
             } else if (auto* pattern = dynamic_cast<doc::PatternFeature*>(&f)) {
                 if (const auto placements = PatternPlacements(*pattern, doc))
                     ApplyCopies(*pattern, *placements, impl, bodies, pattern->status, doc);

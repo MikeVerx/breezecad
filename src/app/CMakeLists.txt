@@ -19,6 +19,7 @@ add_executable(breezecad WIN32
     features/HoleEditor.cpp
     features/LoftEditor.cpp
     features/SweepEditor.cpp
+    features/ThreadEditor.cpp
     features/WorkAxisEditor.cpp
     features/WorkPlaneEditor.cpp
     features/DragArrow.cpp
