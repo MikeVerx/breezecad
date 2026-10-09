@@ -6,6 +6,7 @@
 #include "core/Id.h"
 #include "core/Math.h"
 #include "core/Parameter.h"
+#include "document/EdgeReference.h"
 #include "document/FaceReference.h"
 
 #include <nlohmann/json.hpp>
@@ -40,6 +41,8 @@ bool Read(const Json& j, ObjectId& out);
 bool Read(const Json& j, Frame& out);
 bool Read(const Json& j, Parameter& out);
 bool Read(const Json& j, FaceReference& out);
+Json ToJson(const EdgeReference& e);
+bool Read(const Json& j, EdgeReference& out);
 
 /// Enum values in files are written by name: `table` lists {value, name}.
 template <class E, std::size_t N>

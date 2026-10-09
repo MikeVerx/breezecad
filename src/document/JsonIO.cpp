@@ -72,4 +72,45 @@ bool Read(const Json& j, Parameter& out) {
     return true;
 }
 
+namespace {
+
+constexpr std::array<std::pair<CurveKind, std::string_view>, 3> kCurveIds{{
+    {CurveKind::Line, "line"}, {CurveKind::Circle, "circle"}, {CurveKind::Other, "other"}}};
+
+constexpr std::array<std::pair<SurfaceKind, std::string_view>, 6> kSurfaceIds{{
+    {SurfaceKind::Plane, "plane"},   {SurfaceKind::Cylinder, "cylinder"}, {SurfaceKind::Cone, "cone"},
+    {SurfaceKind::Sphere, "sphere"}, {SurfaceKind::Torus, "torus"},       {SurfaceKind::Other, "other"}}};
+
+} // namespace
+
+Json ToJson(const EdgeReference& e) {
+    Json faces = Json::array();
+    for (const FaceSignature& f : e.faces)
+        faces.push_back(Json{{"kind", IdOf(kSurfaceIds, f.kind)}, {"direction", ToJson(f.direction)}});
+    return Json{{"curve", IdOf(kCurveIds, e.curve)},
+                {"direction", ToJson(e.direction)},
+                {"radius", e.radius},
+                {"middle", ToJson(e.middle)},
+                {"faces", std::move(faces)}};
+}
+
+bool Read(const Json& j, EdgeReference& out) {
+    EdgeReference e;
+    std::string curve;
+    if (!j.is_object() || !ReadMember(j, "curve", curve) || !FromId(kCurveIds, curve, e.curve) ||
+        !ReadMember(j, "direction", e.direction) || !ReadMember(j, "radius", e.radius) ||
+        !ReadMember(j, "middle", e.middle))
+        return false;
+    const auto faces = j.find("faces");
+    if (faces == j.end() || !faces->is_array() || faces->size() != 2) return false;
+    for (std::size_t i = 0; i < 2; ++i) {
+        std::string kind;
+        if (!ReadMember((*faces)[i], "kind", kind) || !FromId(kSurfaceIds, kind, e.faces[i].kind) ||
+            !ReadMember((*faces)[i], "direction", e.faces[i].direction))
+            return false;
+    }
+    out = e;
+    return true;
+}
+
 } // namespace bz::doc::json_io
