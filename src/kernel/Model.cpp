@@ -499,6 +499,12 @@ void Model::Rebuild(doc::Document& doc) {
             } else if (auto* hole = dynamic_cast<doc::HoleFeature*>(&f)) {
                 ApplyToLastBody(bodies, hole->status, "Нет тела, в котором делать отверстие",
                                 [&](const TopoDS_Shape& body) -> Expected<TopoDS_Shape> {
+                                    // Keep the reference on the face as it is now, so the
+                                    // panel draws the centres where the holes are.
+                                    if (const auto plane = occt::ResolvePlaneFrame(body, hole->face)) {
+                                        const Vec3 n = hole->face.normal;
+                                        hole->face.point = hole->face.point + n * (plane->origin - hole->face.point).Dot(n);
+                                    }
                                     const Expected<TopoDS_Shape> tools = occt::HoleTools(body, *hole);
                                     if (!tools) return tools.GetError();
                                     impl.tools[hole->id] = {*tools, doc::BooleanOp::Cut};

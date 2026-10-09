@@ -151,6 +151,25 @@ void HoleEditor::DrawInViewport(AppContext& app, Session& session, const Viewpor
             dl->AddLine({p.x, p.y - arm}, {p.x, p.y + arm}, ink, app.ui.S(1.5f));
         }
         if (myHoveredCentre) ImGui::SetTooltip("Убрать центр");
+
+        // Depth arrow from the first centre into the body.
+        if (!f->centres.empty() && !f->throughAll && !f->depth.HasError()) {
+            const Vec3 base = view.frame.ToWorld(f->centres.front());
+            const std::string label = FormatValue(f->depth.value, Quantity::Length, session.doc.units, 2) + " " +
+                                      UnitLabel(Quantity::Length, session.doc.units);
+            if (const auto depth = myArrow.Update(app, vf, base, view.frame.normal * -1.0, f->depth.value, label)) {
+                myDepth = FormatValue(std::max(*depth, DragStep(vf.projection.mmPerPixel)), Quantity::Length,
+                                      session.doc.units, 3);
+                f->depth.expression = myDepth;
+                Changed(session);
+            }
+            if (myArrow.Hot()) {
+                myHoveredCentre.reset();
+                return;
+            }
+        } else {
+            myArrow.Release();
+        }
     }
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;

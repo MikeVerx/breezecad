@@ -2,6 +2,7 @@
 // The "Плоскость" operation panel: the start is an origin plane, a work plane
 // or a flat face clicked in the viewport; the offset is typed in the panel.
 
+#include "app/features/DragArrow.h"
 #include "app/features/FeatureOperationEditor.h"
 #include "document/WorkPlaneFeature.h"
 
@@ -25,6 +26,7 @@ protected:
 
 private:
     std::string myOffset;
+    DragArrow   myArrow;   ///< offset
 };
 
 } // namespace bz::app

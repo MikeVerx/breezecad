@@ -3,6 +3,7 @@
 // panel frame come from SketchOperationEditor; this adds direction, depth,
 // distance and taper.
 
+#include "app/features/DragArrow.h"
 #include "app/features/SketchOperationEditor.h"
 #include "document/ExtrudeFeature.h"
 
@@ -24,8 +25,7 @@ protected:
     bool PickInViewport(AppContext& app, Session& session, doc::SketchSolidFeature& feature, const SketchView& view) override;
 
 private:
-    bool   myDragging = false;
-    double myDragOffset = 0.0;   ///< handle position minus the grabbed point along the arrow
+    DragArrow   myArrow;
     std::string myDistance;
     std::string myTaper;
 };

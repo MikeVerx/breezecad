@@ -4,6 +4,7 @@
 // same face add centres, a click on a centre removes it. Centres can also be
 // typed exactly in the panel.
 
+#include "app/features/DragArrow.h"
 #include "app/features/FeatureOperationEditor.h"
 #include "document/HoleFeature.h"
 
@@ -37,7 +38,8 @@ private:
     void ClickModel(AppContext& app, Session& session, doc::HoleFeature& f, const ViewportFrame& vf);
 
     std::string        myDiameter, myDepth, myHeadDiameter, myHeadDepth, mySinkDiameter;
-    std::optional<int> myHoveredCentre;   ///< centre under the cursor in the viewport
+    std::optional<int> myHoveredCentre;
+    DragArrow          myArrow;   ///< depth   ///< centre under the cursor in the viewport
 };
 
 } // namespace bz::app

@@ -1,5 +1,6 @@
 #include "app/features/WorkPlaneEditor.h"
 
+#include "app/Format.h"
 #include "app/viewport/Planes.h"
 #include "document/Origin.h"
 #include "ui/Widgets.h"
@@ -66,8 +67,29 @@ void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const Vi
         DrawPlane(app, dl, vf, p, &p == hot, faint && &p != hot && !isBase);   // the base: not faded
     }
     // The plane being made, in the accent colour.
-    for (const ShownPlane& p : WorkPlanes(session, static_cast<std::size_t>(index) + 1))
-        if (p.id == f->id) DrawPlane(app, dl, vf, p, true);
+    bool placed = false;
+    for (const ShownPlane& p : WorkPlanes(session, static_cast<std::size_t>(index) + 1)) {
+        if (p.id != f->id) continue;
+        DrawPlane(app, dl, vf, p, true);
+        placed = true;
+        // Offset arrow from the start to the middle of the new plane.
+        const Vec3 dir = p.frame.normal * (f->reversed ? -1.0 : 1.0);
+        const Vec3 tip = p.frame.ToWorld(p.centre);
+        const std::string label = FormatValue(f->offset.value, Quantity::Length, session.doc.units, 2) + " " +
+                                  UnitLabel(Quantity::Length, session.doc.units);
+        if (auto offset = myArrow.Update(app, vf, tip - dir * f->offset.value, dir, f->offset.value, label)) {
+            if (*offset < 0) {   // dragged past the start: the other side
+                f->reversed = !f->reversed;
+                *offset = -*offset;
+                myArrow.Flipped();
+            }
+            myOffset = FormatValue(*offset, Quantity::Length, session.doc.units, 3);
+            f->offset.expression = myOffset;
+            Changed(session);
+        }
+    }
+    if (!placed || f->offset.HasError()) myArrow.Release();
+    if (myArrow.Hot()) return;
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
     if (hot) {
