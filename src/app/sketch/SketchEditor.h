@@ -90,6 +90,7 @@ private:
         ObjectId id;
         Vec2     pos;
         ObjectId onCurve;
+        ObjectId midOf;   ///< a line whose midpoint this is
     };
     PointRef RefFromSnap(const Snap& snap) const;
     ObjectId Resolve(doc::Document& doc, sketch::Sketch& sk, const PointRef& ref);

@@ -131,7 +131,7 @@ std::optional<sketch::Constraint> DimensionFromPicks(const sketch::Sketch& sk, c
 
 SketchEditor::PointRef SketchEditor::RefFromSnap(const Snap& snap) const {
     return {snap.kind == SnapKind::Point ? snap.point : ObjectId{}, snap.pos,
-            snap.kind == SnapKind::Curve ? snap.curve : ObjectId{}};
+            snap.kind == SnapKind::Curve ? snap.curve : ObjectId{}, snap.kind == SnapKind::Midpoint ? snap.curve : ObjectId{}};
 }
 
 ObjectId SketchEditor::Resolve(doc::Document& doc, sketch::Sketch& sk, const PointRef& ref) {
@@ -139,6 +139,8 @@ ObjectId SketchEditor::Resolve(doc::Document& doc, sketch::Sketch& sk, const Poi
     const ObjectId id = sk.AddPoint(doc.Ids(), ref.pos);
     if (ref.onCurve && sk.KindOf(ref.onCurve) != EntityKind::None)
         sk.AddConstraint(doc.Ids(), Make(ConstraintType::PointOnCurve, id, ref.onCurve));
+    if (ref.midOf && sk.KindOf(ref.midOf) == EntityKind::Line)
+        sk.AddConstraint(doc.Ids(), Make(ConstraintType::Midpoint, id, ref.midOf));
     return id;
 }
 
@@ -243,7 +245,7 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
                 const sketch::Constraint c = Make(snap.horizontal ? ConstraintType::Horizontal : ConstraintType::Vertical, line);
                 if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(d.Ids(), c);
             }
-            continueFrom = PointRef{b, sk.PositionOf(b), {}};
+            continueFrom = PointRef{b, sk.PositionOf(b), {}, {}};
             break;
         }
         case SketchTool::Rectangle: {
@@ -395,6 +397,7 @@ void SketchEditor::DrawPreview(AppContext& app, const SketchView& view, const sk
 
     const bool drawing = myTool >= SketchTool::Line && myTool <= SketchTool::Point;
     if (drawing && myCursor) {
+        DrawSnapGuides(ui, dl, view, mySnap);
         DrawSnapMarker(ui, dl, view.ToScreen(mySnap.pos), mySnap);
         if (!myClicks.empty()) {
             const Vec2 a = myClicks.front().pos, b = mySnap.pos;

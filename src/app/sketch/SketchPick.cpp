@@ -11,6 +11,7 @@ namespace {
 
 constexpr float kPointRadius = 8.0f;   // px
 constexpr float kCurveRadius = 6.0f;   // px
+constexpr float kAlignRadius = 6.0f;   // px: lining up with a point's x or y
 
 float Distance(ImVec2 a, ImVec2 b) { return std::hypot(a.x - b.x, a.y - b.y); }
 
@@ -127,10 +128,20 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
             const float d = Distance(mouse, view.ToScreen(p.pos));
             if (d < best) {
                 best = d;
-                snap = {p.pos, SnapKind::Point, p.id, {}, false, false};
+                snap = {p.pos, SnapKind::Point, p.id, {}, false, false, {}, {}};
             }
         }
         if (snap.kind == SnapKind::Point) return snap;
+
+        for (const auto& l : sk.lines) {
+            const Vec2 mid = (sk.PositionOf(l.start) + sk.PositionOf(l.end)) * 0.5;
+            const float d = Distance(mouse, view.ToScreen(mid));
+            if (d < best) {
+                best = d;
+                snap = {mid, SnapKind::Midpoint, {}, l.id, false, false, {}, {}};
+            }
+        }
+        if (snap.kind == SnapKind::Midpoint) return snap;
 
         float bestCurve = kCurveRadius;
         const auto tryCurve = [&](ObjectId id) {
@@ -170,6 +181,25 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
                 snap.vertical = true;
             }
         }
+    }
+
+    // Lining up with other points: the nearest same-x and same-y within a few pixels.
+    if (options.points) {
+        const double reach = kAlignRadius * std::max(view.MmPerPixel(), 1e-9);
+        double bestX = reach, bestY = reach;
+        for (const auto& p : sk.points) {
+            if (p.id == options.ignore) continue;
+            if (const double dx = std::abs(snap.pos.x - p.pos.x); !snap.vertical && dx < bestX && std::abs(snap.pos.y - p.pos.y) > reach) {
+                bestX = dx;
+                snap.alignedX = p.pos;
+            }
+            if (const double dy = std::abs(snap.pos.y - p.pos.y); !snap.horizontal && dy < bestY && std::abs(snap.pos.x - p.pos.x) > reach) {
+                bestY = dy;
+                snap.alignedY = p.pos;
+            }
+        }
+        if (snap.alignedX) snap.pos.x = snap.alignedX->x;
+        if (snap.alignedY) snap.pos.y = snap.alignedY->y;
     }
     return snap;
 }

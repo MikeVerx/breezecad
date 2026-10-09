@@ -158,6 +158,13 @@ void DrawSnapMarker(ui::Ui& ui, ImDrawList* dl, ImVec2 at, const Snap& snap) {
         case SnapKind::Point:
             dl->AddCircle(at, ui.S(7), ui::ToU32(c.constraintGlyph), 20, ui.S(2));
             break;
+        case SnapKind::Midpoint: {
+            // A small triangle, the usual CAD mark for a midpoint.
+            const float r = ui.S(6);
+            dl->AddTriangle({at.x, at.y - r}, {at.x - r * 0.87f, at.y + r * 0.5f}, {at.x + r * 0.87f, at.y + r * 0.5f},
+                            ui::ToU32(c.constraintGlyph), ui.S(2));
+            break;
+        }
         case SnapKind::Curve:
             dl->AddCircleFilled(at, ui.S(3.5f), ui::ToU32(c.constraintGlyph));
             break;
@@ -171,6 +178,12 @@ void DrawSnapMarker(ui::Ui& ui, ImDrawList* dl, ImVec2 at, const Snap& snap) {
     }
     if (snap.horizontal || snap.vertical)
         ui.icons.Draw(dl, snap.horizontal ? "c-horizontal" : "c-vertical", {at.x + ui.S(10), at.y + ui.S(8)}, ui.S(16), {1, 1, 1, 1});
+}
+
+void DrawSnapGuides(ui::Ui& ui, ImDrawList* dl, const SketchView& view, const Snap& snap) {
+    const Color guide = ui.C().constraintGlyph.WithAlpha(0.7f);
+    if (snap.alignedX) DrawSketchSegment(ui, dl, view, *snap.alignedX, snap.pos, guide, 1.0f, true);
+    if (snap.alignedY) DrawSketchSegment(ui, dl, view, *snap.alignedY, snap.pos, guide, 1.0f, true);
 }
 
 void FillSketchRegion(ImDrawList* dl, const SketchView& view, const kernel::SketchRegion& region, Color fill,

@@ -21,15 +21,18 @@ struct SketchHit {
 SketchHit HitTest(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, const UnitSystem& units,
                   ObjectId ignore = {});
 
-enum class SnapKind : unsigned char { None, Point, Curve, Grid };
+enum class SnapKind : unsigned char { None, Point, Midpoint, Curve, Grid };
 
 struct Snap {
     Vec2     pos;
     SnapKind kind = SnapKind::None;
     ObjectId point;          ///< SnapKind::Point: existing point to reuse
-    ObjectId curve;          ///< SnapKind::Curve: curve the point lies on
+    ObjectId curve;          ///< SnapKind::Curve: curve the point lies on; Midpoint: the line
     bool     horizontal = false;   ///< aligned horizontally with `from`
     bool     vertical   = false;
+    /// Lined up with an existing point (same x / same y), for the dashed
+    /// guide. Only the position is aligned; no constraint is made.
+    std::optional<Vec2> alignedX, alignedY;
 };
 
 struct SnapOptions {
