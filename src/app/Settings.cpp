@@ -33,6 +33,7 @@ Settings Settings::Load(const std::filesystem::path& file) {
     s.animations      = j.value("animations", s.animations);
     s.showTriad       = j.value("showTriad", s.showTriad);
     s.reopenLast      = j.value("reopenLast", s.reopenLast);
+    s.viewBackground  = std::clamp(j.value("viewBackground", s.viewBackground), 0, 2);
     s.newPartLength   = std::clamp(j.value("newPartLength", s.newPartLength), 0, 3);
     s.orbitSpeed      = std::clamp(j.value("orbitSpeed", s.orbitSpeed), 0.25, 4.0);
     s.invertOrbit     = j.value("invertOrbit", s.invertOrbit);
@@ -96,6 +97,7 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"uiScale", uiScale},
         {"showTriad", showTriad},
         {"reopenLast", reopenLast},
+        {"viewBackground", viewBackground},
         {"newPartLength", newPartLength},
         {"orbitSpeed", orbitSpeed},
         {"invertOrbit", invertOrbit},

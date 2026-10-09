@@ -66,6 +66,7 @@ private:
     ui::Icons        myIcons;
     float            myScale = 1.0f;
     bool             myDarkApplied = false;
+    int              myBackgroundApplied = -1;   ///< Settings::viewBackground in use
     double           mySystemThemeCheck = 0.0;
 
     Workspace        myWorkspace;

@@ -163,12 +163,16 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
 void Application::ApplyTheme(bool force) {
     const bool dark = mySettings.theme == ThemeChoice::Dark ||
                       (mySettings.theme == ThemeChoice::System && platform::SystemPrefersDark());
-    if (!force && dark == myDarkApplied) return;
+    if (!force && dark == myDarkApplied && mySettings.viewBackground == myBackgroundApplied) return;
     myDarkApplied = dark;
+    myBackgroundApplied = mySettings.viewBackground;
     myTheme = dark ? ui::Theme::Dark() : ui::Theme::Light();
     ui::ApplyToImGui(myTheme, myScale);
     const ui::ThemeColors& c = myTheme.colors;
-    myViewport.SetColors({c.viewportTop, c.viewportBottom, c.body, c.bodyEdges, c.hoverHighlight, c.selection});
+    // The view background: the theme's gradient, or one of its two ends.
+    const Color top = mySettings.viewBackground == 2 ? c.viewportBottom : c.viewportTop;
+    const Color bottom = mySettings.viewBackground == 1 ? c.viewportTop : c.viewportBottom;
+    myViewport.SetColors({top, bottom, c.body, c.bodyEdges, c.hoverHighlight, c.selection});
     myFramesToDraw = 3;
 }
 
@@ -196,6 +200,7 @@ int Application::Run() {
         HandleCloseRequests();
         if (myShell.quitRequested && myWorkspace.sessions.empty()) break;
 
+        if (mySettings.viewBackground != myBackgroundApplied) ApplyTheme(true);   // chosen in the settings: at once
         if (now - mySystemThemeCheck > 2.0) {
             mySystemThemeCheck = now;
             ApplyTheme(false);

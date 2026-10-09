@@ -309,6 +309,11 @@ void DrawSettings(AppContext& app) {
         static constexpr std::array<const char*, 2> triad{N_("Показывать"), N_("Скрыть")};
         const int t = app.settings.showTriad ? 0 : 1;
         if (const int n = ui::Segmented(ui, "triad", triad, t, 2, width); n != t) app.settings.showTriad = n == 0;
+        ImGui::Dummy({0, ui.S(6)});
+        ui::FieldLabel(ui, Tr("Фон вида"));
+        static constexpr std::array<const char*, 3> backgrounds{N_("Градиент"), N_("Светлый ровный"), N_("Тёмный ровный")};
+        if (const int n = ui::Segmented(ui, "background", backgrounds, app.settings.viewBackground, 3, width); n != app.settings.viewBackground)
+            app.settings.viewBackground = n;
 
     } else if (app.shell.settingsTab == 2) {
         DrawMouseSettings(app, width);
