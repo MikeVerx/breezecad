@@ -17,7 +17,7 @@ sleep 1.5
 "$UI" key l                    # Отрезок вдоль оси Y — ось вращения
 "$UI" clk 880 300
 "$UI" clk 880 700
-"$UI" key Escape Escape Escape   # Принять эскиз: Esc снимает инструмент, выбор, затем выходит
+"$UI" key Escape Escape Escape Escape   # Принять эскиз: Esc обрывает цепочку, снимает инструмент, выбор, затем выходит
 sleep 1.5
 "$UI" clk 215 115            # Вращение
 sleep 1.5
