@@ -67,6 +67,103 @@ std::optional<RectangleIds> AddThreePointRectangle(Sketch& sk, IdGenerator& ids,
     return r;
 }
 
+std::optional<RectangleIds> AddThreePointCentredRectangle(Sketch& sk, IdGenerator& ids, ObjectId centre, Vec2 side, Vec2 third) {
+    const Vec2 c = sk.PositionOf(centre);
+    const Vec2 u = side - c;
+    if (u.Length() < 1e-9) return std::nullopt;
+    const Vec2 n = Vec2{-u.y, u.x}.Normalized();
+    const double half = (third - c).Dot(n);
+    if (std::abs(half) < 1e-9) return std::nullopt;
+    const Vec2 v = n * half;
+    const std::array<ObjectId, 4> corners{sk.AddPoint(ids, c - u - v), sk.AddPoint(ids, c + u - v), sk.AddPoint(ids, c + u + v),
+                                          sk.AddPoint(ids, c - u + v)};
+    const RectangleIds r = Close(sk, ids, corners);
+    sk.AddConstraint(ids, Make(ConstraintType::Perpendicular, r.sides[0], r.sides[1]));
+    sk.AddConstraint(ids, Make(ConstraintType::Parallel, r.sides[0], r.sides[2]));
+    sk.AddConstraint(ids, Make(ConstraintType::Parallel, r.sides[1], r.sides[3]));
+    const ObjectId diagonal = sk.AddLine(ids, corners[0], corners[2], true);
+    sk.AddConstraint(ids, Make(ConstraintType::Midpoint, centre, diagonal));
+    return r;
+}
+
+SlotIds AddStraightSlot(Sketch& sk, IdGenerator& ids, ObjectId centre1, ObjectId centre2, double width) {
+    const Vec2 c1 = sk.PositionOf(centre1), c2 = sk.PositionOf(centre2);
+    const Vec2 d = (c2 - c1).Normalized(), n{-d.y, d.x};
+    const double r = width / 2;
+    const ObjectId a1 = sk.AddPoint(ids, c1 + n * r), b1 = sk.AddPoint(ids, c2 + n * r);
+    const ObjectId a2 = sk.AddPoint(ids, c2 - n * r), b2 = sk.AddPoint(ids, c1 - n * r);
+    SlotIds out;
+    const ObjectId side1 = sk.AddLine(ids, a1, b1), side2 = sk.AddLine(ids, a2, b2);
+    const ObjectId cap2 = sk.AddArc(ids, centre2, a2, b1);   // round the far end of centre 2
+    const ObjectId cap1 = sk.AddArc(ids, centre1, a1, b2);   // round the far end of centre 1
+    out.curves = {side1, cap2, side2, cap1};
+    out.axis = sk.AddLine(ids, centre1, centre2, true);
+    out.cap = cap1;
+    for (ObjectId side : {side1, side2})
+        for (ObjectId cap : {cap1, cap2}) sk.AddConstraint(ids, Make(ConstraintType::Tangent, side, cap));
+    sk.AddConstraint(ids, Make(ConstraintType::Equal, cap1, cap2));
+    return out;
+}
+
+SlotIds AddArcSlot(Sketch& sk, IdGenerator& ids, ObjectId centre, ObjectId start, ObjectId end, double width) {
+    const Vec2 o = sk.PositionOf(centre), s = sk.PositionOf(start);
+    const double radius = (s - o).Length();
+    const Vec2 us = (s - o).Normalized(), ue = (sk.PositionOf(end) - o).Normalized();
+    if (Point* p = sk.FindPoint(end)) p->pos = o + ue * radius;
+    const Vec2 e = o + ue * radius;
+    const double r = width / 2;
+    const ObjectId sOut = sk.AddPoint(ids, s + us * r), sIn = sk.AddPoint(ids, s - us * r);
+    const ObjectId eOut = sk.AddPoint(ids, e + ue * r), eIn = sk.AddPoint(ids, e - ue * r);
+    SlotIds out;
+    const ObjectId outer = sk.AddArc(ids, centre, sOut, eOut);
+    const ObjectId inner = sk.AddArc(ids, centre, sIn, eIn);
+    const ObjectId capEnd = sk.AddArc(ids, end, eOut, eIn);      // bulges past the end
+    const ObjectId capStart = sk.AddArc(ids, start, sIn, sOut);  // bulges before the start
+    out.curves = {outer, capEnd, inner, capStart};
+    out.axis = sk.AddArc(ids, centre, start, end, true);
+    out.cap = capStart;
+    for (ObjectId cap : {capStart, capEnd})
+        for (ObjectId side : {outer, inner}) sk.AddConstraint(ids, Make(ConstraintType::Tangent, cap, side));
+    sk.AddConstraint(ids, Make(ConstraintType::Equal, capStart, capEnd));
+    return out;
+}
+
+namespace {
+
+void AppendArc(std::vector<Vec2>& pts, Vec2 c, double r, double a0, double a1, int n = 24) {
+    for (int i = 0; i <= n; ++i) {
+        const double a = a0 + (a1 - a0) * i / n;
+        pts.push_back(c + Vec2{std::cos(a), std::sin(a)} * r);
+    }
+}
+
+} // namespace
+
+std::vector<Vec2> StraightSlotOutline(Vec2 c1, Vec2 c2, double width) {
+    std::vector<Vec2> pts;
+    if ((c2 - c1).Length() < 1e-12) return pts;
+    const Vec2 d = (c2 - c1).Normalized();
+    const double base = std::atan2(d.y, d.x), r = width / 2;
+    AppendArc(pts, c2, r, base - kPi / 2, base + kPi / 2);
+    AppendArc(pts, c1, r, base + kPi / 2, base + 3 * kPi / 2);
+    return pts;
+}
+
+std::vector<Vec2> ArcSlotOutline(Vec2 o, Vec2 s, Vec2 e, double width) {
+    std::vector<Vec2> pts;
+    const double radius = (s - o).Length(), r = width / 2;
+    if (radius < 1e-12) return pts;
+    const double a0 = std::atan2(s.y - o.y, s.x - o.x);
+    double a1 = std::atan2(e.y - o.y, e.x - o.x);
+    while (a1 <= a0) a1 += 2 * kPi;
+    const Vec2 se = o + Vec2{std::cos(a1), std::sin(a1)} * radius;
+    AppendArc(pts, o, radius + r, a0, a1);
+    AppendArc(pts, se, r, a1, a1 + kPi);
+    AppendArc(pts, o, std::max(radius - r, 0.0), a1, a0);
+    AppendArc(pts, s, r, a0 + kPi, a0 + 2 * kPi);
+    return pts;
+}
+
 std::optional<CircleThrough> CircleThroughPoints(Vec2 a, Vec2 b, Vec2 c) {
     // Perpendicular bisectors meet in the centre.
     const double d = 2 * ((b - a).Cross(c - a));

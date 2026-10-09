@@ -461,6 +461,26 @@ std::string SketchEditor::Hint(const Session& session) const {
         case SketchTool::Line:
             return step == 0 ? InfoOf(myTool).hint : "Укажите конечную точку. Правый щелчок или Esc — закончить цепочку";
         case SketchTool::Rectangle:
+            switch (myOptions.rectangle) {
+                case RectangleMode::Polygon:
+                    return step == 0 ? "Укажите центр многоугольника"
+                                     : myOptions.polygonInscribed ? "Укажите вершину" : "Укажите середину стороны";
+                case RectangleMode::ThreePointsCentre:
+                    return step == 0 ? "Укажите центр прямоугольника" : step == 1 ? "Укажите середину стороны" : "Укажите ширину";
+                case RectangleMode::SlotCentres:
+                    return step == 0 ? "Укажите центр первого скругления" : step == 1 ? "Укажите центр второго" : "Укажите ширину паза";
+                case RectangleMode::SlotOverall:
+                    return step == 0 ? "Укажите один край паза" : step == 1 ? "Укажите другой край" : "Укажите ширину паза";
+                case RectangleMode::SlotCentre:
+                    return step == 0 ? "Укажите середину паза" : step == 1 ? "Укажите центр скругления" : "Укажите ширину паза";
+                case RectangleMode::SlotArc3:
+                    return step == 0 ? "Укажите начало дуги паза" : step == 1 ? "Укажите конец"
+                         : step == 2 ? "Укажите точку, через которую идёт дуга" : "Укажите ширину паза";
+                case RectangleMode::SlotArcCentre:
+                    return step == 0 ? "Укажите центр дуги паза" : step == 1 ? "Укажите начало" : step == 2 ? "Укажите конец"
+                                                                                                        : "Укажите ширину паза";
+                default: break;
+            }
             if (myOptions.rectangle == RectangleMode::ThreePoints)
                 return step == 0 ? "Укажите начало первой стороны" : step == 1 ? "Укажите конец первой стороны" : "Укажите ширину прямоугольника";
             if (myOptions.rectangle == RectangleMode::Centre)
@@ -469,9 +489,6 @@ std::string SketchEditor::Hint(const Session& session) const {
         case SketchTool::Circle:
             if (myOptions.circle == CircleMode::ThreePoints)
                 return step == 0 ? "Укажите первую точку окружности" : step == 1 ? "Укажите вторую точку" : "Укажите третью точку";
-            if (myOptions.circle == CircleMode::Polygon)
-                return step == 0 ? "Укажите центр многоугольника"
-                                 : myOptions.polygonInscribed ? "Укажите вершину" : "Укажите середину стороны";
             return step == 0 ? InfoOf(myTool).hint : "Укажите точку на окружности";
         case SketchTool::Arc:
             if (myOptions.arc == ArcMode::ThreePoints)

@@ -19,11 +19,13 @@ struct Way {
     const char* tip;
 };
 
-/// A row of icon buttons; returns the chosen index.
-int WayRow(ui::Ui& ui, const char* id, std::span<const Way> ways, int current) {
+/// Icon buttons in rows that fit `width`; returns the chosen index.
+int WayRow(ui::Ui& ui, const char* id, std::span<const Way> ways, int current, float width) {
     int chosen = current;
+    const float cell = ui.S(40), gap = ui.S(6);
+    const std::size_t perRow = std::max<std::size_t>(1, static_cast<std::size_t>((width + gap) / (cell + gap)));
     for (std::size_t i = 0; i < ways.size(); ++i) {
-        if (i > 0) ImGui::SameLine(0, ui.S(6));
+        if (i % perRow != 0) ImGui::SameLine(0, gap);
         ImGui::PushID(id);
         ImGui::PushID(static_cast<int>(i));
         if (ui::IconButton(ui, "##way", ways[i].icon, 40, 24, ways[i].tip, true, static_cast<int>(i) == current))
@@ -62,7 +64,7 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     const UnitSystem& units = session.doc.units;
-    const bool polygon = myTool == SketchTool::Circle && myOptions.circle == CircleMode::Polygon;
+    const bool polygon = myTool == SketchTool::Rectangle && myOptions.rectangle == RectangleMode::Polygon;
 
     // Header: tool icon and name, close returns to selection.
     {
@@ -71,7 +73,8 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         const float h = ui.S(48);
         const SketchToolInfo& info = InfoOf(myTool);
         ui.icons.Draw(dl, info.icon, {p.x + ui.S(14), p.y + (h - ui.S(24)) / 2}, ui.S(24), {1, 1, 1, 1});
-        const std::string title = std::string("Эскиз › ") + (polygon ? "Многоугольник" : info.label);
+        const bool slot = myTool == SketchTool::Rectangle && IsSlot(myOptions.rectangle);
+        const std::string title = std::string("Эскиз › ") + (polygon ? "Многоугольник" : slot ? "Паз" : info.label);
         dl->AddText(ui.fonts.title, ui.S(14), {p.x + ui.S(48), p.y + (h - ui.S(14)) / 2 - ui.S(1)}, ui::ToU32(c.text),
                     title.c_str());
         ImGui::SetCursorScreenPos({p.x + width - ui.S(38), p.y + ui.S(9)});
@@ -114,10 +117,17 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
     // Ways to draw.
     switch (myTool) {
         case SketchTool::Rectangle: {
-            static constexpr std::array<Way, 3> ways{{{"sk-rectangle", "По двум углам"},
-                                                     {"sk-rect-centre", "От центра"},
-                                                     {"sk-rect-3pt", "По трём точкам (под углом)"}}};
-            const int chosen = WayRow(ui, "rect", ways, static_cast<int>(myOptions.rectangle));
+            static constexpr std::array<Way, 10> ways{{{"sk-rectangle", "Прямоугольник по двум углам"},
+                                                      {"sk-rect-centre", "Прямоугольник от центра"},
+                                                      {"sk-rect-3pt", "Прямоугольник по трём точкам (под углом)"},
+                                                      {"sk-rect-3pt-centre", "Прямоугольник по трём точкам и центру"},
+                                                      {"sk-polygon", "Многоугольник"},
+                                                      {"sk-slot-centres", "Паз: от центра до центра"},
+                                                      {"sk-slot-overall", "Паз: по краям"},
+                                                      {"sk-slot-centre", "Паз: от середины"},
+                                                      {"sk-slot-arc3", "Дуговой паз по трём точкам"},
+                                                      {"sk-slot-arc-centre", "Дуговой паз от центра дуги"}}};
+            const int chosen = WayRow(ui, "rect", ways, static_cast<int>(myOptions.rectangle), inner);
             if (chosen != static_cast<int>(myOptions.rectangle)) {
                 myOptions.rectangle = static_cast<RectangleMode>(chosen);
                 restart();
@@ -125,10 +135,8 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
             break;
         }
         case SketchTool::Circle: {
-            static constexpr std::array<Way, 3> ways{{{"sk-circle", "Центр и радиус"},
-                                                     {"sk-circle-3pt", "По трём точкам"},
-                                                     {"sk-polygon", "Многоугольник"}}};
-            const int chosen = WayRow(ui, "circle", ways, static_cast<int>(myOptions.circle));
+            static constexpr std::array<Way, 2> ways{{{"sk-circle", "Центр и радиус"}, {"sk-circle-3pt", "По трём точкам"}}};
+            const int chosen = WayRow(ui, "circle", ways, static_cast<int>(myOptions.circle), inner);
             if (chosen != static_cast<int>(myOptions.circle)) {
                 myOptions.circle = static_cast<CircleMode>(chosen);
                 restart();
@@ -137,7 +145,7 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         }
         case SketchTool::Arc: {
             static constexpr std::array<Way, 2> ways{{{"sk-arc", "Центр, начало, конец"}, {"sk-arc-3pt", "По трём точкам"}}};
-            const int chosen = WayRow(ui, "arc", ways, static_cast<int>(myOptions.arc));
+            const int chosen = WayRow(ui, "arc", ways, static_cast<int>(myOptions.arc), inner);
             if (chosen != static_cast<int>(myOptions.arc)) {
                 myOptions.arc = static_cast<ArcMode>(chosen);
                 restart();
@@ -155,13 +163,11 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
             field("Угол", "##ang", myOptions.angle, Quantity::Angle);
             break;
         case SketchTool::Rectangle:
-            field(myOptions.rectangle == RectangleMode::ThreePoints ? "Длина первой стороны" : "Ширина", "##w",
-                  myOptions.width, Quantity::Length);
-            field(myOptions.rectangle == RectangleMode::ThreePoints ? "Вторая сторона" : "Высота", "##h", myOptions.height,
-                  Quantity::Length);
-            break;
-        case SketchTool::Circle:
-            if (polygon) {
+            if (IsSlot(myOptions.rectangle)) {
+                field("Ширина паза", "##w", myOptions.width, Quantity::Length);
+            } else if (myOptions.rectangle == RectangleMode::ThreePointsCentre) {
+                // sizes by clicks; dimension afterwards
+            } else if (polygon) {
                 ui::FieldLabel(ui, "Число сторон");
                 ImGui::Dummy({0, ui.S(2)});
                 const ui::FieldResult r = ui::ExpressionField(ui, "##sides", myOptions.sides, "", mySidesError, inner, false, false);
@@ -181,9 +187,15 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
                 }
                 ImGui::Dummy({0, ui.S(8)});
                 field("Диаметр окружности", "##d", myOptions.size, Quantity::Length);
-            } else if (myOptions.circle == CircleMode::CentreRadius) {
-                field("Диаметр", "##d", myOptions.size, Quantity::Length);
+            } else {
+                field(myOptions.rectangle == RectangleMode::ThreePoints ? "Длина первой стороны" : "Ширина", "##w",
+                      myOptions.width, Quantity::Length);
+                field(myOptions.rectangle == RectangleMode::ThreePoints ? "Вторая сторона" : "Высота", "##h",
+                      myOptions.height, Quantity::Length);
             }
+            break;
+        case SketchTool::Circle:
+            if (myOptions.circle == CircleMode::CentreRadius) field("Диаметр", "##d", myOptions.size, Quantity::Length);
             break;
         case SketchTool::Arc:
             if (myOptions.arc == ArcMode::CentreEnds) field("Радиус", "##r", myOptions.size, Quantity::Length);

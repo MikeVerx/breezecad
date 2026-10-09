@@ -29,6 +29,29 @@ RectangleIds AddCentredRectangle(Sketch& sk, IdGenerator& ids, ObjectId centre, 
 /// the projection of `third`. Nullopt when the three points are in line.
 std::optional<RectangleIds> AddThreePointRectangle(Sketch& sk, IdGenerator& ids, ObjectId a, ObjectId b, Vec2 third);
 
+/// At any angle around an existing centre point: `side` is the middle of a
+/// side (direction and half length), `third` sets the other half size.
+/// Nullopt when the points are in line.
+std::optional<RectangleIds> AddThreePointCentredRectangle(Sketch& sk, IdGenerator& ids, ObjectId centre, Vec2 side, Vec2 third);
+
+/// A slot: two ends rounded by half circles, the sides tangent to them.
+struct SlotIds {
+    std::vector<ObjectId> curves;   ///< sides and end caps
+    ObjectId              axis;     ///< construction centre line or arc
+    ObjectId              cap;      ///< one end cap: its diameter is the slot width
+};
+
+/// Straight slot between two existing centre points, `width` across.
+SlotIds AddStraightSlot(Sketch& sk, IdGenerator& ids, ObjectId centre1, ObjectId centre2, double width);
+
+/// Slot along the counter-clockwise arc around `centre` from point `start`
+/// to point `end` (existing points; `end` is moved onto the radius of `start`).
+SlotIds AddArcSlot(Sketch& sk, IdGenerator& ids, ObjectId centre, ObjectId start, ObjectId end, double width);
+
+/// Outlines for previews (closed, in sketch coordinates).
+std::vector<Vec2> StraightSlotOutline(Vec2 centre1, Vec2 centre2, double width);
+std::vector<Vec2> ArcSlotOutline(Vec2 centre, Vec2 start, Vec2 end, double width);
+
 struct CircleThrough {
     Vec2   centre;
     double radius = 0;

@@ -85,3 +85,45 @@ TEST_CASE("regular polygons inscribed and circumscribed") {
         for (ObjectId s : p.sides) CHECK(LengthOf(sk, s) == doctest::Approx(side).epsilon(1e-4));
     }
 }
+
+TEST_CASE("three points and centre rectangle keeps its centre") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId centre = sk.AddPoint(ids, {0, 0});
+    const auto r = AddThreePointCentredRectangle(sk, ids, centre, {10, 10}, {-3, 3});
+    REQUIRE(r);
+    REQUIRE(Solve(sk).converged);
+    const Vec2 a = sk.PositionOf(r->corners[0]), c = sk.PositionOf(r->corners[2]);
+    CHECK((a + c).x == doctest::Approx(0.0).epsilon(1e-6));
+    CHECK((a + c).y == doctest::Approx(0.0).epsilon(1e-6));
+    CHECK(LengthOf(sk, r->sides[0]) == doctest::Approx(2 * std::sqrt(200.0)));
+}
+
+TEST_CASE("straight slot keeps its width when sized") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId c1 = sk.AddPoint(ids, {0, 0}), c2 = sk.AddPoint(ids, {30, 10});
+    const SlotIds s = AddStraightSlot(sk, ids, c1, c2, 8);
+    REQUIRE(s.curves.size() == 4);
+    sk.AddConstraint(ids, Dim(ConstraintType::Diameter, 12, s.cap));
+    REQUIRE(Solve(sk).converged);
+    const Line* side = sk.FindLine(s.curves[0]);
+    const Vec2 p = sk.PositionOf(side->start), q = sk.PositionOf(side->end);
+    const Vec2 d = (q - p).Normalized();
+    const Vec2 a = sk.PositionOf(c1), b = sk.PositionOf(c2);
+    CHECK(std::abs((a - p).Cross(d)) == doctest::Approx(6.0).epsilon(1e-4));   // side 6 off the axis
+    CHECK(std::abs((b - p).Cross(d)) == doctest::Approx(6.0).epsilon(1e-4));
+}
+
+TEST_CASE("arc slot solves around its centre") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId o = sk.AddPoint(ids, {0, 0}), s = sk.AddPoint(ids, {20, 0}), e = sk.AddPoint(ids, {0, 22});
+    const SlotIds slot = AddArcSlot(sk, ids, o, s, e, 4);
+    REQUIRE(slot.curves.size() == 4);
+    CHECK(sk.PositionOf(e).y == doctest::Approx(20.0));   // moved onto the radius
+    REQUIRE(Solve(sk).converged);
+    CHECK(sk.RadiusOf(slot.curves[0]) - sk.RadiusOf(slot.curves[2]) == doctest::Approx(4.0).epsilon(1e-4));
+    CHECK(ArcSlotOutline({0, 0}, {20, 0}, {0, 20}, 4).size() > 20);
+    CHECK(StraightSlotOutline({0, 0}, {10, 0}, 4).size() > 20);
+}

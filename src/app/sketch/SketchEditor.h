@@ -28,8 +28,13 @@ enum class SketchTool : unsigned char {
 };
 
 /// Ways to draw with one tool, chosen in the tool panel.
-enum class RectangleMode : unsigned char { Corners, Centre, ThreePoints };
-enum class CircleMode : unsigned char { CentreRadius, ThreePoints, Polygon };
+enum class RectangleMode : unsigned char {
+    Corners, Centre, ThreePoints, ThreePointsCentre, Polygon,
+    SlotCentres, SlotOverall, SlotCentre, SlotArc3, SlotArcCentre,
+};
+inline bool IsSlot(RectangleMode m) { return m >= RectangleMode::SlotCentres; }
+inline bool IsArcSlot(RectangleMode m) { return m == RectangleMode::SlotArc3 || m == RectangleMode::SlotArcCentre; }
+enum class CircleMode : unsigned char { CentreRadius, ThreePoints };
 enum class ArcMode : unsigned char { CentreEnds, ThreePoints };
 
 /// Line type of what is drawn: основная (makes profiles), вспомогательная
@@ -159,7 +164,7 @@ private:
     void StartInlineEdit(const sketch::Constraint& c);
     void DrawPreview(AppContext& app, const SketchView& view, const sketch::Sketch& sk, const UnitSystem& units);
     /// The shape being drawn, from the clicks so far to the cursor.
-    void DrawShapePreview(AppContext& app, const SketchView& view) const;
+    void DrawShapePreview(AppContext& app, const SketchView& view, const UnitSystem& units) const;
 
     SketchTool myTool = SketchTool::Select;
     double     myLastClickTime = -1.0;   ///< press time of the last drawing click (see DropPressClick)
