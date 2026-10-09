@@ -209,6 +209,9 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         case SketchTool::Fillet:
             field(Tr("Радиус"), "##fillet", myOptions.filletRadius, Quantity::Length);
             break;
+        case SketchTool::Offset:
+            field(Tr("Расстояние"), "##offset", myOptions.offsetDistance, Quantity::Length);
+            break;
         case SketchTool::Mirror: {
             const std::string chosen = mySelection.empty() ? std::string(Tr("Ничего не выбрано"))
                                                            : Trf("Выбрано элементов: {}", mySelection.size());

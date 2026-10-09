@@ -19,6 +19,7 @@ add_executable(bz_tests
     sketch/FilletTests.cpp
     sketch/MirrorTests.cpp
     sketch/MoveTests.cpp
+    sketch/OffsetTests.cpp
     sketch/ShapesTests.cpp
     sketch/SolverTests.cpp
     sketch/TrimTests.cpp)

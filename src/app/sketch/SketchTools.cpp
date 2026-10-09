@@ -8,6 +8,7 @@
 #include "core/I18n.h"
 #include "sketch/Fillet.h"
 #include "sketch/Mirror.h"
+#include "sketch/Offset.h"
 #include "sketch/Shapes.h"
 #include "sketch/Solver.h"
 #include "sketch/Trim.h"
@@ -505,6 +506,55 @@ void SketchEditor::HandleExtend(AppContext& app, Session& session, const SketchV
     f->sketch = std::move(trial);
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
     session.CommitInPlaceEdit(std::move(before), Tr("Удлинение"));
+}
+
+void SketchEditor::HandleOffset(AppContext& app, Session& session, const SketchView& view) {
+    doc::SketchFeature* f = Active(session);
+    if (!f || !myCursor) return;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ui::ThemeColors& c = app.ui.C();
+    // First the contour: a click on one of its curves.
+    if (myOffsetCurve && !sketch::ChainOf(f->sketch, myOffsetCurve)) myOffsetCurve = {};
+    if (!myOffsetCurve) {
+        if (!myHover || !IsCurve(myHover.kind) || !sketch::ChainOf(f->sketch, myHover.id)) return;
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) myOffsetCurve = myHover.id;
+        return;
+    }
+    // Then the side: the copy follows the cursor.
+    const std::optional<sketch::Chain> chain = sketch::ChainOf(f->sketch, myOffsetCurve);
+    for (const auto& poly : sketch::OffsetPreview(f->sketch, *chain, 0.0)) {   // the chosen contour, highlighted
+        for (std::size_t i = 0; i + 1 < poly.size(); ++i) DrawSketchSegment(app.ui, dl, view, poly[i], poly[i + 1], c.sketchHover, 3.0f, false);
+    }
+    const auto distance = TypedValue(myOptions.offsetDistance, Quantity::Length, session.doc.units);
+    if (!distance || *distance <= 0) return;
+    const double signedDistance = *distance * sketch::SideOf(f->sketch, *chain, *myCursor);
+    const auto preview = sketch::OffsetPreview(f->sketch, *chain, signedDistance);
+    for (const auto& poly : preview)
+        for (std::size_t i = 0; i + 1 < poly.size(); ++i) DrawSketchSegment(app.ui, dl, view, poly[i], poly[i + 1], c.accent, 2.5f, true);
+
+    if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
+    if (preview.empty()) {
+        app.notes.Info(Tr("Эквидистанта не строится: расстояние больше, чем позволяет контур"));
+        return;
+    }
+    auto before = f->Clone();
+    const std::optional<sketch::OffsetCurves> made = sketch::OffsetChain(f->sketch, session.doc.Ids(), *chain, signedDistance);
+    if (!made) return;
+    // One distance drives them all: the first is typed, the others refer to it by name.
+    std::string driver = myOptions.offsetDistance;
+    for (const auto& [point, line] : made->distances) {
+        AddTypedDimensions(session.doc, f->sketch, {{Make(ConstraintType::PointLineDistance, point, line), driver, {}}});
+        if (driver == myOptions.offsetDistance && !f->sketch.constraints.empty()) driver = f->sketch.constraints.back().parameter.name;
+    }
+    if (!sketch::Solve(f->sketch).converged) {
+        f->sketch = static_cast<const doc::SketchFeature&>(*before).sketch;
+        session.doc.EvaluateParameters();
+        app.notes.Error(Tr("Эквидистанта противоречит ограничениям эскиза"));
+        return;
+    }
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), Tr("Эквидистанта"));
+    myOffsetCurve = {};
 }
 
 void SketchEditor::HandleFillet(AppContext& app, Session& session, const SketchView& view) {

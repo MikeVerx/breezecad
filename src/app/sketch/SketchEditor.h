@@ -23,7 +23,7 @@
 namespace bz::app {
 
 enum class SketchTool : unsigned char {
-    Select, Line, Rectangle, Circle, Arc, Point, Project, Trim, Extend, Fillet, Move, Rotate, Copy, Scale, Mirror, PatternRect, PatternCircular, Dimension,
+    Select, Line, Rectangle, Circle, Arc, Point, Project, Trim, Extend, Fillet, Offset, Move, Rotate, Copy, Scale, Mirror, PatternRect, PatternCircular, Dimension,
     Coincident, Horizontal, Vertical, Parallel, Perpendicular, Equal, Tangent, Fix, Midpoint, Concentric, Symmetric,
 };
 
@@ -55,6 +55,7 @@ struct DrawOptions {
     std::string   width, height;    ///< rectangle
     std::string   size;             ///< circle / polygon diameter, arc radius
     std::string   filletRadius = "5";   ///< Скругление: kept between corners
+    std::string   offsetDistance = "5"; ///< Эквидистанта
     std::string   moveX, moveY;     ///< move
     std::string   turn;             ///< rotate
     std::string   factor = "2";     ///< scale
@@ -130,6 +131,8 @@ private:
     /// "Обрезка": the piece under the cursor is shown, a click removes it.
     void HandleTrim(AppContext& app, Session& session, const SketchView& view);
     void HandleExtend(AppContext& app, Session& session, const SketchView& view);
+    void HandleOffset(AppContext& app, Session& session, const SketchView& view);
+    ObjectId myOffsetCurve;   ///< Эквидистанта: a curve of the chosen contour (then the side is picked)
     void HandleFillet(AppContext& app, Session& session, const SketchView& view);
     /// "Перенос" / "Поворот": the selection follows two (three) clicks.
     void HandleMotion(AppContext& app, Session& session, const SketchView& view);

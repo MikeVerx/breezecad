@@ -5,6 +5,7 @@ add_library(bz_sketch STATIC
     Shapes.cpp
     Sketch.cpp
     Fillet.cpp
+    Offset.cpp
     Trim.cpp
     Solver.cpp)
 target_link_libraries(bz_sketch PUBLIC bz::core)
