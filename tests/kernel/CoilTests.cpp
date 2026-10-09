@@ -10,44 +10,56 @@ using namespace bz;
 using namespace bz::test;
 using doc::FeatureState;
 
-TEST_CASE("coil winds a round wire along a helix") {
-    doc::Document d;
+namespace {
+
+/// A sketch with an осевая along the sketch Y axis and a round profile beside it.
+doc::CoilFeature& AddCoil(doc::Document& d, double profileX, double profileRadius, const std::string& pitch,
+                          const std::string& turns) {
+    auto& sk = AddSketch(d, doc::origin::kPlaneXZ);
+    sketch::Sketch& s = sk.sketch;
+    const ObjectId axis = s.AddLine(d.Ids(), s.AddPoint(d.Ids(), {0, -5}), s.AddPoint(d.Ids(), {0, 50}));
+    s.FindLine(axis)->centerline = true;
+    AddCircle(d, sk, {profileX, 0}, profileRadius);
     auto coil = std::make_unique<doc::CoilFeature>();
     coil->id = d.Ids().Next();
     coil->name = "Пружина1";
+    coil->sketch = sk.id;
+    coil->axisLine = axis;
+    coil->pitch.expression = pitch;
+    coil->turns.expression = turns;
     auto* f = coil.get();
     d.Insert(std::move(coil), d.FeatureCount());
+    return *f;
+}
 
+} // namespace
+
+TEST_CASE("coil winds a sketch profile around its осевая") {
+    doc::Document d;
+    auto& f = AddCoil(d, 10, 1, "5", "6");
     kernel::Model model;
     model.Rebuild(d);
-    REQUIRE(f->status.state == FeatureState::Ok);
-    // Wire area times the helix length: 6 turns of radius 10, pitch 5, wire 2.
+    REQUIRE(f.status.state == FeatureState::Ok);
+    // Section area times the helix length through the profile centre.
     const double helix = 6 * std::hypot(2 * kPi * 10, 5.0);
     CHECK(model.Volume() == doctest::Approx(kPi * 1.0 * helix).epsilon(1e-2));
 
-    f->wire.expression = "6";   // thicker than the pitch: turns would overlap
-    d.MarkChanged(0);
+    f.pitch.expression = "1.5";   // below the profile height: turns would overlap
+    d.MarkChanged(1);
     model.Rebuild(d);
-    CHECK(f->status.state == FeatureState::Error);
+    CHECK(f.status.state == FeatureState::Error);
+
+    f.pitch.expression = "5";
+    f.axisLine = {};
+    d.MarkChanged(1);
+    model.Rebuild(d);
+    CHECK(f.status.state == FeatureState::Error);   // no axis chosen
 }
 
-TEST_CASE("coil cut from a body leaves a groove") {
+TEST_CASE("coil profile must not touch the axis") {
     doc::Document d;
-    auto& sk = AddSketch(d);
-    AddRect(d, sk, {-30, -30}, {30, 30});
-    AddExtrude(d, sk.id, "20");
-    auto coil = std::make_unique<doc::CoilFeature>();
-    coil->id = d.Ids().Next();
-    coil->name = "Пружина1";
-    coil->operation = doc::BooleanOp::Cut;
-    coil->turns.expression = "2";
-    coil->start.expression = "5";   // the whole wire inside the 20 mm block
-    auto* f = coil.get();
-    d.Insert(std::move(coil), d.FeatureCount());
-
+    auto& f = AddCoil(d, 0.5, 1, "5", "2");
     kernel::Model model;
     model.Rebuild(d);
-    REQUIRE(f->status.state == FeatureState::Ok);
-    const double helix = 2 * std::hypot(2 * kPi * 10, 5.0);
-    CHECK(60.0 * 60 * 20 - model.Volume() == doctest::Approx(kPi * helix).epsilon(1e-2));
+    CHECK(f.status.state == FeatureState::Error);
 }

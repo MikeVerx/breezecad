@@ -4,12 +4,12 @@
 
 namespace bz::doc {
 
-/// What the regions turn around: a line of the same sketch (usually a
-/// construction centre line) or one of the sketch's own axes.
+/// What the regions turn around: a line of the same sketch, normally an
+/// осевая the user drew. SketchX / SketchY are only read from older files.
 enum class RevolveAxisKind : unsigned char { SketchLine, SketchX, SketchY };
 
 struct RevolveAxis {
-    RevolveAxisKind kind = RevolveAxisKind::SketchY;
+    RevolveAxisKind kind = RevolveAxisKind::SketchLine;
     ObjectId        line;   ///< SketchLine only
 };
 

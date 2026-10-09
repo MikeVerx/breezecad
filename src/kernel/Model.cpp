@@ -521,10 +521,10 @@ void Model::Rebuild(doc::Document& doc) {
                                          return occt::MakeSweep(faces, *path);
                                      });
             } else if (auto* coil = dynamic_cast<doc::CoilFeature*>(&f)) {
-                if (Expected<TopoDS_Shape> solid = occt::MakeCoil(*coil))
-                    CombineSolid(coil->id, coil->operation, *solid, impl, bodies, coil->status);
-                else
-                    coil->status = {FeatureState::Error, solid.GetError().message};
+                ApplySketchSolid(*coil, impl, bodies, coil->status, doc,
+                                 [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature& profile, const Frame& frame) {
+                                     return occt::MakeCoil(faces, *coil, profile.sketch, frame);
+                                 });
             } else if (auto* loft = dynamic_cast<doc::LoftFeature*>(&f)) {
                 ApplyLoft(*loft, impl, bodies, doc);
             } else if (auto* wp = dynamic_cast<doc::WorkPlaneFeature*>(&f)) {

@@ -1,27 +1,29 @@
 #pragma once
-// The "Пружина" operation panel: the axis it winds around, the operation
-// (new body, join — a ridge, cut — a groove), the hand and the sizes.
+// The "Пружина" operation panel: a profile of a sketch wound around an осевая
+// of the same sketch. The axis is clicked in the viewport; the panel holds
+// the number of turns, the pitch and the hand.
 
-#include "app/features/FeatureOperationEditor.h"
+#include "app/features/SketchOperationEditor.h"
 #include "document/CoilFeature.h"
 
 namespace bz::app {
 
-class CoilEditor final : public FeatureOperationEditor {
+class CoilEditor final : public SketchOperationEditor {
 public:
-    void        StartNew(AppContext& app, Session& session);
     bool        CanEdit(const doc::Feature& f) const override;
     const char* Title() const override { return "Пружина"; }
     std::string Hint() const override;
-    void        DrawInViewport(AppContext&, Session&, const ViewportFrame&) override {}
 
 protected:
     const char* Icon() const override { return "tree-coil"; }
+    std::unique_ptr<doc::SketchSolidFeature> Create(Session& session, ObjectId sketch) const override;
     void LoadTexts(const doc::Feature& feature) override;
-    void DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) override;
+    void DrawOptions(AppContext& app, Session& session, doc::SketchSolidFeature& feature, float width) override;
+    void CarryOver(const doc::SketchSolidFeature& previous, doc::SketchSolidFeature& next) const override;
+    bool PickInViewport(AppContext& app, Session& session, doc::SketchSolidFeature& feature, const SketchView& view) override;
 
 private:
-    std::string myRadius, myPitch, myTurns, myWire, myStart;
+    std::string myPitch, myTurns;
 };
 
 } // namespace bz::app

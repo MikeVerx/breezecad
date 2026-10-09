@@ -13,6 +13,7 @@ add_executable(breezecad WIN32
     Workspace.cpp
     features/CopyEditors.cpp
     features/CoilEditor.cpp
+    features/SketchAxis.cpp
     features/DraftEditor.cpp
     features/EdgeOperationEditor.cpp
     features/HoleEditor.cpp

@@ -30,6 +30,7 @@ Expected<gp_Ax1> AxisOf(const doc::RevolveFeature& f, const sketch::Sketch& sk, 
         case doc::RevolveAxisKind::SketchY: a = {0, 0}; b = {0, 1}; break;
         case doc::RevolveAxisKind::SketchLine: {
             const sketch::Line* line = sk.FindLine(f.axis.line);
+            if (!f.axis.line) return Error{"Нарисуйте в эскизе осевую линию и щёлкните её — это ось вращения"};
             if (!line) return Error{"Ось вращения удалена из эскиза"};
             a = sk.PositionOf(line->start);
             b = sk.PositionOf(line->end);
