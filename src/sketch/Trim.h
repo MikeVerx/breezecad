@@ -1,5 +1,5 @@
 #pragma once
-// "Обрезка": removes the piece of a curve between its nearest crossings with
+// "Обрезка" and "Удлинение". Обрезка removes the piece of a curve between its nearest crossings with
 // other curves, around the place that was clicked. A line or an arc keeps
 // the rest (split in two when the piece was in the middle); a circle turns
 // into the arc that remains. New ends sit on the curves that cut them.
@@ -38,5 +38,22 @@ std::vector<Vec2> SpanPolyline(const Sketch& sk, const TrimSpan& span, int segme
 /// Removes the span. Returns false when there is nothing to trim (a circle
 /// cut fewer than two times is removed whole, which is still a trim).
 bool Trim(Sketch& sk, IdGenerator& ids, const TrimSpan& span);
+
+// --- "Удлинение" -----------------------------------------------------------
+
+/// An end of a line moved out to the nearest curve ahead of it.
+struct Extension {
+    ObjectId line;
+    ObjectId end;      ///< the point that moves
+    Vec2     to;
+    ObjectId target;   ///< the curve it stops on
+};
+
+/// The extension of the end of `line` nearer `pick`; nullopt when no curve
+/// lies ahead or the end is shared with another curve (it would drag it).
+std::optional<Extension> FindExtension(const Sketch& sk, ObjectId line, Vec2 pick);
+
+/// Moves the end and ties it to the target (PointOnCurve).
+void Extend(Sketch& sk, IdGenerator& ids, const Extension& extension);
 
 } // namespace bz::sketch

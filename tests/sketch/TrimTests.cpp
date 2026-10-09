@@ -76,3 +76,22 @@ TEST_CASE("trim a circle cut by a line into an arc") {
     CHECK(e.x > 0);
     CHECK(Solve(sk).converged);
 }
+
+TEST_CASE("extend a line end to the nearest curve ahead") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId line = AddSegment(sk, ids, {0, 0}, {10, 0});
+    const ObjectId near = AddSegment(sk, ids, {20, -5}, {20, 5});
+    AddSegment(sk, ids, {30, -5}, {30, 5});
+    AddSegment(sk, ids, {15, 10}, {15, 20});   // its carrier crosses, the segment does not
+
+    const auto e = FindExtension(sk, line, {9, 0.2});
+    REQUIRE(e);
+    CHECK(e->target == near);
+    CHECK((e->to - Vec2{20, 0}).Length() == doctest::Approx(0.0));
+    Extend(sk, ids, *e);
+    REQUIRE(Solve(sk).converged);
+    CHECK(LengthOf(sk, *sk.FindLine(line)) == doctest::Approx(20.0));
+
+    CHECK_FALSE(FindExtension(sk, line, {0.5, 0}));   // nothing behind the start
+}

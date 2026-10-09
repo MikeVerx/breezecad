@@ -486,6 +486,27 @@ void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchVie
     session.CommitInPlaceEdit(std::move(before), Tr("Обрезка"));
 }
 
+void SketchEditor::HandleExtend(AppContext& app, Session& session, const SketchView& view) {
+    doc::SketchFeature* f = Active(session);
+    if (!f || !myHover || !myCursor || myHover.kind != EntityKind::Line) return;
+    const std::optional<sketch::Extension> e = sketch::FindExtension(f->sketch, myHover.id, *myCursor);
+    if (!e) return;
+    // The piece that would be added: dashed in the accent colour.
+    DrawSketchSegment(app.ui, ImGui::GetWindowDrawList(), view, f->sketch.PositionOf(e->end), e->to, app.ui.C().accent, 3.0f, true);
+
+    if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
+    auto before = f->Clone();
+    sketch::Sketch trial = f->sketch;
+    sketch::Extend(trial, session.doc.Ids(), *e);
+    if (!sketch::Solve(trial).converged) {
+        app.notes.Error(Tr("Удлинение противоречит размерам или связям отрезка"));
+        return;
+    }
+    f->sketch = std::move(trial);
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), Tr("Удлинение"));
+}
+
 void SketchEditor::HandleFillet(AppContext& app, Session& session, const SketchView& view) {
     doc::SketchFeature* f = Active(session);
     if (!f || !myHover || !myCursor) return;

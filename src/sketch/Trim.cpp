@@ -236,4 +236,47 @@ bool Trim(Sketch& sk, IdGenerator& ids, const TrimSpan& span) {
     return true;
 }
 
+std::optional<Extension> FindExtension(const Sketch& sk, ObjectId lineId, Vec2 pick) {
+    const Line* line = sk.FindLine(lineId);
+    if (!line || line->projected) return std::nullopt;
+    const bool atStart = (sk.PositionOf(line->start) - pick).Length() < (sk.PositionOf(line->end) - pick).Length();
+    const ObjectId end = atStart ? line->start : line->end;
+    const Vec2 from = sk.PositionOf(end), other = sk.PositionOf(atStart ? line->end : line->start);
+    const double length = (from - other).Length();
+    if (length < kEps) return std::nullopt;
+    // A shared end would drag the other curve along.
+    int uses = 0;
+    for (const Line& l : sk.lines) uses += (l.start == end) + (l.end == end);
+    for (const Arc& a : sk.arcs) uses += (a.start == end) + (a.end == end) + (a.center == end);
+    for (const Circle& c : sk.circles) uses += c.center == end;
+    const Point* origin = sk.Origin();
+    if (uses > 1 || (origin && origin->id == end)) return std::nullopt;
+
+    const Vec2 dir = (from - other) * (1.0 / length);
+    const Shape self = ShapeOf(sk, lineId);
+    std::optional<Extension> best;
+    double nearest = 0;
+    const auto consider = [&](ObjectId id) {
+        if (id == lineId) return;
+        const Shape target = ShapeOf(sk, id);
+        for (const Vec2 x : Crossings(self, target)) {
+            const double ahead = (x - from).Dot(dir);
+            if (ahead < kEps * std::max(1.0, length) || !ParamOf(target, x)) continue;
+            if (!best || ahead < nearest) {
+                best = Extension{lineId, end, x, id};
+                nearest = ahead;
+            }
+        }
+    };
+    for (const Line& l : sk.lines) consider(l.id);
+    for (const Circle& c : sk.circles) consider(c.id);
+    for (const Arc& a : sk.arcs) consider(a.id);
+    return best;
+}
+
+void Extend(Sketch& sk, IdGenerator& ids, const Extension& e) {
+    if (Point* p = sk.FindPoint(e.end)) p->pos = e.to;
+    sk.AddConstraint(ids, Make(ConstraintType::PointOnCurve, e.end, e.target));
+}
+
 } // namespace bz::sketch

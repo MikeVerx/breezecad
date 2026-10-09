@@ -16,7 +16,7 @@
 namespace bz::app {
 namespace {
 
-constexpr std::array<SketchToolInfo, 28> kTools{{
+constexpr std::array<SketchToolInfo, 29> kTools{{
     {SketchTool::Select, N_("Выбор"), "ui-check", N_("Выберите или перетащите элементы эскиза")},
     {SketchTool::Line, N_("Отрезок"), "sk-line", N_("Укажите начальную точку отрезка")},
     {SketchTool::Rectangle, N_("Прямоугольник"), "sk-rectangle", N_("Укажите первый угол прямоугольника")},
@@ -25,6 +25,7 @@ constexpr std::array<SketchToolInfo, 28> kTools{{
     {SketchTool::Point, N_("Точка"), "sk-point", N_("Укажите положение точки")},
     {SketchTool::Project, N_("Проецировать"), "sk-project", N_("Щёлкните ребро модели или грань (весь её контур) — проекция появится в эскизе и будет следовать за моделью")},
     {SketchTool::Trim, N_("Обрезка"), "sk-trim", N_("Щёлкните лишний кусок кривой — он удалится до ближайших пересечений")},
+    {SketchTool::Extend, N_("Удлинение"), "sk-extend", N_("Щёлкните отрезок у конца — он дотянется до ближайшей кривой")},
     {SketchTool::Fillet, N_("Скругление"), "sk-fillet", N_("Задайте радиус и щёлкните угол, где сходятся два отрезка")},
     {SketchTool::Move, N_("Перенос"), "sk-move", N_("Выберите элементы (Ctrl+щелчок), затем укажите базовую точку")},
     {SketchTool::Rotate, N_("Поворот"), "sk-rotate", N_("Выберите элементы (Ctrl+щелчок), затем укажите центр поворота")},
@@ -326,6 +327,7 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
         case SketchTool::Point:     HandleDrawing(app, session, view); break;
         case SketchTool::Project:   HandleProject(app, session, view); break;
         case SketchTool::Trim:      HandleTrim(app, session, view); break;
+        case SketchTool::Extend:    HandleExtend(app, session, view); break;
         case SketchTool::Fillet:    HandleFillet(app, session, view); break;
         case SketchTool::Move:
         case SketchTool::Rotate:    HandleMotion(app, session, view); break;
