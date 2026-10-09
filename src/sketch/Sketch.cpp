@@ -73,6 +73,15 @@ ObjectId Sketch::AddArc(IdGenerator& ids, ObjectId center, ObjectId start, Objec
 }
 
 ObjectId Sketch::AddConstraint(IdGenerator& ids, Constraint constraint) {
+    // The same geometric relation twice (in either order of its first two
+    // entities) adds nothing but an over-constrained sketch.
+    if (!IsDimensional(constraint.type))
+        for (const Constraint& c : constraints) {
+            if (c.type != constraint.type || c.refs[2] != constraint.refs[2]) continue;
+            const bool same = (c.refs[0] == constraint.refs[0] && c.refs[1] == constraint.refs[1]) ||
+                              (c.refs[0] == constraint.refs[1] && c.refs[1] == constraint.refs[0]);
+            if (same) return c.id;
+        }
     constraint.id = ids.Next();
     constraints.push_back(std::move(constraint));
     return constraints.back().id;
