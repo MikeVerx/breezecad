@@ -12,6 +12,7 @@
 #include <gp_Ax3.hxx>
 #include <gp_Circ.hxx>
 
+#include <algorithm>
 #include <cmath>
 
 namespace bz::kernel::occt {
@@ -36,11 +37,21 @@ Expected<TopoDS_Shape> MakeCoil(const doc::CoilFeature& f) {
         Handle(Geom_CylindricalSurface) cylinder = new Geom_CylindricalSurface(frame, f.radius.value);
         const double angle = 2 * kPi * f.turns.value;
         const double height = f.pitch.value * f.turns.value;
-        const gp_Pnt2d from(0, 0), to(f.leftHanded ? -angle : angle, height);
-        const Handle(Geom2d_TrimmedCurve) line = GCE2d_MakeSegment(from, to);
-        TopoDS_Edge helixEdge = BRepBuilderAPI_MakeEdge(line, cylinder);
-        BRepLib::BuildCurves3d(helixEdge);
-        const TopoDS_Wire helix = BRepBuilderAPI_MakeWire(helixEdge);
+        // One edge per half turn: a single edge winding round many times
+        // makes one self-wrapping face that booleans handle badly.
+        const int pieces = std::max(1, static_cast<int>(std::ceil(f.turns.value * 2 - 1e-9)));
+        const double sign = f.leftHanded ? -1.0 : 1.0;
+        BRepBuilderAPI_MakeWire helixWire;
+        for (int i = 0; i < pieces; ++i) {
+            const double t0 = static_cast<double>(i) / pieces, t1 = static_cast<double>(i + 1) / pieces;
+            const gp_Pnt2d from(sign * angle * t0, height * t0), to(sign * angle * t1, height * t1);
+            const Handle(Geom2d_TrimmedCurve) segment = GCE2d_MakeSegment(from, to);
+            TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(segment, cylinder);
+            BRepLib::BuildCurves3d(edge);
+            helixWire.Add(edge);
+        }
+        if (!helixWire.IsDone()) return Error{"Пружина: не удалось построить винтовую линию"};
+        const TopoDS_Wire helix = helixWire.Wire();
 
         // The wire's cross-section: a circle at the helix start, square to it.
         const gp_Pnt startPoint = base.Translated(gp_Vec(across) * f.radius.value);
