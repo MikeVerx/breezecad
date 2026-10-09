@@ -42,7 +42,7 @@ struct ShellState {
 
     render::DisplayStyle displayStyle = render::DisplayStyle::ShadedWithEdges;
 
-    /// "Сечение": the view cut by an origin plane moved through the part.
+    /// "Разрез вида": the view cut by an origin plane moved through the part.
     struct Section {
         bool  on = false;
         int   plane = 1;           ///< 0 XY, 1 XZ, 2 YZ

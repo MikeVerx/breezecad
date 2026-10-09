@@ -43,7 +43,7 @@ void RegisterActions(AppContext& app) {
                if (Session* s = app.Doc()) app.ops.Close(app, *s);
                app.shell.measuring = !app.shell.measuring;
            }});
-    a.Add({"view.section", "Сечение", "section", 0, "Разрезать вид плоскостью, чтобы заглянуть внутрь детали",
+    a.Add({"view.section", "Разрез вида", "section", 0, "Разрезать вид плоскостью, чтобы заглянуть внутрь детали",
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { app.shell.section.on = !app.shell.section.on; }});
     a.Add({"tools.massProperties", "МЦХ", "mass-properties", 0, "Масса, объём, площадь, центр масс и габариты детали",
@@ -85,6 +85,8 @@ void RegisterActions(AppContext& app) {
     a.Add({"feature.loft", "Лофт", "loft", 0, "Тело через контуры нескольких эскизов", inModel, [&app] { StartLoft(app); }});
     a.Add({"feature.coil", "Пружина", "coil", 0, "Проволока, навитая по винтовой линии вокруг оси; вырезом — канавка", inModel,
            [&app] { StartCoil(app); }});
+    a.Add({"feature.section", "Сечение", "cut-section", 0, "Отсечь модель плоскостью — операция в дереве, гасится и удаляется как любая", inModel,
+           [&app] { StartSection(app); }});
     a.Add({"feature.draft", "Уклон", "draft", 0, "Наклонить боковые грани, чтобы деталь выходила из формы", inModel,
            [&app] { StartDraft(app); }});
     a.Add({"feature.chamfer", "Фаска", "chamfer", 0, "Срезать рёбра тела под 45°", inModel, [&app] { StartChamfer(app); }});

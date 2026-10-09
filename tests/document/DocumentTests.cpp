@@ -2,6 +2,7 @@
 #include "document/BzcFile.h"
 #include "document/Commands.h"
 #include "document/CoilFeature.h"
+#include "document/SectionFeature.h"
 #include "document/DraftFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
@@ -235,6 +236,7 @@ TEST_CASE("every feature type survives a file round trip") {
     made.push_back(std::make_unique<doc::SweepFeature>());
     made.push_back(std::make_unique<doc::DraftFeature>());
     made.push_back(std::make_unique<doc::CoilFeature>());
+    made.push_back(std::make_unique<doc::SectionFeature>());
     std::vector<std::pair<ObjectId, std::string_view>> expected;
     for (auto& f : made) {
         f->id = d.Ids().Next();

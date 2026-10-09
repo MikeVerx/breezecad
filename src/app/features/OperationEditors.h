@@ -9,6 +9,7 @@
 #include "app/features/HoleEditor.h"
 #include "app/features/LoftEditor.h"
 #include "app/features/RevolveEditor.h"
+#include "app/features/SectionEditor.h"
 #include "app/features/ShellEditor.h"
 #include "app/features/SweepEditor.h"
 #include "app/features/WorkPlaneEditor.h"
@@ -31,9 +32,10 @@ struct OperationEditors {
     SweepEditor     sweep;
     DraftEditor     draft;
     CoilEditor      coil;
+    SectionEditor   section;
 
-    std::array<OperationEditor*, 13> All() {
-        return {&extrude, &revolve, &fillet, &chamfer, &hole, &shell, &workPlane, &pattern, &mirror, &loft, &sweep, &draft, &coil};
+    std::array<OperationEditor*, 14> All() {
+        return {&extrude, &revolve, &fillet, &chamfer, &hole, &shell, &workPlane, &pattern, &mirror, &loft, &sweep, &draft, &coil, &section};
     }
 
     /// The open operation, or nullptr.

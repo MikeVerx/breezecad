@@ -135,6 +135,9 @@ void ModelRibbon(RibbonBuilder& r) {
     r.Small("feature.shell");
     r.Small("feature.draft");
     r.EndColumn();
+    r.BeginColumn();
+    r.Small("feature.section");
+    r.EndColumn();
     r.EndGroup();
 
     r.BeginGroup("Массив");

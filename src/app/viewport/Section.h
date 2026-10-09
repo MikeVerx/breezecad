@@ -1,5 +1,5 @@
 #pragma once
-// "Сечение": the view cut by an origin plane moved through the part, with a
+// "Разрез вида": the view cut by an origin plane moved through the part, with a
 // small bar over the viewport to choose the plane, move it and flip it.
 
 #include "app/AppContext.h"

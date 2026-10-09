@@ -3,6 +3,7 @@
 #include "core/Log.h"
 #include "document/CoilFeature.h"
 #include "document/DraftFeature.h"
+#include "document/SectionFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/HoleFeature.h"
 #include "document/ExtrudeFeature.h"
@@ -17,6 +18,7 @@
 #include "document/WorkPlaneFeature.h"
 #include "kernel/occt/Coil.h"
 #include "kernel/occt/Draft.h"
+#include "kernel/occt/Section.h"
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Extrude.h"
 #include "kernel/occt/FaceMatch.h"
@@ -274,6 +276,35 @@ std::optional<Frame> PlaneOf(ObjectId id, const doc::Document& doc) {
     return std::nullopt;
 }
 
+/// Every body cut by the section plane; bodies wholly on the far side go.
+void ApplySection(doc::SectionFeature& section, const doc::Document& doc, std::vector<Body>& bodies) {
+    const std::optional<Frame> plane = PlaneOf(section.plane, doc);
+    if (!plane) {
+        section.status = {FeatureState::Error, "Выберите плоскость сечения"};
+        return;
+    }
+    if (bodies.empty()) {
+        section.status = {FeatureState::Error, "Нет тела, которое рассечь"};
+        return;
+    }
+    std::vector<Body> kept;
+    for (Body& body : bodies) {
+        const auto cut = occt::CutByPlane(body.shape, *plane, section.flipped);
+        if (!cut) {
+            section.status = {FeatureState::Error, cut.GetError().message};
+            return;
+        }
+        if (*cut) {
+            body.shape = **cut;
+            kept.push_back(body);
+        }
+    }
+    section.status = kept.empty() ? doc::FeatureStatus{FeatureState::Warning, "Плоскость отсекла всю модель — переверните сторону"}
+                                  : doc::FeatureStatus{FeatureState::Ok, {}};
+    bodies = std::move(kept);
+}
+
+
 /// The reflection of a mirror, about an origin plane or a work plane.
 Expected<gp_Trsf> MirrorPlacement(const doc::MirrorFeature& f, const doc::Document& doc) {
     const std::optional<Frame> plane = PlaneOf(f.plane, doc);
@@ -505,6 +536,8 @@ void Model::Rebuild(doc::Document& doc) {
                 else
                     ApplyToLastBody(bodies, draft->status, "Нет тела для уклона",
                                     [&](const TopoDS_Shape& body) { return occt::MakeDraft(body, *draft, *neutral); });
+            } else if (auto* section = dynamic_cast<doc::SectionFeature*>(&f)) {
+                ApplySection(*section, doc, bodies);
             } else if (auto* shell = dynamic_cast<doc::ShellFeature*>(&f)) {
                 ApplyToLastBody(bodies, shell->status, "Нет тела для оболочки",
                                 [&](const TopoDS_Shape& body) { return occt::MakeShell(body, *shell); });

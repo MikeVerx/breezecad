@@ -2,6 +2,7 @@
 
 #include "document/CoilFeature.h"
 #include "document/DraftFeature.h"
+#include "document/SectionFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
@@ -27,6 +28,7 @@ FeatureRegistry& FeatureRegistry::Default() {
         r.Register(std::string(SweepFeature::kType), [] { return std::make_unique<SweepFeature>(); });
         r.Register(std::string(CoilFeature::kType), [] { return std::make_unique<CoilFeature>(); });
         r.Register(std::string(DraftFeature::kType), [] { return std::make_unique<DraftFeature>(); });
+        r.Register(std::string(SectionFeature::kType), [] { return std::make_unique<SectionFeature>(); });
         r.Register(std::string(LoftFeature::kType), [] { return std::make_unique<LoftFeature>(); });
         r.Register(std::string(PatternFeature::kType), [] { return std::make_unique<PatternFeature>(); });
         r.Register(std::string(MirrorFeature::kType), [] { return std::make_unique<MirrorFeature>(); });

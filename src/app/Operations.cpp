@@ -212,6 +212,13 @@ void StartCoil(AppContext& app) {
     app.ops.coil.StartNew(app, *s);
 }
 
+void StartSection(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.section.StartNew(app, *s);
+}
+
 void StartRevolve(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;

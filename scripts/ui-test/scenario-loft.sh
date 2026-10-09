@@ -7,7 +7,7 @@ UI="$(dirname "$0")/ui.sh"
 "$UI" clk 800 450
 "$UI" mousemove 900 500; sleep 0.3
 "$UI" clk 980 560
-"$UI" clk 1313 115           # Принять эскиз
+"$UI" key Escape Escape Escape   # Принять эскиз: Esc снимает инструмент, выбор, затем выходит
 sleep 2
 "$UI" clk 296 118            # Лофт: два последних эскиза, «Добавить»
 sleep 2

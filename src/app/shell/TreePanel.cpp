@@ -7,6 +7,7 @@
 #include "app/shell/Shell.h"
 #include "document/Commands.h"
 #include "document/CoilFeature.h"
+#include "document/SectionFeature.h"
 #include "document/DraftFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
@@ -390,6 +391,7 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::SweepFeature*>(&f)) return "tree-sweep";
     if (dynamic_cast<const doc::DraftFeature*>(&f)) return "tree-draft";
     if (dynamic_cast<const doc::CoilFeature*>(&f)) return "tree-coil";
+    if (dynamic_cast<const doc::SectionFeature*>(&f)) return "tree-cut-section";
     return "tree-unknown";
 }
 

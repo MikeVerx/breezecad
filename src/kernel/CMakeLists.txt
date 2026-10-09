@@ -2,6 +2,7 @@ add_library(bz_kernel STATIC
     Model.cpp
     occt/Coil.cpp
     occt/Draft.cpp
+    occt/Section.cpp
     occt/EdgeMatch.cpp
     occt/Export.cpp
     occt/Extrude.cpp

@@ -23,6 +23,7 @@ add_executable(breezecad WIN32
     features/ExtrudeEditor.cpp
     features/FeatureOperationEditor.cpp
     features/RevolveEditor.cpp
+    features/SectionEditor.cpp
     features/SketchOperationEditor.cpp
     shell/Bars.cpp
     shell/Dialogs.cpp
