@@ -6,6 +6,7 @@
 #include "document/Feature.h"
 
 #include <cstddef>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -95,6 +96,8 @@ public:
     /// First feature index that needs a rebuild (FeatureCount() if none).
     std::size_t DirtyFrom() const { return myDirtyFrom; }
     void        ClearDirty() { myDirtyFrom = myFeatures.size(); }
+    /// Features from `index` on still need a rebuild (a partial one stopped there).
+    void        KeepDirtyFrom(std::size_t index) { myDirtyFrom = std::min(index, myFeatures.size()); }
 
 private:
     std::vector<std::unique_ptr<Feature>> myFeatures;

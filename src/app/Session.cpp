@@ -39,21 +39,32 @@ void Session::CommitInPlaceEdit(std::unique_ptr<doc::Feature> before, std::strin
     history.Execute(doc, doc::ReplaceFeature(std::move(edited), std::move(label)));
 }
 
-bool Session::RebuildIfNeeded() {
-    if (doc.Revision() == myBuiltRevision) return false;
+bool Session::RebuildIfNeeded() { return Rebuild(40.0); }
+
+bool Session::RebuildNow() { return Rebuild(-1.0); }
+
+bool Session::Rebuild(double budgetMs) {
+    // Something left over from a partial rebuild that is no longer limited.
+    const std::size_t limit = myRebuildLimit ? *myRebuildLimit : static_cast<std::size_t>(-1);
+    const bool leftOver = doc.DirtyFrom() < doc.FeatureCount() && doc.DirtyFrom() <= limit;
+    if (doc.Revision() == myBuiltRevision && !leftOver) return false;
     // While a handle or a value is being dragged, a part that takes long to
     // rebuild is rebuilt at most every so often, and once more on release:
     // the drag stays smooth instead of waiting for every step.
     const double now = ImGui::GetTime();
-    if (ImGui::IsMouseDown(ImGuiMouseButton_Left) && myLastRebuildSeconds > 0.04 &&
+    if (budgetMs >= 0 && !myRebuilding && ImGui::IsMouseDown(ImGuiMouseButton_Left) && myLastRebuildSeconds > 0.04 &&
         now - myLastRebuildAt < std::max(0.25, 3 * myLastRebuildSeconds))
         return false;
     const auto start = std::chrono::steady_clock::now();
-    model.Rebuild(doc);
+    // A slice at a time: the window keeps answering while a large part
+    // rebuilds; the part shown changes when the rebuild is done.
+    const bool done = model.RebuildSlice(doc, limit, myShowAtLimit ? kernel::Model::Stopped::ShowAtStop : kernel::Model::Stopped::KeepShown,
+                                         budgetMs);
     myLastRebuildSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     myLastRebuildAt = ImGui::GetTime();
     myBuiltRevision = doc.Revision();
-    return true;
+    myRebuilding = !done;
+    return done;
 }
 
 } // namespace bz::app

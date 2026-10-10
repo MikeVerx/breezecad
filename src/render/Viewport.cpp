@@ -1,6 +1,7 @@
 #include "render/Viewport.h"
 
 #include "core/Log.h"
+#include "core/Profile.h"
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/FaceMatch.h"
 #include "kernel/occt/Measure.h"
@@ -457,14 +458,27 @@ void Viewport::Sync(const kernel::Model& model) {
     m.syncedModel = &model;
     m.syncedRevision = model.Revision();
 
-    for (const auto& s : m.shown) m.context->Remove(s.shape, false);
+    // A body whose shape did not change keeps its presentation: meshing and
+    // the selection structures are the costly part, and most edits (a
+    // sketch, a later operation) leave most bodies as they were.
+    std::vector<Impl::Shown> previous = std::move(m.shown);
     m.shown.clear();
     for (const kernel::Body& body : model.GetImpl().bodies) {
+        const auto same = std::find_if(previous.begin(), previous.end(), [&](const Impl::Shown& s) {
+            return !s.shape.IsNull() && s.body == body.id && s.shape->Shape().IsEqual(body.shape);
+        });
+        if (same != previous.end()) {
+            m.shown.push_back(*same);
+            same->shape.Nullify();   // taken: not removed below
+            continue;
+        }
         Handle(AIS_Shape) ais = new AIS_Shape(body.shape);
         m.ApplyStyle(ais, body.id == m.hovered);
         m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
         m.shown.push_back({body.id, ais});
     }
+    for (const auto& s : previous)
+        if (!s.shape.IsNull()) m.context->Remove(s.shape, false);
     m.ActivateShown();
     // Picked entities belonged to the old shapes.
     if (!m.measuring.picked.empty()) ClearMeasure();
@@ -474,6 +488,7 @@ void Viewport::Sync(const kernel::Model& model) {
 }
 
 void Viewport::Hover(std::optional<Vec2> pixel) {
+    prof::Scope profile("hover");
     Impl& m = *myImpl;
     if (pixel == m.hoverPixel) return;
     m.hoverPixel = pixel;
@@ -906,6 +921,7 @@ void Viewport::SetPlanes(const std::vector<PlaneQuad>& planes) {
 // --- picking on the original body -----------------------------------------
 
 void Viewport::BeginPickingOriginal(const kernel::Model& model, std::size_t featureIndex, PickTarget target) {
+    prof::Scope profile("pick-setup");
     Impl& m = *myImpl;
     Impl::OriginalPicking& o = m.original;
 

@@ -53,6 +53,7 @@
 #include <gp_Trsf.hxx>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <mutex>
 
@@ -629,8 +630,15 @@ Model::~Model() = default;
 Model::Model(Model&&) noexcept = default;
 Model& Model::operator=(Model&&) noexcept = default;
 
-void Model::Rebuild(doc::Document& doc) {
+void Model::Rebuild(doc::Document& doc) { RebuildUpTo(doc, static_cast<std::size_t>(-1), Stopped::KeepShown); }
+
+void Model::RebuildUpTo(doc::Document& doc, std::size_t last, Stopped shown) { RebuildSlice(doc, last, shown, -1.0); }
+
+Model::Progress Model::RebuildProgress() const { return {myImpl->sliceDone, myImpl->sliceTotal}; }
+
+bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, double budgetMs) {
     Impl& impl = *myImpl;
+    const auto sliceStart = std::chrono::steady_clock::now();
     doc::RecomputeModel(doc);
 
     const std::size_t count = doc.FeatureCount();
@@ -647,11 +655,26 @@ void Model::Rebuild(doc::Document& doc) {
     impl.bodiesAfter.resize(count);
 
     std::vector<Body> bodies = start > 0 ? impl.bodiesAfter[start - 1] : std::vector<Body>{};
-    for (std::size_t i = start; i < count; ++i) {
+    const std::size_t end = last < count ? last + 1 : count;
+    if (!impl.slicing || start < impl.sliceFirst) {   // a new rebuild (or an edit went further back)
+        impl.sliceFirst = start;
+        impl.slicing = true;
+    }
+    impl.sliceTotal = end > impl.sliceFirst ? end - impl.sliceFirst : 0;
+    std::size_t stoppedAt = end;
+    for (std::size_t i = start; i < end; ++i) {
+        // Out of time (after at least one operation): the rest next time.
+        if (budgetMs >= 0 && i > start &&
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - sliceStart).count() > budgetMs) {
+            stoppedAt = i;
+            break;
+        }
+        impl.sliceDone = i - std::min(i, impl.sliceFirst);
         doc::Feature& f = *doc.Features()[i];
         impl.cachedOrder[i] = f.id;
         impl.tools.erase(f.id);   // set again below if the operation succeeds
 
+        const auto featureStart = std::chrono::steady_clock::now();
         const bool skip = !doc.IsActive(i) || f.suppressed;
         // One failing operation must not take the program down: whatever OCCT
         // or our code throws becomes that operation's error, and the bodies
@@ -768,17 +791,32 @@ void Model::Rebuild(doc::Document& doc) {
             f.status = {FeatureState::Error, std::format("Внутренняя ошибка: {}", e.what())};
         }
         if (f.status.state == FeatureState::Error) log::Warn("{}: {}", f.name, f.status.message);
+        if (const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - featureStart).count(); ms > 50)
+            log::Info("Rebuild: {} took {:.0f} ms", f.name, ms);
         impl.bodiesAfter[i] = bodies;
     }
 
-    // The visible result is the state at the end-of-part marker.
-    const std::size_t marker = std::min(doc.EndMarker(), count);
-    impl.bodies = marker > 0 ? impl.bodiesAfter[marker - 1] : std::vector<Body>{};
+    if (stoppedAt < end) {   // a slice: the part shown stays until the rebuild is done
+        doc.KeepDirtyFrom(stoppedAt);
+        impl.sliceDone = stoppedAt - std::min(stoppedAt, impl.sliceFirst);
+        return false;
+    }
+    impl.slicing = false;
+    impl.sliceDone = impl.sliceTotal = 0;
+    // The visible result is the state at the end-of-part marker (or, while
+    // an operation is edited, right after it).
+    if (end < count) {
+        doc.KeepDirtyFrom(end);
+        if (shown == Stopped::ShowAtStop) impl.bodies = end > 0 ? impl.bodiesAfter[end - 1] : std::vector<Body>{};
+    } else {
+        const std::size_t marker = std::min(doc.EndMarker(), count);
+        impl.bodies = marker > 0 ? impl.bodiesAfter[marker - 1] : std::vector<Body>{};
+        doc.ClearDirty();
+    }
     impl.infos.clear();
     for (const Body& b : impl.bodies) impl.infos.push_back({b.id, b.name});
-
-    doc.ClearDirty();
     ++impl.revision;
+    return true;
 }
 
 std::uint64_t Model::Revision() const { return myImpl->revision; }

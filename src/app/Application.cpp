@@ -5,6 +5,7 @@
 #include "app/shell/Shell.h"
 #include "app/viewport/ViewportPanel.h"
 #include "core/Log.h"
+#include "core/Profile.h"
 #include "core/PathText.h"
 #include "kernel/TextGeometry.h"
 #include "platform/Paths.h"
@@ -224,6 +225,8 @@ int Application::Run() {
 
 bool Application::NeedsAnotherFrame() const {
     if (myBusy || myViewport.NeedsRender() || !myDeferred.empty()) return true;
+    for (const auto& s : myWorkspace.sessions)
+        if (s->Rebuilding()) return true;   // the next slice of a rebuild
     if (myScreenshotFrame >= 0) return true;
     const ImGuiIO& io = ImGui::GetIO();
     for (bool down : io.MouseDown)
@@ -305,12 +308,29 @@ void Application::Frame() {
     if (myShell.captureShortcut.empty()) myActions.HandleShortcuts(myInput.chords);
     myInput.chords.clear();
     if (Session* s = myWorkspace.Active()) {
-        if (s->RebuildIfNeeded()) {
+        // Editing a sketch or an operation waits only for the part up to it;
+        // what comes after is rebuilt once editing ends.
+        if (s->mode == EditMode::Sketch && s->doc.IndexOf(s->activeSketch) >= 0) {
+            s->LimitRebuild(static_cast<std::size_t>(s->doc.IndexOf(s->activeSketch)), false);
+        } else if (const OperationEditor* op = myOps.Active(); op && s->doc.IndexOf(op->EditedFeature()) >= 0) {
+            s->LimitRebuild(static_cast<std::size_t>(s->doc.IndexOf(op->EditedFeature())), true);
+        } else {
+            s->LimitRebuild(std::nullopt, false);
+        }
+        bool rebuilt = false;
+        {
+            prof::Scope scope("rebuild");
+            rebuilt = s->RebuildIfNeeded();
+        }
+        if (rebuilt) {
             myFramesToDraw = std::max(myFramesToDraw, 2);
             // A changed variable, undo or redo may push the body off screen.
             if (s->mode == EditMode::Model && !myOps.Active()) myShell.keepModelInView = true;
         }
-        myViewport.Sync(s->model);
+        {
+            prof::Scope scope("sync");
+            myViewport.Sync(s->model);
+        }
         myViewport.SetDisplayStyle(myShell.displayStyle);
         myViewport.SetQuality(mySettings.graphics);
         if (myShell.keepModelInView) {   // the model was rebuilt and synced above
@@ -323,8 +343,11 @@ void Application::Frame() {
     const auto smooth = [](double& into, double ms) { into = into * 0.9 + ms * 0.1; };
     const auto msSince = [](double t) { return (glfwGetTime() - t) * 1000.0; };
     const double uiStart = glfwGetTime();
-    DrawRoot();
-    DrawDialogs(app);
+    {
+        prof::Scope scope("interface");
+        DrawRoot();
+        DrawDialogs(app);
+    }
     const ImVec2 corner = myShell.viewportMax.x > 0 && !myWorkspace.ShowsHome() ? myShell.viewportMax : ImGui::GetIO().DisplaySize;
     myBusy = myNotes.Draw(*myUi, corner, now) || myBusy;
 
@@ -332,7 +355,10 @@ void Application::Frame() {
     smooth(myStats.uiMs, msSince(uiStart));
     if (myWorkspace.Active() && !myWorkspace.ShowsHome() && myViewport.NeedsRender()) {
         const double sceneStart = glfwGetTime();
-        myViewport.Render();
+        {
+            prof::Scope scope("scene");
+            myViewport.Render();
+        }
         smooth(myStats.sceneMs, msSince(sceneStart));
         ++mySceneFramesThisSecond;
     }
@@ -366,8 +392,16 @@ void Application::Frame() {
     // Work requested by panels during the frame, now that nobody iterates.
     std::vector<std::function<void()>> work;
     work.swap(myDeferred);
-    for (auto& w : work) w();
+    {
+        prof::Scope scope("commands");
+        for (auto& w : work) w();
+    }
     if (!work.empty()) myFramesToDraw = std::max(myFramesToDraw, 2);
+
+    // A frame long enough to be felt: say in the log where the time went.
+    const double frameMs = (glfwGetTime() - now) * 1000.0;
+    const std::vector<prof::Part> parts = prof::TakeFrame();
+    if (frameMs > 80.0) log::Info("Slow frame {:.0f} ms: {}", frameMs, prof::Describe(parts));
 
     UpdateTitle();
 }

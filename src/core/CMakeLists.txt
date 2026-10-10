@@ -2,6 +2,7 @@ add_library(bz_core STATIC
     Expression.cpp
     I18n.cpp
     Log.cpp
+    Profile.cpp
     Units.cpp
     ViewProjection.cpp)
 target_include_directories(bz_core PUBLIC ${PROJECT_SOURCE_DIR}/src)

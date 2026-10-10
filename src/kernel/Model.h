@@ -67,6 +67,27 @@ public:
     /// Sets every feature's status. Never throws.
     void Rebuild(doc::Document& doc);
 
+    /// What a partial rebuild shows when it stops early.
+    enum class Stopped { KeepShown, ShowAtStop };
+    /// Rebuilds only up to feature number `last` (included); the features
+    /// after it stay to be rebuilt later (Document::DirtyFrom). While a
+    /// sketch is edited the part shown is kept as it was (KeepShown); while
+    /// an operation is edited it is shown as it is right after it
+    /// (ShowAtStop). Editing then waits for nothing that comes after.
+    void RebuildUpTo(doc::Document& doc, std::size_t last, Stopped shown);
+
+    /// As RebuildUpTo, but returns after about `budgetMs` (at least one
+    /// operation): the window stays alive while a large part rebuilds, a
+    /// slice per frame. True when it got to the end (or to `last`); the
+    /// part shown changes only then.
+    bool RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, double budgetMs);
+
+    /// How far the rebuild in progress is: operations done and to do.
+    struct Progress {
+        std::size_t done = 0, total = 0;
+    };
+    Progress RebuildProgress() const;
+
     /// Bumped whenever the geometry changes (the viewport re-syncs on it).
     std::uint64_t Revision() const;
 

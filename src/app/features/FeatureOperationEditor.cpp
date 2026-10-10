@@ -70,7 +70,7 @@ void FeatureOperationEditor::EditExisting(AppContext& app, Session& session, Obj
 bool FeatureOperationEditor::Commit(AppContext& app, Session& session) {
     doc::Feature* f = Edited(session);
     if (!f) return false;
-    session.RebuildIfNeeded();
+    session.RebuildNow();
     if (f->status.state == doc::FeatureState::Error) {
         app.notes.Error(Tr(f->status.message));
         return false;

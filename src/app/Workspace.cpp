@@ -118,6 +118,7 @@ bool Workspace::Export(Session& session, ExportFormat format, Notifications& not
     const auto chosen = platform::ShowSaveDialog(Trf("Экспорт в {}", info.name),
                                                  folder / (session.Title() + info.ext), {{info.name, info.pattern}}, info.ext);
     if (!chosen) return false;
+    session.RebuildNow();   // a rebuild may still be under way in slices
     const Status status = format == ExportFormat::Step ? session.model.ExportStep(*chosen)
                         : format == ExportFormat::Stl  ? session.model.ExportStl(*chosen)
                                                        : session.model.Export3mf(*chosen);

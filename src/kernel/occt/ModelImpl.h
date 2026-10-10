@@ -37,6 +37,10 @@ struct Model::Impl {
     std::unordered_map<ObjectId, Tool> tools;
 
     std::vector<Body>     bodies;   ///< final result (at the end-of-part marker)
+
+    /// A rebuild done in slices (Model::RebuildSlice): where it began and how far it is.
+    bool        slicing = false;
+    std::size_t sliceFirst = 0, sliceDone = 0, sliceTotal = 0;
     std::vector<BodyInfo> infos;
     std::uint64_t         revision = 0;
 

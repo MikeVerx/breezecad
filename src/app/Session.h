@@ -60,8 +60,25 @@ public:
     /// Rebuilds geometry if the document changed since the last rebuild.
     /// Returns true when it did.
     bool RebuildIfNeeded();
+    /// The same, to the end at once (before reading the result: a commit,
+    /// an export).
+    bool RebuildNow();
+    /// A rebuild is under way in slices (the window shows its progress).
+    bool Rebuilding() const { return myRebuilding; }
+
+    /// While a sketch or an operation is edited: rebuild only up to it
+    /// (`last`, a feature index); the rest follows when editing ends.
+    /// `showAtLast`: show the part right after it (an operation's preview).
+    void LimitRebuild(std::optional<std::size_t> last, bool showAtLast) {
+        myRebuildLimit = last;
+        myShowAtLimit = showAtLast;
+    }
 
 private:
+    std::optional<std::size_t> myRebuildLimit;
+    bool                       myRebuilding = false;
+    bool                       Rebuild(double budgetMs);
+    bool                       myShowAtLimit = false;
     std::uint64_t myBuiltRevision = static_cast<std::uint64_t>(-1);
     double        myLastRebuildSeconds = 0;   ///< how long the last rebuild took
     double        myLastRebuildAt = 0;        ///< when it finished (ImGui time)
