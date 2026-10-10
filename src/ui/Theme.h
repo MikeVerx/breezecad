@@ -69,6 +69,7 @@ struct ThemeColors {
     Color planeFill;         ///< origin planes while choosing a sketch plane
     Color planeEdge;
     Color axisX, axisY, axisZ;
+    Color planeXY, planeXZ, planeYZ;   ///< origin planes: the axis colours, muted
 
     // view cube and its buttons
     Color cubeLight;         ///< face colour toward the light

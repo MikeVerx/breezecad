@@ -65,6 +65,9 @@ Theme Theme::Light() {
     c.axisX           = Color::Hex(0xD64545);
     c.axisY           = Color::Hex(0x2E9E5B);
     c.axisZ           = Color::Hex(0x1D4ED8);
+    c.planeXY         = Color::Hex(0x7088B0);
+    c.planeXZ         = Color::Hex(0x739A84);
+    c.planeYZ         = Color::Hex(0xA9807E);
 
     c.cubeLight       = Color::Hex(0xFFFFFF);
     c.cubeShade       = Color::Hex(0xC4CBD4);
@@ -139,6 +142,9 @@ Theme Theme::Dark() {
     c.axisX           = Color::Hex(0xF06A6E);
     c.axisY           = Color::Hex(0x4CBB7F);
     c.axisZ           = Color::Hex(0x6E9BFF);
+    c.planeXY         = Color::Hex(0x8C9CC0);
+    c.planeXZ         = Color::Hex(0x8AAE98);
+    c.planeYZ         = Color::Hex(0xBE9592);
 
     c.cubeLight       = Color::Hex(0x5C6470);
     c.cubeShade       = Color::Hex(0x2E333B);
