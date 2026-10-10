@@ -488,8 +488,82 @@ void SketchEditor::AddTypedDimensions(doc::Document& doc, sketch::Sketch& sk, co
     }
 }
 
+namespace {
+
+/// Where the segment p-q first crosses the drawn curve `id` (sketch coordinates).
+std::optional<Vec2> FenceCrossing(const sketch::Sketch& sk, ObjectId id, Vec2 p, Vec2 q) {
+    const std::vector<Vec2> pts = sketch::SpanPolyline(sk, sketch::TrimSpan{id, std::nullopt, std::nullopt}, 96);
+    const Vec2 d = q - p;
+    std::optional<Vec2> best;
+    double bestT = 2;
+    for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
+        const Vec2 e = pts[i + 1] - pts[i];
+        const double den = d.Cross(e);
+        if (std::abs(den) < 1e-18) continue;
+        const double t = (pts[i] - p).Cross(e) / den, u = (pts[i] - p).Cross(d) / den;
+        if (t < 0 || t > 1 || u < 0 || u > 1 || t >= bestT) continue;
+        bestT = t;
+        best = p + d * t;
+    }
+    return best;
+}
+
+} // namespace
+
 void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchView& view) {
     doc::SketchFeature* f = Active(session);
+    // Dragging draws a fence: every piece it crosses is trimmed on release
+    // (one undo step), as in KOMPAS and Inventor.
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && view.vf.hovered && myCursor) myFence = {*myCursor};
+    if (!myFence.empty() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && myCursor &&
+        (myFence.size() > 1 || ImGui::IsMouseDragging(ImGuiMouseButton_Left, 4.0f))) {
+        if ((*myCursor - myFence.back()).Length() > view.MmPerPixel() * 3) myFence.push_back(*myCursor);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        for (std::size_t i = 0; i + 1 < myFence.size(); ++i)
+            DrawSketchSegment(app.ui, dl, view, myFence[i], myFence[i + 1], app.ui.C().danger, 1.5f, true);
+        return;
+    }
+    if (myFence.size() > 1 && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        const std::vector<Vec2> fence = std::move(myFence);
+        myFence.clear();
+        auto before = f->Clone();
+        sketch::Sketch trial = f->sketch;
+        int trimmed = 0;
+        for (std::size_t i = 0; i + 1 < fence.size(); ++i) {
+            // The curves change as pieces go: look again after each trim.
+            for (int guard = 0, again = 1; again && guard < 200; ++guard) {
+                again = 0;
+                std::vector<ObjectId> curves;
+                for (const auto& l : trial.lines) if (!l.projected) curves.push_back(l.id);
+                for (const auto& c : trial.circles) if (!c.projected) curves.push_back(c.id);
+                for (const auto& a : trial.arcs) if (!a.projected) curves.push_back(a.id);
+                for (const auto& s : trial.splines) curves.push_back(s.id);
+                for (const auto& e : trial.ellipses) curves.push_back(e.id);
+                for (const ObjectId id : curves) {
+                    const std::optional<Vec2> at = FenceCrossing(trial, id, fence[i], fence[i + 1]);
+                    if (!at) continue;
+                    const auto span = sketch::FindTrimSpan(trial, id, *at);
+                    if (span && sketch::Trim(trial, session.doc.Ids(), *span)) {
+                        ++trimmed;
+                        again = 1;
+                        break;
+                    }
+                }
+            }
+        }
+        if (trimmed == 0) return;
+        if (!sketch::Solve(trial).converged) {
+            app.notes.Error(Tr("После обрезки эскиз не решается — куски оставлены"));
+            return;
+        }
+        f->sketch = std::move(trial);
+        f->PruneProjections();
+        session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+        session.CommitInPlaceEdit(std::move(before), Tr("Обрезка"));
+        myClickUsed = true;
+        return;
+    }
+    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) myFence.clear();
     const bool onCurve = myHover && IsAnyCurve(myHover.kind);
     if (!onCurve || !myCursor) return;
     // Projected geometry belongs to the model.

@@ -6,15 +6,70 @@
 #include "core/I18n.h"
 #include "document/Commands.h"
 #include "sketch/Solver.h"
+#include "sketch/SplineGeometry.h"
 #include "ui/Widgets.h"
 
 #include <imgui_stdlib.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 
 namespace bz::app {
 namespace {
+
+/// Sketch entities in a screen box: wholly inside (`window`) or touching it.
+std::vector<ObjectId> EntitiesInBox(const sketch::Sketch& sk, const SketchView& view, ImVec2 lo, ImVec2 hi, bool window) {
+    const auto inside = [&](ImVec2 p) { return p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y; };
+    // A segment crossing the box (for "touching"): either end inside, or it
+    // cuts one of the box's sides.
+    const auto crosses = [&](ImVec2 p, ImVec2 q) {
+        if (inside(p) || inside(q)) return true;
+        const auto cut = [](ImVec2 a, ImVec2 b, ImVec2 c, ImVec2 d) {
+            const auto side = [](ImVec2 o, ImVec2 u, ImVec2 v) { return (u.x - o.x) * (v.y - o.y) - (u.y - o.y) * (v.x - o.x); };
+            return side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0;
+        };
+        const ImVec2 c1{lo.x, lo.y}, c2{hi.x, lo.y}, c3{hi.x, hi.y}, c4{lo.x, hi.y};
+        return cut(p, q, c1, c2) || cut(p, q, c2, c3) || cut(p, q, c3, c4) || cut(p, q, c4, c1);
+    };
+    const auto test = [&](const std::vector<Vec2>& pts) {
+        if (pts.empty()) return false;
+        std::vector<ImVec2> s;
+        for (const Vec2 p : pts) s.push_back(view.ToScreen(p));
+        if (window) return std::all_of(s.begin(), s.end(), inside);
+        if (s.size() == 1) return inside(s[0]);
+        for (std::size_t i = 0; i + 1 < s.size(); ++i)
+            if (crosses(s[i], s[i + 1])) return true;
+        return false;
+    };
+    const auto circlePoints = [](Vec2 c, double r, double from, double sweep) {
+        std::vector<Vec2> out;
+        for (int i = 0; i <= 48; ++i) {
+            const double t = from + sweep * i / 48;
+            out.push_back(c + Vec2{std::cos(t), std::sin(t)} * r);
+        }
+        return out;
+    };
+    std::vector<ObjectId> out;
+    for (const sketch::Point& p : sk.points)
+        if (!p.isOrigin && test({p.pos})) out.push_back(p.id);
+    for (const sketch::Line& l : sk.lines)
+        if (test({sk.PositionOf(l.start), sk.PositionOf(l.end)})) out.push_back(l.id);
+    for (const sketch::Circle& c : sk.circles)
+        if (test(circlePoints(sk.PositionOf(c.center), c.radius, 0, 2 * kPi))) out.push_back(c.id);
+    for (const sketch::Arc& a : sk.arcs) {
+        const Vec2 c = sk.PositionOf(a.center), s = sk.PositionOf(a.start) - c, e = sk.PositionOf(a.end) - c;
+        const double from = std::atan2(s.y, s.x);
+        double sweep = std::atan2(e.y, e.x) - from;
+        while (sweep <= 0) sweep += 2 * kPi;
+        if (test(circlePoints(c, s.Length(), from, sweep))) out.push_back(a.id);
+    }
+    for (const sketch::Spline& sp : sk.splines)
+        if (test(sketch::SampleSpline(sketch::SplineShape(sk, sp), 8))) out.push_back(sp.id);
+    for (const sketch::Ellipse& e : sk.ellipses)
+        if (test(sketch::SampleEllipse(sk, e, 48))) out.push_back(e.id);
+    return out;
+}
 
 constexpr std::array<SketchToolInfo, 33> kTools{{
     {SketchTool::Select, N_("Выбор"), "ui-check", N_("Выберите или перетащите элементы эскиза")},
@@ -400,6 +455,8 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
     const std::optional<Vec2> cursor = myCursor;
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        myBoxStart.reset();
+        if (!myHover) myBoxStart = ImGui::GetMousePos();   // a press on empty space may start a selection box
         myPressedOnEntity = static_cast<bool>(myHover);
         // Geometric constraints (glyphs) can be selected but not dragged.
         if (const sketch::Constraint* c = f->sketch.FindConstraint(myHover.id); c && !sketch::IsDimensional(c->type))
@@ -472,7 +529,30 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
         // Releasing commits the edit, which rebuilds once.
     }
 
+    // Selection box, as in CAD: dragged left to right (red) it takes what is
+    // wholly inside; right to left (green), whatever it touches.
+    if (myBoxStart && !myPressedOnEntity && (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 4.0f) || myBoxing)) {
+        myBoxing = true;
+        const ImVec2 a = *myBoxStart, b = ImGui::GetMousePos();
+        const bool window = b.x >= a.x;
+        const ui::ThemeColors& c = app.ui.C();
+        const Color tone = window ? c.danger : c.success;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImVec2 lo{std::min(a.x, b.x), std::min(a.y, b.y)}, hi{std::max(a.x, b.x), std::max(a.y, b.y)};
+        dl->AddRectFilled(lo, hi, ui::ToU32(tone.WithAlpha(0.10f)));
+        dl->AddRect(lo, hi, ui::ToU32(tone), 0, 0, app.ui.S(1.2f));
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+            if (!io.KeyShift && !io.KeyCtrl) mySelection.clear();
+            for (const ObjectId id : EntitiesInBox(f->sketch, view, lo, hi, window)) mySelection.insert(id);
+            myBoxStart.reset();
+            myBoxing = false;
+            myPressedOnEntity = false;
+        }
+        return;
+    }
+
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        myBoxStart.reset();
         if (myDragging) {
             session.CommitInPlaceEdit(std::move(myDragBefore), Tr("Перемещение в эскизе"));
         } else if (myHover) {
@@ -519,8 +599,29 @@ void SketchEditor::HandleInlineEdit(AppContext& app, Session& session, const Ske
     // A click on another dimension puts its name into the formula, as in
     // Inventor: "d3" replaces an untouched value, otherwise it is added.
     const ImVec2 mouse = ImGui::GetMousePos();
-    const bool overField = mouse.x >= at.x - width / 2 && mouse.x <= at.x + width / 2 && mouse.y >= at.y - ui.S(18) &&
+    const float grip = ui.S(18);   // a handle left of the field: drag it to move the dimension out of the way
+    const bool overField = mouse.x >= at.x - width / 2 - grip - ui.S(2) && mouse.x <= at.x + width / 2 && mouse.y >= at.y - ui.S(18) &&
                            mouse.y <= at.y + ui.S(18);
+    {
+        const ImVec2 g{at.x - width / 2 - grip - ui.S(2), at.y - ui.S(18)};
+        ImGui::SetCursorScreenPos(g);
+        ImGui::InvisibleButton("##dimension-grip", {grip, ui.S(36)});
+        const bool hot = ImGui::IsItemHovered() || ImGui::IsItemActive();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(g, {g.x + grip, g.y + ui.S(36)}, ui::ToU32(hot ? ui.C().hover : ui.C().field), ui.S(6));
+        for (int row = 0; row < 3; ++row)
+            for (int col = 0; col < 2; ++col)
+                dl->AddCircleFilled({g.x + ui.S(6) + static_cast<float>(col) * ui.S(6), g.y + ui.S(12) + static_cast<float>(row) * ui.S(6)}, ui.S(1.4f),
+                                    ui::ToU32(ui.C().textMuted));
+        if (hot) ui::ItemTooltip(ui, Tr("Перетащите, чтобы сдвинуть размер"));
+        if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.0f)) {
+            const ImVec2 now = ImGui::GetMousePos(), was{now.x - ImGui::GetIO().MouseDelta.x, now.y - ImGui::GetIO().MouseDelta.y};
+            const auto a = view.FromScreen(was), b = view.FromScreen(now);
+            if (a && b) c->labelOffset = c->labelOffset + (*b - *a);
+        }
+        if (ImGui::IsItemDeactivated()) myEditFocus = true;   // back to typing
+        ImGui::SetCursorScreenPos({at.x - width / 2, at.y - ui.S(18)});
+    }
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && view.vf.hovered && !overField) {
         const SketchHit hit = HitTest(f->sketch, view, mouse, session.doc.units);
         const sketch::Constraint* other = hit.kind == sketch::EntityKind::Constraint ? f->sketch.FindConstraint(hit.id) : nullptr;

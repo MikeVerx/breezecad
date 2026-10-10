@@ -237,6 +237,9 @@ private:
     bool        myClearOnSeed = false;   ///< the next typed key replaces the field's text
     int         myBackspaces = 0;        ///< Backspaces typed in the view, not applied yet
     std::unordered_set<ObjectId> mySelection;
+    std::optional<ImVec2>        myBoxStart;   ///< where a selection box was started (screen)
+    bool                         myBoxing = false;
+    std::vector<Vec2>            myFence;   ///< Обрезка: the path dragged so far (sketch coordinates)
     std::vector<ObjectId>        myPicks;
     SketchHit                    myHover;
 
