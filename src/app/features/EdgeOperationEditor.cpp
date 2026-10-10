@@ -4,6 +4,7 @@
 #include "ui/Widgets.h"
 
 #include <algorithm>
+#include <array>
 
 namespace bz::app {
 namespace {
@@ -44,13 +45,25 @@ bool EdgeOperationEditor::ShowStatus(const doc::Feature& feature) const {
 }
 
 std::string EdgeOperationEditor::Hint() const {
-    return Tr("Щёлкните рёбра модели (повторный щелчок убирает ребро), введите размер. Enter — готово, Esc — отмена");
+    return myByFace ? Tr("Щёлкните грань — возьмутся все её рёбра (повторный щелчок убирает их), введите размер. Enter — готово, Esc — отмена")
+                    : Tr("Щёлкните рёбра модели (повторный щелчок убирает ребро), введите размер. Enter — готово, Esc — отмена");
 }
 
 void EdgeOperationEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::EdgeFeature&>(feature);
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
+
+    Section(app, Tr("Щелчок выбирает"));
+    {
+        static constexpr std::array<const char*, 2> modes{N_("Ребро"), N_("Грань целиком")};
+        const int current = myByFace ? 1 : 0;
+        if (const int chosen = ui::Segmented(ui, "pick-mode", modes, current, 2, width); chosen != current) myByFace = chosen == 1;
+        Caption(app, myByFace ? Tr("Все рёбра грани разом. Убрать отдельные потом можно в режиме «Ребро».")
+                              : Tr("Каждое ребро по отдельности. Касательные к нему рёбра скругляются вместе с ним."),
+                width);
+    }
+    Gap(app);
 
     Section(app, Tr("Рёбра"));
     {
@@ -79,10 +92,29 @@ void EdgeOperationEditor::DrawInViewport(AppContext& app, Session& session, cons
     if (!f) return;
     const int index = session.doc.IndexOf(f->id);
     if (index < 0) return;
-    app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Edges);
+    app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index),
+                                      myByFace ? render::PickTarget::Faces : render::PickTarget::Edges);
     app.viewport.SetMarkedEdges(f->edges);
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
+    if (myByFace) {
+        // Every edge of the face: added, or all dropped when all were in already.
+        const std::vector<doc::EdgeReference> edges = app.viewport.PickFaceEdges(vf.ToLocal(ImGui::GetMousePos()));
+        if (edges.empty()) return;
+        const auto chosen = [&](const doc::EdgeReference& e) {
+            return std::any_of(f->edges.begin(), f->edges.end(), [&](const auto& x) { return SameEdge(x, e); });
+        };
+        if (std::all_of(edges.begin(), edges.end(), chosen)) {
+            std::erase_if(f->edges, [&](const auto& x) {
+                return std::any_of(edges.begin(), edges.end(), [&](const auto& e) { return SameEdge(x, e); });
+            });
+        } else {
+            for (const auto& e : edges)
+                if (!chosen(e)) f->edges.push_back(e);
+        }
+        Changed(session);
+        return;
+    }
     const auto picked = app.viewport.PickEdge(vf.ToLocal(ImGui::GetMousePos()));
     if (!picked) return;
     const auto existing = std::find_if(f->edges.begin(), f->edges.end(), [&](const auto& e) { return SameEdge(e, *picked); });
