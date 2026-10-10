@@ -176,123 +176,326 @@ void DrawMassProperties(AppContext& app) {
     ImGui::EndPopup();
 }
 
-/// "Библиотека": type -> standard -> size -> length; makes a new part.
-void DrawLibrary(AppContext& app) {
-    namespace parts = doc::parts;
+// --- "Библиотека": the standard parts window -----------------------------------
+
+namespace parts = doc::parts;
+
+/// Chooses a standard part (and remembers it among the recent ones).
+void PickPart(AppContext& app, const ShellState::Library::Pick& pick) {
+    auto& lib = app.shell.library;
+    const parts::StandardInfo* before = parts::FindStandard(lib.chosen.standard);
+    const parts::StandardInfo* s = parts::FindStandard(pick.standard);
+    if (!s) return;
+    if (!before || before->kind != s->kind) lib.appearance.clear();   // another kind: its own default look
+    lib.chosen = pick;
+    lib.family = static_cast<int>(parts::FamilyOf(*s));
+    // Show where it is in the tree.
+    for (int g = 0; g < static_cast<int>(parts::Groups().size()); ++g)
+        for (parts::PartKind k : parts::Groups()[static_cast<std::size_t>(g)].kinds)
+            if (k == s->kind) lib.openGroups.insert(g);
+    lib.openKinds.insert(static_cast<int>(s->kind));
+    std::erase_if(lib.recent, [&](const auto& r) { return r.standard == pick.standard; });
+    lib.recent.insert(lib.recent.begin(), pick);
+    if (lib.recent.size() > 8) lib.recent.resize(8);
+}
+
+/// The pick for a standard keeping the current size and length where it has them.
+ShellState::Library::Pick PickFor(const parts::StandardInfo& s, const ShellState::Library::Pick& from) {
+    ShellState::Library::Pick p{std::string(s.id), {}, 0};
+    const parts::StandardInfo* old = parts::FindStandard(from.standard);
+    p.size = old ? parts::MatchingSize(*old, from.size, s) : parts::Sizes(s).front();
+    const std::vector<double> lengths = parts::Lengths(s, p.size);
+    if (!lengths.empty()) {
+        p.length = lengths[lengths.size() / 2];
+        for (double l : lengths)
+            if (std::abs(l - from.length) < 1e-9) p.length = l;
+    }
+    return p;
+}
+
+/// A row of the tree: indent, optional chevron and icon, text. True when clicked.
+bool TreeRow(ui::Ui& ui, const char* id, int indent, const char* chevron, const char* icon, const std::string& text,
+             const char* note, bool selected, bool muted, float width) {
+    const ui::ThemeColors& c = ui.C();
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float h = ui.S(28);
+    const bool clicked = ImGui::InvisibleButton(id, {width, h});
+    const bool hovered = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (selected || hovered) dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(selected ? c.accentSoft : c.hover), ui.S(6));
+    float x = p.x + ui.S(6) + ui.S(16) * static_cast<float>(indent);
+    if (chevron) ui.icons.Draw(dl, chevron, {x, p.y + (h - ui.S(12)) / 2}, ui.S(12), c.textMuted);
+    x += ui.S(16);
+    if (icon) {
+        ui.icons.Draw(dl, icon, {x, p.y + (h - ui.S(15)) / 2}, ui.S(15), c.textSecondary);
+        x += ui.S(21);
+    }
+    const ImVec4 clip{p.x, p.y, p.x + width - ui.S(4), p.y + h};
+    ImFont* font = selected ? ui.fonts.medium : ui.fonts.body;
+    dl->AddText(font, ui.S(13), {x, p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(muted ? c.textDisabled : c.text), text.c_str(),
+                nullptr, 0, &clip);
+    if (note && *note) {
+        const float tw = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, text.c_str()).x;
+        dl->AddText(ui.fonts.caption, ui.S(11), {x + tw + ui.S(6), p.y + (h - ui.S(11)) / 2}, ui::ToU32(c.textMuted), note, nullptr, 0,
+                    &clip);
+    }
+    return clicked;
+}
+
+/// Section caption in the main part of the window.
+void LibraryHeading(ui::Ui& ui, const char* text) {
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, text);
+}
+
+/// Wrapped muted text.
+void LibraryNote(ui::Ui& ui, const char* text) {
+    ui::FontScope font(ui.fonts.caption);
+    ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
+    ImGui::PushTextWrapPos(0);
+    ImGui::TextUnformatted(text);
+    ImGui::PopTextWrapPos();
+    ImGui::PopStyleColor();
+}
+
+/// The chosen part: name, parameters, look, analogues, thread.
+void DrawLibraryPart(AppContext& app, const parts::StandardInfo& standard, float width) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
-    if (!BeginDialog(ui, "##library", app.shell.showLibrary, ui.S(760))) return;
-    auto& choice = app.shell.library;
+    auto& lib = app.shell.library;
+    const parts::KindInfo& kind = parts::KindOf(standard.kind);
+    {
+        ui::FontScope font(ui.fonts.display);
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(Trf("{} {}", Tr(kind.title.data()), standard.title).c_str());
+        ImGui::PopTextWrapPos();
+    }
+    if (!standard.note.empty()) LibraryNote(ui, Tr(standard.note.data()));
+
+    // Parameters.
+    const std::vector<std::string> sizes = parts::Sizes(standard);
+    if (std::ranges::find(sizes, lib.chosen.size) == sizes.end()) lib.chosen.size = sizes.front();
+    LibraryHeading(ui, standard.kind == parts::PartKind::BallBearing    ? Tr("Подшипник")
+                       : standard.kind == parts::PartKind::RingExternal ? Tr("Диаметр вала, мм")
+                       : standard.kind == parts::PartKind::RingInternal ? Tr("Диаметр отверстия, мм")
+                       : parts::HasThread(standard.kind)                ? Tr("Резьба")
+                                                                        : Tr("Диаметр, мм"));
+    {
+        std::vector<const char*> labels;
+        for (const std::string& s : sizes) labels.push_back(s.c_str());
+        const int current = static_cast<int>(std::ranges::find(sizes, lib.chosen.size) - sizes.begin());
+        if (const int chosen = ui::Segmented(ui, "size", labels, current, 6, width); chosen != current && chosen >= 0)
+            lib.chosen.size = sizes[static_cast<std::size_t>(chosen)];
+    }
+    const std::vector<double> lengths = parts::Lengths(standard, lib.chosen.size);
+    if (!lengths.empty()) {
+        LibraryHeading(ui, Tr("Длина, мм"));
+        int current = -1;
+        for (std::size_t i = 0; i < lengths.size(); ++i)
+            if (std::abs(lengths[i] - lib.chosen.length) < 1e-9) current = static_cast<int>(i);
+        if (current < 0) {
+            current = static_cast<int>(lengths.size() / 2);
+            lib.chosen.length = lengths[static_cast<std::size_t>(current)];
+        }
+        std::vector<std::string> texts;
+        for (double l : lengths) texts.push_back(std::format("{:g}", l));
+        std::vector<const char*> labels;
+        for (const std::string& t : texts) labels.push_back(t.c_str());
+        if (const int chosen = ui::Segmented(ui, "length", labels, current, 8, width); chosen != current && chosen >= 0)
+            lib.chosen.length = lengths[static_cast<std::size_t>(chosen)];
+    } else {
+        lib.chosen.length = 0;
+    }
+
+    // Look: the metals of the standard appearances.
+    LibraryHeading(ui, Tr("Стиль отображения"));
+    {
+        const std::string current = lib.appearance.empty() ? std::string(parts::DefaultAppearance(standard.kind)) : lib.appearance;
+        const float box = ui.S(30), gap = ui.S(6);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        std::string name;
+        int n = 0;
+        for (const doc::Appearance& a : doc::StandardAppearances()) {
+            if (a.finish != doc::Finish::Metal) continue;
+            if (n++ > 0) ImGui::SameLine(0, gap);
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            ImGui::PushID(a.id.c_str());
+            if (ImGui::InvisibleButton("##look", {box, box})) lib.appearance = a.id;
+            if (ImGui::IsItemHovered()) ui::ItemTooltip(ui, Tr(a.name.c_str()));
+            ImGui::PopID();
+            const bool on = a.id == current;
+            dl->AddRectFilled({p.x + ui.S(3), p.y + ui.S(3)}, {p.x + box - ui.S(3), p.y + box - ui.S(3)}, ui::ToU32(a.face), ui.S(5));
+            dl->AddRect({p.x + ui.S(3), p.y + ui.S(3)}, {p.x + box - ui.S(3), p.y + box - ui.S(3)}, ui::ToU32(a.edges), ui.S(5), 0,
+                        ui.S(1));
+            if (on) {
+                dl->AddRect(p, {p.x + box, p.y + box}, ui::ToU32(c.accent), ui.S(7), 0, ui.S(2));
+                name = Tr(a.name.c_str());
+            }
+        }
+        if (current == parts::DefaultAppearance(standard.kind)) name = Trf("{} (по умолчанию)", name);
+        LibraryNote(ui, name.c_str());
+    }
+
+    // Analogues: other standards of the same kind.
+    const std::vector<const parts::StandardInfo*> analogues = parts::Analogues(standard);
+    if (!analogues.empty()) {
+        LibraryHeading(ui, Tr("Аналоги из других стандартов"));
+        float x = 0;
+        for (const parts::StandardInfo* a : analogues) {
+            const std::string label(a->title);
+            const float w = ui.fonts.medium->CalcTextSizeA(ui.S(13), FLT_MAX, 0, label.c_str()).x + ui.S(28);
+            if (x > 0 && x + w > width) x = 0;
+            else if (x > 0) ImGui::SameLine(0, ui.S(6));
+            x += w + ui.S(6);
+            ImGui::PushID(a->id.data());
+            const bool clicked = ui::SecondaryButton(ui, "##analogue", label.c_str(), nullptr, {w, ui.S(30)});
+            if (ImGui::IsItemHovered() && !a->note.empty()) ui::ItemTooltip(ui, Tr(a->note.data()));
+            ImGui::PopID();
+            if (clicked) {
+                PickPart(app, PickFor(*a, lib.chosen));
+                return;   // the window shows the other standard from the next frame
+            }
+        }
+    }
+
+    // Thread: drawn by default.
+    if (parts::HasThread(standard.kind)) {
+        LibraryHeading(ui, Tr("Вид резьбы"));
+        static constexpr std::array<const char*, 2> kinds{N_("Условная (нарисованная)"), N_("Настоящая (вырезанная)")};
+        const int current = lib.realThread ? 1 : 0;
+        if (const int chosen = ui::Segmented(ui, "thread", kinds, current, 2, width); chosen != current && chosen >= 0)
+            lib.realThread = chosen == 1;
+        LibraryNote(ui, lib.realThread ? Tr("Резьба вырезается в модели: тяжелее, и её грани мешают позиционировать деталь в сборке.")
+                                       : Tr("Резьба рисуется на гладком цилиндре; при экспорте в STEP/STL вырезается настоящая."));
+    }
+}
+
+/// "Выбор стандартного изделия": recent parts, the standards filter, the
+/// folders on the left, the chosen part on the right; makes a new part.
+void DrawLibrary(AppContext& app) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    if (!BeginDialog(ui, "##library", app.shell.showLibrary, ui.S(1000))) return;
+    auto& lib = app.shell.library;
     const auto close = [&] {
         app.shell.showLibrary = false;
         ImGui::CloseCurrentPopup();
     };
     {
         ui::FontScope font(ui.fonts.title);
-        ImGui::TextUnformatted(Tr("Стандартные изделия"));
+        ImGui::TextUnformatted(Tr("Выбор стандартного изделия"));
     }
     ImGui::Dummy({0, ui.S(2)});
 
-    // Left: the kinds; right: standard, size, length.
-    const auto kinds = parts::Kinds();
-    choice.kind = std::clamp(choice.kind, 0, static_cast<int>(kinds.size()) - 1);
-    const float left = ui.S(230), gap = ui.S(16);
-    ImGui::BeginGroup();
-    for (int i = 0; i < static_cast<int>(kinds.size()); ++i) {
-        const bool on = i == choice.kind;
+    // Hotbar: home (nothing chosen) and the parts chosen in this session.
+    if (ui::IconButton(ui, "##library-home", "ui-home", ui.S(30), ui.S(16), Tr("К началу: ничего не выбрано"), true, lib.chosen.standard.empty()))
+        lib.chosen = {};
+    for (std::size_t i = 0; i < lib.recent.size(); ++i) {
+        const parts::StandardInfo* s = parts::FindStandard(lib.recent[i].standard);
+        if (!s) continue;
+        ImGui::SameLine(0, ui.S(6));
+        const std::string label = parts::ShortName(*s);
+        const bool on = lib.chosen.standard == lib.recent[i].standard;
+        const float w = ui.fonts.body->CalcTextSizeA(ui.S(12), FLT_MAX, 0, label.c_str()).x + ui.S(20);
         const ImVec2 p = ImGui::GetCursorScreenPos();
-        const float h = ui.S(30);
-        ImGui::PushID(i);
-        if (ImGui::InvisibleButton("##kind", {left, h}) && !on) {
-            choice.kind = i;
-            choice.standard = choice.size = choice.length = 0;
-        }
+        ImGui::PushID(static_cast<int>(i));
+        const bool clicked = ImGui::InvisibleButton("##recent", {w, ui.S(30)});
         const bool hovered = ImGui::IsItemHovered();
         ImGui::PopID();
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        if (on || hovered)
-            dl->AddRectFilled(p, {p.x + left, p.y + h}, ui::ToU32(on ? c.accentSoft : c.hover), ui.S(6));
-        dl->AddText(on ? ui.fonts.medium : ui.fonts.body, ui.S(13), {p.x + ui.S(10), p.y + (h - ui.S(13)) / 2 - ui.S(1)},
-                    ui::ToU32(on ? c.text : c.textSecondary), Tr(kinds[static_cast<std::size_t>(i)].name.data()));
-    }
-    ImGui::EndGroup();
-    ImGui::SameLine(0, gap);
-
-    ImGui::BeginGroup();
-    const float width = ImGui::GetContentRegionAvail().x;
-    const std::vector<const parts::StandardInfo*> standards = parts::StandardsOf(kinds[static_cast<std::size_t>(choice.kind)].kind);
-    choice.standard = std::clamp(choice.standard, 0, static_cast<int>(standards.size()) - 1);
-    ui::FieldLabel(ui, Tr("Стандарт"));
-    {
-        std::vector<const char*> labels;
-        for (const auto* s : standards) labels.push_back(s->title.data());
-        if (const int chosen = ui::Segmented(ui, "standard", labels, choice.standard, 2, width);
-            chosen != choice.standard && chosen >= 0) {
-            choice.standard = chosen;
-            choice.size = choice.length = 0;
+        dl->AddRectFilled(p, {p.x + w, p.y + ui.S(30)}, ui::ToU32(on ? c.accentSoft : hovered ? c.hover : c.field), ui.S(15));
+        dl->AddRect(p, {p.x + w, p.y + ui.S(30)}, ui::ToU32(on ? c.accentSoftBorder : c.fieldBorder), ui.S(15));
+        dl->AddText(ui.fonts.body, ui.S(12), {p.x + ui.S(10), p.y + ui.S(8)}, ui::ToU32(c.text), label.c_str());
+        if (clicked) {
+            const auto pick = lib.recent[i];
+            PickPart(app, pick);
+            break;
         }
-    }
-    const parts::StandardInfo& standard = *standards[static_cast<std::size_t>(choice.standard)];
-    if (!standard.note.empty()) {
-        ui::FontScope font(ui.fonts.caption);
-        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
-        ImGui::TextUnformatted(Tr(standard.note.data()));
-        ImGui::PopStyleColor();
     }
     ImGui::Dummy({0, ui.S(4)});
 
-    const std::vector<std::string> sizes = parts::Sizes(standard);
-    choice.size = std::clamp(choice.size, 0, static_cast<int>(sizes.size()) - 1);
-    ui::FieldLabel(ui, standard.kind == parts::PartKind::BallBearing ? Tr("Подшипник")
-                       : standard.kind == parts::PartKind::RingExternal ? Tr("Диаметр вала, мм")
-                       : standard.kind == parts::PartKind::RingInternal ? Tr("Диаметр отверстия, мм")
-                                                                         : Tr("Резьба"));
+    const float left = ui.S(300), gap = ui.S(20), height = ui.S(500);
+    // The standards filter, over the folders.
     {
-        std::vector<const char*> labels;
-        for (const std::string& s : sizes) labels.push_back(s.c_str());
-        if (const int chosen = ui::Segmented(ui, "size", labels, choice.size, 6, width); chosen != choice.size && chosen >= 0) {
-            choice.size = chosen;
-            choice.length = 0;
-        }
+        static constexpr std::array<const char*, 3> families{"ГОСТ", "ISO", "DIN"};
+        if (const int chosen = ui::Segmented(ui, "family", families, lib.family, 3, left); chosen != lib.family && chosen >= 0)
+            lib.family = chosen;
     }
-    const std::string& size = sizes[static_cast<std::size_t>(choice.size)];
-    const std::vector<double> lengths = parts::Lengths(standard, size);
-    double length = 0;
-    if (!lengths.empty()) {
-        ImGui::Dummy({0, ui.S(4)});
-        ui::FieldLabel(ui, Tr("Длина, мм"));
-        choice.length = std::clamp(choice.length, 0, static_cast<int>(lengths.size()) - 1);
-        std::vector<std::string> texts;
-        for (double l : lengths) texts.push_back(std::format("{:g}", l));
-        std::vector<const char*> labels;
-        for (const std::string& t : texts) labels.push_back(t.c_str());
-        if (const int chosen = ui::Segmented(ui, "length", labels, choice.length, 8, width); chosen >= 0) choice.length = chosen;
-        length = lengths[static_cast<std::size_t>(choice.length)];
-    }
-    ImGui::EndGroup();
+    ImGui::Dummy({0, ui.S(2)});
 
-    ui::Divider(ui, c.dividerSoft);
-    const std::string designation = parts::Designation({std::string(standard.id), size, length});
-    ValueRow(ui, Tr("Обозначение"), designation);
-    {
-        ui::FontScope font(ui.fonts.caption);
-        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
-        ImGui::PushTextWrapPos(0);
-        ImGui::TextUnformatted(Tr("Деталь откроется новым документом: эскизы с размерами от переменных, вращение или выдавливание, "
-                                  "условная резьба. Свойства детали заполнены. Форма упрощённая, как в библиотеках САПР."));
-        ImGui::PopTextWrapPos();
-        ImGui::PopStyleColor();
+    // Left: folders -> varieties -> standard parts of the chosen standards body.
+    ImGui::BeginChild("##library-tree", {left, height - ui.S(40)}, ImGuiChildFlags_None);
+    const float treeWidth = ImGui::GetContentRegionAvail().x;
+    const auto groups = parts::Groups();
+    for (int g = 0; g < static_cast<int>(groups.size()); ++g) {
+        const parts::GroupInfo& group = groups[static_cast<std::size_t>(g)];
+        const bool open = lib.openGroups.contains(g);
+        ImGui::PushID(g);
+        if (TreeRow(ui, "##group", 0, open ? "ui-chevron-down" : "ui-chevron-right", "ui-folder", Tr(group.name.data()), nullptr,
+                    false, false, treeWidth)) {
+            if (open) lib.openGroups.erase(g);
+            else lib.openGroups.insert(g);
+        }
+        if (open)
+            for (parts::PartKind k : group.kinds) {
+                const parts::KindInfo& kind = parts::KindOf(k);
+                std::vector<const parts::StandardInfo*> items;
+                for (const parts::StandardInfo* s : parts::StandardsOf(k))
+                    if (static_cast<int>(parts::FamilyOf(*s)) == lib.family) items.push_back(s);
+                const bool kindOpen = lib.openKinds.contains(static_cast<int>(k));
+                ImGui::PushID(static_cast<int>(k));
+                if (TreeRow(ui, "##kind", 1, kindOpen ? "ui-chevron-down" : "ui-chevron-right", nullptr, Tr(kind.variety.data()), nullptr,
+                            false, items.empty(), treeWidth)) {
+                    if (kindOpen) lib.openKinds.erase(static_cast<int>(k));
+                    else lib.openKinds.insert(static_cast<int>(k));
+                }
+                if (kindOpen) {
+                    if (items.empty()) {
+                        static constexpr std::array<const char*, 3> none{N_("Нет изделий по ГОСТ"), N_("Нет изделий по ISO"),
+                                                                         N_("Нет изделий по DIN")};
+                        TreeRow(ui, "##none", 2, nullptr, nullptr, Tr(none[static_cast<std::size_t>(lib.family)]), nullptr, false, true,
+                                treeWidth);
+                    }
+                    for (const parts::StandardInfo* s : items) {
+                        ImGui::PushID(s->id.data());
+                        if (TreeRow(ui, "##item", 2, nullptr, nullptr, std::string(s->title), Tr(s->note.data()),
+                                    lib.chosen.standard == s->id, false, treeWidth))
+                            PickPart(app, PickFor(*s, lib.chosen));
+                        ImGui::PopID();
+                    }
+                }
+                ImGui::PopID();
+            }
+        ImGui::PopID();
     }
-    ImGui::Dummy({0, ui.S(8)});
+    ImGui::EndChild();
+    if (ui::SecondaryButton(ui, "##library-pack", Tr("Добавить пакет стандартных изделий"), nullptr, {left, ui.S(34)}))
+        app.notes.Info(Tr("Пакеты стандартных изделий появятся в следующих версиях"));
+
+    // Right: the chosen part, or nothing.
+    const parts::StandardInfo* standard = parts::FindStandard(lib.chosen.standard);
+    ImGui::SameLine(0, gap);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - (height - ui.S(40)) - ImGui::GetStyle().ItemSpacing.y);
+    ImGui::BeginChild("##library-part", {0, height}, ImGuiChildFlags_None);
+    if (standard) DrawLibraryPart(app, *standard, ImGui::GetContentRegionAvail().x - ui.S(8));
+    ImGui::EndChild();
+
+    // Footer.
+    ui::Divider(ui, c.dividerSoft);
+    standard = parts::FindStandard(lib.chosen.standard);
+    const parts::Request request{lib.chosen.standard, lib.chosen.size, lib.chosen.length, lib.realThread, lib.appearance};
+    if (standard) ValueRow(ui, Tr("Обозначение"), parts::Designation(request));
+    else ImGui::Dummy({0, ui.S(26)});
+    ImGui::Dummy({0, ui.S(4)});
     const float bw = ui.S(170);
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 2 * bw - ui.S(8));
-    if (ui::SecondaryButton(ui, "##library-cancel", Tr("Отмена"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+    if (ui::SecondaryButton(ui, "##library-cancel", Tr("Закрыть"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape))
         close();
     ImGui::SameLine(0, ui.S(8));
-    if (ui::PrimaryButton(ui, "##library-create", Tr("Создать деталь"), "Enter", {bw, ui.S(36)}) ||
-        ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-        if (CreateStandardPart(app, std::string(standard.id), size, length)) close();
-    }
+    if ((ui::PrimaryButton(ui, "##library-create", Tr("Создать деталь"), "Enter", {bw, ui.S(36)}, standard != nullptr) ||
+         (standard && ImGui::IsKeyPressed(ImGuiKey_Enter))) &&
+        standard && CreateStandardPart(app, request))
+        close();
     ImGui::EndPopup();
 }
 

@@ -31,12 +31,28 @@ enum class PartKind : unsigned char {
     BallBearing,        ///< подшипник шариковый радиальный
     RingExternal,       ///< кольцо стопорное наружное (на вал)
     RingInternal,       ///< кольцо стопорное внутреннее (в отверстие)
+    PinCylindrical,     ///< штифт цилиндрический
+    PinTaper,           ///< штифт конический
+    CotterPin,          ///< шплинт
 };
 
+/// A variety of parts (a kind): its row in a group and its full name.
+/// Names are Russian; the interface translates them when it shows them.
 struct KindInfo {
     PartKind         kind;
-    std::string_view name;   ///< "Болт шестигранный" (Russian; translated when shown)
+    std::string_view variety;   ///< "С шестигранной головкой" (in its group)
+    std::string_view title;     ///< "Болт с шестигранной головкой"
+    std::string_view noun;      ///< "Болт" (designations, short names)
 };
+
+/// A folder of the library: "Болты", "Винты"… with its varieties.
+struct GroupInfo {
+    std::string_view         name;
+    std::span<const PartKind> kinds;
+};
+
+/// Standards bodies, for the filter of the library window.
+enum class Family : unsigned char { Gost, Iso, Din };
 
 struct StandardInfo {
     std::string_view id;     ///< stable key, "gost7798"
@@ -47,6 +63,21 @@ struct StandardInfo {
 
 /// Every kind, in the order the dialog lists them.
 std::span<const KindInfo> Kinds();
+const KindInfo& KindOf(PartKind kind);
+/// The folders of the library window, in order.
+std::span<const GroupInfo> Groups();
+Family FamilyOf(const StandardInfo& standard);
+/// "Болт ГОСТ 7798-70": for the list of recent parts.
+std::string ShortName(const StandardInfo& standard);
+/// Standards of the same kind other than this one (the analogues).
+std::vector<const StandardInfo*> Analogues(const StandardInfo& standard);
+/// The size of `to` matching `size` of `from` (same diameter or bearing),
+/// or `to`'s first size when it has no such one.
+std::string MatchingSize(const StandardInfo& from, std::string_view size, const StandardInfo& to);
+/// The part has a thread (screws, bolts, nuts).
+bool HasThread(PartKind kind);
+/// Appearance id (doc::StandardAppearances) a new part of this kind gets.
+std::string_view DefaultAppearance(PartKind kind);
 /// Standards of one kind, in the order the dialog lists them.
 std::vector<const StandardInfo*> StandardsOf(PartKind kind);
 const StandardInfo* FindStandard(std::string_view id);
@@ -60,6 +91,11 @@ struct Request {
     std::string standard;   ///< StandardInfo::id
     std::string size;       ///< one of Sizes()
     double      length = 0; ///< one of Lengths(), unused when there are none
+    /// A real cut thread instead of the drawn (cosmetic) one. Drawn is the
+    /// default: a cut thread makes faces that confuse placing in an assembly.
+    bool        realThread = false;
+    /// Appearance of the body (doc::StandardAppearances id); empty: DefaultAppearance.
+    std::string appearance{};
 };
 
 /// Outer size of the part as the table gives it (mm): across X, Y and along

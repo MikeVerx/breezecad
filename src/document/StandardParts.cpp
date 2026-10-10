@@ -146,22 +146,58 @@ constexpr RingRow kRingsInternal[] = {{10, 1, 10.8},   {12, 1, 13},     {15, 1, 
                                       {30, 1.2, 32.1}, {32, 1.2, 34.4}, {35, 1.5, 37.8}, {40, 1.75, 43.5}, {45, 1.75, 48.5},
                                       {50, 2, 54.2},   {55, 2, 59.2},   {60, 2, 64.2}};
 
+// --- pins and cotter pins ------------------------------------------------------
+struct PinRow {   // cylindrical: diameter; taper: the small end's diameter (taper 1:50)
+    double d, lMin, lMax;
+};
+struct CotterRow {   // nominal = hole diameter; wire across both halves; eye outer diameter
+    double d, wire, eye, lMin, lMax;
+};
+constexpr PinRow kPinsCylindrical[] = {{2, 6, 20},   {3, 8, 30},    {4, 8, 40},     {5, 10, 50},    {6, 12, 60},
+                                       {8, 14, 80},  {10, 18, 100}, {12, 22, 120},  {16, 26, 160},  {20, 35, 200}};
+constexpr PinRow kPinsTaper[] = {{2, 10, 35},  {3, 12, 45},   {4, 14, 55},   {5, 18, 60},   {6, 22, 90},
+                                 {8, 22, 120}, {10, 26, 160}, {12, 32, 180}, {16, 40, 200}, {20, 45, 200}};
+constexpr CotterRow kCotters[] = {{1.6, 1.4, 3.2, 8, 32},   {2, 1.8, 4, 10, 40},   {2.5, 2.3, 5, 12, 50},
+                                  {3.2, 2.9, 6.4, 14, 63},  {4, 3.7, 8, 18, 80},   {5, 4.6, 10, 22, 100},
+                                  {6.3, 5.9, 12.6, 32, 125}, {8, 7.5, 16, 40, 160}, {10, 9.5, 20, 45, 200}};
+constexpr double kPinLengths[] = {6,  8,  10, 12, 14, 16, 18, 20, 22, 24, 26,  28,  30,  32,  35,  40, 45,
+                                  50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 120, 140, 160, 180, 200};
+constexpr double kCotterLengths[] = {4,  5,  6,  8,  10, 12, 14, 16, 18, 20,  22,  25,  28,  32,  36,
+                                     40, 45, 50, 56, 63, 71, 80, 90, 100, 112, 125, 140, 160, 180, 200};
+
 // ===========================================================================
 // The catalogue.
 // ===========================================================================
 
 constexpr KindInfo kKinds[] = {
-    {PartKind::HexBolt, "Болт шестигранный"},
-    {PartKind::SocketScrew, "Винт с цилиндрической головкой"},
-    {PartKind::CountersunkScrew, "Винт с потайной головкой"},
-    {PartKind::PanScrew, "Винт с полукруглой головкой"},
-    {PartKind::HexNut, "Гайка шестигранная"},
-    {PartKind::LockNut, "Гайка самоконтрящаяся"},
-    {PartKind::FlatWasher, "Шайба плоская"},
-    {PartKind::SpringWasher, "Шайба пружинная"},
-    {PartKind::BallBearing, "Подшипник шариковый радиальный"},
-    {PartKind::RingExternal, "Кольцо стопорное наружное"},
-    {PartKind::RingInternal, "Кольцо стопорное внутреннее"},
+    {PartKind::HexBolt, "С шестигранной головкой", "Болт с шестигранной головкой", "Болт"},
+    {PartKind::SocketScrew, "С цилиндрической головкой", "Винт с цилиндрической головкой и шестигранником", "Винт"},
+    {PartKind::CountersunkScrew, "С потайной головкой", "Винт с потайной головкой", "Винт"},
+    {PartKind::PanScrew, "С полукруглой головкой", "Винт с полукруглой головкой", "Винт"},
+    {PartKind::HexNut, "Шестигранные", "Гайка шестигранная", "Гайка"},
+    {PartKind::LockNut, "Самоконтрящиеся", "Гайка самоконтрящаяся", "Гайка"},
+    {PartKind::FlatWasher, "Плоские", "Шайба плоская", "Шайба"},
+    {PartKind::SpringWasher, "Пружинные", "Шайба пружинная", "Шайба"},
+    {PartKind::PinCylindrical, "Цилиндрические", "Штифт цилиндрический", "Штифт"},
+    {PartKind::PinTaper, "Конические", "Штифт конический", "Штифт"},
+    {PartKind::CotterPin, "Шплинты", "Шплинт", "Шплинт"},
+    {PartKind::BallBearing, "Шариковые радиальные", "Подшипник шариковый радиальный однорядный", "Подшипник"},
+    {PartKind::RingExternal, "Наружные (на вал)", "Кольцо стопорное наружное", "Кольцо"},
+    {PartKind::RingInternal, "Внутренние (в отверстие)", "Кольцо стопорное внутреннее", "Кольцо"},
+};
+
+constexpr PartKind kBolts[] = {PartKind::HexBolt};
+constexpr PartKind kScrews[] = {PartKind::SocketScrew, PartKind::CountersunkScrew, PartKind::PanScrew};
+constexpr PartKind kNuts[] = {PartKind::HexNut, PartKind::LockNut};
+constexpr PartKind kWashers[] = {PartKind::FlatWasher, PartKind::SpringWasher};
+constexpr PartKind kPins[] = {PartKind::PinCylindrical, PartKind::PinTaper};
+constexpr PartKind kCotterPins[] = {PartKind::CotterPin};
+constexpr PartKind kBearings_[] = {PartKind::BallBearing};
+constexpr PartKind kRings[] = {PartKind::RingExternal, PartKind::RingInternal};
+
+constexpr GroupInfo kGroups[] = {
+    {"Болты", kBolts},     {"Винты", kScrews},         {"Гайки", kNuts},           {"Шайбы", kWashers},
+    {"Штифты", kPins},     {"Шплинты", kCotterPins},   {"Подшипники", kBearings_}, {"Кольца стопорные", kRings},
 };
 
 constexpr StandardInfo kStandards[] = {
@@ -192,6 +228,13 @@ constexpr StandardInfo kStandards[] = {
     {"din471", "DIN 471", PartKind::RingExternal, ""},
     {"gost13943", "ГОСТ 13943-86", PartKind::RingInternal, ""},
     {"din472", "DIN 472", PartKind::RingInternal, ""},
+    {"gost3128", "ГОСТ 3128-70", PartKind::PinCylindrical, ""},
+    {"iso2338", "ISO 2338", PartKind::PinCylindrical, ""},
+    {"din7", "DIN 7", PartKind::PinCylindrical, ""},
+    {"gost3129", "ГОСТ 3129-70", PartKind::PinTaper, "конусность 1:50"},
+    {"iso2339", "ISO 2339", PartKind::PinTaper, "конусность 1:50"},
+    {"gost397", "ГОСТ 397-79", PartKind::CotterPin, ""},
+    {"iso1234", "ISO 1234", PartKind::CotterPin, ""},
 };
 
 bool IsGost(const StandardInfo& s) { return s.title.starts_with("ГОСТ"); }
@@ -266,14 +309,17 @@ int GostBearingNumber(int iso) {
     return (series == 0 ? 100 : series * 100) + iso % 100;
 }
 
-/// Lengths from the preferred series within [lo, hi].
+/// Lengths from the preferred series within [lo, hi] (screws: the ГОСТ or
+/// the ISO series; pins and cotter pins their own).
 std::vector<double> LengthsBetween(const StandardInfo& s, double lo, double hi) {
     std::vector<double> out;
-    const auto add = [&](auto series) {
+    const auto add = [&](const auto& series) {
         for (double l : series)
             if (l >= lo - 1e-9 && l <= hi + 1e-9) out.push_back(l);
     };
-    if (IsGost(s)) add(kGostLengths);
+    if (s.kind == PartKind::PinCylindrical || s.kind == PartKind::PinTaper) add(kPinLengths);
+    else if (s.kind == PartKind::CotterPin) add(kCotterLengths);
+    else if (IsGost(s)) add(kGostLengths);
     else add(kIsoLengths);
     std::ranges::sort(out);
     out.erase(std::unique(out.begin(), out.end()), out.end());
@@ -396,7 +442,9 @@ public:
         f->extent = RevolveExtent::Full;
         f->operation = op;
         f->angle.name = myDoc.NextParameterName();
-        return Add(std::move(f), "Вращение");
+        RevolveFeature& made = Add(std::move(f), "Вращение");
+        if (op == BooleanOp::NewBody && !myFirstBody) myFirstBody = made.id;
+        return made;
     }
 
     ExtrudeFeature& Extrude(const SketchFeature& sk, const X& distance, BooleanOp op, bool reversed = false,
@@ -409,14 +457,16 @@ public:
         f->distance.name = myDoc.NextParameterName();
         f->distance.expression = distance.text;
         f->distance.value = distance.v;
-        return Add(std::move(f), op == BooleanOp::Cut ? "Вырез" : "Выдавливание");
+        ExtrudeFeature& made = Add(std::move(f), op == BooleanOp::Cut ? "Вырез" : "Выдавливание");
+        if (op == BooleanOp::NewBody && !myFirstBody) myFirstBody = made.id;
+        return made;
     }
 
     /// Cosmetic thread on the cylinder of radius `d`/2 around Z.
     void Thread(const X& d, const X& pitch, double midZ, std::optional<X> length, double size) {
         auto f = std::make_unique<ThreadFeature>();
         f->face = CylinderTouch{{0, 0, midZ}, {0, 0, 1}, d.v / 2, {}};
-        f->cosmetic = true;
+        f->cosmetic = !myRealThread;
         f->size = size;
         f->pitch.name = myDoc.NextParameterName();
         f->pitch.expression = pitch.text;
@@ -457,8 +507,22 @@ private:
         sk.sketch.AddConstraint(myDoc.Ids(), c);
     }
 
+public:
+    /// The feature that made the body (its look is set on it).
+    ObjectId FirstBody() const { return myFirstBody; }
+    void     RealThread(bool real) { myRealThread = real; }
+
+    /// A circle centred at `centre` (held by dimensions) with a diameter dimension.
+    void CircleAt(SketchFeature& sk, const P& centre, const X& diameter) {
+        const ObjectId c = sk.sketch.AddCircle(myDoc.Ids(), Point(sk, centre), diameter.v / 2);
+        Dimension(sk, sketch::ConstraintType::Diameter, c, {}, diameter);
+    }
+
+private:
     Document& myDoc;
     ObjectId  myOrigin;
+    ObjectId  myFirstBody;
+    bool      myRealThread = false;
 };
 
 /// Shank from z = 0 down to -L with a 45° tip chamfer, and a head profile
@@ -489,6 +553,50 @@ void Finish(Document& d, std::string name, std::string designation) {
 // ===========================================================================
 
 std::span<const KindInfo> Kinds() { return kKinds; }
+
+const KindInfo& KindOf(PartKind kind) {
+    for (const KindInfo& k : kKinds)
+        if (k.kind == kind) return k;
+    return kKinds[0];
+}
+
+std::span<const GroupInfo> Groups() { return kGroups; }
+
+Family FamilyOf(const StandardInfo& s) {
+    if (IsGost(s)) return Family::Gost;
+    return s.title.starts_with("DIN") ? Family::Din : Family::Iso;
+}
+
+std::string ShortName(const StandardInfo& s) { return std::format("{} {}", KindOf(s.kind).noun, s.title); }
+
+std::vector<const StandardInfo*> Analogues(const StandardInfo& standard) {
+    std::vector<const StandardInfo*> out;
+    for (const StandardInfo& s : kStandards)
+        if (s.kind == standard.kind && s.id != standard.id) out.push_back(&s);
+    return out;
+}
+
+bool HasThread(PartKind kind) {
+    switch (kind) {
+        case PartKind::HexBolt:
+        case PartKind::SocketScrew:
+        case PartKind::CountersunkScrew:
+        case PartKind::PanScrew:
+        case PartKind::HexNut:
+        case PartKind::LockNut: return true;
+        default:                return false;
+    }
+}
+
+std::string_view DefaultAppearance(PartKind kind) {
+    switch (kind) {
+        case PartKind::SpringWasher:
+        case PartKind::RingExternal:
+        case PartKind::RingInternal:
+        case PartKind::CotterPin: return "std.blued";   // spring steel, oxidised
+        default:                  return "std.steel";
+    }
+}
 
 std::vector<const StandardInfo*> StandardsOf(PartKind kind) {
     std::vector<const StandardInfo*> out;
@@ -528,8 +636,34 @@ std::vector<std::string> Sizes(const StandardInfo& s) {
         case PartKind::RingInternal:
             for (const RingRow& r : kRingsInternal) out.push_back(Num(r.d1));
             break;
+        case PartKind::PinCylindrical:
+            for (const PinRow& r : kPinsCylindrical) out.push_back(Num(r.d));
+            break;
+        case PartKind::PinTaper:
+            for (const PinRow& r : kPinsTaper) out.push_back(Num(r.d));
+            break;
+        case PartKind::CotterPin:
+            for (const CotterRow& r : kCotters) out.push_back(Num(r.d));
+            break;
     }
     return out;
+}
+
+std::string MatchingSize(const StandardInfo& from, std::string_view size, const StandardInfo& to) {
+    const std::vector<std::string> sizes = Sizes(to);
+    if (sizes.empty()) return {};
+    if (from.kind == PartKind::BallBearing && to.kind == PartKind::BallBearing) {
+        // Through the ISO number: 204 (ГОСТ) = 6204.
+        for (const BearingRow& r : kBearings) {
+            const std::string inFrom = std::to_string(from.id == "gost8338" ? GostBearingNumber(r.number) : r.number);
+            if (inFrom == size) return std::to_string(to.id == "gost8338" ? GostBearingNumber(r.number) : r.number);
+        }
+        return sizes.front();
+    }
+    const std::optional<double> d = SizeNumber(size);
+    for (const std::string& s : sizes)
+        if (const auto e = SizeNumber(s); d && e && std::abs(*d - *e) < 1e-9) return s;
+    return sizes.front();
 }
 
 std::vector<double> Lengths(const StandardInfo& s, std::string_view size) {
@@ -551,12 +685,34 @@ std::vector<double> Lengths(const StandardInfo& s, std::string_view size) {
         case PartKind::PanScrew:
             if (const SlotRow* r = FindRow(SlotRows(s.id), *d)) return LengthsBetween(s, r->lMin, r->lMax);
             break;
+        case PartKind::PinCylindrical:
+            if (const PinRow* r = FindRow(Rows(kPinsCylindrical), *d)) return LengthsBetween(s, r->lMin, r->lMax);
+            break;
+        case PartKind::PinTaper:
+            if (const PinRow* r = FindRow(Rows(kPinsTaper), *d)) return LengthsBetween(s, r->lMin, r->lMax);
+            break;
+        case PartKind::CotterPin:
+            if (const CotterRow* r = FindRow(Rows(kCotters), *d)) return LengthsBetween(s, r->lMin, r->lMax);
+            break;
         default: break;
     }
     return {};
 }
 
+namespace {
+std::string DesignationOf(const Request& q);
+}
+
 std::string Designation(const Request& q) {
+    std::string out = DesignationOf(q);
+    const StandardInfo* s = FindStandard(q.standard);
+    // ГОСТ writes decimals with a comma: «Шплинт 3,2×20 ГОСТ 397-79».
+    if (s && IsGost(*s)) std::ranges::replace(out, '.', ',');
+    return out;
+}
+
+namespace {
+std::string DesignationOf(const Request& q) {
     const StandardInfo* s = FindStandard(q.standard);
     if (!s) return {};
     const std::string title(s->title);
@@ -587,9 +743,13 @@ std::string Designation(const Request& q) {
                 if (d && std::abs(r.d1 - *d) < 1e-9) return std::format("Кольцо {} \xE2\x80\x93 {}\xC3\x97{}", title, q.size, Num(r.s));
             return plain("Кольцо");
         }
+        case PartKind::PinCylindrical:
+        case PartKind::PinTaper:         return withLength("Штифт");
+        case PartKind::CotterPin:        return withLength("Шплинт");
     }
     return {};
 }
+} // namespace
 
 Expected<Made> MakePart(const Request& q) {
     const StandardInfo* s = FindStandard(q.standard);
@@ -604,6 +764,7 @@ Expected<Made> MakePart(const Request& q) {
     Made made;
     Document& doc = made.doc;
     Builder b(doc);
+    b.RealThread(q.realThread && HasThread(s->kind));
     const double dn = SizeNumber(q.size).value_or(0);
     const std::string designation = Designation(q);
 
@@ -792,7 +953,57 @@ Expected<Made> MakePart(const Request& q) {
             Finish(doc, "Кольцо", designation);
             break;
         }
+        case PartKind::PinCylindrical: {
+            // From z = 0 up to L, a small chamfer at both ends.
+            const X d = b.Var("d", dn), L = b.Var("L", q.length), c = d * 0.1, r = Half(d);
+            SketchFeature& sk = b.Sketch(origin::kPlaneXZ);
+            const std::vector<ObjectId> lines =
+                b.Polygon(sk, {{N(0), N(0)}, {r - c, N(0)}, {r, c}, {r, L - c}, {r - c, L}, {N(0), L}});
+            Builder::MarkAxis(sk, lines.back());
+            b.Revolve(sk, lines.back());
+            made.envelope = {dn, dn, q.length};
+            Finish(doc, "Штифт", designation);
+            break;
+        }
+        case PartKind::PinTaper: {
+            // The small end (d) at z = 0; the diameter grows by 1/50 of the length.
+            const X d = b.Var("d", dn), L = b.Var("L", q.length);
+            SketchFeature& sk = b.Sketch(origin::kPlaneXZ);
+            const std::vector<ObjectId> lines =
+                b.Polygon(sk, {{N(0), N(0)}, {Half(d), N(0)}, {Half(d + L / 50), L}, {N(0), L}});
+            Builder::MarkAxis(sk, lines.back());
+            b.Revolve(sk, lines.back());
+            const double big = dn + q.length / 50;
+            made.envelope = {big, big, q.length};
+            Finish(doc, "Штифт", designation);
+            break;
+        }
+        case PartKind::CotterPin: {
+            // Shank (both halves together) from z = 0 down to -l, split along
+            // its length; an eye of the bent wire on top, in the XZ plane.
+            const CotterRow& r = *FindRow(Rows(kCotters), dn);
+            const X w = b.Var("dw", r.wire), c = b.Var("c", r.eye), l = b.Var("l", q.length);
+            SketchFeature& shank = b.Sketch(origin::kPlaneXZ);
+            const std::vector<ObjectId> lines =
+                b.Polygon(shank, {{N(0), l, false, true}, {Half(w), l, false, true}, {Half(w), N(0)}, {N(0), N(0)}});
+            Builder::MarkAxis(shank, lines.back());
+            b.Revolve(shank, lines.back());
+            SketchFeature& eye = b.Sketch(origin::kPlaneXZ);
+            const P centre{N(0), Half(c) - w / 4};
+            b.CircleAt(eye, centre, c);
+            b.CircleAt(eye, centre, c - w);
+            // Thinner than the shank: faces tangent to it would make the union invalid.
+            b.Extrude(eye, w * 0.8, BooleanOp::Join, false, ExtentType::Symmetric);
+            SketchFeature& split = b.Sketch(origin::kPlaneXZ);
+            b.Slot(split, w * 0.1, {N(0), l + N(1), false, true}, {N(0), w / 2, false, true});
+            b.Extrude(split, w * 2, BooleanOp::Cut, false, ExtentType::Symmetric);
+            made.envelope = {r.eye, r.wire, q.length + r.eye - r.wire / 4};
+            Finish(doc, "Шплинт", designation);
+            break;
+        }
     }
+    const std::string appearance = q.appearance.empty() ? std::string(DefaultAppearance(s->kind)) : q.appearance;
+    if (const Appearance* a = ::bz::doc::FindStandard(appearance); a && b.FirstBody()) doc.look.SetBody(b.FirstBody(), a);
     return made;
 }
 

@@ -153,8 +153,8 @@ void StartChamfer(AppContext& app) {
     app.ops.chamfer.StartNew(app, *s);
 }
 
-bool CreateStandardPart(AppContext& app, const std::string& standard, const std::string& size, double length) {
-    Expected<doc::parts::Made> made = doc::parts::MakePart({standard, size, length});
+bool CreateStandardPart(AppContext& app, const doc::parts::Request& request) {
+    Expected<doc::parts::Made> made = doc::parts::MakePart(request);
     if (!made) {
         app.notes.Error(Tr(made.GetError().message));
         return false;

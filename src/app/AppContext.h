@@ -14,6 +14,7 @@
 
 #include <functional>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -49,9 +50,20 @@ struct ShellState {
     std::string        shortcutNote;             ///< "taken from …" after a reassignment
     bool               showMassProperties = false;   ///< the "МЦХ" window
     bool               showLibrary = false;          ///< the standard parts window ("Библиотека")
-    /// What the library window shows (indices into its lists; kept while the app runs).
-    struct LibraryChoice {
-        int kind = 0, standard = 0, size = 0, length = 0;
+    /// The standard parts window: what it shows, kept while the program runs
+    /// (not saved: the recent parts are those of this session only).
+    struct Library {
+        struct Pick {
+            std::string standard, size;   ///< doc::parts ids
+            double      length = 0;
+        };
+        int              family = 0;        ///< filter: 0 ГОСТ, 1 ISO, 2 DIN
+        std::set<int>    openGroups;        ///< expanded folders (index in parts::Groups())
+        std::set<int>    openKinds;         ///< expanded varieties (parts::PartKind)
+        Pick             chosen;            ///< empty standard: nothing chosen
+        bool             realThread = false;
+        std::string      appearance;        ///< empty: the default of the kind
+        std::vector<Pick> recent;           ///< newest first
     } library;
 
     render::DisplayStyle displayStyle = render::DisplayStyle::ShadedWithEdges;

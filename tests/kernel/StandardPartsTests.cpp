@@ -83,6 +83,33 @@ TEST_CASE("a standard part stays parametric: the length variable drives the mode
     CHECK((model.BoundingBox()->max - model.BoundingBox()->min).z == doctest::Approx(58));
 }
 
+TEST_CASE("standard part catalogue: groups, analogues, matching sizes, look, real thread") {
+    std::size_t kinds = 0;
+    for (const GroupInfo& g : Groups()) kinds += g.kinds.size();
+    CHECK(kinds == Kinds().size());
+    const StandardInfo& gost = *FindStandard("gost8338");
+    CHECK(MatchingSize(gost, "204", *FindStandard("iso15")) == "6204");
+    CHECK(MatchingSize(*FindStandard("gost7798"), "М12", *FindStandard("iso4017")) == "M12");
+    CHECK(Analogues(*FindStandard("gost3128")).size() == 2);
+    CHECK(FamilyOf(*FindStandard("din127")) == Family::Din);
+    CHECK(ShortName(*FindStandard("gost5915")) == "Гайка ГОСТ 5915-70");
+    CHECK(Designation({"gost397", "3.2", 20}) == "Шплинт 3,2\xC3\x97" "20 ГОСТ 397-79");
+
+    Expected<Made> bolt = MakePart({"gost7798", "М8", 40, true, "std.brass"});
+    REQUIRE(bolt);
+    REQUIRE(bolt->doc.look.bodies.size() == 1);
+    CHECK(bolt->doc.look.bodies.front().appearance == "std.brass");
+    kernel::Model model;
+    model.Rebuild(bolt->doc);
+    for (const auto& f : bolt->doc.Features()) CHECK(f->status.state == FeatureState::Ok);
+    // A real thread takes material away: less than the plain shank.
+    Expected<Made> plain = MakePart({"gost7798", "М8", 40});
+    REQUIRE(plain);
+    kernel::Model plainModel;
+    plainModel.Rebuild(plain->doc);
+    CHECK(model.Volume() < plainModel.Volume() - 10);
+}
+
 TEST_CASE("unknown standard part requests are errors") {
     CHECK_FALSE(MakePart({"nope", "M10", 40}));
     CHECK_FALSE(MakePart({"iso4017", "M7", 40}));
