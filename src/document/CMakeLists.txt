@@ -22,7 +22,8 @@ add_library(bz_document STATIC
     SweepFeature.cpp
     ThreadFeature.cpp
     UnknownFeature.cpp
-    WorkAxisFeature.cpp)
+    WorkAxisFeature.cpp
+    WorkPointFeature.cpp)
 target_link_libraries(bz_document
     PUBLIC  bz::core bz::sketch bz::json
     PRIVATE bz::miniz)

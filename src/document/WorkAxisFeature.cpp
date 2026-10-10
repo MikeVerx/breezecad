@@ -14,16 +14,20 @@ using json_io::ReadMember;
 
 namespace {
 
-constexpr std::array<std::pair<WorkAxisMethod, std::string_view>, 3> kMethodIds{{
+constexpr std::array<std::pair<WorkAxisMethod, std::string_view>, 4> kMethodIds{{
     {WorkAxisMethod::Edge, "edge"},
     {WorkAxisMethod::Cylinder, "cylinder"},
     {WorkAxisMethod::Planes, "planes"},
+    {WorkAxisMethod::Points, "points"},
 }};
 
 } // namespace
 
 std::vector<ObjectId> WorkAxisFeature::Dependencies() const {
     std::vector<ObjectId> out;
+    if (method == WorkAxisMethod::Points)
+        for (const ObjectId w : pointFeatures)
+            if (w) out.push_back(w);
     if (method != WorkAxisMethod::Planes) return out;
     for (const ObjectId p : {plane1, plane2})
         if (p && !origin::IsOriginElement(p)) out.push_back(p);
@@ -38,6 +42,7 @@ void WorkAxisFeature::SaveFields(Json& out) const {
                            {"radius", cylinder->radius}};
     out["plane1"] = json_io::ToJson(plane1);
     out["plane2"] = json_io::ToJson(plane2);
+    if (method == WorkAxisMethod::Points) json_io::SavePointPicks(out, points, pointEdges, pointFeatures);
 }
 
 Status WorkAxisFeature::LoadFields(const Json& in) {
@@ -62,8 +67,15 @@ Status WorkAxisFeature::LoadFields(const Json& in) {
         t.radius = (*it)["radius"].get<double>();
         c = t;
     }
+    std::vector<Vec3> pts;
+    std::vector<std::optional<EdgeReference>> ptEdges;
+    std::vector<ObjectId> ptFeatures;
+    if (!json_io::LoadPointPicks(in, pts, ptEdges, ptFeatures)) return Error{"Рабочая ось: повреждены точки"};
     method = m;
     edge = e;
+    points = std::move(pts);
+    pointEdges = std::move(ptEdges);
+    pointFeatures = std::move(ptFeatures);
     cylinder = c;
     plane1 = p1;
     plane2 = p2;

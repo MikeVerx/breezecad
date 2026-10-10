@@ -16,6 +16,7 @@
 #include "document/ShellFeature.h"
 #include "document/ThreadFeature.h"
 #include "document/WorkAxisFeature.h"
+#include "document/WorkPointFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "kernel/occt/Coil.h"
 #include "kernel/occt/Section.h"
@@ -23,6 +24,7 @@
 #include "kernel/occt/Extrude.h"
 #include "kernel/occt/FaceMatch.h"
 #include "kernel/occt/Fillet.h"
+#include "kernel/occt/Points.h"
 #include "kernel/occt/Shell.h"
 #include "kernel/occt/Hole.h"
 #include "kernel/occt/Loft.h"
@@ -360,6 +362,108 @@ std::optional<Frame> PlaneOf(ObjectId id, const doc::Document& doc) {
     return std::nullopt;
 }
 
+/// Points picked for a plane or an axis, moved to where they are now: work
+/// points where they were placed, vertices found again by an edge ending
+/// there. False (with `error`) when a work point is missing or not placed.
+bool ResolvePointPicks(std::vector<Vec3>& points, std::vector<std::optional<doc::EdgeReference>>& edges,
+                       std::vector<ObjectId>& workPoints, const doc::Document& doc, const std::vector<Body>& bodies,
+                       const char*& error) {
+    edges.resize(points.size());
+    workPoints.resize(points.size());
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        if (workPoints[i]) {
+            const auto* wp = doc.FindAs<doc::WorkPointFeature>(workPoints[i]);
+            if (!wp || !wp->position) {
+                error = "Рабочая точка не построена";
+                return false;
+            }
+            points[i] = *wp->position;
+            continue;
+        }
+        if (!edges[i]) continue;
+        for (auto it = bodies.rbegin(); it != bodies.rend(); ++it)
+            if (const auto at = occt::ResolveVertex(*edges[i], points[i], it->shape)) {
+                points[i] = *at;
+                break;
+            }
+    }
+    return true;
+}
+
+/// The edge `ref` on the most recent body that has it.
+std::optional<TopoDS_Edge> FindEdge(const doc::EdgeReference& ref, const std::vector<Body>& bodies) {
+    for (auto it = bodies.rbegin(); it != bodies.rend(); ++it)
+        if (auto e = occt::ResolveEdges({ref}, it->shape).front()) return e;
+    return std::nullopt;
+}
+
+/// Puts a work point where its method says.
+void PlaceWorkPoint(doc::WorkPointFeature& wp, const doc::Document& doc, const std::vector<Body>& bodies) {
+    const auto fail = [&](const char* message) {
+        wp.position.reset();
+        wp.status = {FeatureState::Error, message};
+    };
+    using doc::WorkPointMethod;
+    switch (wp.method) {
+        case WorkPointMethod::Vertex: {
+            if (!wp.edge) return fail("Щёлкните вершину тела");
+            std::optional<Vec3> at;
+            for (auto it = bodies.rbegin(); it != bodies.rend() && !at; ++it) at = occt::ResolveVertex(*wp.edge, wp.vertex, it->shape);
+            if (!at) return fail("Вершина не найдена: модель изменилась слишком сильно");
+            wp.vertex = *at;
+            wp.position = *at;
+            break;
+        }
+        case WorkPointMethod::Center: {
+            if (wp.sphere) {
+                std::optional<Vec3> c;
+                for (auto it = bodies.rbegin(); it != bodies.rend() && !c; ++it)
+                    if (const auto face = occt::ResolveAnyFace(it->shape, *wp.sphere)) c = occt::SphereCenter(*face);
+                if (!c) return fail("Сферическая грань не найдена");
+                wp.position = c;
+                break;
+            }
+            if (!wp.edge) return fail("Щёлкните круглое ребро или сферу");
+            const auto edge = FindEdge(*wp.edge, bodies);
+            if (!edge) return fail("Ребро не найдено: модель изменилась слишком сильно");
+            const auto c = occt::EdgeCenter(*edge);
+            if (!c) return fail("У ребра нет центра: нужна окружность, дуга или эллипс");
+            wp.position = c;
+            break;
+        }
+        case WorkPointMethod::Midpoint: {
+            if (!wp.edge) return fail("Щёлкните ребро");
+            const auto edge = FindEdge(*wp.edge, bodies);
+            if (!edge) return fail("Ребро не найдено: модель изменилась слишком сильно");
+            wp.position = occt::EdgeMiddle(*edge);
+            break;
+        }
+        case WorkPointMethod::Intersection: {
+            std::optional<std::pair<Vec3, Vec3>> line;
+            if (wp.axis) {
+                const auto* wa = doc.FindAs<doc::WorkAxisFeature>(wp.axis);
+                if (wa) line = wa->line;
+            } else if (wp.edge) {
+                for (auto it = bodies.rbegin(); it != bodies.rend() && !line; ++it) line = occt::ResolveLine(*wp.edge, it->shape);
+            }
+            if (!line) return fail("Щёлкните прямое ребро или рабочую ось");
+            const std::optional<Frame> plane = PlaneOf(wp.plane, doc);
+            if (!plane) return fail("Выберите плоскость");
+            const double along = line->second.Dot(plane->normal);
+            if (std::abs(along) < 1e-9) return fail("Линия параллельна плоскости — пересечения нет");
+            const double t = (plane->origin - line->first).Dot(plane->normal) / along;
+            wp.position = line->first + line->second * t;
+            break;
+        }
+        case WorkPointMethod::Coordinates:
+            for (const Parameter* p : {&wp.x, &wp.y, &wp.z})
+                if (p->HasError()) return fail("Координата задана с ошибкой");
+            wp.position = Vec3{wp.x.value, wp.y.value, wp.z.value};
+            break;
+    }
+    wp.status = {FeatureState::Ok, {}};
+}
+
 /// Puts a work axis where its edge, cylinder or two planes say.
 void PlaceWorkAxis(doc::WorkAxisFeature& wa, const doc::Document& doc, const std::vector<Body>& bodies) {
     const auto fail = [&](const char* message) {
@@ -393,6 +497,15 @@ void PlaceWorkAxis(doc::WorkAxisFeature& wa, const doc::Document& doc, const std
             const double d1 = a->normal.Dot(a->origin), d2 = b->normal.Dot(b->origin);
             const Vec3 p = (b->normal.Cross(dir) * d1 + dir.Cross(a->normal) * d2) * (1.0 / len2);
             wa.line = std::make_pair(p, dir.Normalized());
+            break;
+        }
+        case doc::WorkAxisMethod::Points: {
+            if (wa.points.size() < 2) return fail("Выберите две точки");
+            const char* error = nullptr;
+            if (!ResolvePointPicks(wa.points, wa.pointEdges, wa.pointFeatures, doc, bodies, error)) return fail(error);
+            const Vec3 dir = wa.points[1] - wa.points[0];
+            if (dir.Length() < 1e-9) return fail("Точки совпадают — ось через них не одна");
+            wa.line = std::make_pair(wa.points[0], dir.Normalized());
             break;
         }
     }
@@ -486,17 +599,9 @@ void PlaceWorkPlane(doc::WorkPlaneFeature& wp, const doc::Document& doc, const s
         return;
     }
     if (wp.method == WorkPlaneMethod::ThreePoints) {
-        if (wp.points.size() < 3) return fail("Выберите три вершины");
-        // Each vertex found again: the end of its edge nearest to where it was.
-        wp.pointEdges.resize(wp.points.size());
-        for (std::size_t i = 0; i < wp.points.size(); ++i) {
-            if (!wp.pointEdges[i]) continue;
-            for (auto it = bodies.rbegin(); it != bodies.rend(); ++it)
-                if (const auto at = occt::ResolveVertex(*wp.pointEdges[i], wp.points[i], it->shape)) {
-                    wp.points[i] = *at;
-                    break;
-                }
-        }
+        if (wp.points.size() < 3) return fail("Выберите три точки");
+        const char* error = nullptr;
+        if (!ResolvePointPicks(wp.points, wp.pointEdges, wp.pointFeatures, doc, bodies, error)) return fail(error);
         const Vec3 a = wp.points[0], u = wp.points[1] - a, v = wp.points[2] - a;
         const Vec3 n = u.Cross(v);
         if (n.Length() < 1e-9 * std::max(1.0, u.Length() * v.Length())) return fail("Точки лежат на одной прямой — плоскость через них не одна");
@@ -818,6 +923,8 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                 PlaceWorkPlane(*wp, doc, bodies);
             } else if (auto* wa = dynamic_cast<doc::WorkAxisFeature*>(&f)) {
                 PlaceWorkAxis(*wa, doc, bodies);
+            } else if (auto* wpt = dynamic_cast<doc::WorkPointFeature*>(&f)) {
+                PlaceWorkPoint(*wpt, doc, bodies);
             } else if (auto* section = dynamic_cast<doc::SectionFeature*>(&f)) {
                 ApplySection(*section, doc, bodies);
             } else if (f.status.state == FeatureState::NotComputed) {

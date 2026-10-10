@@ -288,6 +288,9 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             }
             DrawWorkAxes(app, dl, vf, session, static_cast<std::size_t>(-1),
                          app.shell.hoveredTreeItem ? app.shell.hoveredTreeItem : session.selectedFeature);
+            if (!operation || !operation->DrawsPoints())
+                DrawWorkPoints(app, dl, vf, WorkPoints(session),
+                               app.shell.hoveredTreeItem ? app.shell.hoveredTreeItem : session.selectedFeature);
             // Sketches not used by an operation stay visible, like in Inventor.
             // (An open sketch operation draws its own sketch.)
             for (std::size_t i = 0; i < session.doc.EndMarker(); ++i) {

@@ -41,6 +41,8 @@ public:
     virtual bool PicksFaces() const { return false; }
     /// True when the operation draws the origin and work planes itself (work plane).
     virtual bool DrawsPlanes() const { return false; }
+    /// True when the operation draws the work points itself (it picks them).
+    virtual bool DrawsPoints() const { return false; }
 
     virtual const char* Title() const = 0;    ///< "Выдавливание", shown in the status bar
     virtual std::string Hint() const = 0;     ///< what to do, for the status bar

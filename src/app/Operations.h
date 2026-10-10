@@ -31,6 +31,7 @@ void StartRevolve(AppContext& app);
 void StartFillet(AppContext& app);
 void StartChamfer(AppContext& app);
 void StartShell(AppContext& app);
+void StartWorkPoint(AppContext& app);
 void StartHole(AppContext& app);
 void StartWorkPlane(AppContext& app);
 void StartWorkAxis(AppContext& app);

@@ -3,7 +3,8 @@
 // and as a reference. Built one of three ways:
 //   Edge      along a straight edge of the body;
 //   Cylinder  the axis of a cylindrical face (a shaft, a hole);
-//   Planes    where two planes (origin or work planes) meet.
+//   Planes    where two planes (origin or work planes) meet;
+//   Points    through two points: vertices of the body or work points.
 
 #include "document/EdgeReference.h"
 #include "document/Feature.h"
@@ -11,10 +12,11 @@
 
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace bz::doc {
 
-enum class WorkAxisMethod : unsigned char { Edge, Cylinder, Planes };
+enum class WorkAxisMethod : unsigned char { Edge, Cylinder, Planes, Points };
 
 class WorkAxisFeature final : public FeatureBase<WorkAxisFeature> {
 public:
@@ -24,6 +26,10 @@ public:
     std::optional<EdgeReference> edge;
     std::optional<CylinderTouch> cylinder;   ///< `radial` unused
     ObjectId                     plane1, plane2;
+    /// Points: the two points, as WorkPlaneFeature::points (see json_io::SavePointPicks).
+    std::vector<Vec3>                         points;
+    std::vector<std::optional<EdgeReference>> pointEdges;
+    std::vector<ObjectId>                     pointFeatures;
 
     /// Where the axis is after the last rebuild: a point on it and its unit
     /// direction (runtime, never saved).

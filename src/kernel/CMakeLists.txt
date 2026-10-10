@@ -10,6 +10,7 @@ add_library(bz_kernel STATIC
     occt/Hole.cpp
     occt/Loft.cpp
     occt/Measure.cpp
+    occt/Points.cpp
     occt/Project.cpp
     occt/Revolve.cpp
     occt/Shell.cpp

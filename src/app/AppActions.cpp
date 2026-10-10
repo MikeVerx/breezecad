@@ -89,6 +89,9 @@ void RegisterActions(AppContext& app) {
            [&app] { StartWorkPlane(app); }});
     a.Add({"feature.workAxis", N_("Ось"), "work-axis", 0, N_("Рабочая ось: по оси цилиндра, по ребру или на пересечении плоскостей"), inModel,
            [&app] { StartWorkAxis(app); }});
+    a.Add({"feature.workPoint", N_("Точка"), "work-point", 0,
+           N_("Рабочая точка: вершина, центр окружности или сферы, середина ребра, пересечение с плоскостью, координаты"), inModel,
+           [&app] { StartWorkPoint(app); }});
     a.Add({"feature.patternRect", N_("Прямоугольный"), "pattern-rect", 0, N_("Повторить операции рядами вдоль осей"), inModel,
            [&app] { StartPattern(app, doc::PatternKind::Rectangular); }});
     a.Add({"feature.patternCircular", N_("Круговой"), "pattern-circular", 0, N_("Повторить операции по кругу вокруг оси"), inModel,

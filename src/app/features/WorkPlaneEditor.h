@@ -19,6 +19,7 @@ public:
     std::string Hint() const override;
     bool        PicksFaces() const override { return true; }
     bool        DrawsPlanes() const override { return true; }
+    bool        DrawsPoints() const override { return myMethod == doc::WorkPlaneMethod::ThreePoints; }
     /// Through an edge: the edges of the body before the plane are picked.
     bool        PicksOriginal() const override {
         return myMethod == doc::WorkPlaneMethod::Angle || myMethod == doc::WorkPlaneMethod::ThreePoints ||

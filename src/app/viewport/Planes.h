@@ -34,6 +34,24 @@ const ShownPlane* PlaneUnderCursor(const ViewportFrame& vf, ImVec2 mouse, const 
 void DrawWorkAxes(AppContext& app, ImDrawList* dl, const ViewportFrame& vf, const Session& session,
                   std::size_t before = static_cast<std::size_t>(-1), ObjectId hot = {});
 
+/// The placed work axis whose line passes within a few pixels of the
+/// cursor (before index `before`), or an invalid id.
+ObjectId AxisUnderCursor(AppContext& app, const ViewportFrame& vf, ImVec2 mouse, const Session& session,
+                         std::size_t before = static_cast<std::size_t>(-1));
+
+/// A placed work point: where it is and its name.
+struct ShownPoint {
+    ObjectId    id;
+    Vec3        at;
+    std::string label;
+};
+/// Active, placed work points of the part, before index `before` (all by default).
+std::vector<ShownPoint> WorkPoints(const Session& session, std::size_t before = static_cast<std::size_t>(-1));
+/// Draws them as small crosses with a dot and their names; `hot` stronger.
+void DrawWorkPoints(AppContext& app, ImDrawList* dl, const ViewportFrame& vf, const std::vector<ShownPoint>& points, ObjectId hot = {});
+/// The work point within a few pixels of the cursor, or nullptr.
+const ShownPoint* PointUnderCursor(AppContext& app, const ViewportFrame& vf, ImVec2 mouse, const std::vector<ShownPoint>& points);
+
 /// Queues the plane for this frame's 3D view (DrawViewport hands the queue
 /// to the viewport) and draws its label. `hot`: hovered or chosen. `faint`:
 /// stepped back so a body stays readable.

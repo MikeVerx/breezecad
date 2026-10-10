@@ -14,6 +14,7 @@
 #include "document/ThreadFeature.h"
 #include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
+#include "document/WorkPointFeature.h"
 
 namespace bz::doc {
 
@@ -35,6 +36,7 @@ FeatureRegistry& FeatureRegistry::Default() {
         r.Register(std::string(WorkPlaneFeature::kType), [] { return std::make_unique<WorkPlaneFeature>(); });
         r.Register(std::string(WorkAxisFeature::kType), [] { return std::make_unique<WorkAxisFeature>(); });
         r.Register(std::string(ShellFeature::kType), [] { return std::make_unique<ShellFeature>(); });
+        r.Register(std::string(WorkPointFeature::kType), [] { return std::make_unique<WorkPointFeature>(); });
         r.Register(std::string(ThreadFeature::kType), [] { return std::make_unique<ThreadFeature>(); });
         return r;
     }();

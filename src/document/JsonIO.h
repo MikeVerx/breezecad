@@ -12,6 +12,8 @@
 #include <nlohmann/json.hpp>
 
 #include <array>
+#include <optional>
+#include <vector>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -47,6 +49,16 @@ bool Read(const Json& j, Parameter& out);
 bool Read(const Json& j, FaceReference& out);
 Json ToJson(const EdgeReference& e);
 bool Read(const Json& j, EdgeReference& out);
+
+/// Points picked on the body or work points (planes through three points,
+/// axes through two): `points` model space, `edges` an edge ending at each
+/// vertex (or none), `workPoints` the work point used instead (or none);
+/// the three are parallel. Keys "points", "pointEdges", "pointFeatures".
+void SavePointPicks(Json& out, const std::vector<Vec3>& points, const std::vector<std::optional<EdgeReference>>& edges,
+                    const std::vector<ObjectId>& workPoints);
+/// False when malformed; missing keys give empty lists.
+bool LoadPointPicks(const Json& in, std::vector<Vec3>& points, std::vector<std::optional<EdgeReference>>& edges,
+                    std::vector<ObjectId>& workPoints);
 
 /// Enum values in files are written by name: `table` lists {value, name}.
 template <class E, std::size_t N>

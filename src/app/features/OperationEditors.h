@@ -15,6 +15,7 @@
 #include "app/features/ThreadEditor.h"
 #include "app/features/WorkAxisEditor.h"
 #include "app/features/WorkPlaneEditor.h"
+#include "app/features/WorkPointEditor.h"
 
 #include <array>
 
@@ -28,6 +29,7 @@ struct OperationEditors {
     HoleEditor    hole;
     WorkPlaneEditor workPlane;
     WorkAxisEditor  workAxis;
+    WorkPointEditor workPoint;
     PatternEditor   pattern;
     MirrorEditor    mirror;
     LoftEditor      loft;
@@ -38,8 +40,8 @@ struct OperationEditors {
     ShellEditor     shell;
     AppearanceEditor appearance;
 
-    std::array<OperationEditor*, 16> All() {
-        return {&extrude, &revolve, &fillet,  &chamfer, &hole, &workPlane, &workAxis,
+    std::array<OperationEditor*, 17> All() {
+        return {&extrude, &revolve, &fillet,  &chamfer, &hole, &workPlane, &workAxis, &workPoint,
                 &pattern, &mirror,  &loft,    &sweep,   &coil, &section,   &thread, &shell, &appearance};
     }
 

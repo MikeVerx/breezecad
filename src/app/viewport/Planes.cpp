@@ -3,6 +3,7 @@
 #include "document/Origin.h"
 #include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
+#include "document/WorkPointFeature.h"
 #include "ui/Widgets.h"
 
 #include <algorithm>
@@ -126,6 +127,67 @@ void DrawWorkAxes(AppContext& app, ImDrawList* dl, const ViewportFrame& vf, cons
         }
         dl->AddText(app.ui.fonts.bodySmall, app.ui.S(12), {b.x + app.ui.S(4), b.y - app.ui.S(14)}, ink, wa->name.c_str());
     }
+}
+
+ObjectId AxisUnderCursor(AppContext& app, const ViewportFrame& vf, ImVec2 mouse, const Session& session, std::size_t before) {
+    const double reach = PlaneHalfSize(session) * 1.2;
+    const auto& features = session.doc.Features();
+    ObjectId best;
+    float bestDistance = app.ui.S(6);
+    for (std::size_t i = 0; i < features.size() && i < before; ++i) {
+        const auto* wa = dynamic_cast<const doc::WorkAxisFeature*>(features[i].get());
+        if (!wa || wa->suppressed || !wa->line) continue;
+        const auto& [point, dir] = *wa->line;
+        const ImVec2 a = vf.Project(point - dir * reach), b = vf.Project(point + dir * reach);
+        const float dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
+        if (len2 < 1) continue;
+        const float t = std::clamp(((mouse.x - a.x) * dx + (mouse.y - a.y) * dy) / len2, 0.0f, 1.0f);
+        const float d = std::hypot(a.x + dx * t - mouse.x, a.y + dy * t - mouse.y);
+        if (d < bestDistance) {
+            bestDistance = d;
+            best = wa->id;
+        }
+    }
+    return best;
+}
+
+std::vector<ShownPoint> WorkPoints(const Session& session, std::size_t before) {
+    std::vector<ShownPoint> out;
+    const auto& features = session.doc.Features();
+    for (std::size_t i = 0; i < features.size() && i < before; ++i) {
+        if (!session.doc.IsActive(i)) continue;
+        const auto* wp = dynamic_cast<const doc::WorkPointFeature*>(features[i].get());
+        if (wp && !wp->suppressed && wp->position) out.push_back({wp->id, *wp->position, wp->name});
+    }
+    return out;
+}
+
+void DrawWorkPoints(AppContext& app, ImDrawList* dl, const ViewportFrame& vf, const std::vector<ShownPoint>& points, ObjectId hot) {
+    const ui::ThemeColors& c = app.ui.C();
+    for (const ShownPoint& p : points) {
+        const bool strong = p.id == hot;
+        const ImU32 ink = ui::ToU32(strong ? c.accent : c.planeEdge);
+        const ImVec2 at = vf.Project(p.at);
+        const float arm = app.ui.S(strong ? 8.0f : 6.0f), w = app.ui.S(strong ? 2.0f : 1.3f);
+        dl->AddLine({at.x - arm, at.y}, {at.x + arm, at.y}, ink, w);
+        dl->AddLine({at.x, at.y - arm}, {at.x, at.y + arm}, ink, w);
+        dl->AddCircleFilled(at, app.ui.S(strong ? 3.5f : 2.6f), ink);
+        dl->AddText(app.ui.fonts.bodySmall, app.ui.S(12), {at.x + app.ui.S(6), at.y - app.ui.S(18)}, ink, p.label.c_str());
+    }
+}
+
+const ShownPoint* PointUnderCursor(AppContext& app, const ViewportFrame& vf, ImVec2 mouse, const std::vector<ShownPoint>& points) {
+    const ShownPoint* best = nullptr;
+    float bestDistance = app.ui.S(8);
+    for (const ShownPoint& p : points) {
+        const ImVec2 at = vf.Project(p.at);
+        const float d = std::hypot(at.x - mouse.x, at.y - mouse.y);
+        if (d < bestDistance) {
+            bestDistance = d;
+            best = &p;
+        }
+    }
+    return best;
 }
 
 } // namespace bz::app

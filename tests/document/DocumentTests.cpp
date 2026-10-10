@@ -4,6 +4,7 @@
 #include "document/CoilFeature.h"
 #include "document/SectionFeature.h"
 #include "document/ShellFeature.h"
+#include "document/WorkPointFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
@@ -235,6 +236,7 @@ TEST_CASE("every feature type survives a file round trip") {
     made.push_back(std::make_unique<doc::CoilFeature>());
     made.push_back(std::make_unique<doc::SectionFeature>());
     made.push_back(std::make_unique<doc::ShellFeature>());
+    made.push_back(std::make_unique<doc::WorkPointFeature>());
     std::vector<std::pair<ObjectId, std::string_view>> expected;
     for (auto& f : made) {
         f->id = d.Ids().Next();

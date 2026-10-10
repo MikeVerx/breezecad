@@ -1,5 +1,6 @@
 #include "app/features/WorkAxisEditor.h"
 
+#include "app/features/PointPick.h"
 #include "app/viewport/Planes.h"
 #include "core/I18n.h"
 #include "document/Origin.h"
@@ -28,6 +29,7 @@ std::string WorkAxisEditor::Hint() const {
     switch (myMethod) {
         case WorkAxisMethod::Edge:     return Tr("Щёлкните прямое ребро тела. Enter — готово, Esc — отмена");
         case WorkAxisMethod::Planes:   return Tr("Щёлкните две пересекающиеся плоскости. Enter — готово, Esc — отмена");
+        case WorkAxisMethod::Points:   return Tr("Щёлкните две точки: вершины тела или рабочие точки. Enter — готово, Esc — отмена");
         case WorkAxisMethod::Cylinder: break;
     }
     return Tr("Щёлкните цилиндрическую грань: вал или отверстие. Enter — готово, Esc — отмена");
@@ -78,6 +80,10 @@ void WorkAxisEditor::DrawInViewport(AppContext& app, Session& session, const Vie
                 }
             }
             break;
+        case WorkAxisMethod::Points:
+            if (PickPoints(app, session, vf, static_cast<std::size_t>(index), 2, f->points, f->pointEdges, f->pointFeatures))
+                Changed(session);
+            break;
         case WorkAxisMethod::Planes: {
             std::vector<ShownPlane> planes = OriginPlanes(session);
             const std::vector<ShownPlane> work = WorkPlanes(session, static_cast<std::size_t>(index));
@@ -101,13 +107,14 @@ void WorkAxisEditor::DrawBody(AppContext& app, Session& session, doc::Feature& f
     auto& f = static_cast<doc::WorkAxisFeature&>(feature);
     ui::Ui& ui = app.ui;
     Section(app, Tr("Способ"));
-    static constexpr std::array<const char*, 3> methods{N_("Ось цилиндра"), N_("По ребру"), N_("Две плоскости")};
-    // The panel shows the methods in this order; the enum is Edge, Cylinder, Planes.
-    static constexpr std::array<WorkAxisMethod, 3> order{WorkAxisMethod::Cylinder, WorkAxisMethod::Edge, WorkAxisMethod::Planes};
+    static constexpr std::array<const char*, 4> methods{N_("Ось цилиндра"), N_("По ребру"), N_("Две плоскости"), N_("Две точки")};
+    // The panel shows the methods in this order; the enum is Edge, Cylinder, Planes, Points.
+    static constexpr std::array<WorkAxisMethod, 4> order{WorkAxisMethod::Cylinder, WorkAxisMethod::Edge, WorkAxisMethod::Planes,
+                                                         WorkAxisMethod::Points};
     int current = 0;
     for (std::size_t i = 0; i < order.size(); ++i)
         if (order[i] == f.method) current = static_cast<int>(i);
-    if (const int chosen = ui::Segmented(ui, "method", methods, current, 3, width); chosen != current) {
+    if (const int chosen = ui::Segmented(ui, "method", methods, current, 2, width); chosen != current) {
         f.method = order[static_cast<std::size_t>(chosen)];
         myMethod = f.method;
         mySlot = 0;
@@ -129,6 +136,14 @@ void WorkAxisEditor::DrawBody(AppContext& app, Session& session, doc::Feature& f
             if (PickChip(ui, "##second", Tr("Вторая"), PlaneName(session, f.plane2), mySlot == 1, width)) mySlot = 1;
             Caption(app, Tr("Плоскости начала координат или рабочие; ось — линия их пересечения."), width);
             break;
+        case WorkAxisMethod::Points: {
+            const std::string count = f.points.size() >= 2 ? std::string(Tr("выбраны"))
+                                    : f.points.empty()     ? std::string()
+                                                           : Trf("{} из 2", f.points.size());
+            PickChip(ui, "##points", Tr("Точки"), count, true, width);
+            Caption(app, Tr("Щёлкните две вершины тела или рабочие точки. Третий щелчок начинает выбор заново."), width);
+            break;
+        }
     }
 }
 
