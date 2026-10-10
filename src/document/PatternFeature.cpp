@@ -158,6 +158,7 @@ std::vector<ObjectId> MirrorFeature::Dependencies() const {
 void MirrorFeature::SaveFields(Json& out) const {
     SaveSources(out);
     out["plane"] = json_io::ToJson(plane);
+    if (wholeBody) out["wholeBody"] = true;
 }
 
 Status MirrorFeature::LoadFields(const Json& in) {
@@ -165,6 +166,7 @@ Status MirrorFeature::LoadFields(const Json& in) {
     if (!ReadMember(in, "plane", p)) return Error{"Зеркало: повреждены параметры"};
     if (Status s = LoadSources(in, "Зеркало"); !s) return s;
     plane = p;
+    wholeBody = in.value("wholeBody", false);
     return Status::Ok();
 }
 

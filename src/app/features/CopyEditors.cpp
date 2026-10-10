@@ -2,6 +2,7 @@
 
 #include "core/I18n.h"
 #include "document/HoleFeature.h"
+#include "document/ThreadFeature.h"
 #include "document/Origin.h"
 #include "document/SketchSolidFeature.h"
 #include "document/WorkAxisFeature.h"
@@ -19,7 +20,9 @@ using doc::PatternKind;
 /// Operations whose result can be copied (the kernel keeps their tools).
 bool IsCopyable(const doc::Feature& f) {
     if (const auto* solid = dynamic_cast<const doc::SketchSolidFeature*>(&f)) return solid->operation != doc::BooleanOp::Intersect;
-    return dynamic_cast<const doc::HoleFeature*>(&f) != nullptr;
+    // Holes and threads; patterns and mirrors too, so a mirror takes the whole pattern.
+    return dynamic_cast<const doc::HoleFeature*>(&f) != nullptr || dynamic_cast<const doc::ThreadFeature*>(&f) != nullptr ||
+           dynamic_cast<const doc::CopyFeature*>(&f) != nullptr;
 }
 
 constexpr std::array<const char*, 3> kAxisLabels{"X", "Y", "Z"};
@@ -48,9 +51,34 @@ bool DirectionChoice(ui::Ui& ui, const char* id, bool& reversed, float width) {
 // --- CopyEditor ---------------------------------------------------------------
 
 void CopyEditor::DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) {
-    (void)app;
-    (void)session;
-    (void)vf;
+    PickSourceInView(app, session, vf);
+}
+
+bool CopyEditor::PickSourceInView(AppContext& app, Session& session, const ViewportFrame& vf) {
+    // As in KOMPAS: a click on the model takes (or drops) the operation that
+    // made that surface.
+    auto* f = dynamic_cast<doc::CopyFeature*>(Edited(session));
+    if (!f || !vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return false;
+    const int index = session.doc.IndexOf(f->id);
+    const auto hit = app.viewport.Pick(vf.ToLocal(ImGui::GetMousePos()));
+    if (index < 0 || !hit) return false;
+    const ObjectId id = session.model.FeatureAt(hit->point, session.doc, static_cast<std::size_t>(index));
+    const doc::Feature* source = session.doc.Find(id);
+    if (!source || !IsCopyable(*source)) {
+        app.notes.Info(Tr("Здесь нет операции, которую можно скопировать"));
+        return true;
+    }
+    if (const auto it = std::find(f->sources.begin(), f->sources.end(), id); it != f->sources.end()) {
+        f->sources.erase(it);
+    } else {
+        f->sources.push_back(id);
+        // In document order, as the list shows them.
+        std::sort(f->sources.begin(), f->sources.end(), [&](ObjectId a, ObjectId b) { return session.doc.IndexOf(a) < session.doc.IndexOf(b); });
+    }
+    app.notes.Info(Trf("{}: {}", source->name, std::find(f->sources.begin(), f->sources.end(), id) != f->sources.end()
+                                                       ? Tr("выбрано") : Tr("снято")));
+    Changed(session);
+    return true;
 }
 
 void CopyEditor::ChooseDefaultSource(const Session& session, doc::CopyFeature& f) {
@@ -67,8 +95,10 @@ void CopyEditor::ChooseDefaultSource(const Session& session, doc::CopyFeature& f
 
 bool CopyEditor::DrawSources(AppContext& app, Session& session, doc::CopyFeature& f, float width) {
     Section(app, Tr("Что копировать"));
-    return FeatureChecklist(app, session, f.sources, IsCopyable, width,
-                            Tr("Нет операций, которые можно скопировать: выдавливание, вращение или отверстие."));
+    const bool changed = FeatureChecklist(app, session, f.sources, IsCopyable, width,
+                                          Tr("Нет операций, которые можно скопировать: выдавливание, вращение или отверстие."));
+    Caption(app, Tr("Отметьте в списке или щёлкните операцию прямо на модели."), width);
+    return changed;
 }
 
 // --- PatternEditor --------------------------------------------------------------
@@ -214,12 +244,24 @@ void MirrorEditor::StartNew(AppContext& app, Session& session) {
 }
 
 void MirrorEditor::DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) {
-    if (auto* f = dynamic_cast<doc::MirrorFeature*>(Edited(session))) PickPlane(app, session, f->plane, vf);
+    auto* f = dynamic_cast<doc::MirrorFeature*>(Edited(session));
+    if (!f) return;
+    const ObjectId plane = f->plane;
+    PickPlane(app, session, f->plane, vf);
+    if (f->plane == plane && !f->wholeBody) PickSourceInView(app, session, vf);   // a click not on a plane
 }
 
 void MirrorEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::MirrorFeature&>(feature);
-    DrawSources(app, session, f, width);
+    Section(app, Tr("Что отражать"));
+    static constexpr std::array<const char*, 2> what{N_("Операции"), N_("Тело целиком")};
+    const int current = f.wholeBody ? 1 : 0;
+    if (const int chosen = ui::Segmented(app.ui, "mirror-what", what, current, 2, width); chosen != current) {
+        f.wholeBody = chosen == 1;
+        Changed(session);
+    }
+    Gap(app);
+    if (!f.wholeBody) DrawSources(app, session, f, width);
     Gap(app);
     Section(app, Tr("Плоскость симметрии"));
     PlaneChoice(app, session, f.plane, width);

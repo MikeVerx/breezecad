@@ -37,6 +37,7 @@ private:
     doc::WorkPlaneMethod  myMethod = doc::WorkPlaneMethod::Offset;   ///< of the edited plane, last frame
     int                   mySlot = 0;   ///< where the next click goes: 0 the start, 1 the second start or the edge
     DragArrow   myArrow;   ///< offset
+    bool myRebuildOnRelease = false;   ///< the offset was dragged: rebuild when the drag ends
 };
 
 } // namespace bz::app

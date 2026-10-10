@@ -15,6 +15,9 @@ public:
     void DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;
 
 protected:
+    /// A click on the model: takes or drops the operation that made that
+    /// surface. True when the click was used.
+    bool PickSourceInView(AppContext& app, Session& session, const ViewportFrame& vf);
     /// The operations to copy: every one before this feature that can be
     /// copied, ticked or not. Returns true when the choice changed.
     bool DrawSources(AppContext& app, Session& session, doc::CopyFeature& f, float width);

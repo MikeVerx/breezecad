@@ -87,6 +87,11 @@ public:
     /// Every pair of bodies that share material (touching does not count).
     /// Computed on demand and kept until the geometry changes.
     const std::vector<Interference>& Interferences() const;
+
+    /// The operation (before feature number `beforeIndex`) whose added or
+    /// cut material has its surface at `point`: what a click on the model
+    /// picked, for choosing what a pattern or mirror copies. Latest first.
+    ObjectId FeatureAt(Vec3 point, const doc::Document& doc, std::size_t beforeIndex) const;
     /// A model edge as it would appear on `plane`, taken from the bodies as
     /// they were before feature number `featureIndex` (a sketch projecting it).
     Expected<ProjectedCurve> ProjectEdge(const doc::EdgeReference& edge, const Frame& plane, std::size_t featureIndex) const;

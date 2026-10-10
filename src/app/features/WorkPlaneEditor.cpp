@@ -168,8 +168,14 @@ void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const Vi
             }
             f->offset.expression = myOffset;
             f->offset.value = *offset;
-            Changed(session);
+            // The part is rebuilt once, on release: rebuilding everything
+            // after the plane on every frame of the drag made it crawl.
+            myRebuildOnRelease = true;
         }
+    }
+    if (myRebuildOnRelease && !myArrow.Dragging()) {
+        myRebuildOnRelease = false;
+        Changed(session);
     }
     if (!placed || f->offset.HasError() || f->method != WorkPlaneMethod::Offset) myArrow.Release();
     if (myArrow.Hot()) return;

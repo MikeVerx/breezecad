@@ -233,3 +233,38 @@ TEST_CASE("work axes: two planes, a cylinder; a circular pattern around one") {
     REQUIRE(circular.status.state == FeatureState::Ok);
     CHECK(model.Volume() == doctest::Approx(kPlate - 3 * kHole).epsilon(1e-6));
 }
+
+TEST_CASE("a mirror takes a pattern along, and can mirror the whole body") {
+    Plate p;
+    auto& pattern = p.Add<doc::PatternFeature>();
+    pattern.sources = {p.hole->id};
+    pattern.count1.expression = "2";
+    pattern.spacing1.expression = "20";   // holes at x = 10 and 30
+    auto& middle = p.Add<doc::WorkPlaneFeature>();
+    middle.base = doc::origin::kPlaneYZ;
+    middle.offset.expression = "50";
+    auto& mirror = p.Add<doc::MirrorFeature>();
+    mirror.sources = {p.hole->id, pattern.id};
+    mirror.plane = middle.id;
+    kernel::Model model;
+    model.Rebuild(p.d);
+    REQUIRE(mirror.status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(kPlate - 4 * kHole).epsilon(1e-6));
+
+    // The whole body about x = 0: a second plate on the other side.
+    mirror.wholeBody = true;
+    mirror.plane = doc::origin::kPlaneYZ;
+    p.d.MarkChanged(static_cast<std::size_t>(p.d.IndexOf(mirror.id)));
+    model.Rebuild(p.d);
+    REQUIRE(mirror.status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(2 * (kPlate - 2 * kHole)).epsilon(1e-6));
+}
+
+TEST_CASE("the operation under a point of the model") {
+    Plate p;
+    kernel::Model model;
+    model.Rebuild(p.d);
+    CHECK(model.FeatureAt({13, 10, 5}, p.d, p.d.FeatureCount()) == p.hole->id);   // the hole's wall
+    CHECK(model.FeatureAt({50, 30, 10}, p.d, p.d.FeatureCount()) == p.d.Features()[1]->id);   // the plate's top
+    CHECK_FALSE(model.FeatureAt({500, 0, 0}, p.d, p.d.FeatureCount()));
+}

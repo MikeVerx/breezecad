@@ -23,6 +23,7 @@ struct Body {
 struct Tool {
     TopoDS_Shape   shape;
     doc::BooleanOp op = doc::BooleanOp::Join;   ///< Join or Cut
+    TopoDS_Shape   cuts;   ///< a pattern or mirror that both added and cut: what it cut (`shape` added)
 };
 
 struct Model::Impl {

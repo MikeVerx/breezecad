@@ -82,6 +82,7 @@ public:
     static constexpr std::string_view kType = "mirror";
 
     ObjectId plane;   ///< origin plane or work plane
+    bool     wholeBody = false;   ///< mirror the whole most recent body (the sources are not used)
 
     std::string_view Type() const override { return kType; }
     std::vector<ObjectId> Dependencies() const override;

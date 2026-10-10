@@ -32,6 +32,11 @@
 
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepBndLib.hxx>
+#include <TopoDS_Vertex.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
+#include <BRepBuilderAPI_MakeVertex.hxx>
+#include <TopoDS_Compound.hxx>
+#include <BRep_Builder.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepGProp.hxx>
 #include <BRepTools.hxx>
@@ -82,7 +87,7 @@ std::string NextBodyName(const std::vector<Body>& bodies) {
 void CombineSolid(ObjectId id, doc::BooleanOp op, const TopoDS_Shape& tool, Model::Impl& impl, std::vector<Body>& bodies,
                   doc::FeatureStatus& status) {
     // A new body copied by a pattern joins the body it started.
-    if (op != doc::BooleanOp::Intersect) impl.tools[id] = {tool, op == doc::BooleanOp::Cut ? doc::BooleanOp::Cut : doc::BooleanOp::Join};
+    if (op != doc::BooleanOp::Intersect) impl.tools[id] = {tool, op == doc::BooleanOp::Cut ? doc::BooleanOp::Cut : doc::BooleanOp::Join, {}};
 
     if (op == doc::BooleanOp::NewBody || bodies.empty()) {
         if (op == doc::BooleanOp::Cut || op == doc::BooleanOp::Intersect) {
@@ -242,7 +247,7 @@ void ApplyThread(doc::ThreadFeature& thread, Model::Impl& impl, std::vector<Body
         thread.status = {FeatureState::Error, result.GetError().message};
         return;
     }
-    impl.tools[thread.id] = {*tool, doc::BooleanOp::Cut};
+    impl.tools[thread.id] = {*tool, doc::BooleanOp::Cut, {}};
     target->shape = *result;
     thread.status = {FeatureState::Ok, {}};
 }
@@ -275,8 +280,19 @@ void ApplyCopies(const doc::CopyFeature& f, const std::vector<gp_Trsf>& placemen
             const TopoDS_Shape copy = BRepBuilderAPI_Transform(tool->second.shape, t, true).Shape();
             (tool->second.op == doc::BooleanOp::Cut ? cuts : joins).push_back(copy);
             preview.copies.push_back(copy);
+            if (!tool->second.cuts.IsNull()) cuts.push_back(BRepBuilderAPI_Transform(tool->second.cuts, t, true).Shape());
         }
     }
+    // What this operation added and cut: a later pattern or mirror can copy it in turn.
+    const auto compound = [](const std::vector<TopoDS_Shape>& shapes) {
+        TopoDS_Compound c;
+        BRep_Builder builder;
+        builder.MakeCompound(c);
+        for (const TopoDS_Shape& s : shapes) builder.Add(c, s);
+        return TopoDS_Shape(c);
+    };
+    if (!joins.empty()) impl.tools[f.id] = {compound(joins), doc::BooleanOp::Join, cuts.empty() ? TopoDS_Shape() : compound(cuts)};
+    else if (!cuts.empty()) impl.tools[f.id] = {compound(cuts), doc::BooleanOp::Cut, {}};
     Body& target = bodies.back();
     for (auto [tools, op] : {std::pair{&joins, doc::BooleanOp::Join}, {&cuts, doc::BooleanOp::Cut}}) {
         Expected<TopoDS_Shape> result = occt::ApplyBoolean(target.shape, *tools, op);
@@ -681,7 +697,7 @@ void Model::Rebuild(doc::Document& doc) {
                                     }
                                     const Expected<TopoDS_Shape> tools = occt::HoleTools(body, *hole);
                                     if (!tools) return tools.GetError();
-                                    impl.tools[hole->id] = {*tools, doc::BooleanOp::Cut};
+                                    impl.tools[hole->id] = {*tools, doc::BooleanOp::Cut, {}};
                                     return occt::ApplyBoolean(body, *tools, doc::BooleanOp::Cut);
                                 });
             } else if (auto* thread = dynamic_cast<doc::ThreadFeature*>(&f)) {
@@ -692,10 +708,20 @@ void Model::Rebuild(doc::Document& doc) {
                 else
                     pattern->status = {FeatureState::Error, placements.GetError().message};
             } else if (auto* mirror = dynamic_cast<doc::MirrorFeature*>(&f)) {
-                if (const auto placement = MirrorPlacement(*mirror, doc))
-                    ApplyCopies(*mirror, {*placement}, impl, bodies, mirror->status, doc);
-                else
+                const auto placement = MirrorPlacement(*mirror, doc);
+                if (!placement) {
                     mirror->status = {FeatureState::Error, placement.GetError().message};
+                } else if (mirror->wholeBody) {
+                    // The body and its mirror image, joined (touching halves become one).
+                    ApplyToLastBody(bodies, mirror->status, "Нет тела, которое отражать",
+                                    [&](const TopoDS_Shape& body) -> Expected<TopoDS_Shape> {
+                                        const TopoDS_Shape image = BRepBuilderAPI_Transform(body, *placement, true).Shape();
+                                        impl.tools[mirror->id] = {image, doc::BooleanOp::Join, {}};
+                                        return occt::ApplyBoolean(body, image, doc::BooleanOp::Join);
+                                    });
+                } else {
+                    ApplyCopies(*mirror, {*placement}, impl, bodies, mirror->status, doc);
+                }
             } else if (auto* sweep = dynamic_cast<doc::SweepFeature*>(&f)) {
                 const auto* pathSketch = doc.FindAs<doc::SketchFeature>(sweep->path);
                 const Expected<TopoDS_Wire> path =
@@ -820,6 +846,21 @@ const std::vector<Interference>& Model::Interferences() const {
             }
         }
     return m.interferences;
+}
+
+ObjectId Model::FeatureAt(Vec3 point, const doc::Document& doc, std::size_t beforeIndex) const {
+    const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(gp_Pnt(point.x, point.y, point.z));
+    for (std::size_t i = std::min(beforeIndex, doc.FeatureCount()); i-- > 0;) {
+        const ObjectId id = doc.Features()[i]->id;
+        const auto tool = myImpl->tools.find(id);
+        if (tool == myImpl->tools.end()) continue;
+        for (const TopoDS_Shape* s : {&tool->second.shape, &tool->second.cuts}) {
+            if (s->IsNull()) continue;
+            BRepExtrema_DistShapeShape distance(probe, *s);
+            if (distance.IsDone() && distance.Value() < 1e-4) return id;
+        }
+    }
+    return {};
 }
 
 double Model::Volume() const {
