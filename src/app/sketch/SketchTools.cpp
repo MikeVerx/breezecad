@@ -1283,7 +1283,13 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
                 if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
             }
             dims.push_back({Make(ConstraintType::Length, line), myOptions.length, {}});
-            continueFrom = PointRef{b, sk.PositionOf(b), {}, {}};
+            if (!myChainEnd || a != myChainEnd) myChainStart = a;   // a new chain
+            if (b == myChainStart) {   // the contour is closed: the next click starts afresh
+                myChainStart = myChainEnd = {};
+            } else {
+                continueFrom = PointRef{b, sk.PositionOf(b), {}, {}};
+                myChainEnd = b;
+            }
             break;
         }
         case SketchTool::Rectangle: {

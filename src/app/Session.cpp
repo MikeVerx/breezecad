@@ -124,7 +124,7 @@ bool Session::Rebuild(double budgetMs) {
         return false;
     // Long work (a heavy boolean, a part just opened) goes to another
     // thread: one operation alone can take seconds and cannot be sliced.
-    if (budgetMs >= 0 && model.EstimateRebuildMs(doc, limit) > 60.0) {
+    if (budgetMs >= 0 && myBackgroundAllowed && model.EstimateRebuildMs(doc, limit) > 60.0) {
         StartBackground(limit);
         myRebuilding = true;
         return adopted;

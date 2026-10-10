@@ -226,7 +226,9 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.EndGroup();
 
     r.BeginGroup(Tr("Модель"));
-    r.Large("sketch.project", Tr("Проеци-\nровать"), active(SketchTool::Project));
+    const bool projecting = active(SketchTool::Project);
+    r.Large("sketch.project", Tr("Проеци-\nровать"), projecting && app.sketch.ProjectsLinked());
+    r.Large("sketch.projectFixed", Tr("Незави-\nсимая"), projecting && !app.sketch.ProjectsLinked());
     r.EndGroup();
 
     r.BeginGroup(Tr("Массив"));

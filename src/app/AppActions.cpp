@@ -157,8 +157,18 @@ void RegisterActions(AppContext& app) {
         const SketchToolInfo& info = InfoOf(t.tool);
         const SketchTool tool = t.tool;
         a.Add({t.id, info.label, info.icon, t.key == ImGuiKey_None ? 0 : static_cast<ImGuiKeyChord>(t.key), info.hint,
-               inSketch, [&app, tool] { app.sketch.SetTool(app, *app.Doc(), tool); }});
+               inSketch, [&app, tool] {
+                   if (tool == SketchTool::Project) app.sketch.SetProjectLinked(true);
+                   app.sketch.SetTool(app, *app.Doc(), tool);
+               }});
     }
+    // The same tool, making a copy that no longer follows the model.
+    a.Add({"sketch.projectFixed", N_("Независимая проекция"), "sk-project-fixed", 0,
+           N_("Щёлкните ребро модели или грань — её контур станет обычной закреплённой геометрией эскиза, за моделью не следует"),
+           inSketch, [&app] {
+               app.sketch.SetProjectLinked(false);
+               app.sketch.SetTool(app, *app.Doc(), SketchTool::Project);
+           }});
 
     // --- view ---
     a.Add({"view.home", N_("Домой (изометрия)"), "view-home", ImGuiKey_Home, {}, hasDoc, [&app] { HomeView(app); }});

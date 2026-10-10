@@ -31,6 +31,7 @@ Settings Settings::Load(const std::filesystem::path& file) {
     const std::string theme = j.value("theme", "system");
     s.theme = theme == "light" ? ThemeChoice::Light : theme == "dark" ? ThemeChoice::Dark : ThemeChoice::System;
     s.animations      = j.value("animations", s.animations);
+    s.backgroundRebuild = j.value("backgroundRebuild", s.backgroundRebuild);
     s.showTriad       = j.value("showTriad", s.showTriad);
     s.reopenLast      = j.value("reopenLast", s.reopenLast);
     s.viewBackground  = std::clamp(j.value("viewBackground", s.viewBackground), 0, 2);
@@ -96,6 +97,7 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"pointSnap", pointSnap},
         {"orthoMode", orthoMode},
         {"graphics", graphics},
+        {"backgroundRebuild", backgroundRebuild},
         {"showAllConstraints", showAllConstraints},
         {"gridStep", gridStep},
         {"uiScale", uiScale},

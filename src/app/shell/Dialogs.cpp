@@ -176,6 +176,39 @@ void DrawLanguageSettings(AppContext& app, float width) {
     }
 }
 
+/// The "Оптимизация" tab: what costs time on a weak computer.
+void DrawOptimizationSettings(AppContext& app, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    const auto caption = [&](const std::string& text) {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(text.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+        ImGui::Dummy({0, ui.S(6)});
+    };
+    ui::FieldLabel(ui, Tr("Качество графики"));
+    static constexpr std::array<const char*, 3> quality{N_("Высокое"), N_("Среднее"), N_("Слабый компьютер")};
+    if (const int n = ui::Segmented(ui, "graphics", quality, app.settings.graphics, 3, width); n != app.settings.graphics)
+        app.settings.graphics = n;
+    caption(Tr("Сглаживание краёв и точность сетки круглых граней. Ниже качество — быстрее показ больших деталей."));
+
+    ui::FieldLabel(ui, Tr("Анимации камеры"));
+    static constexpr std::array<const char*, 2> anim{N_("Плавные повороты"), N_("Без анимации")};
+    const int a = app.settings.animations ? 0 : 1;
+    if (const int n = ui::Segmented(ui, "anim", anim, a, 2, width); n != a) app.settings.animations = n == 0;
+    caption(Tr("Переходы к видам, «Показать всё», вход в эскиз. Без анимации камера переходит сразу."));
+
+    ui::FieldLabel(ui, Tr("Долгое перестроение"));
+    static constexpr std::array<const char*, 2> rebuild{N_("В фоне"), N_("Сразу, окно ждёт")};
+    const int r = app.settings.backgroundRebuild ? 0 : 1;
+    if (const int n = ui::Segmented(ui, "rebuild", rebuild, r, 2, width); n != r) app.settings.backgroundRebuild = n == 0;
+    caption(Tr("В фоне окно не замирает, пока считается тяжёлая операция: модель обновится, когда расчёт закончится. "
+               "«Сразу» — по-старому, на случай если фоновый расчёт ведёт себя странно."));
+}
+
 /// The "Мышь" tab: a ready-made set of view gestures, or each one by hand.
 void DrawMouseSettings(AppContext& app, float width) {
     ui::Ui& ui = app.ui;
@@ -270,8 +303,8 @@ void DrawSettings(AppContext& app) {
         ImGui::TextUnformatted(Tr("Настройки"));
     }
     const float width = ImGui::GetContentRegionAvail().x;
-    static constexpr std::array<const char*, 4> tabs{N_("Интерфейс"), N_("Клавиши"), N_("Мышь"), N_("Общие")};
-    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 4, width);
+    static constexpr std::array<const char*, 5> tabs{N_("Интерфейс"), N_("Клавиши"), N_("Мышь"), N_("Общие"), N_("Оптимизация")};
+    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 5, width);
     ImGui::Dummy({0, ui.S(6)});
 
     if (app.shell.settingsTab == 0) {
@@ -299,11 +332,7 @@ void DrawSettings(AppContext& app) {
         static constexpr std::array<const char*, 3> themes{N_("Как в системе"), N_("Светлая"), N_("Тёмная")};
         const int theme = static_cast<int>(app.settings.theme);
         if (const int t = ui::Segmented(ui, "theme", themes, theme, 3, width); t != theme) SetTheme(app, static_cast<ThemeChoice>(t));
-        ImGui::Dummy({0, ui.S(6)});
-        ui::FieldLabel(ui, Tr("Камера"));
-        static constexpr std::array<const char*, 2> anim{N_("Плавные повороты"), N_("Без анимации")};
-        const int a = app.settings.animations ? 0 : 1;
-        if (const int n = ui::Segmented(ui, "anim", anim, a, 2, width); n != a) app.settings.animations = n == 0;
+
         ImGui::Dummy({0, ui.S(6)});
         ui::FieldLabel(ui, Tr("Оси в углу вида"));
         static constexpr std::array<const char*, 2> triad{N_("Показывать"), N_("Скрыть")};
@@ -314,12 +343,8 @@ void DrawSettings(AppContext& app) {
         static constexpr std::array<const char*, 3> backgrounds{N_("Градиент"), N_("Светлый ровный"), N_("Тёмный ровный")};
         if (const int n = ui::Segmented(ui, "background", backgrounds, app.settings.viewBackground, 3, width); n != app.settings.viewBackground)
             app.settings.viewBackground = n;
-        ImGui::Dummy({0, ui.S(6)});
-        ui::FieldLabel(ui, Tr("Качество графики"));
-        static constexpr std::array<const char*, 3> quality{N_("Высокое"), N_("Среднее"), N_("Слабый компьютер")};
-        if (const int n = ui::Segmented(ui, "graphics", quality, app.settings.graphics, 3, width); n != app.settings.graphics)
-            app.settings.graphics = n;
-
+    } else if (app.shell.settingsTab == 4) {
+        DrawOptimizationSettings(app, width);
     } else if (app.shell.settingsTab == 2) {
         DrawMouseSettings(app, width);
     } else if (app.shell.settingsTab == 3) {

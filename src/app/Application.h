@@ -58,6 +58,7 @@ private:
     bool NeedsAnotherFrame() const;
     /// A document rebuilds on another thread: frames at a calm pace.
     bool WaitsForBackground() const;
+    double myMemoryReadAt = -10.0;   ///< when the memory figure was last read
     void TakeScreenshot(const std::filesystem::path& file) const;
     void PollShotRequest();
 

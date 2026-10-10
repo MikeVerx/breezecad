@@ -99,6 +99,9 @@ public:
 
     // --- tools ------------------------------------------------------------
     SketchTool Tool() const { return myTool; }
+    /// Projection linked to the model (it follows it) or a fixed copy.
+    bool ProjectsLinked() const { return myOptions.projectLinked; }
+    void SetProjectLinked(bool linked) { myOptions.projectLinked = linked; }
     void SetTool(AppContext& app, Session& session, SketchTool tool);
     /// Esc: drops the current step, then the tool, then leaves the sketch.
     void Escape(AppContext& app, Session& session);
@@ -220,6 +223,9 @@ private:
     std::string           mySidesError;          ///< polygon side count that is not a whole number
     double                myMmPerPixel = 0.1;   ///< of the last frame, to place automatic dimension labels
     std::vector<PointRef> myClicks;
+    /// A chain of lines: where it began and where the next line starts. A
+    /// line that ends where the chain began closes it, and the chain stops.
+    ObjectId myChainStart, myChainEnd;
     Snap                  mySnap;
     std::optional<Vec2>   myCursor;
 

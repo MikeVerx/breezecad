@@ -308,7 +308,10 @@ void Application::Frame() {
     AppContext& app = *myContext;
     app.now = now;
     myStats.fps = myFps;
-    if (myFrameIndex % 30 == 0) myStats.memoryMb = platform::ResidentMemoryMb();
+    if (now - myMemoryReadAt >= 1.0) {   // a system call: once a second is enough
+        myStats.memoryMb = platform::ResidentMemoryMb();
+        myMemoryReadAt = now;
+    }
     myStats.hoverMs = app.stats.hoverMs;
     app.stats = myStats;
 
@@ -327,6 +330,7 @@ void Application::Frame() {
         }
         bool rebuilt = false;
         s->SetMeshQuality(mySettings.graphics);
+        s->AllowBackground(mySettings.backgroundRebuild);
         {
             prof::Scope scope("rebuild");
             rebuilt = s->RebuildIfNeeded();

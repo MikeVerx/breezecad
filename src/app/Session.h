@@ -78,6 +78,8 @@ public:
     /// Display quality (Settings::graphics): a rebuild on another thread
     /// meshes its bodies for it there, not in the window's thread.
     void SetMeshQuality(int level) { myMeshQuality = level; }
+    /// Long rebuilds may run on another thread (Settings::backgroundRebuild).
+    void AllowBackground(bool allow) { myBackgroundAllowed = allow; }
 
     /// While a sketch or an operation is edited: rebuild only up to it
     /// (`last`, a feature index); the rest follows when editing ends.
@@ -103,6 +105,7 @@ private:
     bool                       Rebuild(double budgetMs);
     bool                       myShowAtLimit = false;
     int                        myMeshQuality = 1;
+    bool                       myBackgroundAllowed = true;
     std::uint64_t myBuiltRevision = static_cast<std::uint64_t>(-1);
     double        myLastRebuildSeconds = 0;   ///< how long the last rebuild took
     double        myLastRebuildAt = 0;        ///< when it finished (ImGui time)
