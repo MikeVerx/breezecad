@@ -277,11 +277,21 @@ void ApplyCopies(const doc::CopyFeature& f, const std::vector<gp_Trsf>& placemen
             return;
         }
         preview.sources.push_back(tool->second.shape);
+        // A pattern's tool is a compound of copies that may overlap one
+        // another: a boolean must get them as separate tools (an
+        // overlapping compound is invalid input and can crash OCCT).
+        const auto add = [](std::vector<TopoDS_Shape>& to, const TopoDS_Shape& shape) {
+            if (shape.ShapeType() != TopAbs_COMPOUND) {
+                to.push_back(shape);
+                return;
+            }
+            for (TopExp_Explorer e(shape, TopAbs_SOLID); e.More(); e.Next()) to.push_back(e.Current());
+        };
         for (const gp_Trsf& t : placements) {
             const TopoDS_Shape copy = BRepBuilderAPI_Transform(tool->second.shape, t, true).Shape();
-            (tool->second.op == doc::BooleanOp::Cut ? cuts : joins).push_back(copy);
+            add(tool->second.op == doc::BooleanOp::Cut ? cuts : joins, copy);
             preview.copies.push_back(copy);
-            if (!tool->second.cuts.IsNull()) cuts.push_back(BRepBuilderAPI_Transform(tool->second.cuts, t, true).Shape());
+            if (!tool->second.cuts.IsNull()) add(cuts, BRepBuilderAPI_Transform(tool->second.cuts, t, true).Shape());
         }
     }
     // What this operation added and cut: a later pattern or mirror can copy it in turn.
