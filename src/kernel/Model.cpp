@@ -32,6 +32,7 @@
 
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepBndLib.hxx>
+#include <TopExp_Explorer.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
@@ -854,10 +855,18 @@ ObjectId Model::FeatureAt(Vec3 point, const doc::Document& doc, std::size_t befo
         const ObjectId id = doc.Features()[i]->id;
         const auto tool = myImpl->tools.find(id);
         if (tool == myImpl->tools.end()) continue;
+        // Face by face: measured against a solid, a point inside it counts
+        // as on it (and OCCT 8 can crash in that inside test).
         for (const TopoDS_Shape* s : {&tool->second.shape, &tool->second.cuts}) {
             if (s->IsNull()) continue;
-            BRepExtrema_DistShapeShape distance(probe, *s);
-            if (distance.IsDone() && distance.Value() < 1e-4) return id;
+            Bnd_Box box;
+            BRepBndLib::Add(*s, box);
+            box.Enlarge(1e-3);
+            if (box.IsOut(gp_Pnt(point.x, point.y, point.z))) continue;
+            for (TopExp_Explorer e(*s, TopAbs_FACE); e.More(); e.Next()) {
+                BRepExtrema_DistShapeShape distance(probe, e.Current());
+                if (distance.IsDone() && distance.Value() < 1e-4) return id;
+            }
         }
     }
     return {};
