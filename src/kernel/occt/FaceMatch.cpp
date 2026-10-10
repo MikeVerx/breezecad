@@ -31,8 +31,8 @@ std::optional<Vec3> PlanarNormal(const TopoDS_Face& face) {
     return normal;
 }
 
-std::optional<Vec3> NormalAt(const TopoDS_Face& face, const Vec3& near) {
-    const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(gp_Pnt(near.x, near.y, near.z));
+std::optional<Vec3> NormalAt(const TopoDS_Face& face, const Vec3& around) {
+    const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(gp_Pnt(around.x, around.y, around.z));
     BRepExtrema_DistShapeShape distance(probe, face);   // to a face, never a solid (OCCT 8)
     if (!distance.IsDone() || distance.NbSolution() < 1 || distance.SupportTypeShape2(1) != BRepExtrema_IsInFace) {
         // On an edge or vertex of the face: the normal at the middle of the
