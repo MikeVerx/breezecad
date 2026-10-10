@@ -243,8 +243,8 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::EdgesAndFaces);
             app.viewport.SetMarkedEdges({});
         }
-    } else if (!pickingOriginal) {
-        app.viewport.EndPickingOriginal();
+    } else {
+        app.viewport.ExpirePickingOriginal();
     }
     // Measuring makes vertices and edges pickable too.
     const bool measuring = app.shell.measuring && session.mode == EditMode::Model && !operation;

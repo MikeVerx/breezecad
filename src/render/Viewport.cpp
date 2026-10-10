@@ -271,6 +271,7 @@ struct Viewport::Impl {
     /// see BeginPickingOriginal).
     struct OriginalPicking {
         bool                            active = false;
+        bool                            requested = false;   ///< Begin called since the last ExpirePickingOriginal
         PickTarget                      target = PickTarget::Edges;
         const kernel::Model*            model = nullptr;
         std::uint64_t                   revision = 0;
@@ -981,6 +982,7 @@ void Viewport::BeginPickingOriginal(const kernel::Model& model, std::size_t feat
     prof::Scope profile("pick-setup");
     Impl& m = *myImpl;
     Impl::OriginalPicking& o = m.original;
+    o.requested = true;
 
     // The result stays on screen as a live preview, but only the body as it
     // was is pickable: its edges are drawn as lines over the preview, so an
@@ -1022,6 +1024,12 @@ void Viewport::BeginPickingOriginal(const kernel::Model& model, std::size_t feat
     o.revision = model.Revision();
     o.featureIndex = featureIndex;
     m.ShowMarked();   // re-resolve against the new bodies
+}
+
+void Viewport::ExpirePickingOriginal() {
+    Impl::OriginalPicking& o = myImpl->original;
+    if (o.active && !o.requested) EndPickingOriginal();
+    o.requested = false;
 }
 
 void Viewport::EndPickingOriginal() {
@@ -1118,6 +1126,14 @@ std::optional<Viewport::VertexPick> Viewport::PickVertex(Vec2 pixel) {
         return pick;
     }
     return std::nullopt;
+}
+
+bool Viewport::OriginalUnder(Vec2 pixel) {
+    Impl& m = *myImpl;
+    if (!m.original.active) return false;
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->Pick(static_cast<int>(std::lround(pixel.x * m.pixelScale)), static_cast<int>(std::lround(pixel.y * m.pixelScale)), m.view);
+    return selector->NbPicked() > 0;
 }
 
 std::optional<doc::FaceReference> Viewport::PickFace(Vec2 pixel) {

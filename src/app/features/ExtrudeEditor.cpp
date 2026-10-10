@@ -49,24 +49,30 @@ bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::Sketc
         myArrow.Release();
         if (!f.toPlane && !f.toFace.IsSet()) myPickTarget = true;
         if (!myPickTarget) return false;
-        // Origin and work planes first; else a flat face of the body.
+        // A flat face of the body under the cursor; elsewhere an origin or
+        // work plane. Planes lie over the body, so they are offered only
+        // off it: otherwise a big plane would hide the face aimed at.
         const int index = session.doc.IndexOf(f.id);
         if (index < 0) return false;
+        app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Faces);
+        const Vec2 at = view.vf.ToLocal(ImGui::GetMousePos());
+        if (view.vf.hovered && app.viewport.OriginalUnder(at)) {
+            const std::optional<doc::FaceReference> face = app.viewport.PickFace(at);
+            if (face && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                f.toFace = *face;
+                f.toPlane = {};
+                myPickTarget = false;
+                Changed(session);
+            } else if (!face && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                app.notes.Info(Tr("Нужна плоская грань"));
+            }
+            return true;
+        }
         const ObjectId before = f.toPlane;
         PickPlane(app, session, f.toPlane, view.vf);
         if (f.toPlane != before) {
             f.toFace = {};
             myPickTarget = false;
-            return true;
-        }
-        app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Faces);
-        if (view.vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-            if (const auto face = app.viewport.PickFace(view.vf.ToLocal(ImGui::GetMousePos()))) {
-                f.toFace = *face;
-                f.toPlane = {};
-                myPickTarget = false;
-                Changed(session);
-            }
         }
         return true;
     }

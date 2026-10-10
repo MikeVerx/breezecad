@@ -165,6 +165,10 @@ public:
     /// every frame.
     void BeginPickingOriginal(const kernel::Model& model, std::size_t featureIndex, PickTarget target);
     void EndPickingOriginal();
+    /// Once a frame, before the editors draw: ends the picking nobody asked
+    /// for since the last call. (Ending it whenever an editor does not say
+    /// it picks would rebuild the targets every frame for one that does.)
+    void ExpirePickingOriginal();
     /// Edge under the cursor (PickTarget::Edges), described for storing.
     std::optional<doc::EdgeReference> PickEdge(Vec2 pixel);
     /// Every edge of the face under the cursor (PickTarget::EdgesAndFaces,
@@ -186,6 +190,8 @@ public:
     std::optional<VertexPick> PickVertex(Vec2 pixel);
     /// Flat face under the cursor (PickTarget::Faces); nullopt for a curved one.
     std::optional<doc::FaceReference> PickFace(Vec2 pixel);
+    /// Some part of the body being picked on (BeginPickingOriginal) is under `pixel`.
+    bool OriginalUnder(Vec2 pixel);
     /// True when both references point at the same face of the original
     /// body (a second click on a face drops it).
     bool SameOriginalFace(const doc::FaceReference& a, const doc::FaceReference& b) const;

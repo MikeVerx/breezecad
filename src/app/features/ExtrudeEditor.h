@@ -15,6 +15,8 @@ public:
     bool        CanEdit(const doc::Feature& f) const override;
     const char* Title() const override { return Tr("Выдавливание"); }
     std::string Hint() const override;
+    /// Choosing the face "до": faces under the cursor light up.
+    bool        PicksOriginal() const override { return myPickTarget; }
 
 protected:
     const char* Icon() const override { return "tree-extrude"; }
