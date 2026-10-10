@@ -227,6 +227,17 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const bool navigating = Navigate(app, session, vf, ImGui::IsItemHovered());
     vf.projection = app.viewport.Projection();
     vf.hovered = ImGui::IsItemHovered() && !navigating;
+    if (navigating && app.shell.nav.orbiting) {
+        // The point the view turns around: under the cursor when the turn
+        // began (or the model centre), so it is clear what stays in place.
+        const ui::ThemeColors& c = ui.C();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImVec2 at = vf.Project(app.shell.nav.pivot);
+        const float r = ui.S(5);
+        dl->AddCircleFilled(at, r + ui.S(2), ui::ToU32(c.panel.WithAlpha(0.9f)));
+        dl->AddCircleFilled(at, r, ui::ToU32(c.accent));
+        dl->AddCircle(at, r + ui.S(7), ui::ToU32(c.accent.WithAlpha(0.45f)), 0, ui.S(1.2f));
+    }
     UpdateMarkingMenu(app, session, vf);   // may take the mouse from the overlays
     app.shell.handleHot = false;           // a handle drawn below sets it again for the next frame
 
