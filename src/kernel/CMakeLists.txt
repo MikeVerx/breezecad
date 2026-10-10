@@ -12,6 +12,7 @@ add_library(bz_kernel STATIC
     occt/Measure.cpp
     occt/Project.cpp
     occt/Revolve.cpp
+    occt/Shell.cpp
     occt/SketchGeometry.cpp
     occt/Sweep.cpp
     occt/Text.cpp

@@ -5,6 +5,7 @@ add_library(bz_document STATIC
     Document.cpp
     CoilFeature.cpp
     SectionFeature.cpp
+    ShellFeature.cpp
     EdgeFeature.cpp
     ExtrudeFeature.cpp
     FeatureRegistry.cpp

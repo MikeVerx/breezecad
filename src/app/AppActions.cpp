@@ -102,6 +102,8 @@ void RegisterActions(AppContext& app) {
            [&app] { StartCoil(app); }});
     a.Add({"feature.section", N_("Сечение"), "cut-section", 0, N_("Отсечь модель плоскостью — операция в дереве, гасится и удаляется как любая"), inModel,
            [&app] { StartSection(app); }});
+    a.Add({"feature.shell", N_("Оболочка"), "shell", 0, N_("Сделать тело полым со стенками заданной толщины; выбранные грани удаляются"),
+           inModel, [&app] { StartShell(app); }});
     a.Add({"feature.chamfer", N_("Фаска"), "chamfer", 0, N_("Срезать рёбра тела под 45°"), inModel, [&app] { StartChamfer(app); }});
 
     // --- sketch ---

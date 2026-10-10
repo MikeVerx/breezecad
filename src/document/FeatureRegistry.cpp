@@ -8,6 +8,7 @@
 #include "document/LoftFeature.h"
 #include "document/PatternFeature.h"
 #include "document/RevolveFeature.h"
+#include "document/ShellFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
 #include "document/ThreadFeature.h"
@@ -33,6 +34,7 @@ FeatureRegistry& FeatureRegistry::Default() {
         r.Register(std::string(MirrorFeature::kType), [] { return std::make_unique<MirrorFeature>(); });
         r.Register(std::string(WorkPlaneFeature::kType), [] { return std::make_unique<WorkPlaneFeature>(); });
         r.Register(std::string(WorkAxisFeature::kType), [] { return std::make_unique<WorkAxisFeature>(); });
+        r.Register(std::string(ShellFeature::kType), [] { return std::make_unique<ShellFeature>(); });
         r.Register(std::string(ThreadFeature::kType), [] { return std::make_unique<ThreadFeature>(); });
         return r;
     }();

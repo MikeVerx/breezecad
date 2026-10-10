@@ -13,6 +13,7 @@
 #include "document/PatternFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
+#include "document/ShellFeature.h"
 #include "document/ThreadFeature.h"
 #include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
@@ -22,6 +23,7 @@
 #include "kernel/occt/Extrude.h"
 #include "kernel/occt/FaceMatch.h"
 #include "kernel/occt/Fillet.h"
+#include "kernel/occt/Shell.h"
 #include "kernel/occt/Hole.h"
 #include "kernel/occt/Loft.h"
 #include "kernel/occt/ModelImpl.h"
@@ -213,7 +215,6 @@ void ApplyEdgeFeature(const doc::EdgeFeature& f, std::vector<Body>& bodies, doc:
                        : doc::FeatureStatus{FeatureState::Warning, std::format("Не найдено рёбер: {}", lost)};
 }
 
-/// Holes are cut from the most recent body.
 /// Operations that change the most recent body (hole, shell): `make` turns
 /// its shape into the new one.
 template <class Make>
@@ -753,6 +754,26 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                                     impl.tools[hole->id] = {*tools, doc::BooleanOp::Cut, {}};
                                     return occt::ApplyBoolean(body, *tools, doc::BooleanOp::Cut);
                                 });
+            } else if (auto* shell = dynamic_cast<doc::ShellFeature*>(&f)) {
+                if (shell->thickness.HasError()) {
+                    shell->status = {FeatureState::Error, shell->thickness.error};
+                } else {
+                    std::size_t lost = 0;
+                    ApplyToLastBody(bodies, shell->status, "Нет тела, из которого делать оболочку",
+                                    [&](const TopoDS_Shape& body) -> Expected<TopoDS_Shape> {
+                                        std::vector<TopoDS_Face> open;
+                                        for (const doc::FaceReference& r : shell->faces) {
+                                            const auto face = r.curved ? occt::ResolveAnyFace(body, r) : occt::ResolveFace(body, r);
+                                            if (face) open.push_back(*face);
+                                            else ++lost;
+                                        }
+                                        if (open.empty() && !shell->faces.empty())
+                                            return Error{"Грани оболочки не найдены: модель изменилась слишком сильно"};
+                                        return occt::MakeShell(body, open, shell->thickness.value, shell->outward);
+                                    });
+                    if (lost > 0 && shell->status.state == FeatureState::Ok)
+                        shell->status = {FeatureState::Warning, std::format("Не найдено граней: {}", lost)};
+                }
             } else if (auto* thread = dynamic_cast<doc::ThreadFeature*>(&f)) {
                 ApplyThread(*thread, impl, bodies);
             } else if (auto* pattern = dynamic_cast<doc::PatternFeature*>(&f)) {

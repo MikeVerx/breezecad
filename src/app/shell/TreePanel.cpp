@@ -16,6 +16,7 @@
 #include "document/PatternFeature.h"
 #include "document/RevolveFeature.h"
 #include "document/SectionFeature.h"
+#include "document/ShellFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
 #include "document/ThreadFeature.h"
@@ -117,6 +118,8 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
         return "R" + FormatValue(fillet->radius.value, Quantity::Length, d.units);
     if (const auto* chamfer = dynamic_cast<const doc::ChamferFeature*>(&f))
         return FormatValue(chamfer->distance.value, Quantity::Length, d.units) + "\xC3\x97" + "45\xC2\xB0";
+    if (const auto* shell = dynamic_cast<const doc::ShellFeature*>(&f))
+        return FormatValue(shell->thickness.value, Quantity::Length, d.units) + " " + UnitLabel(Quantity::Length, d.units);
     if (const auto* hole = dynamic_cast<const doc::HoleFeature*>(&f)) {
         std::string meta = "\xC3\x98" + FormatValue(hole->diameter.value, Quantity::Length, d.units);   // Ø6.6
         if (hole->centres.size() > 1) meta += " \xC3\x97" + std::to_string(hole->centres.size());
@@ -394,6 +397,7 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::CoilFeature*>(&f)) return "tree-coil";
     if (dynamic_cast<const doc::ThreadFeature*>(&f)) return "tree-thread";
     if (dynamic_cast<const doc::SectionFeature*>(&f)) return "tree-cut-section";
+    if (dynamic_cast<const doc::ShellFeature*>(&f)) return "tree-shell";
     return "tree-unknown";
 }
 
