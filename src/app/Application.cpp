@@ -20,6 +20,7 @@
 #include <lunasvg.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 
 // Defined (non-static) in imgui_impl_glfw.cpp but not declared in its header.
@@ -174,8 +175,11 @@ void Application::ApplyTheme(bool force) {
     ui::ApplyToImGui(myTheme, myScale);
     const ui::ThemeColors& c = myTheme.colors;
     // The view background: the theme's gradient, or one of its two ends.
-    const Color top = mySettings.viewBackground == 2 ? c.viewportBottom : c.viewportTop;
-    const Color bottom = mySettings.viewBackground == 1 ? c.viewportTop : c.viewportBottom;
+    Color top = mySettings.viewBackground == 2 ? c.viewportBottom : c.viewportTop;
+    Color bottom = mySettings.viewBackground == 1 ? c.viewportTop : c.viewportBottom;
+    // Test hook: a flat background of a given colour (renders keyed out
+    // against black and white for the splash picture, scripts/splash).
+    if (const char* bg = std::getenv("BZ_VIEW_BG")) top = bottom = Color::Hex(static_cast<std::uint32_t>(std::strtoul(bg, nullptr, 16)));
     myViewport.SetColors({top, bottom, c.body, c.bodyEdges, c.hoverHighlight, c.selection, c.danger});
     myFramesToDraw = 3;
 }
