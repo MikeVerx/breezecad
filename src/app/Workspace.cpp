@@ -6,10 +6,12 @@
 #include "core/Log.h"
 #include "core/PathText.h"
 #include "document/BzcFile.h"
+#include "document/ThreadFeature.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
 
 #include <algorithm>
+#include <optional>
 
 namespace bz::app {
 namespace {
@@ -119,9 +121,26 @@ bool Workspace::Export(Session& session, ExportFormat format, Notifications& not
                                                  folder / (session.Title() + info.ext), {{info.name, info.pattern}}, info.ext);
     if (!chosen) return false;
     session.RebuildNow();   // a rebuild may still be under way in slices
-    const Status status = format == ExportFormat::Step ? session.model.ExportStep(*chosen)
-                        : format == ExportFormat::Stl  ? session.model.ExportStl(*chosen)
-                                                       : session.model.Export3mf(*chosen);
+    // Cosmetic threads are only drawn in the model; a file gets them cut.
+    std::optional<kernel::Model> real;
+    if (std::ranges::any_of(session.doc.Features(), [](const auto& f) {
+            const auto* t = dynamic_cast<const doc::ThreadFeature*>(f.get());
+            return t && t->cosmetic && !t->suppressed;
+        })) {
+        doc::Document copy = session.doc.Clone();
+        for (const auto& f : copy.Features())
+            if (auto* t = dynamic_cast<doc::ThreadFeature*>(f.get())) t->cosmetic = false;
+        copy.MarkChanged(0);
+        real.emplace();
+        real->Rebuild(copy);
+        for (const auto& f : copy.Features())
+            if (f->status.state == doc::FeatureState::Error && dynamic_cast<const doc::ThreadFeature*>(f.get()))
+                notes.Error(Trf("{}: резьба для файла не построилась — {}", f->name, Tr(f->status.message)));
+    }
+    const kernel::Model& model = real ? *real : session.model;
+    const Status status = format == ExportFormat::Step ? model.ExportStep(*chosen)
+                        : format == ExportFormat::Stl  ? model.ExportStl(*chosen)
+                                                       : model.Export3mf(*chosen);
     if (!status) {
         notes.Error(Tr(status.GetError().message));
         return false;

@@ -291,7 +291,7 @@ void MirrorEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
         f.face = {};
         myPickFace = false;
     }
-    const std::string faceText = !f.plane && f.face.IsSet() ? Tr("выбрана") : std::string(Tr("не выбрана"));
+    const std::string faceText = !f.plane && f.face.IsSet() ? Tr("выбрана") : std::string(Tr("нет"));
     if (PickChip(app.ui, "##mirror-face", Tr("Плоская грань"), faceText, myPickFace, width)) myPickFace = !myPickFace;
     Caption(app, Tr("Нажмите и щёлкните плоскую грань тела — она станет плоскостью симметрии."), width);
 }

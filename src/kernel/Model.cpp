@@ -246,6 +246,16 @@ void ApplyThread(doc::ThreadFeature& thread, Model::Impl& impl, std::vector<Body
                 target = &*it;
                 break;
             }
+    if (thread.cosmetic) {   // drawn on the face only; exports cut it (Model::WithRealThreads)
+        const Expected<TopoDS_Shape> drawn = occt::CosmeticThread(target->shape, thread);
+        if (!drawn) {
+            thread.status = {FeatureState::Error, drawn.GetError().message};
+            return;
+        }
+        impl.decorations[thread.id] = *drawn;
+        thread.status = {FeatureState::Ok, {}};
+        return;
+    }
     const Expected<TopoDS_Shape> tool = occt::ThreadTool(target->shape, thread);
     Expected<TopoDS_Shape> result = tool ? occt::ApplyBoolean(target->shape, *tool, doc::BooleanOp::Cut) : tool;
     if (!result) {
@@ -676,6 +686,7 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
         doc::Feature& f = *doc.Features()[i];
         impl.cachedOrder[i] = f.id;
         impl.tools.erase(f.id);   // set again below if the operation succeeds
+        impl.decorations.erase(f.id);
 
         const auto featureStart = std::chrono::steady_clock::now();
         const bool skip = !doc.IsActive(i) || f.suppressed;
@@ -823,6 +834,11 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
     }
     impl.infos.clear();
     for (const Body& b : impl.bodies) impl.infos.push_back({b.id, b.name});
+    // Drawings of features deleted or past the end-of-part marker go.
+    std::erase_if(impl.decorations, [&](const auto& d) {
+        const int i = doc.IndexOf(d.first);
+        return i < 0 || !doc.IsActive(static_cast<std::size_t>(i));
+    });
     ++impl.revision;
     return true;
 }
@@ -912,7 +928,9 @@ void Model::Adopt(Model&& fork, std::size_t start) {
         take(a.tools, b.tools);
         take(a.sketches, b.sketches);
         take(a.copyPreviews, b.copyPreviews);
+        take(a.decorations, b.decorations);
     }
+    std::erase_if(a.decorations, [&](const auto& d) { return std::ranges::find(a.cachedOrder, d.first) == a.cachedOrder.end(); });
     a.costMs = std::move(b.costMs);
     if (b.bodiesSet) {   // otherwise the part shown stays as it was
         a.bodies = std::move(b.bodies);

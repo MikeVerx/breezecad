@@ -36,6 +36,9 @@ struct Model::Impl {
     /// Tools of the operations that can be copied, by feature id.
     std::unordered_map<ObjectId, Tool> tools;
 
+    /// What is drawn but not part of a body (cosmetic threads), by feature id.
+    std::unordered_map<ObjectId, TopoDS_Shape> decorations;
+
     /// How long each operation took last time it was built, ms.
     std::unordered_map<ObjectId, double> costMs;
 

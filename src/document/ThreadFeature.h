@@ -21,6 +21,12 @@ public:
     Parameter length{.name = "", .expression = "10", .quantity = Quantity::Length, .value = 10.0, .error = {}};
     bool      fromOtherEnd = false;   ///< start at the other end of the face
     bool      leftHanded = false;
+    /// Standard size chosen by hand (nominal diameter, mm); 0 = from the
+    /// face. A shaft or hole of another diameter is cut to this size.
+    double    size = 0;
+    /// Drawn on the face, not cut: the model stays light. The real thread
+    /// is cut in exported files.
+    bool      cosmetic = false;
 
     /// Runtime (set by the rebuild, not saved): what the face turned out to be.
     struct Site {
@@ -41,6 +47,9 @@ public:
 
 /// ISO metric coarse pitch for a nominal diameter (the nearest standard size).
 double CoarsePitch(double nominalDiameter);
+
+/// The ISO 261 coarse series, smallest first: nominal diameters, mm.
+std::vector<double> StandardSizes();
 
 /// The standard size `diameter` is within 5% of, or `diameter` itself.
 double StandardSize(double diameter);

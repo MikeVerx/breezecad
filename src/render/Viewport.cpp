@@ -223,6 +223,8 @@ struct Viewport::Impl {
     /// an operation without applying it brings the old shapes back at once.
     std::vector<Shown> spare;
     static constexpr std::size_t kSpare = 4;
+    /// Cosmetic threads and the like: drawn, never picked.
+    std::vector<Handle(AIS_Shape)> decorations;
 
     /// Measuring (see SetMeasuring).
     struct Measuring {
@@ -521,6 +523,16 @@ void Viewport::Sync(const kernel::Model& model) {
     while (m.spare.size() > Impl::kSpare) {
         m.context->Remove(m.spare.front().shape, false);
         m.spare.erase(m.spare.begin());
+    }
+    for (const auto& d : m.decorations) m.context->Remove(d, false);
+    m.decorations.clear();
+    for (const auto& [id, shape] : model.GetImpl().decorations) {
+        Handle(AIS_Shape) ais = new AIS_Shape(shape);
+        ais->SetColor(ToQuantity(m.colors.edges));
+        ais->SetWidth(1.4);
+        SetMeshPrecision(ais->Attributes(), m.quality);
+        m.context->Display(ais, AIS_WireFrame, -1, false);
+        m.decorations.push_back(ais);
     }
     m.ActivateShown();
     // Picked entities belonged to the old shapes.
