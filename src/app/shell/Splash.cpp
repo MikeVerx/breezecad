@@ -39,6 +39,7 @@ public:
     }
     Keep(const Keep&) = delete;
     Keep& operator=(const Keep&) = delete;
+    ImGuiContext* PreviousImGui() const { return myImGui; }
 
 private:
     GLFWwindow*   myGl;
@@ -177,6 +178,7 @@ void Splash::Close() {
         myProgress = 1.0f;
         while (std::chrono::steady_clock::now() - myOpenedAt < kAtLeast) {
             Draw();
+            ImGui::SetCurrentContext(keep.PreviousImGui());   // events of the next Draw go to the main window's context
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
         }
         glfwMakeContextCurrent(myWindow);
@@ -192,9 +194,13 @@ void Splash::Close() {
 }
 
 void Splash::Draw() {
+    // Events first, while the main window's ImGui context is still the
+    // current one: its GLFW callbacks (focus, size of the hidden main
+    // window) look their data up in the current context, and in the
+    // splash's they would find none and crash (seen on Windows).
+    glfwPollEvents();   // also keeps the system from calling the program "not responding"
     glfwMakeContextCurrent(myWindow);
     ImGui::SetCurrentContext(myContext);
-    glfwPollEvents();   // keeps the system from calling the program "not responding"
     int fbw = 1, fbh = 1;
     glfwGetFramebufferSize(myWindow, &fbw, &fbh);
     ImGuiIO& io = ImGui::GetIO();

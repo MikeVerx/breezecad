@@ -93,7 +93,9 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     Splash splash;
     const bool dark = mySettings.theme == ThemeChoice::Dark ||
                       (mySettings.theme == ThemeChoice::System && platform::SystemPrefersDark());
-    const bool splashShown = splash.Open(assets, dark);
+    // After a run that did not end normally, no splash: should the splash
+    // itself be what failed, the next start still works.
+    const bool splashShown = !myShell.crashedLastTime && splash.Open(assets, dark);
     const int steps = 4 + static_cast<int>(files.size());
     int step = 0;
     const auto progress = [&](const std::string& status) { splash.Step(status, static_cast<float>(++step) / static_cast<float>(steps)); };
