@@ -18,6 +18,7 @@ add_executable(bz_tests
     kernel/RevolveTests.cpp
     kernel/SectionTests.cpp
     kernel/ShellTests.cpp
+    kernel/StandardPartsTests.cpp
     kernel/SweepTests.cpp
     kernel/ThreadTests.cpp
     kernel/WorkPlaneTests.cpp

@@ -9,6 +9,7 @@
 #include "document/Commands.h"
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
+#include "document/StandardParts.h"
 #include "document/WorkPlaneFeature.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
@@ -150,6 +151,22 @@ void StartChamfer(AppContext& app) {
     if (!s) return;
     app.ops.Close(app, *s);
     app.ops.chamfer.StartNew(app, *s);
+}
+
+bool CreateStandardPart(AppContext& app, const std::string& standard, const std::string& size, double length) {
+    Expected<doc::parts::Made> made = doc::parts::MakePart({standard, size, length});
+    if (!made) {
+        app.notes.Error(Tr(made.GetError().message));
+        return false;
+    }
+    EndEditing(app);
+    Session& s = app.workspace.NewPart();
+    s.untitledName = made->doc.info.designation;
+    s.doc = std::move(made->doc);
+    s.doc.units.length = static_cast<LengthUnit>(app.settings.newPartLength);
+    s.history.MarkUnsaved();
+    app.shell.ribbonTab = RibbonTab::Model;
+    return true;
 }
 
 void StartWorkPoint(AppContext& app) {

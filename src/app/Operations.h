@@ -32,6 +32,9 @@ void StartFillet(AppContext& app);
 void StartChamfer(AppContext& app);
 void StartShell(AppContext& app);
 void StartWorkPoint(AppContext& app);
+/// Builds a standard part (doc::parts) and opens it as a new document;
+/// reports what went wrong otherwise. True on success.
+bool CreateStandardPart(AppContext& app, const std::string& standard, const std::string& size, double length);
 void StartHole(AppContext& app);
 void StartWorkPlane(AppContext& app);
 void StartWorkAxis(AppContext& app);

@@ -19,6 +19,7 @@ add_library(bz_document STATIC
     RevolveFeature.cpp
     SketchFeature.cpp
     SketchSolidFeature.cpp
+    StandardParts.cpp
     SweepFeature.cpp
     ThreadFeature.cpp
     UnknownFeature.cpp

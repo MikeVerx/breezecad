@@ -182,7 +182,7 @@ void ModelRibbon(RibbonBuilder& r) {
     r.EndGroup();
 
     r.BeginGroup(Tr("Ст. изделия"));
-    r.LargeLater("library", Tr("Библиотека"));
+    r.Large("parts.library", Tr("Библиотека"));
     r.EndGroup();
 
     r.BeginGroup(Tr("Экспорт"));

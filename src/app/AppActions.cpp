@@ -89,6 +89,9 @@ void RegisterActions(AppContext& app) {
            [&app] { StartWorkPlane(app); }});
     a.Add({"feature.workAxis", N_("Ось"), "work-axis", 0, N_("Рабочая ось: по оси цилиндра, по ребру или на пересечении плоскостей"), inModel,
            [&app] { StartWorkAxis(app); }});
+    a.Add({"parts.library", N_("Библиотека"), "library", 0,
+           N_("Стандартные изделия: болты, винты, гайки, шайбы, подшипники, стопорные кольца — новой деталью"), {},
+           [&app] { app.shell.showLibrary = true; }});
     a.Add({"feature.workPoint", N_("Точка"), "work-point", 0,
            N_("Рабочая точка: вершина, центр окружности или сферы, середина ребра, пересечение с плоскостью, координаты"), inModel,
            [&app] { StartWorkPoint(app); }});

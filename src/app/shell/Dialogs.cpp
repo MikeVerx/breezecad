@@ -11,6 +11,7 @@
 #include "core/I18n.h"
 #include "core/Version.h"
 #include "document/Commands.h"
+#include "document/StandardParts.h"
 #include "core/PathText.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
@@ -172,6 +173,126 @@ void DrawMassProperties(AppContext& app) {
     }
     ImGui::SameLine(0, ui.S(8));
     if (ui::PrimaryButton(ui, "##mass-close", Tr("Закрыть"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape)) close();
+    ImGui::EndPopup();
+}
+
+/// "Библиотека": type -> standard -> size -> length; makes a new part.
+void DrawLibrary(AppContext& app) {
+    namespace parts = doc::parts;
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    if (!BeginDialog(ui, "##library", app.shell.showLibrary, ui.S(760))) return;
+    auto& choice = app.shell.library;
+    const auto close = [&] {
+        app.shell.showLibrary = false;
+        ImGui::CloseCurrentPopup();
+    };
+    {
+        ui::FontScope font(ui.fonts.title);
+        ImGui::TextUnformatted(Tr("Стандартные изделия"));
+    }
+    ImGui::Dummy({0, ui.S(2)});
+
+    // Left: the kinds; right: standard, size, length.
+    const auto kinds = parts::Kinds();
+    choice.kind = std::clamp(choice.kind, 0, static_cast<int>(kinds.size()) - 1);
+    const float left = ui.S(230), gap = ui.S(16);
+    ImGui::BeginGroup();
+    for (int i = 0; i < static_cast<int>(kinds.size()); ++i) {
+        const bool on = i == choice.kind;
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float h = ui.S(30);
+        ImGui::PushID(i);
+        if (ImGui::InvisibleButton("##kind", {left, h}) && !on) {
+            choice.kind = i;
+            choice.standard = choice.size = choice.length = 0;
+        }
+        const bool hovered = ImGui::IsItemHovered();
+        ImGui::PopID();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        if (on || hovered)
+            dl->AddRectFilled(p, {p.x + left, p.y + h}, ui::ToU32(on ? c.accentSoft : c.hover), ui.S(6));
+        dl->AddText(on ? ui.fonts.medium : ui.fonts.body, ui.S(13), {p.x + ui.S(10), p.y + (h - ui.S(13)) / 2 - ui.S(1)},
+                    ui::ToU32(on ? c.text : c.textSecondary), Tr(kinds[static_cast<std::size_t>(i)].name.data()));
+    }
+    ImGui::EndGroup();
+    ImGui::SameLine(0, gap);
+
+    ImGui::BeginGroup();
+    const float width = ImGui::GetContentRegionAvail().x;
+    const std::vector<const parts::StandardInfo*> standards = parts::StandardsOf(kinds[static_cast<std::size_t>(choice.kind)].kind);
+    choice.standard = std::clamp(choice.standard, 0, static_cast<int>(standards.size()) - 1);
+    ui::FieldLabel(ui, Tr("Стандарт"));
+    {
+        std::vector<const char*> labels;
+        for (const auto* s : standards) labels.push_back(s->title.data());
+        if (const int chosen = ui::Segmented(ui, "standard", labels, choice.standard, 2, width);
+            chosen != choice.standard && chosen >= 0) {
+            choice.standard = chosen;
+            choice.size = choice.length = 0;
+        }
+    }
+    const parts::StandardInfo& standard = *standards[static_cast<std::size_t>(choice.standard)];
+    if (!standard.note.empty()) {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+        ImGui::TextUnformatted(Tr(standard.note.data()));
+        ImGui::PopStyleColor();
+    }
+    ImGui::Dummy({0, ui.S(4)});
+
+    const std::vector<std::string> sizes = parts::Sizes(standard);
+    choice.size = std::clamp(choice.size, 0, static_cast<int>(sizes.size()) - 1);
+    ui::FieldLabel(ui, standard.kind == parts::PartKind::BallBearing ? Tr("Подшипник")
+                       : standard.kind == parts::PartKind::RingExternal ? Tr("Диаметр вала, мм")
+                       : standard.kind == parts::PartKind::RingInternal ? Tr("Диаметр отверстия, мм")
+                                                                         : Tr("Резьба"));
+    {
+        std::vector<const char*> labels;
+        for (const std::string& s : sizes) labels.push_back(s.c_str());
+        if (const int chosen = ui::Segmented(ui, "size", labels, choice.size, 6, width); chosen != choice.size && chosen >= 0) {
+            choice.size = chosen;
+            choice.length = 0;
+        }
+    }
+    const std::string& size = sizes[static_cast<std::size_t>(choice.size)];
+    const std::vector<double> lengths = parts::Lengths(standard, size);
+    double length = 0;
+    if (!lengths.empty()) {
+        ImGui::Dummy({0, ui.S(4)});
+        ui::FieldLabel(ui, Tr("Длина, мм"));
+        choice.length = std::clamp(choice.length, 0, static_cast<int>(lengths.size()) - 1);
+        std::vector<std::string> texts;
+        for (double l : lengths) texts.push_back(std::format("{:g}", l));
+        std::vector<const char*> labels;
+        for (const std::string& t : texts) labels.push_back(t.c_str());
+        if (const int chosen = ui::Segmented(ui, "length", labels, choice.length, 8, width); chosen >= 0) choice.length = chosen;
+        length = lengths[static_cast<std::size_t>(choice.length)];
+    }
+    ImGui::EndGroup();
+
+    ui::Divider(ui, c.dividerSoft);
+    const std::string designation = parts::Designation({std::string(standard.id), size, length});
+    ValueRow(ui, Tr("Обозначение"), designation);
+    {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(Tr("Деталь откроется новым документом: эскизы с размерами от переменных, вращение или выдавливание, "
+                                  "условная резьба. Свойства детали заполнены. Форма упрощённая, как в библиотеках САПР."));
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    }
+    ImGui::Dummy({0, ui.S(8)});
+    const float bw = ui.S(170);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 2 * bw - ui.S(8));
+    if (ui::SecondaryButton(ui, "##library-cancel", Tr("Отмена"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        close();
+    ImGui::SameLine(0, ui.S(8));
+    if (ui::PrimaryButton(ui, "##library-create", Tr("Создать деталь"), "Enter", {bw, ui.S(36)}) ||
+        ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+        if (CreateStandardPart(app, std::string(standard.id), size, length)) close();
+    }
     ImGui::EndPopup();
 }
 
@@ -594,6 +715,7 @@ void DrawDialogs(AppContext& app) {
     }
 
     DrawMassProperties(app);
+    DrawLibrary(app);
     DrawBackgroundMenu(app);
 
     DrawSettings(app);

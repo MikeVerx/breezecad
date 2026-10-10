@@ -48,6 +48,11 @@ struct ShellState {
     std::string        shortcutFilter;
     std::string        shortcutNote;             ///< "taken from …" after a reassignment
     bool               showMassProperties = false;   ///< the "МЦХ" window
+    bool               showLibrary = false;          ///< the standard parts window ("Библиотека")
+    /// What the library window shows (indices into its lists; kept while the app runs).
+    struct LibraryChoice {
+        int kind = 0, standard = 0, size = 0, length = 0;
+    } library;
 
     render::DisplayStyle displayStyle = render::DisplayStyle::ShadedWithEdges;
 
