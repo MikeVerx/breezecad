@@ -851,6 +851,10 @@ const std::vector<Interference>& Model::Interferences() const {
 
 ObjectId Model::FeatureAt(Vec3 point, const doc::Document& doc, std::size_t beforeIndex) const {
     const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(gp_Pnt(point.x, point.y, point.z));
+    // A clicked point lies on the displayed triangles, not the exact
+    // surface: allow for the tessellation (a small share of the model size).
+    double tolerance = 0.05;
+    if (const auto bounds = BoundingBox()) tolerance = std::max(tolerance, (bounds->max - bounds->min).Length() * 0.003);
     for (std::size_t i = std::min(beforeIndex, doc.FeatureCount()); i-- > 0;) {
         const ObjectId id = doc.Features()[i]->id;
         const auto tool = myImpl->tools.find(id);
@@ -861,11 +865,11 @@ ObjectId Model::FeatureAt(Vec3 point, const doc::Document& doc, std::size_t befo
             if (s->IsNull()) continue;
             Bnd_Box box;
             BRepBndLib::Add(*s, box);
-            box.Enlarge(1e-3);
+            box.Enlarge(tolerance);
             if (box.IsOut(gp_Pnt(point.x, point.y, point.z))) continue;
             for (TopExp_Explorer e(*s, TopAbs_FACE); e.More(); e.Next()) {
                 BRepExtrema_DistShapeShape distance(probe, e.Current());
-                if (distance.IsDone() && distance.Value() < 1e-4) return id;
+                if (distance.IsDone() && distance.Value() < tolerance) return id;
             }
         }
     }

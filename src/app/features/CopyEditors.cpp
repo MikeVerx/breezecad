@@ -246,9 +246,14 @@ void MirrorEditor::StartNew(AppContext& app, Session& session) {
 void MirrorEditor::DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) {
     auto* f = dynamic_cast<doc::MirrorFeature*>(Edited(session));
     if (!f) return;
-    const ObjectId plane = f->plane;
-    PickPlane(app, session, f->plane, vf);
-    if (f->plane == plane && !f->wholeBody) PickSourceInView(app, session, vf);   // a click not on a plane
+    // A click on the body picks an operation to mirror; elsewhere it picks
+    // the plane (the planes are drawn over the body, so the body comes first).
+    const bool onBody = !f->wholeBody && vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+                        app.viewport.Pick(vf.ToLocal(ImGui::GetMousePos())).has_value();
+    ObjectId plane = f->plane;
+    PickPlane(app, session, plane, vf);
+    if (onBody) PickSourceInView(app, session, vf);
+    else if (plane != f->plane) f->plane = plane;
 }
 
 void MirrorEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
