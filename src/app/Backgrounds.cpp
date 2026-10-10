@@ -8,10 +8,11 @@
 namespace bz::app {
 namespace {
 
-constexpr std::array<BackgroundPreset, 11> kPresets{{
+constexpr std::array<BackgroundPreset, 12> kPresets{{
     {"theme", N_("Как в теме"), {}, {}, false, true},
     {"light", N_("Светлый ровный"), {}, {}, false, true},
     {"dark", N_("Тёмный ровный"), {}, {}, false, true},
+    {"white", N_("Белый"), Color::Hex(0xFFFFFF), Color::Hex(0xFFFFFF)},
     {"studio", N_("Студия"), Color::Hex(0xFFFFFF), Color::Hex(0xC9CED6), true},
     {"sky", N_("Небо"), Color::Hex(0x8FB8E8), Color::Hex(0xEAF2FB)},
     {"warm", N_("Тёплый свет"), Color::Hex(0xF6EBDD), Color::Hex(0xD9C7B0)},
