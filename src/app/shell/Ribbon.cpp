@@ -8,6 +8,7 @@
 #include "ui/Widgets.h"
 
 #include <algorithm>
+#include <span>
 
 namespace bz::app {
 namespace {
@@ -205,6 +206,38 @@ void ModelRibbon(RibbonBuilder& r) {
     r.EndGroup();
 }
 
+void AssemblyRibbon(AppContext& app, RibbonBuilder& r) {
+    const AssemblyState::Tool tool = app.Doc() && app.Doc()->assembly ? app.Doc()->assembly->tool : AssemblyState::Tool::Move;
+    r.BeginGroup(Tr("Компонент"));
+    r.Large("assembly.place", Tr("Вставить"));
+    r.Large("assembly.placeStandard", Tr("Стандартное\nизделие"));
+    r.EndGroup();
+
+    r.BeginGroup(Tr("Положение"));
+    r.BeginColumn();
+    r.Small("assembly.move", nullptr, tool == AssemblyState::Tool::Move);
+    r.Small("assembly.rotate", nullptr, tool == AssemblyState::Tool::Rotate);
+    r.Small("assembly.ground");
+    r.EndColumn();
+    r.EndGroup();
+
+    r.BeginGroup(Tr("Экспорт"));
+    r.BeginColumn();
+    r.Small("file.exportStep", "STEP");
+    r.Small("file.exportStl", "STL");
+    r.Small("file.export3mf", "3MF");
+    r.EndColumn();
+    r.EndGroup();
+
+    r.BeginGroup(Tr("Диагностика"));
+    r.BeginColumn();
+    r.Small("tools.measure", nullptr, app.shell.measuring);
+    r.Small("view.section", nullptr, app.shell.section.on);
+    r.Small("tools.interference", nullptr, app.shell.interference);
+    r.EndColumn();
+    r.EndGroup();
+}
+
 void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     const bool sketching = app.Doc() && app.Doc()->mode == EditMode::Sketch;
     const SketchTool tool = app.sketch.Tool();
@@ -352,9 +385,12 @@ void DrawModeBar(AppContext& app, ImVec2 pos, float width) {
         const char* label;
         RibbonTab   tab;
     };
-    const Tab tabs[] = {{Tr("3D-модель"), RibbonTab::Model}, {Tr("Эскиз"), RibbonTab::Sketch}, {Tr("Вид"), RibbonTab::View}};
+    const bool assemblyTabs = app.Doc() && app.Doc()->assembly && !app.workspace.ShowsHome();
+    const Tab partTabs[] = {{Tr("3D-модель"), RibbonTab::Model}, {Tr("Эскиз"), RibbonTab::Sketch}, {Tr("Вид"), RibbonTab::View}};
+    const Tab asmTabs[] = {{Tr("Сборка"), RibbonTab::Model}, {Tr("Вид"), RibbonTab::View}};
+    if (assemblyTabs && app.shell.ribbonTab == RibbonTab::Sketch) app.shell.ribbonTab = RibbonTab::Model;
     float x = pos.x + ui.S(12);
-    for (const Tab& t : tabs) {
+    for (const Tab& t : assemblyTabs ? std::span<const Tab>(asmTabs) : std::span<const Tab>(partTabs)) {
         const bool on = app.shell.ribbonTab == t.tab;
         ImFont* font = on ? ui.fonts.strong : ui.fonts.medium;
         const ImVec2 ts = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, t.label);
@@ -376,7 +412,6 @@ void DrawModeBar(AppContext& app, ImVec2 pos, float width) {
 }
 
 float DrawRibbon(AppContext& app, Session& session, ImVec2 pos, float width) {
-    (void)session;
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     const float h = ui.S(100);
@@ -413,7 +448,10 @@ float DrawRibbon(AppContext& app, Session& session, ImVec2 pos, float width) {
     RibbonBuilder builder(app, {pos.x - scroll, pos.y}, h);
     ImGui::PushClipRect({pos.x + (leftArrow ? aw : 0), pos.y}, {pos.x + width - (rightArrow ? aw : 0), pos.y + h}, true);
     switch (app.shell.ribbonTab) {
-        case RibbonTab::Model:  ModelRibbon(builder); break;
+        case RibbonTab::Model:
+            if (session.assembly) AssemblyRibbon(app, builder);
+            else ModelRibbon(builder);
+            break;
         case RibbonTab::Sketch: SketchRibbon(app, builder); break;
         case RibbonTab::View:   ViewRibbon(app, builder); break;
     }

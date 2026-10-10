@@ -11,6 +11,7 @@
 #include "core/I18n.h"
 #include "core/Version.h"
 #include "document/Commands.h"
+#include "app/assembly/AssemblyUi.h"
 #include "document/StandardParts.h"
 #include "core/PathText.h"
 #include "platform/FileDialogs.h"
@@ -492,9 +493,12 @@ void DrawLibrary(AppContext& app) {
     if (ui::SecondaryButton(ui, "##library-cancel", Tr("Закрыть"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape))
         close();
     ImGui::SameLine(0, ui.S(8));
-    if ((ui::PrimaryButton(ui, "##library-create", Tr("Создать деталь"), "Enter", {bw, ui.S(36)}, standard != nullptr) ||
+    // In an assembly the part goes into it (its file next to the assembly).
+    const bool intoAssembly = InAssembly(app);
+    if ((ui::PrimaryButton(ui, "##library-create", intoAssembly ? Tr("Вставить в сборку") : Tr("Создать деталь"), "Enter",
+                           {bw, ui.S(36)}, standard != nullptr) ||
          (standard && ImGui::IsKeyPressed(ImGuiKey_Enter))) &&
-        standard && CreateStandardPart(app, request))
+        standard && (intoAssembly ? PlaceStandardPart(app, request) : CreateStandardPart(app, request)))
         close();
     ImGui::EndPopup();
 }

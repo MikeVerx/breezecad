@@ -1,5 +1,7 @@
 #pragma once
 
+#include "app/AssemblyState.h"
+#include "core/Expected.h"
 #include "document/Commands.h"
 #include "document/Document.h"
 #include "kernel/Model.h"
@@ -31,6 +33,22 @@ public:
     doc::History   history;
     kernel::Model  model;
 
+    /// Set for an assembly: `doc` then stays empty and `model` shows the
+    /// placed components (one body per component, body id = component id).
+    std::unique_ptr<AssemblyState> assembly;
+    bool IsAssembly() const { return assembly != nullptr; }
+    /// Makes this session an assembly (an empty one).
+    AssemblyState& MakeAssembly();
+    /// The kind of document (doc::DocumentTypes): "part" or "assembly".
+    std::string_view DocumentType() const;
+
+    /// Counts every change of the content (autosave).
+    std::uint64_t ContentRevision() const;
+    /// Writes the document to `target` (part or assembly). An assembly
+    /// written elsewhere than its own file keeps pointing at the same
+    /// parts (its relative paths are adjusted in the copy).
+    Status WriteFile(const std::filesystem::path& target, std::string_view generator) const;
+
     std::filesystem::path path;        ///< empty until saved once
     std::string           untitledName; ///< "Деталь1" for documents never saved
     std::string           autosaveKey;  ///< folder name for autosave copies
@@ -48,7 +66,12 @@ public:
 
     /// File name without extension, or the untitled name.
     std::string Title() const;
-    bool IsModified() const { return history.IsModified(); }
+    bool IsModified() const { return assembly ? assembly->IsModified() : history.IsModified(); }
+    bool CanUndo() const { return assembly ? assembly->CanUndo() : history.CanUndo(); }
+    bool CanRedo() const { return assembly ? assembly->CanRedo() : history.CanRedo(); }
+    std::string UndoLabel() const { return assembly ? assembly->UndoLabel() : history.UndoLabel(); }
+    /// After saving to `path` (the session's file from now on).
+    void MarkSaved();
 
     /// Runs an undoable command.
     void Execute(std::unique_ptr<doc::Command> command);

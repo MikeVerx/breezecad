@@ -2,7 +2,10 @@
 
 #include <imgui.h>
 
+#include "assembly/AssemblyFile.h"
 #include "core/Log.h"
+#include "document/BzcFile.h"
+#include "document/DocumentTypes.h"
 
 #include <algorithm>
 #include <atomic>
@@ -81,6 +84,7 @@ bool Session::FinishBackground() {
 }
 
 std::string Session::Title() const {
+    if (assembly && !assembly->assembly.info.name.empty()) return assembly->assembly.info.name;
     if (!doc.info.name.empty()) return doc.info.name;
     if (path.empty()) return untitledName;
     const std::u8string stem = path.stem().u8string();
@@ -88,8 +92,38 @@ std::string Session::Title() const {
 }
 
 void Session::Execute(std::unique_ptr<doc::Command> command) { history.Execute(doc, std::move(command)); }
-void Session::Undo() { history.Undo(doc); }
-void Session::Redo() { history.Redo(doc); }
+void Session::Undo() {
+    if (assembly) assembly->Undo();
+    else history.Undo(doc);
+}
+void Session::Redo() {
+    if (assembly) assembly->Redo();
+    else history.Redo(doc);
+}
+
+AssemblyState& Session::MakeAssembly() {
+    assembly = std::make_unique<AssemblyState>();
+    assembly->geometry.ShowIn(model);
+    return *assembly;
+}
+
+std::string_view Session::DocumentType() const { return assembly ? doc::kAssemblyType : doc::kPartType; }
+
+std::uint64_t Session::ContentRevision() const { return assembly ? assembly->assembly.Revision() : doc.Revision(); }
+
+Status Session::WriteFile(const std::filesystem::path& target, std::string_view generator) const {
+    if (!assembly) return doc::SaveBzc(doc, target, generator);
+    if (path == target) return assembly::SaveAssembly(assembly->assembly, target, generator);
+    Expected<assembly::Assembly> copy = assembly::AssemblyFromJson(assembly::AssemblyToJson(assembly->assembly));
+    if (!copy) return copy.GetError();
+    assembly::RebasePaths(*copy, path, target);
+    return assembly::SaveAssembly(*copy, target, generator);
+}
+
+void Session::MarkSaved() {
+    if (assembly) assembly->MarkSaved();
+    else history.MarkSaved();
+}
 
 void Session::CommitInPlaceEdit(std::unique_ptr<doc::Feature> before, std::string label) {
     // Put the old version back and take the edited one, then run the edit
@@ -104,6 +138,12 @@ bool Session::RebuildIfNeeded() { return Rebuild(40.0); }
 bool Session::RebuildNow() { return Rebuild(-1.0); }
 
 bool Session::Rebuild(double budgetMs) {
+    if (assembly) {
+        // Parts are rebuilt as they load; what is left is cheap (placing).
+        const bool changed = assembly->Update(path);
+        myRebuilding = false;
+        return changed;
+    }
     bool adopted = false;
     if (myBackground) {
         if (budgetMs >= 0 && !myBackground->finished) return false;   // still at it; the window goes on

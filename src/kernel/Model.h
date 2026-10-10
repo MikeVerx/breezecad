@@ -138,6 +138,8 @@ public:
 
     struct Impl;
     const Impl& GetImpl() const { return *myImpl; }
+    /// For kernel code that fills a model itself (AssemblyModel).
+    Impl& EditImpl() { return *myImpl; }
 
 private:
     std::unique_ptr<Impl> myImpl;

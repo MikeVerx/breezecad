@@ -2,7 +2,11 @@
 
 #include "app/Session.h"
 
+#include "core/Expected.h"
+
 #include <filesystem>
+#include <string>
+#include <string_view>
 #include <memory>
 #include <vector>
 
@@ -28,6 +32,12 @@ public:
 
     /// New empty part, made active.
     Session& NewPart();
+    /// New empty assembly, made active.
+    Session& NewAssembly();
+
+    /// A session for a .bzc file of any kind this version opens (not added).
+    static Expected<std::unique_ptr<Session>> LoadSession(const std::filesystem::path& file,
+                                                          std::vector<std::string>* warnings);
 
     /// Opens a .bzc file (or activates it when already open).
     bool Open(const std::filesystem::path& file, Notifications& notes, Settings& settings);
@@ -42,8 +52,8 @@ public:
     /// Closes without asking (the caller has dealt with unsaved changes).
     void Close(int index);
 
-    /// Next "ДетальN" name not used by open documents.
-    std::string NextUntitledName() const;
+    /// Next "ДетальN" (or "<base>N") name not used by open documents.
+    std::string NextUntitledName(std::string_view base = "Деталь") const;
 
 private:
     int  myActive   = -1;

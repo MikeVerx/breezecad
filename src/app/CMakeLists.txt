@@ -4,7 +4,9 @@ add_executable(breezecad WIN32
     AppActions.cpp
     AppearanceLibrary.cpp
     Application.cpp
+    AssemblyState.cpp
     Autosave.cpp
+    assembly/AssemblyUi.cpp
     Backgrounds.cpp
     Format.cpp
     Language.cpp
@@ -69,7 +71,7 @@ if(WIN32)
     endif()
 endif()
 target_link_libraries(breezecad PRIVATE
-    bz::core bz::document bz::kernel bz::render bz::ui bz::platform
+    bz::core bz::document bz::assembly bz::kernel bz::render bz::ui bz::platform
     bz::imgui bz::miniz bz::json lunasvg::lunasvg glfw OpenGL::GL)
 bz_set_warnings(breezecad)
 

@@ -6,12 +6,15 @@
 #include "core/Log.h"
 #include "core/Version.h"
 #include "core/PathText.h"
+#include "assembly/AssemblyFile.h"
 #include "document/BzcFile.h"
+#include "document/DocumentTypes.h"
 #include "document/ThreadFeature.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
 
 #include <algorithm>
+#include <format>
 #include <optional>
 
 namespace bz::app {
@@ -32,9 +35,9 @@ void Workspace::Activate(int index) {
     myShowHome = false;
 }
 
-std::string Workspace::NextUntitledName() const {
+std::string Workspace::NextUntitledName(std::string_view base) const {
     for (int n = 1;; ++n) {
-        const std::string name = Trf("Деталь{}", n);
+        const std::string name = std::format("{}{}", Tr(std::string(base)), n);
         const bool used = std::any_of(sessions.begin(), sessions.end(), [&](const auto& s) { return s->Title() == name; });
         if (!used) return name;
     }
@@ -48,6 +51,38 @@ Session& Workspace::NewPart() {
     return *sessions.back();
 }
 
+Session& Workspace::NewAssembly() {
+    auto session = std::make_unique<Session>();
+    session->MakeAssembly();
+    session->untitledName = NextUntitledName("Сборка");
+    sessions.push_back(std::move(session));
+    Activate(static_cast<int>(sessions.size()) - 1);
+    return *sessions.back();
+}
+
+Expected<std::unique_ptr<Session>> Workspace::LoadSession(const std::filesystem::path& file,
+                                                          std::vector<std::string>* warnings) {
+    Expected<std::string> type = doc::ReadDocumentType(file);
+    if (!type) return type.GetError();
+    const doc::DocumentTypeInfo* info = doc::DocumentTypeRegistry::Default().Find(*type);
+    if (!info || !info->canOpen)
+        return Error{std::format("документы вида «{}» эта версия не открывает", info ? info->title : *type)};
+    auto session = std::make_unique<Session>();
+    if (*type == doc::kAssemblyType) {
+        Expected<assembly::Assembly> loaded = assembly::LoadAssembly(file, warnings);
+        if (!loaded) return loaded.GetError();
+        session->MakeAssembly().assembly = std::move(*loaded);
+        session->assembly->MarkSaved();
+    } else {
+        doc::LoadReport report;
+        Expected<doc::Document> loaded = doc::LoadBzc(file, &report);
+        if (!loaded) return loaded.GetError();
+        session->doc = std::move(*loaded);
+        if (warnings) warnings->insert(warnings->end(), report.warnings.begin(), report.warnings.end());
+    }
+    return session;
+}
+
 bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Settings& settings) {
     for (std::size_t i = 0; i < sessions.size(); ++i) {
         if (!sessions[i]->path.empty() && std::filesystem::equivalent(sessions[i]->path, file)) {
@@ -55,20 +90,18 @@ bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Se
             return true;
         }
     }
-    doc::LoadReport report;
-    Expected<doc::Document> loaded = doc::LoadBzc(file, &report);
+    std::vector<std::string> warnings;
+    Expected<std::unique_ptr<Session>> loaded = LoadSession(file, &warnings);
     if (!loaded) {
         notes.Error(Trf("Не удалось открыть «{}»: {}", ToUtf8(file.filename()), Tr(loaded.GetError().message)));
         settings.RemoveRecent(file);
         return false;
     }
-    auto session = std::make_unique<Session>();
-    session->doc = std::move(*loaded);
-    session->path = file;
-    sessions.push_back(std::move(session));
+    (*loaded)->path = file;
+    sessions.push_back(std::move(*loaded));
     Activate(static_cast<int>(sessions.size()) - 1);
     settings.AddRecent(file);
-    for (const auto& w : report.warnings) notes.Info(Tr(w));
+    for (const auto& w : warnings) notes.Info(Tr(w));
     log::Info("Opened {}", ToUtf8(file));
     return true;
 }
@@ -86,13 +119,15 @@ bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settin
         if (!chosen) return false;
         target = *chosen;
     }
-    const Status status = doc::SaveBzc(session.doc, target, kGenerator);
+    const Status status = session.WriteFile(target, kGenerator);
     if (!status) {
         notes.Error(Trf("Не удалось сохранить: {}", Tr(status.GetError().message)));
         return false;
     }
+    // An assembly saved somewhere else refers to its parts from there now.
+    if (session.assembly && session.path != target) assembly::RebasePaths(session.assembly->assembly, session.path, target);
     session.path = target;
-    session.history.MarkSaved();
+    session.MarkSaved();
     session.unsavedSince = -1.0;
     settings.AddRecent(target);
     notes.Success(Trf("Сохранено: {}", ToUtf8(target.filename())));
@@ -110,7 +145,7 @@ bool Workspace::Export(Session& session, ExportFormat format, Notifications& not
                     : format == ExportFormat::Stl  ? Info{"STL", "*.stl", ".stl"}
                                                    : Info{Tr("3MF для 3D-печати"), "*.3mf", ".3mf"};
     if (session.model.Bodies().empty()) {
-        notes.Info(Tr("В детали ещё нет тел для экспорта"));
+        notes.Info(Tr(session.assembly ? "В сборке ещё нет компонентов для экспорта" : "В детали ещё нет тел для экспорта"));
         return false;
     }
     if (const std::string problem = platform::FileDialogProblem(); !problem.empty()) {

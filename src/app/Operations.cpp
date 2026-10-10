@@ -9,6 +9,7 @@
 #include "document/Commands.h"
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
+#include "app/assembly/AssemblyUi.h"
 #include "document/StandardParts.h"
 #include "document/WorkPlaneFeature.h"
 #include "platform/FileDialogs.h"
@@ -78,17 +79,20 @@ void RequestClose(AppContext& app, int index) {
 }
 
 void RecoverDocument(AppContext& app, const RecoverableDocument& rec) {
-    Expected<doc::Document> loaded = doc::LoadBzc(rec.copy);
+    Expected<std::unique_ptr<Session>> loaded = Workspace::LoadSession(rec.copy, nullptr);
     if (!loaded) {
         app.notes.Error(Trf("Копию не удалось открыть: {}", Tr(loaded.GetError().message)));
         return;
     }
     EndEditing(app);
-    Session& s = app.workspace.NewPart();
-    s.doc = std::move(*loaded);
+    app.workspace.sessions.push_back(std::move(*loaded));
+    app.workspace.Activate(static_cast<int>(app.workspace.sessions.size()) - 1);
+    Session& s = *app.workspace.sessions.back();
     s.path = rec.original;
     s.untitledName = rec.title;
-    s.history.MarkUnsaved();   // the recovered state is not in the original file
+    // The recovered state is not in the original file.
+    if (s.assembly) s.assembly->MarkUnsaved();
+    else s.history.MarkUnsaved();
     app.autosave.Remove(rec);
     std::erase_if(app.shell.recoverable, [&](const RecoverableDocument& r) { return r.folder == rec.folder; });
     app.notes.Success(Trf("Восстановлено: {}. Сохраните документ.", rec.title));
@@ -96,12 +100,12 @@ void RecoverDocument(AppContext& app, const RecoverableDocument& rec) {
 
 bool CanUndo(AppContext& app) {
     Session* s = app.Doc();
-    return s && !app.ops.Active() && s->history.CanUndo();
+    return s && !app.ops.Active() && s->CanUndo();
 }
 
 bool CanRedo(AppContext& app) {
     Session* s = app.Doc();
-    return s && !app.ops.Active() && s->history.CanRedo();
+    return s && !app.ops.Active() && s->CanRedo();
 }
 
 void Undo(AppContext& app) {
@@ -217,12 +221,12 @@ void ToggleInterference(AppContext& app) {
     if (!app.shell.interference || !s) return;
     const auto& bodies = s->model.Bodies();
     if (bodies.size() < 2) {
-        app.notes.Info(Tr("В детали одно тело — пересекаться не с чем"));
+        app.notes.Info(Tr(s->assembly ? "В сборке один компонент — пересекаться не с чем" : "В детали одно тело — пересекаться не с чем"));
         return;
     }
     const std::vector<kernel::Interference>& found = s->model.Interferences();
     if (found.empty()) {
-        app.notes.Success(Tr("Тела не пересекаются"));
+        app.notes.Success(Tr(s->assembly ? "Компоненты не пересекаются" : "Тела не пересекаются"));
         return;
     }
     const UnitSystem& units = s->doc.units;
@@ -361,6 +365,7 @@ void EscapePressed(AppContext& app) {
         app.sketch.Escape(app, *s);
     } else if (s->mode == EditMode::PickPlane) {
         s->mode = EditMode::Model;
+    } else if (s->assembly && AssemblyEscape(app, *s)) {
     } else {
         s->selectedFeature = {};
     }
@@ -377,6 +382,8 @@ void DeletePressed(AppContext& app) {
     if (!s || app.ops.Active()) return;
     if (s->mode == EditMode::Sketch) {
         app.sketch.DeleteSelection(*s);
+    } else if (s->assembly) {
+        AssemblyDelete(app, *s);
     } else if (s->selectedFeature && s->doc.Find(s->selectedFeature)) {
         DeleteFeature(app, *s, s->selectedFeature);
     }

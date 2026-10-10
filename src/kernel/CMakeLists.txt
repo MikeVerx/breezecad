@@ -1,4 +1,5 @@
 add_library(bz_kernel STATIC
+    AssemblyModel.cpp
     Model.cpp
     occt/Coil.cpp
     occt/Section.cpp
@@ -19,7 +20,7 @@ add_library(bz_kernel STATIC
     occt/Text.cpp
     occt/Thread.cpp)
 target_link_libraries(bz_kernel
-    PUBLIC  bz::document bz::occt_modeling
+    PUBLIC  bz::document bz::assembly bz::occt_modeling
     PRIVATE bz::occt_exchange bz::miniz TKService TKV3d)   # TKV3d: text outlines on OCCT 7.x
 bz_set_warnings(bz_kernel)
 add_library(bz::kernel ALIAS bz_kernel)

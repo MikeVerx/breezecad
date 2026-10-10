@@ -5,6 +5,7 @@
 #include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
+#include "app/assembly/AssemblyUi.h"
 #include "app/viewport/MarkingMenu.h"
 #include "app/viewport/Measure.h"
 #include "app/viewport/Planes.h"
@@ -278,6 +279,10 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             PickPlane(app, session, vf, dl);
             break;
         case EditMode::Model: {
+            if (session.assembly) {
+                DrawAssemblyViewport(app, session, vf);
+                break;
+            }
             // Origin planes only when pointed at in the tree (or in an empty
             // part); work planes always, faint unless pointed at.
             const auto pointedAt = [&](ObjectId id) { return app.shell.hoveredTreeItem == id || session.selectedFeature == id; };

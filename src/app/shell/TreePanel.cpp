@@ -23,6 +23,8 @@
 #include "document/ThreadFeature.h"
 #include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
+#include "app/assembly/AssemblyUi.h"
+#include "assembly/AssemblyFile.h"
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
 
@@ -181,6 +183,10 @@ void ContextMenu(AppContext& app, Session& session, const doc::Feature& f, std::
 } // namespace
 
 void DrawTreePanel(AppContext& app, Session& session, float width) {
+    if (session.assembly) {
+        DrawAssemblyTree(app, session, width);
+        return;
+    }
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     doc::Document& d = session.doc;
@@ -376,6 +382,166 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         ImGui::TextColored(ui::ToVec4(c.textMuted), "%s",
                            Tr("Деталь пустая. Нажмите «Начать эскиз» на ленте (S) и выберите плоскость — с этого начинается любая деталь."));
         ImGui::PopTextWrapPos();
+    }
+    ImGui::EndGroup();
+}
+
+// --- assembly -------------------------------------------------------------------
+
+const char* ConstraintIcon(assembly::ConstraintType type) {
+    switch (type) {
+        case assembly::ConstraintType::Mate:     return "a-mate";
+        case assembly::ConstraintType::Insert:   return "a-insert";
+        case assembly::ConstraintType::Angle:    return "a-angle";
+        case assembly::ConstraintType::Tangent:  return "a-tangent";
+        case assembly::ConstraintType::AxisMate: return "a-axis";
+    }
+    return "a-mate";
+}
+
+void DrawAssemblyTree(AppContext& app, Session& session, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    AssemblyState& st = *session.assembly;
+    assembly::Assembly& a = st.assembly;
+    {
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float h = ui.S(40);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddText(ui.fonts.strong, ui.S(13), {p.x + ui.S(14), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text),
+                    Tr("Дерево сборки"));
+        dl->AddLine({p.x, p.y + h - 1}, {p.x + width, p.y + h - 1}, ui::ToU32(c.dividerSoft));
+        ImGui::Dummy({width, h});
+    }
+    const float rowW = width - ui.S(12);
+    ImGui::SetCursorPosX(ui.S(6));
+    ImGui::BeginGroup();
+    ImGui::Dummy({0, ui.S(4)});
+    app.shell.hoveredTreeItem = {};
+    {
+        RowStyle style;
+        style.icon = "tree-assembly";
+        if (Row(app, "##assembly", session.Title(), style, rowW).clicked) st.selected = {};
+    }
+
+    // Components, each with the constraints that tie it.
+    for (const assembly::Component& comp : a.components) {
+        const ObjectId id = comp.id;
+        RowStyle style;
+        style.depth = 1;
+        style.icon = "tree-component";
+        style.selected = st.selected == id;
+        style.muted = !comp.visible;
+        const auto constraints = a.ConstraintsOf(id);
+        style.caret = !constraints.empty();
+        style.open = app.shell.expanded.contains(id);
+        if (const std::string problem = st.geometry.ProblemOf(id); !problem.empty()) {
+            style.statusIcon = "status-error";
+            style.statusText = Tr(problem);
+        } else if (comp.grounded) {
+            style.meta = Tr("закреплён");
+            style.statusText = Tr("Закреплён: зависимости и перетаскивание его не двигают");
+        } else if (const auto f = st.freedom.find(id); f != st.freedom.end()) {
+            // Remaining degrees of freedom, as Inventor shows them.
+            style.meta = f->second.Total() == 0 ? std::string(Tr("определён")) : Trf("{} ст.св.", f->second.Total());
+            style.statusText = Trf("Свободы: перемещений {}, вращений {}", f->second.translations, f->second.rotations);
+        }
+        ImGui::PushID(static_cast<int>(id.value));
+        const RowResult r = Row(app, "##comp", comp.name, style, rowW);
+        if (r.hovered) app.shell.hoveredTreeItem = id;
+        if (r.caretClicked) {
+            if (style.open) app.shell.expanded.erase(id);
+            else app.shell.expanded.insert(id);
+        }
+        if (r.clicked) st.selected = id;
+        if (r.doubleClicked) {
+            const std::filesystem::path file = assembly::ResolvePartPath(session.path, comp.path);
+            app.Later([&app, file] { OpenDocument(app, file); });
+        }
+        {
+            ui::MenuStyle menu(ui);
+            if (ImGui::BeginPopupContextItem("##comp-menu")) {
+                st.selected = id;
+                if (ui::MenuItem(ui, Tr("Открыть деталь"), nullptr, "ui-open")) {
+                    const std::filesystem::path file = assembly::ResolvePartPath(session.path, comp.path);
+                    app.Later([&app, file] { OpenDocument(app, file); });
+                }
+                if (ui::MenuItem(ui, comp.grounded ? Tr("Освободить") : Tr("Закрепить"), nullptr, "ui-lock"))
+                    app.Later([&app] { ToggleGrounded(app); });
+                if (ui::MenuItem(ui, comp.visible ? Tr("Скрыть") : Tr("Показать"), nullptr, comp.visible ? "ui-eye-off" : "ui-eye"))
+                    app.Later([&st, id] {
+                        if (assembly::Component* cc = st.assembly.FindComponent(id)) {
+                            st.Checkpoint(cc->visible ? N_("Скрыть") : N_("Показать"));
+                            cc->visible = !cc->visible;
+                            st.assembly.Touch();
+                        }
+                    });
+                ImGui::Separator();
+                if (ui::MenuItem(ui, Tr("Удалить"), "Del", "ui-trash")) app.Later([&app, &session] { AssemblyDelete(app, session); });
+                ImGui::EndPopup();
+            }
+        }
+        ImGui::PopID();
+        if (!style.open) continue;
+        for (const assembly::Constraint* con : constraints) {
+            RowStyle cs;
+            cs.depth = 2;
+            cs.icon = ConstraintIcon(con->type);
+            cs.selected = st.selected == con->id;
+            cs.muted = con->suppressed;
+            const ObjectId other = con->first.component == id ? con->second.component : con->first.component;
+            if (const assembly::Component* o = a.FindComponent(other)) cs.meta = o->name;
+            ImGui::PushID(static_cast<int>(con->id.value));
+            if (Row(app, "##in-comp", con->name, cs, rowW).clicked) st.selected = con->id;
+            ImGui::PopID();
+        }
+    }
+
+    // All constraints.
+    if (!a.constraints.empty()) {
+        ImGui::Dummy({0, ui.S(6)});
+        ui::FieldLabel(ui, Tr("Зависимости"));
+        for (assembly::Constraint& con : a.constraints) {
+            RowStyle style;
+            style.depth = 1;
+            style.icon = ConstraintIcon(con.type);
+            style.selected = st.selected == con.id;
+            style.muted = con.suppressed;
+            switch (con.state) {
+                case assembly::ConstraintState::Failed:
+                    style.statusIcon = "status-error";
+                    style.statusText = Tr("Не выполняется: противоречит другим зависимостям или геометрии");
+                    break;
+                case assembly::ConstraintState::Redundant:
+                    style.statusIcon = "status-warning";
+                    style.statusText = Tr("Лишняя: то же уже задано другими зависимостями");
+                    break;
+                default: break;
+            }
+            ImGui::PushID(static_cast<int>(con.id.value));
+            const RowResult r = Row(app, "##con", con.name, style, rowW);
+            if (r.clicked) st.selected = con.id;
+            {
+                ui::MenuStyle menu(ui);
+                if (ImGui::BeginPopupContextItem("##con-menu")) {
+                    st.selected = con.id;
+                    const ObjectId cid = con.id;
+                    if (ui::MenuItem(ui, con.suppressed ? Tr("Включить") : Tr("Подавить"), nullptr,
+                                     con.suppressed ? "ui-eye" : "ui-eye-off"))
+                        app.Later([&st, cid] {
+                            if (assembly::Constraint* cc = st.assembly.FindConstraint(cid)) {
+                                st.Checkpoint(cc->suppressed ? N_("Включить") : N_("Подавить"));
+                                cc->suppressed = !cc->suppressed;
+                                st.assembly.Touch();
+                            }
+                        });
+                    ImGui::Separator();
+                    if (ui::MenuItem(ui, Tr("Удалить"), "Del", "ui-trash")) app.Later([&app, &session] { AssemblyDelete(app, session); });
+                    ImGui::EndPopup();
+                }
+            }
+            ImGui::PopID();
+        }
     }
     ImGui::EndGroup();
 }

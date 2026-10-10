@@ -2,6 +2,7 @@
 // the variables table. The tree is in TreePanel.cpp.
 
 #include "app/Format.h"
+#include "app/assembly/AssemblyUi.h"
 #include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
@@ -45,6 +46,10 @@ void PropertyField(AppContext& app, Session& session, const char* label, const c
 } // namespace
 
 void DrawPropertiesPanel(AppContext& app, Session& session, float width) {
+    if (session.assembly) {
+        DrawAssemblyProperties(app, session, width);
+        return;
+    }
     ui::Ui& ui = app.ui;
     PanelHeader(ui, Tr("Свойства детали"), width);
     const float inner = width - ui.S(28);
@@ -240,7 +245,9 @@ void DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
                     {"##rail-props", "ui-sliders", Tr("Свойства детали"), LeftTab::Properties},
                     {"##rail-vars", "ui-variables", Tr("Переменные"), LeftTab::Variables}};
         float y = pos.y + ui.S(8);
+        if (session.assembly && app.shell.leftTab == LeftTab::Variables) app.shell.leftTab = LeftTab::Tree;
         for (const auto& t : tabs) {
+            if (session.assembly && t.tab == LeftTab::Variables) continue;   // an assembly has no variables yet
             ImGui::SetCursorScreenPos({pos.x + (railW - ui.S(36)) / 2, y});
             const bool active = app.shell.leftTab == t.tab && !app.ops.Active();
             if (ui::IconButton(ui, t.id, t.icon, 36, 20, t.tip, true, active)) {

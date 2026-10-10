@@ -224,7 +224,7 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
         ImGui::SetCursorScreenPos({x, cy});
         std::string tip = a->Label();
         if (const std::string sc = ActionRegistry::ChordText(a->chord); !sc.empty()) tip += " (" + sc + ")";
-        if (std::string undo = actionId == std::string("edit.undo") && app.Doc() ? Tr(app.Doc()->history.UndoLabel()) : "";
+        if (std::string undo = actionId == std::string("edit.undo") && app.Doc() ? Tr(app.Doc()->UndoLabel()) : "";
             !undo.empty())
             tip += ": " + undo;
         if (ui::IconButton(ui, actionId, a->icon, 30, 18, tip.c_str(), a->IsEnabled())) {

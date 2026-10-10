@@ -3,6 +3,7 @@
 
 #include "app/Application.h"
 #include "app/Operations.h"
+#include "app/assembly/AssemblyUi.h"
 #include "app/features/OperationEditors.h"
 #include "core/I18n.h"
 #include "document/Origin.h"
@@ -19,10 +20,31 @@ void RegisterActions(AppContext& app) {
     ActionRegistry& a = app.actions;
     const auto hasDoc = [&app] { return app.Doc() != nullptr && !app.workspace.ShowsHome(); };
     const auto inSketch = [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch; };
-    const auto inModel = [&app] { return app.Doc() && !app.workspace.ShowsHome() && app.Doc()->mode != EditMode::Sketch; };
+    const auto inModel = [&app] {
+        return app.Doc() && !app.workspace.ShowsHome() && app.Doc()->mode != EditMode::Sketch && !app.Doc()->assembly;
+    };
+    // Part commands do nothing in an assembly.
+    const auto partDoc = [&app] { return app.Doc() != nullptr && !app.workspace.ShowsHome() && !app.Doc()->assembly; };
+    const auto asmDoc = [&app] { return InAssembly(app); };
 
     // --- file ---
     a.Add({"file.new", N_("Новая деталь"), "ui-new", Ctrl(ImGuiKey_N), {}, {}, [&app] { NewDocument(app); }});
+    a.Add({"file.newAssembly", N_("Новая сборка"), "assembly", 0, N_("Собрать детали в узел: компоненты и зависимости"), {},
+           [&app] { NewAssembly(app); }});
+    a.Add({"assembly.place", N_("Вставить"), "place-component", ImGuiKey_P, N_("Вставить деталь из файла как компонент (P)"),
+           asmDoc, [&app] { PlaceComponent(app); }});
+    a.Add({"assembly.placeStandard", N_("Стандартное"), "library", 0,
+           N_("Вставить стандартное изделие из библиотеки: болт, гайку, шайбу, подшипник…"), asmDoc,
+           [&app] { app.shell.showLibrary = true; }});
+    a.Add({"assembly.move", N_("Перемещать"), "move-component", 0,
+           N_("Перетаскивание компонента левой кнопкой двигает его в плоскости экрана"), asmDoc,
+           [&app] { app.Doc()->assembly->tool = AssemblyState::Tool::Move; }});
+    a.Add({"assembly.rotate", N_("Вращать"), "rotate-component", 0,
+           N_("Перетаскивание компонента левой кнопкой вращает его вокруг центра"), asmDoc,
+           [&app] { app.Doc()->assembly->tool = AssemblyState::Tool::Rotate; }});
+    a.Add({"assembly.ground", N_("Закрепить"), "ui-lock", 0, N_("Закрепить или освободить выбранный компонент"),
+           [&app] { return InAssembly(app) && app.Doc()->assembly->assembly.FindComponent(app.Doc()->assembly->selected); },
+           [&app] { ToggleGrounded(app); }});
     a.Add({"file.open", N_("Открыть…"), "ui-open", Ctrl(ImGuiKey_O), {}, {}, [&app] { OpenDocument(app); }});
     a.Add({"file.save", N_("Сохранить"), "ui-save", Ctrl(ImGuiKey_S), {}, hasDoc, [&app] { SaveDocument(app, false); }});
     a.Add({"file.saveAs", N_("Сохранить как…"), "ui-save", CtrlShift(ImGuiKey_S), {}, hasDoc, [&app] { SaveDocument(app, true); }});
@@ -77,7 +99,7 @@ void RegisterActions(AppContext& app) {
     a.Add({"sketch.start", N_("Начать эскиз"), "sketch", ImGuiKey_S,
            N_("Выберите плоскость или плоскую грань и рисуйте профиль"), inModel, [&app] { StartSketch(app); }});
     a.Add({"feature.extrude", N_("Выдавливание"), "extrude", ImGuiKey_E,
-           N_("Вытянуть замкнутый контур эскиза в тело (E)"), hasDoc, [&app] { StartExtrude(app); }});
+           N_("Вытянуть замкнутый контур эскиза в тело (E)"), partDoc, [&app] { StartExtrude(app); }});
     a.Add({"feature.revolve", N_("Вращение"), "revolve", ImGuiKey_R,
            N_("Повернуть замкнутый контур эскиза вокруг оси (R)"), inModel, [&app] { StartRevolve(app); }});
     a.Add({"feature.fillet", N_("Сопряжение"), "fillet", 0, N_("Скруглить рёбра тела"), inModel, [&app] { StartFillet(app); }});

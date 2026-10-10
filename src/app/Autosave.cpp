@@ -34,7 +34,7 @@ bool Autosave::Update(Session& session, const Settings& settings, double now, do
     }
     if (session.unsavedSince < 0) session.unsavedSince = now;
     if (settings.autosaveMinutes <= 0) return false;
-    if (session.autosavedRevision == session.doc.Revision()) return false;
+    if (session.autosavedRevision == session.ContentRevision()) return false;
     if (now - session.unsavedSince < settings.autosaveMinutes * 60.0) return false;
     if (idleSeconds < kIdleBeforeWrite) return false;
 
@@ -49,7 +49,7 @@ bool Autosave::Update(Session& session, const Settings& settings, double now, do
         if (!info.is_discarded()) slot = info.value("slot", 0) % kCopies + 1;
     }
     const std::filesystem::path copy = folder / std::format("copy{}.bzc", slot);
-    const Status status = doc::SaveBzc(session.doc, copy, "BreezeCAD autosave");
+    const Status status = session.WriteFile(copy, "BreezeCAD autosave");
     if (!status) {
         log::Warn("Autosave failed: {}", status.GetError().message);
         session.unsavedSince = now;   // try again after another interval
@@ -59,7 +59,7 @@ bool Autosave::Update(Session& session, const Settings& settings, double now, do
                               {"slot", slot}, {"savedAt", NowText()}};
     std::ofstream(folder / "info.json", std::ios::trunc) << info.dump(1);
 
-    session.autosavedRevision = session.doc.Revision();
+    session.autosavedRevision = session.ContentRevision();
     session.unsavedSince = now;   // next copy after another interval of changes
     log::Info("Autosaved {} to slot {}", session.Title(), slot);
     return true;

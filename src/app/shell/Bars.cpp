@@ -101,7 +101,7 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
     }
 
     // Mode and what to do next.
-    std::string mode = Tr("Деталь"), hint;
+    std::string mode = Tr(app.Doc() && app.Doc()->assembly ? "Сборка" : "Деталь"), hint;
     if (const OperationEditor* operation = app.ops.Active()) {
         mode = operation->Title();
         hint = operation->Hint();
