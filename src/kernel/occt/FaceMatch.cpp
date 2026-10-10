@@ -4,6 +4,8 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
+#include <BRepGProp_Face.hxx>
+#include <BRepExtrema_SupportType.hxx>
 #include <TopAbs_Orientation.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
@@ -27,6 +29,48 @@ std::optional<Vec3> PlanarNormal(const TopoDS_Face& face) {
     Vec3 normal = ToVec(surface.Plane().Axis().Direction().XYZ()).Normalized();
     if (face.Orientation() == TopAbs_REVERSED) normal = -normal;
     return normal;
+}
+
+std::optional<Vec3> NormalAt(const TopoDS_Face& face, const Vec3& near) {
+    const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(gp_Pnt(near.x, near.y, near.z));
+    BRepExtrema_DistShapeShape distance(probe, face);   // to a face, never a solid (OCCT 8)
+    if (!distance.IsDone() || distance.NbSolution() < 1 || distance.SupportTypeShape2(1) != BRepExtrema_IsInFace) {
+        // On an edge or vertex of the face: the normal at the middle of the
+        // face's parameter range near enough for direction checks.
+        BRepGProp_Face props(face);
+        double u1, u2, v1, v2;
+        props.Bounds(u1, u2, v1, v2);
+        gp_Pnt p;
+        gp_Vec n;
+        props.Normal((u1 + u2) / 2, (v1 + v2) / 2, p, n);
+        if (n.Magnitude() < 1e-12) return std::nullopt;
+        return ToVec(n.XYZ()).Normalized();
+    }
+    double u = 0, v = 0;
+    distance.ParOnFaceS2(1, u, v);
+    BRepGProp_Face props(face);   // takes the face's orientation into account
+    gp_Pnt p;
+    gp_Vec n;
+    props.Normal(u, v, p, n);
+    if (n.Magnitude() < 1e-12) return std::nullopt;
+    return ToVec(n.XYZ()).Normalized();
+}
+
+std::optional<TopoDS_Face> ResolveAnyFace(const TopoDS_Shape& body, const doc::FaceReference& ref) {
+    if (!ref.IsSet()) return std::nullopt;
+    const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(gp_Pnt(ref.point.x, ref.point.y, ref.point.z));
+    std::optional<TopoDS_Face> best;
+    double bestDistance = 1e300;
+    for (TopExp_Explorer e(body, TopAbs_FACE); e.More(); e.Next()) {
+        const TopoDS_Face& face = TopoDS::Face(e.Current());
+        BRepExtrema_DistShapeShape distance(probe, face);
+        if (!distance.IsDone() || distance.Value() >= bestDistance) continue;
+        const std::optional<Vec3> normal = NormalAt(face, ref.point);
+        if (!normal || normal->Dot(ref.normal.Normalized()) < 0.3) continue;   // a face turned away (the other side of a wall)
+        best = face;
+        bestDistance = distance.Value();
+    }
+    return best;
 }
 
 std::optional<TopoDS_Face> ResolveFace(const TopoDS_Shape& body, const doc::FaceReference& ref) {

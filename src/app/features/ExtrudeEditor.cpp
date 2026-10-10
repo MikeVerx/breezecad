@@ -57,14 +57,12 @@ bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::Sketc
         app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Faces);
         const Vec2 at = view.vf.ToLocal(ImGui::GetMousePos());
         if (view.vf.hovered && app.viewport.OriginalUnder(at)) {
-            const std::optional<doc::FaceReference> face = app.viewport.PickFace(at);
+            const std::optional<doc::FaceReference> face = app.viewport.PickFace(at, true);
             if (face && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
                 f.toFace = *face;
                 f.toPlane = {};
                 myPickTarget = false;
                 Changed(session);
-            } else if (!face && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-                app.notes.Info(Tr("Нужна плоская грань"));
             }
             return true;
         }
@@ -160,10 +158,12 @@ void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
         } else if (const doc::Feature* p = f.toPlane ? session.doc.Find(f.toPlane) : nullptr) {
             target = p->name;
         } else if (f.toFace.IsSet()) {
-            target = Tr("плоская грань");
+            target = f.toFace.curved ? Tr("кривая грань") : Tr("плоская грань");
         }
         if (PickChip(ui, "##to", Tr("До"), target, myPickTarget, width)) myPickTarget = true;
-        Caption(app, Tr("Щёлкните плоскость или плоскую грань. Если она наклонена, конец выдавливания примет её наклон."), width);
+        Caption(app, Tr("Щёлкните плоскость или грань тела, плоскую или кривую: конец выдавливания примет её форму. "
+                        "Если грань меньше выдавливания, её поверхность продолжится за края."),
+                width);
     }
     Gap(app);
 

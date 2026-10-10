@@ -1136,7 +1136,7 @@ bool Viewport::OriginalUnder(Vec2 pixel) {
     return selector->NbPicked() > 0;
 }
 
-std::optional<doc::FaceReference> Viewport::PickFace(Vec2 pixel) {
+std::optional<doc::FaceReference> Viewport::PickFace(Vec2 pixel, bool curvedToo) {
     Impl& m = *myImpl;
     if (!m.original.active) return std::nullopt;
     const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
@@ -1146,9 +1146,13 @@ std::optional<doc::FaceReference> Viewport::PickFace(Vec2 pixel) {
     for (int i = 1; i <= selector->NbPicked(); ++i) {
         const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
         if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_FACE) continue;
-        const std::optional<Vec3> normal = kernel::occt::PlanarNormal(TopoDS::Face(owner->Shape()));
-        if (!normal) return std::nullopt;   // the nearest face is curved
-        return doc::FaceReference{*normal, ToVec(selector->PickedPoint(i).XYZ())};
+        const TopoDS_Face& face = TopoDS::Face(owner->Shape());
+        const Vec3 point = ToVec(selector->PickedPoint(i).XYZ());
+        if (const std::optional<Vec3> normal = kernel::occt::PlanarNormal(face)) return doc::FaceReference{*normal, point};
+        if (!curvedToo) return std::nullopt;   // the nearest face is curved
+        const std::optional<Vec3> normal = kernel::occt::NormalAt(face, point);
+        if (!normal) return std::nullopt;
+        return doc::FaceReference{*normal, point, true};
     }
     return std::nullopt;
 }

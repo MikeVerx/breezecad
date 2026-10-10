@@ -331,3 +331,43 @@ TEST_CASE("a forked model rebuilds on another thread and is adopted") {
     model.Rebuild(d);
     CHECK(model.Volume() == doctest::Approx(24000.0 - 500.0));
 }
+
+TEST_CASE("extrude up to a curved face") {
+    // A bar lying along Y (radius 20, axis at height 40), a 10x10 post
+    // from the XY plane up to its underside.
+    doc::Document d;
+    auto& barSketch = AddSketch(d, doc::origin::kPlaneXZ);
+    AddCircle(d, barSketch, {0, 40}, 20);
+    auto& bar = AddExtrude(d, barSketch.id, "60");
+    bar.extent = doc::ExtentType::Symmetric;
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(bar.status.state == FeatureState::Ok);
+    const auto box = model.BoundingBox();
+    REQUIRE(box);
+    REQUIRE(std::abs(box->min.z - 20) < 1e-3);   // the circle went where the test means it to
+
+    auto& postSketch = AddSketch(d);
+    AddRect(d, postSketch, {-5, -5}, {5, 5});
+    auto& post = AddExtrude(d, postSketch.id, "1", BooleanOp::NewBody);
+    post.extent = doc::ExtentType::ToPlane;
+    post.toFace = {.normal = {0, 0, -1}, .point = {0, 0, 20}, .curved = true};
+    model.Rebuild(d);
+    REQUIRE(post.status.state == FeatureState::Ok);
+    // Height under the bar: 40 - sqrt(400 - x²), the same along y.
+    double area = 0;
+    constexpr int n = 2000;
+    for (int i = 0; i < n; ++i) {
+        const double x = -5 + 10.0 * (i + 0.5) / n;
+        area += (40 - std::sqrt(400 - x * x)) * 10.0 / n;
+    }
+    const double bars = kPi * 400 * 60;
+    CHECK(model.Volume() - bars == doctest::Approx(area * 10).epsilon(1e-3));
+
+    // A bar narrower than the post: its surface carries on past its ends.
+    bar.distance.expression = "6";
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(bar.id)));
+    model.Rebuild(d);
+    REQUIRE(post.status.state == FeatureState::Ok);
+    CHECK(model.Volume() - kPi * 400 * 6 == doctest::Approx(area * 10).epsilon(1e-3));
+}

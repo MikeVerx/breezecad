@@ -30,8 +30,11 @@ bool Read(const Json& j, Vec2& out) {
 }
 
 bool Read(const Json& j, FaceReference& out) {
-    return j.is_object() && j.contains("normal") && j.contains("point") && Read(j["normal"], out.normal) &&
-           Read(j["point"], out.point);
+    if (!j.is_object() || !j.contains("normal") || !j.contains("point") || !Read(j["normal"], out.normal) || !Read(j["point"], out.point))
+        return false;
+    const auto curved = j.find("curved");
+    out.curved = curved != j.end() && curved->is_boolean() && curved->get<bool>();
+    return true;
 }
 
 bool Read(const Json& j, Vec3& out) {

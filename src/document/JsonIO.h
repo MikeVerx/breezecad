@@ -32,7 +32,11 @@ std::string_view QuantityId(Quantity q);
 Quantity         QuantityFromId(std::string_view id);
 
 Json ToJson(const Parameter& p);
-inline Json ToJson(const FaceReference& f) { return Json{{"normal", ToJson(f.normal)}, {"point", ToJson(f.point)}}; }
+inline Json ToJson(const FaceReference& f) {
+    Json j{{"normal", ToJson(f.normal)}, {"point", ToJson(f.point)}};
+    if (f.curved) j["curved"] = true;
+    return j;
+}
 
 // Readers return false (and leave `out` unchanged) on malformed input.
 bool Read(const Json& j, Vec2& out);

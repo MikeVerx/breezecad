@@ -713,13 +713,18 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                 ApplySketchSolid(*ex, impl, bodies, ex->status, doc,
                                  [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature&, const Frame& frame) {
                                      std::optional<Frame> target;
+                                     std::optional<TopoDS_Face> until;
                                      if (ex->extent == doc::ExtentType::ToPlane) {
                                          if (ex->toPlane) target = PlaneOf(ex->toPlane, doc);
-                                         else if (ex->toFace.IsSet())
+                                         else if (ex->toFace.IsSet() && ex->toFace.curved) {
+                                             for (auto it = bodies.rbegin(); it != bodies.rend() && !until; ++it)
+                                                 until = occt::ResolveAnyFace(it->shape, ex->toFace);
+                                             if (!until) return Expected<TopoDS_Shape>(Error{"Грань «до» не найдена: выберите её заново"});
+                                         } else if (ex->toFace.IsSet())
                                              for (auto it = bodies.rbegin(); it != bodies.rend() && !target; ++it)
                                                  target = occt::ResolvePlaneFrame(it->shape, ex->toFace);
                                      }
-                                     return occt::MakeExtrusion(faces, *ex, frame, ThroughAllLength(bodies, frame), target);
+                                     return occt::MakeExtrusion(faces, *ex, frame, ThroughAllLength(bodies, frame), target, until);
                                  });
             } else if (auto* rev = dynamic_cast<doc::RevolveFeature*>(&f)) {
                 ApplySketchSolid(*rev, impl, bodies, rev->status, doc,

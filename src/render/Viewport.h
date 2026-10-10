@@ -189,7 +189,9 @@ public:
     };
     std::optional<VertexPick> PickVertex(Vec2 pixel);
     /// Flat face under the cursor (PickTarget::Faces); nullopt for a curved one.
-    std::optional<doc::FaceReference> PickFace(Vec2 pixel);
+    /// The flat face under `pixel` (or, with `curvedToo`, any face: a curved
+    /// one comes as FaceReference::curved).
+    std::optional<doc::FaceReference> PickFace(Vec2 pixel, bool curvedToo = false);
     /// Some part of the body being picked on (BeginPickingOriginal) is under `pixel`.
     bool OriginalUnder(Vec2 pixel);
     /// True when both references point at the same face of the original
