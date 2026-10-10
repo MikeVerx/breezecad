@@ -13,6 +13,28 @@ namespace bz::doc {
 
 Document::Document() { myIds.Reserve(ObjectId{origin::kFirstUserId - 1}); }
 
+Document Document::Clone() const {
+    Document copy;
+    copy.info = info;
+    copy.units = units;
+    copy.variables = variables;
+    copy.myFeatures.reserve(myFeatures.size());
+    for (const auto& f : myFeatures) copy.myFeatures.push_back(f->Clone());
+    copy.myIds = myIds;
+    copy.myEndMarker = myEndMarker;
+    copy.myRevision = myRevision;
+    copy.myDirtyFrom = myDirtyFrom;
+    return copy;
+}
+
+void Document::TakeRebuilt(const Document& rebuilt) {
+    if (rebuilt.myFeatures.size() != myFeatures.size() || rebuilt.variables.size() != variables.size()) return;
+    for (std::size_t i = 0; i < variables.size(); ++i) variables[i] = rebuilt.variables[i];
+    for (std::size_t i = 0; i < myFeatures.size(); ++i)
+        if (myFeatures[i]->id == rebuilt.myFeatures[i]->id) myFeatures[i]->TakeRebuilt(*rebuilt.myFeatures[i]);
+    myDirtyFrom = rebuilt.myDirtyFrom;
+}
+
 Feature* Document::Find(ObjectId id) {
     for (auto& f : myFeatures)
         if (f->id == id) return f.get();

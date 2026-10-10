@@ -36,7 +36,11 @@ struct Model::Impl {
     /// Tools of the operations that can be copied, by feature id.
     std::unordered_map<ObjectId, Tool> tools;
 
+    /// How long each operation took last time it was built, ms.
+    std::unordered_map<ObjectId, double> costMs;
+
     std::vector<Body>     bodies;   ///< final result (at the end-of-part marker)
+    bool                  bodiesSet = false;   ///< `bodies` was set by a rebuild (a Fork starts without)
 
     /// A rebuild done in slices (Model::RebuildSlice): where it began and how far it is.
     bool        slicing = false;

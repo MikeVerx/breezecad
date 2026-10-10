@@ -79,6 +79,10 @@ public:
 
     /// Re-creates displayed bodies if the model (or which model) changed.
     void Sync(const kernel::Model& model);
+    /// Meshes the model's bodies as Sync would at this quality level. Safe
+    /// on another thread for a model no viewport shows yet: Sync then finds
+    /// the triangles ready.
+    static void PrepareMeshes(const kernel::Model& model, int quality);
     /// Pre-highlights the face under the cursor (nullopt: nothing).
     void Hover(std::optional<Vec2> pixel);
     void SetColors(const ViewportColors& colors);

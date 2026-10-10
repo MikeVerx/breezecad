@@ -23,6 +23,9 @@ enum class EditMode : unsigned char {
 class Session {
 public:
     Session();
+    ~Session();   // waits for a rebuild still running on another thread
+    Session(const Session&) = delete;
+    Session& operator=(const Session&) = delete;
 
     doc::Document  doc;
     doc::History   history;
@@ -63,8 +66,18 @@ public:
     /// The same, to the end at once (before reading the result: a commit,
     /// an export).
     bool RebuildNow();
-    /// A rebuild is under way in slices (the window shows its progress).
+    /// A rebuild is under way, in slices or on another thread (the window
+    /// shows its progress).
     bool Rebuilding() const { return myRebuilding; }
+    /// The rebuild under way runs on another thread (the window only has
+    /// to show that it is busy).
+    bool RebuildingInBackground() const { return myBackground != nullptr; }
+    /// How far that rebuild is.
+    kernel::Model::Progress RebuildProgress() const;
+
+    /// Display quality (Settings::graphics): a rebuild on another thread
+    /// meshes its bodies for it there, not in the window's thread.
+    void SetMeshQuality(int level) { myMeshQuality = level; }
 
     /// While a sketch or an operation is edited: rebuild only up to it
     /// (`last`, a feature index); the rest follows when editing ends.
@@ -75,10 +88,21 @@ public:
     }
 
 private:
+    struct Background;
+    /// A long rebuild runs on another thread, on copies of the document
+    /// and of the shapes it starts from; the window keeps showing the part
+    /// as it was until it is done.
+    std::unique_ptr<Background> myBackground;
+    void StartBackground(std::size_t limit);
+    /// Waits for the background rebuild and takes its result. True when
+    /// it was made for the document as it is now.
+    bool FinishBackground();
+
     std::optional<std::size_t> myRebuildLimit;
     bool                       myRebuilding = false;
     bool                       Rebuild(double budgetMs);
     bool                       myShowAtLimit = false;
+    int                        myMeshQuality = 1;
     std::uint64_t myBuiltRevision = static_cast<std::uint64_t>(-1);
     double        myLastRebuildSeconds = 0;   ///< how long the last rebuild took
     double        myLastRebuildAt = 0;        ///< when it finished (ImGui time)

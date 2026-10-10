@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <thread>
 
 using namespace bz;
 using namespace bz::test;
@@ -290,4 +291,43 @@ TEST_CASE("interferences: overlapping bodies are found, touching ones are not") 
     CHECK(found[0].second == 1);
     CHECK(found[0].volume == doctest::Approx(200));
     CHECK(found[0].centre.x == doctest::Approx(9));
+}
+
+TEST_CASE("a forked model rebuilds on another thread and is adopted") {
+    doc::Document d;
+    auto& base = AddSketch(d);
+    AddRect(d, base, {0, 0}, {60, 40});
+    AddExtrude(d, base.id, "10");
+    auto& pocket = AddSketch(d);
+    AddRect(d, pocket, {10, 10}, {20, 20});
+    auto& cut = AddExtrude(d, pocket.id, "4", BooleanOp::Cut);
+
+    kernel::Model model;
+    model.Rebuild(d);
+    const double before = model.Volume();
+    CHECK(before == doctest::Approx(24000.0 - 400.0));
+
+    // Deeper pocket: only the cut has to be rebuilt.
+    cut.distance.expression = "6";
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(cut.id)));
+    const std::size_t start = model.FirstToRebuild(d);
+    CHECK(start == static_cast<std::size_t>(d.IndexOf(cut.id)));
+
+    doc::Document copy = d.Clone();
+    kernel::Model fork = model.Fork(start);
+    std::thread worker([&] { fork.Rebuild(copy); });
+    worker.join();
+    CHECK(model.Volume() == doctest::Approx(before));   // untouched meanwhile
+
+    d.TakeRebuilt(copy);
+    model.Adopt(std::move(fork), start);
+    CHECK(d.DirtyFrom() == d.FeatureCount());
+    CHECK(cut.distance.value == doctest::Approx(6.0));
+    CHECK(cut.status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(24000.0 - 600.0));
+    // Later rebuilds go on from the adopted results.
+    cut.distance.expression = "5";
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(cut.id)));
+    model.Rebuild(d);
+    CHECK(model.Volume() == doctest::Approx(24000.0 - 500.0));
 }

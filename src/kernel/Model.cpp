@@ -30,6 +30,9 @@
 #include "kernel/occt/Sweep.h"
 #include "kernel/occt/Thread.h"
 
+#include <BOPAlgo_Options.hxx>
+#include <TopoDS.hxx>
+#include <BRepBuilderAPI_Copy.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepBndLib.hxx>
 #include <TopExp_Explorer.hxx>
@@ -614,9 +617,12 @@ bool FollowSupport(doc::SketchFeature& sk, const doc::Document& doc, const std::
 
 /// OCCT prints progress reports (STEP statistics...) to stdout; keep only
 /// warnings and errors, our own log covers the rest.
-void QuietOcctMessages() {
+/// Process-wide OCCT setup: fewer messages, booleans on all cores.
+void SetUpOcct() {
     static std::once_flag once;
     std::call_once(once, [] {
+        // Booleans split their intersection work over the processor's cores.
+        BOPAlgo_Options::SetParallelMode(true);
         const Handle(Message_Messenger)& messenger = Message::DefaultMessenger();
         // Range-for works with both OCCT 7.x and 8.x sequence types.
         for (const auto& printer : messenger->Printers()) printer->SetTraceLevel(Message_Warning);
@@ -625,7 +631,7 @@ void QuietOcctMessages() {
 
 } // namespace
 
-Model::Model() : myImpl(std::make_unique<Impl>()) { QuietOcctMessages(); }
+Model::Model() : myImpl(std::make_unique<Impl>()) { SetUpOcct(); }
 Model::~Model() = default;
 Model::Model(Model&&) noexcept = default;
 Model& Model::operator=(Model&&) noexcept = default;
@@ -642,15 +648,7 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
     doc::RecomputeModel(doc);
 
     const std::size_t count = doc.FeatureCount();
-    // Reuse cached results up to the first changed feature, as long as the
-    // order of features has not changed before that point.
-    std::size_t start = std::min(doc.DirtyFrom(), count);
-    for (std::size_t i = 0; i < start; ++i) {
-        if (i >= impl.cachedOrder.size() || impl.cachedOrder[i] != doc.Features()[i]->id) {
-            start = i;
-            break;
-        }
-    }
+    const std::size_t start = FirstToRebuild(doc);
     impl.cachedOrder.resize(count);
     impl.bodiesAfter.resize(count);
 
@@ -791,8 +789,9 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
             f.status = {FeatureState::Error, std::format("Внутренняя ошибка: {}", e.what())};
         }
         if (f.status.state == FeatureState::Error) log::Warn("{}: {}", f.name, f.status.message);
-        if (const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - featureStart).count(); ms > 50)
-            log::Info("Rebuild: {} took {:.0f} ms", f.name, ms);
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - featureStart).count();
+        if (!skip) impl.costMs[f.id] = ms;
+        if (ms > 50) log::Info("Rebuild: {} took {:.0f} ms", f.name, ms);
         impl.bodiesAfter[i] = bodies;
     }
 
@@ -807,16 +806,116 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
     // an operation is edited, right after it).
     if (end < count) {
         doc.KeepDirtyFrom(end);
-        if (shown == Stopped::ShowAtStop) impl.bodies = end > 0 ? impl.bodiesAfter[end - 1] : std::vector<Body>{};
+        if (shown == Stopped::ShowAtStop) {
+            impl.bodies = end > 0 ? impl.bodiesAfter[end - 1] : std::vector<Body>{};
+            impl.bodiesSet = true;
+        }
     } else {
         const std::size_t marker = std::min(doc.EndMarker(), count);
         impl.bodies = marker > 0 ? impl.bodiesAfter[marker - 1] : std::vector<Body>{};
+        impl.bodiesSet = true;
         doc.ClearDirty();
     }
     impl.infos.clear();
     for (const Body& b : impl.bodies) impl.infos.push_back({b.id, b.name});
     ++impl.revision;
     return true;
+}
+
+std::size_t Model::FirstToRebuild(const doc::Document& doc) const {
+    // Cached results are reused up to the first changed feature, as long as
+    // the order of features has not changed before that point.
+    const std::size_t start = std::min(doc.DirtyFrom(), doc.FeatureCount());
+    for (std::size_t i = 0; i < start; ++i)
+        if (i >= myImpl->cachedOrder.size() || myImpl->cachedOrder[i] != doc.Features()[i]->id) return i;
+    return start;
+}
+
+double Model::EstimateRebuildMs(const doc::Document& doc, std::size_t last) const {
+    constexpr double kNeverBuilt = 1000.0;
+    const std::size_t count = doc.FeatureCount();
+    const std::size_t end = last < count ? last + 1 : count;
+    double total = 0;
+    for (std::size_t i = FirstToRebuild(doc); i < end; ++i) {
+        const doc::Feature& f = *doc.Features()[i];
+        if (!doc.IsActive(i) || f.suppressed) continue;
+        const auto it = myImpl->costMs.find(f.id);
+        total += it != myImpl->costMs.end() ? it->second : kNeverBuilt;
+    }
+    return total;
+}
+
+Model Model::Fork(std::size_t start) const {
+    const Impl& a = *myImpl;
+    Model fork;
+    Impl& b = *fork.myImpl;
+    b.cachedOrder = a.cachedOrder;
+    b.bodiesAfter.resize(a.bodiesAfter.size());
+    b.costMs = a.costMs;
+    b.revision = a.revision;   // `bodies` stays empty: the shown ones are not the fork's to touch
+    start = std::min(start, a.bodiesAfter.size());
+
+    // Every shape the rebuild can start from, copied in one go so shapes
+    // that shared parts still share them in the copy.
+    TopoDS_Compound all;
+    BRep_Builder builder;
+    builder.MakeCompound(all);
+    const auto add = [&](const TopoDS_Shape& s) {
+        if (!s.IsNull()) builder.Add(all, s);
+    };
+    if (start > 0)
+        for (const Body& body : a.bodiesAfter[start - 1]) add(body.shape);
+    for (const auto& [id, tool] : a.tools) {
+        add(tool.shape);
+        add(tool.cuts);
+    }
+    for (const auto& [id, profile] : a.sketches)
+        for (const TopoDS_Face& face : profile.faces) add(face);
+    BRepBuilderAPI_Copy copier(all, true, false);
+    const auto copied = [&](const TopoDS_Shape& s) {
+        if (s.IsNull()) return s;
+        TopoDS_Shape image = copier.ModifiedShape(s);
+        image.Orientation(s.Orientation());
+        return image;
+    };
+
+    if (start > 0)
+        for (const Body& body : a.bodiesAfter[start - 1]) b.bodiesAfter[start - 1].push_back({body.id, body.name, copied(body.shape)});
+    for (const auto& [id, tool] : a.tools) b.tools[id] = {copied(tool.shape), tool.op, copied(tool.cuts)};
+    for (const auto& [id, profile] : a.sketches) {
+        occt::SketchProfile& p = b.sketches[id];
+        p.frame = profile.frame;
+        p.regions = profile.regions;
+        for (const TopoDS_Face& face : profile.faces) p.faces.push_back(TopoDS::Face(copied(face)));
+    }
+    return fork;
+}
+
+void Model::Adopt(Model&& fork, std::size_t start) {
+    Impl& a = *myImpl;
+    Impl& b = *fork.myImpl;
+    a.cachedOrder = b.cachedOrder;
+    a.bodiesAfter.resize(b.bodiesAfter.size());
+    for (std::size_t i = start; i < b.bodiesAfter.size(); ++i) a.bodiesAfter[i] = std::move(b.bodiesAfter[i]);
+    // What the features from `start` on made; earlier ones keep their own shapes.
+    for (std::size_t i = start; i < b.cachedOrder.size(); ++i) {
+        const ObjectId id = b.cachedOrder[i];
+        const auto take = [id](auto& to, auto& from) {
+            if (const auto it = from.find(id); it != from.end()) to[id] = std::move(it->second);
+            else to.erase(id);
+        };
+        take(a.tools, b.tools);
+        take(a.sketches, b.sketches);
+        take(a.copyPreviews, b.copyPreviews);
+    }
+    a.costMs = std::move(b.costMs);
+    if (b.bodiesSet) {   // otherwise the part shown stays as it was
+        a.bodies = std::move(b.bodies);
+        a.infos = std::move(b.infos);
+    }
+    a.slicing = false;
+    a.sliceDone = a.sliceTotal = 0;
+    a.revision = std::max(a.revision, b.revision) + 1;
 }
 
 std::uint64_t Model::Revision() const { return myImpl->revision; }

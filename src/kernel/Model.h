@@ -88,6 +88,22 @@ public:
     };
     Progress RebuildProgress() const;
 
+    /// The first feature a rebuild of `doc` has to compute.
+    std::size_t FirstToRebuild(const doc::Document& doc) const;
+
+    /// About how long rebuilding from `doc.DirtyFrom()` up to feature `last`
+    /// will take, from the time each operation took last time. Operations
+    /// never built count as slow.
+    double EstimateRebuildMs(const doc::Document& doc, std::size_t last) const;
+
+    /// For a rebuild on another thread: a model that computes the features
+    /// from `start` on by itself. It shares no OCCT shape with this one (the
+    /// shapes it starts from are copied), so the two can be used at the same
+    /// time from different threads.
+    Model Fork(std::size_t start) const;
+    /// Takes the results of a Fork(start) that has rebuilt a copy of the document.
+    void Adopt(Model&& fork, std::size_t start);
+
     /// Bumped whenever the geometry changes (the viewport re-syncs on it).
     std::uint64_t Revision() const;
 

@@ -7,6 +7,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <memory>
+#include <type_traits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -51,6 +52,12 @@ public:
 
     virtual std::unique_ptr<Feature> Clone() const = 0;
 
+    /// Takes what a rebuild computed on a copy of this feature (status,
+    /// solved sketch, resolved references). The copy was made from this
+    /// feature and nothing changed since, so the object stays the same one
+    /// and pointers into it stay valid.
+    virtual void TakeRebuilt(const Feature& rebuilt) { status = rebuilt.status; }
+
     /// Features this one reads from (e.g. the sketch of an extrusion).
     virtual std::vector<ObjectId> Dependencies() const { return {}; }
 
@@ -88,6 +95,12 @@ class FeatureBase : public Base {
 public:
     std::unique_ptr<Feature> Clone() const override {
         return std::make_unique<Derived>(static_cast<const Derived&>(*this));
+    }
+    void TakeRebuilt(const Feature& rebuilt) override {
+        if constexpr (std::is_copy_assignable_v<Derived>)
+            static_cast<Derived&>(*this) = static_cast<const Derived&>(rebuilt);
+        else
+            Feature::TakeRebuilt(rebuilt);
     }
 };
 

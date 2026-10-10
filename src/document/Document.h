@@ -35,6 +35,13 @@ public:
     Document(const Document&) = delete;
     Document& operator=(const Document&) = delete;
 
+    /// A deep copy (for a rebuild on another thread).
+    Document Clone() const;
+    /// Takes the results of a rebuild done on Clone(), made at the current
+    /// revision: evaluated values, feature statuses and what features
+    /// resolved, and how far the rebuild got.
+    void TakeRebuilt(const Document& rebuilt);
+
     PartInfo               info;
     UnitSystem             units;
     std::vector<Parameter> variables;   ///< the user variables table

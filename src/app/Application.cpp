@@ -184,7 +184,9 @@ int Application::Run() {
         if (NeedsAnotherFrame()) {
             platform::Window::PollEvents();
         } else {
-            platform::Window::WaitEvents(1.0);   // wakes up for autosave and theme checks
+            // Wakes up for autosave and theme checks; often enough to show
+            // a rebuild running on another thread.
+            platform::Window::WaitEvents(WaitsForBackground() ? 1.0 / 30.0 : 1.0);
         }
         const double now = glfwGetTime();
         if (myInput.seen) {
@@ -211,7 +213,7 @@ int Application::Run() {
         for (auto& s : myWorkspace.sessions)
             if (myAutosave->Update(*s, mySettings, now, now - myShell.lastInputTime)) myFramesToDraw = std::max(myFramesToDraw, 1);
 
-        if (myFramesToDraw > 0 || NeedsAnotherFrame()) {
+        if (myFramesToDraw > 0 || NeedsAnotherFrame() || WaitsForBackground()) {
             Frame();
             if (myFramesToDraw > 0) --myFramesToDraw;
         }
@@ -226,12 +228,18 @@ int Application::Run() {
 bool Application::NeedsAnotherFrame() const {
     if (myBusy || myViewport.NeedsRender() || !myDeferred.empty()) return true;
     for (const auto& s : myWorkspace.sessions)
-        if (s->Rebuilding()) return true;   // the next slice of a rebuild
+        if (s->Rebuilding() && !s->RebuildingInBackground()) return true;   // the next slice of a rebuild
     if (myScreenshotFrame >= 0) return true;
     const ImGuiIO& io = ImGui::GetIO();
     for (bool down : io.MouseDown)
         if (down) return true;
     return false;
+}
+
+bool Application::WaitsForBackground() const {
+    // Only the document on screen: another one takes its result when shown.
+    const int i = myWorkspace.ActiveIndex();
+    return i >= 0 && i < static_cast<int>(myWorkspace.sessions.size()) && myWorkspace.sessions[static_cast<std::size_t>(i)]->RebuildingInBackground();
 }
 
 void Application::HandleCloseRequests() {
@@ -318,6 +326,7 @@ void Application::Frame() {
             s->LimitRebuild(std::nullopt, false);
         }
         bool rebuilt = false;
+        s->SetMeshQuality(mySettings.graphics);
         {
             prof::Scope scope("rebuild");
             rebuilt = s->RebuildIfNeeded();

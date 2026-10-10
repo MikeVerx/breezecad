@@ -2,10 +2,13 @@
 
 #include <imgui.h>
 
+#include "core/Log.h"
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <format>
+#include <thread>
 
 namespace bz::app {
 namespace {
@@ -18,7 +21,64 @@ std::string NewAutosaveKey() {
 
 } // namespace
 
+struct Session::Background {
+    doc::Document              doc;     ///< a copy, rebuilt on the other thread
+    kernel::Model              model;   ///< a fork of the session's model
+    std::size_t                start = 0;
+    std::atomic<std::size_t>   done{0}, total{0};
+    std::atomic<bool>          finished{false};
+    std::thread                thread;
+};
+
 Session::Session() : autosaveKey(NewAutosaveKey()) {}
+
+Session::~Session() {
+    if (myBackground && myBackground->thread.joinable()) myBackground->thread.join();
+}
+
+kernel::Model::Progress Session::RebuildProgress() const {
+    if (myBackground) return {myBackground->done.load(), myBackground->total.load()};
+    return model.RebuildProgress();
+}
+
+void Session::StartBackground(std::size_t limit) {
+    auto job = std::make_unique<Background>();
+    job->doc = doc.Clone();
+    job->start = model.FirstToRebuild(doc);
+    job->model = model.Fork(job->start);
+    const auto shown = myShowAtLimit ? kernel::Model::Stopped::ShowAtStop : kernel::Model::Stopped::KeepShown;
+    Background* b = job.get();
+    b->thread = std::thread([b, limit, shown, quality = myMeshQuality] {
+        // RebuildSlice keeps every OCCT error inside the operation that
+        // caused it; anything else must not leave this thread.
+        try {
+            while (!b->model.RebuildSlice(b->doc, limit, shown, 0.0)) {
+                const kernel::Model::Progress p = b->model.RebuildProgress();
+                b->total = p.total;
+                b->done = p.done;
+            }
+            render::Viewport::PrepareMeshes(b->model, quality);
+        } catch (const std::exception& e) {
+            log::Error("Background rebuild failed: {}", e.what());
+        } catch (...) {   // an OCCT failure outside an operation (meshing)
+            log::Error("Background rebuild failed");
+        }
+        b->finished = true;
+    });
+    myBackground = std::move(job);
+}
+
+bool Session::FinishBackground() {
+    std::unique_ptr<Background> job = std::move(myBackground);
+    job->thread.join();
+    // Made for the document as it is now: take everything. The document
+    // changed meanwhile (a value dragged on): still show the shape it got
+    // to, the features themselves stay to be rebuilt again.
+    const bool current = job->doc.Revision() == doc.Revision();
+    if (current) doc.TakeRebuilt(job->doc);
+    model.Adopt(std::move(job->model), job->start);
+    return current;
+}
 
 std::string Session::Title() const {
     if (!doc.info.name.empty()) return doc.info.name;
@@ -44,10 +104,17 @@ bool Session::RebuildIfNeeded() { return Rebuild(40.0); }
 bool Session::RebuildNow() { return Rebuild(-1.0); }
 
 bool Session::Rebuild(double budgetMs) {
+    bool adopted = false;
+    if (myBackground) {
+        if (budgetMs >= 0 && !myBackground->finished) return false;   // still at it; the window goes on
+        if (FinishBackground()) myBuiltRevision = doc.Revision();
+        myRebuilding = false;
+        adopted = true;
+    }
     // Something left over from a partial rebuild that is no longer limited.
     const std::size_t limit = myRebuildLimit ? *myRebuildLimit : static_cast<std::size_t>(-1);
     const bool leftOver = doc.DirtyFrom() < doc.FeatureCount() && doc.DirtyFrom() <= limit;
-    if (doc.Revision() == myBuiltRevision && !leftOver) return false;
+    if (doc.Revision() == myBuiltRevision && !leftOver) return adopted;
     // While a handle or a value is being dragged, a part that takes long to
     // rebuild is rebuilt at most every so often, and once more on release:
     // the drag stays smooth instead of waiting for every step.
@@ -55,6 +122,13 @@ bool Session::Rebuild(double budgetMs) {
     if (budgetMs >= 0 && !myRebuilding && ImGui::IsMouseDown(ImGuiMouseButton_Left) && myLastRebuildSeconds > 0.04 &&
         now - myLastRebuildAt < std::max(0.25, 3 * myLastRebuildSeconds))
         return false;
+    // Long work (a heavy boolean, a part just opened) goes to another
+    // thread: one operation alone can take seconds and cannot be sliced.
+    if (budgetMs >= 0 && model.EstimateRebuildMs(doc, limit) > 60.0) {
+        StartBackground(limit);
+        myRebuilding = true;
+        return adopted;
+    }
     const auto start = std::chrono::steady_clock::now();
     // A slice at a time: the window keeps answering while a large part
     // rebuilds; the part shown changes when the rebuild is done.

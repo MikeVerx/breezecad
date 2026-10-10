@@ -33,6 +33,7 @@
 #include <Prs3d_Drawer.hxx>
 #include <Prs3d_IsoAspect.hxx>
 #include <Prs3d_LineAspect.hxx>
+#include <StdPrs_ToolTriangulatedShape.hxx>
 #include <Prs3d_ShadingAspect.hxx>
 #include <SelectMgr_EntityOwner.hxx>
 #include <StdSelect_BRepOwner.hxx>
@@ -185,6 +186,23 @@ std::optional<Frame> PlanarFaceFrame(const TopoDS_Face& face) {
 
 // --- Impl -------------------------------------------------------------------
 
+namespace {
+
+/// How finely bodies are meshed for display, by quality level (0 best).
+/// Finer than OCCT's default (20°): round faces look round.
+void SetMeshPrecision(const Handle(Prs3d_Drawer)& drawer, int quality) {
+    static constexpr double kAngle[] = {4.0, 8.0, 15.0}, kCoefficient[] = {0.0005, 0.001, 0.003};
+    drawer->SetDeviationAngle(kAngle[quality] * kPi / 180.0);
+    drawer->SetDeviationCoefficient(kCoefficient[quality]);
+    // Not a "change" for OCCT: a new presentation with its own precision
+    // would otherwise wipe the shape's triangles (ClearOnOwnDeflectionChange)
+    // and mesh it all again. SetQuality cleans them itself when it changes.
+    drawer->UpdatePreviousDeviationAngle();
+    drawer->UpdatePreviousDeviationCoefficient();
+}
+
+} // namespace
+
 struct Viewport::Impl {
     Handle(OpenGl_GraphicDriver)     driver;
     Handle(V3d_Viewer)               viewer;
@@ -201,6 +219,10 @@ struct Viewport::Impl {
         Handle(AIS_Shape)  shape;
     };
     std::vector<Shown> shown;
+    /// Bodies shown a moment ago, hidden but kept with their meshes: closing
+    /// an operation without applying it brings the old shapes back at once.
+    std::vector<Shown> spare;
+    static constexpr std::size_t kSpare = 4;
 
     /// Measuring (see SetMeasuring).
     struct Measuring {
@@ -319,9 +341,7 @@ struct Viewport::Impl {
         drawer->SetFaceBoundaryUpperContinuity(GeomAbs_C1);
         // Finer tessellation than OCCT's default (20°): round faces look
         // round; coarser on the lower quality levels.
-        static constexpr double kAngle[] = {4.0, 8.0, 15.0}, kCoefficient[] = {0.0005, 0.001, 0.003};
-        drawer->SetDeviationAngle(kAngle[quality] * kPi / 180.0);
-        drawer->SetDeviationCoefficient(kCoefficient[quality]);
+        SetMeshPrecision(drawer, quality);
         drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(colors.edges), Aspect_TOL_SOLID, 1.0));
         // Wireframe and hidden-line styles draw edges in the edge colour (not
         // the body colour SetColor gave them) and no isolines.
@@ -452,6 +472,12 @@ void Viewport::SetSize(double width, double height, double pixelScale) {
     m.dirty = true;
 }
 
+void Viewport::PrepareMeshes(const kernel::Model& model, int quality) {
+    Handle(Prs3d_Drawer) drawer = new Prs3d_Drawer();
+    SetMeshPrecision(drawer, std::clamp(quality, 0, 2));
+    for (const kernel::Body& body : model.GetImpl().bodies) StdPrs_ToolTriangulatedShape::Tessellate(body.shape, drawer);
+}
+
 void Viewport::Sync(const kernel::Model& model) {
     Impl& m = *myImpl;
     if (&model == m.syncedModel && model.Revision() == m.syncedRevision) return;
@@ -472,13 +498,30 @@ void Viewport::Sync(const kernel::Model& model) {
             same->shape.Nullify();   // taken: not removed below
             continue;
         }
+        const auto kept = std::find_if(m.spare.begin(), m.spare.end(), [&](const Impl::Shown& s) {
+            return s.body == body.id && s.shape->Shape().IsEqual(body.shape);
+        });
+        if (kept != m.spare.end()) {
+            m.ApplyStyle(kept->shape, body.id == m.hovered);
+            m.context->Display(kept->shape, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
+            m.shown.push_back(*kept);
+            m.spare.erase(kept);
+            continue;
+        }
         Handle(AIS_Shape) ais = new AIS_Shape(body.shape);
         m.ApplyStyle(ais, body.id == m.hovered);
         m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
         m.shown.push_back({body.id, ais});
     }
-    for (const auto& s : previous)
-        if (!s.shape.IsNull()) m.context->Remove(s.shape, false);
+    for (const auto& s : previous) {
+        if (s.shape.IsNull()) continue;
+        m.context->Erase(s.shape, false);
+        m.spare.push_back(s);
+    }
+    while (m.spare.size() > Impl::kSpare) {
+        m.context->Remove(m.spare.front().shape, false);
+        m.spare.erase(m.spare.begin());
+    }
     m.ActivateShown();
     // Picked entities belonged to the old shapes.
     if (!m.measuring.picked.empty()) ClearMeasure();
@@ -535,6 +578,8 @@ void Viewport::SetQuality(int level) {
     static constexpr int kSamples[] = {4, 2, 0};
     m.view->ChangeRenderingParams().NbMsaaSamples = kSamples[level];
     // New tessellation: the old triangles stay on the shape until cleaned.
+    for (const auto& s : m.spare) m.context->Remove(s.shape, false);
+    m.spare.clear();
     for (const auto& s : m.shown) {
         BRepTools::Clean(s.shape->Shape());
         s.shape->SetToUpdate();

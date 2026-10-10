@@ -56,6 +56,8 @@ private:
     void UpdateTitle();
     void HandleCloseRequests();
     bool NeedsAnotherFrame() const;
+    /// A document rebuilds on another thread: frames at a calm pace.
+    bool WaitsForBackground() const;
     void TakeScreenshot(const std::filesystem::path& file) const;
     void PollShotRequest();
 

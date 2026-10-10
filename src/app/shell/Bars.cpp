@@ -11,6 +11,7 @@
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
 
+#include <cmath>
 #include <format>
 
 namespace bz::app {
@@ -132,15 +133,23 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
     for (const auto& f : s->doc.Features()) errors += f->status.state == doc::FeatureState::Error && f->id != editing ? 1 : 0;
     if (s->Rebuilding()) {
         // A rebuild under way in slices: a bar with how far it is.
-        const kernel::Model::Progress p = s->model.RebuildProgress();
+        const kernel::Model::Progress p = s->RebuildProgress();
         const float barW = ui.S(90), barH = ui.S(6);
         const std::string label = Tr("Перестроение");
         const float lw = font->CalcTextSizeA(fs, FLT_MAX, 0, label.c_str()).x;
         right -= barW;
         const float by = pos.y + (h - barH) / 2;
         dl->AddRectFilled({right, by}, {right + barW, by + barH}, ui::ToU32(c.dividerSoft), barH / 2);
-        const float share = p.total > 0 ? static_cast<float>(p.done) / static_cast<float>(p.total) : 0.0f;
-        dl->AddRectFilled({right, by}, {right + std::max(barH, barW * share), by + barH}, ui::ToU32(c.accent), barH / 2);
+        if (p.total > 1) {
+            const float share = static_cast<float>(p.done) / static_cast<float>(p.total);
+            dl->AddRectFilled({right, by}, {right + std::max(barH, barW * share), by + barH}, ui::ToU32(c.accent), barH / 2);
+        } else {
+            // One long operation: how far it is is unknown, a part runs back and forth.
+            const float part = barW * 0.3f;
+            const float t = static_cast<float>(std::fmod(ImGui::GetTime() * 0.8, 2.0));
+            const float x0 = right + (barW - part) * (t < 1.0f ? t : 2.0f - t);
+            dl->AddRectFilled({x0, by}, {x0 + part, by + barH}, ui::ToU32(c.accent), barH / 2);
+        }
         right -= ui.S(8) + lw;
         dl->AddText(font, fs, {right, ty}, ui::ToU32(c.textSecondary), label.c_str());
         right -= ui.S(18);
