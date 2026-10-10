@@ -376,7 +376,48 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
                     if (a.id == curve) a.projected = true;
                 break;
         }
-        f->projections.push_back({edge, curve});
+        if (myOptions.style != LineStyle::Normal) {   // "Вспомогат." chosen before picking
+            if (sketch::Line* l = sk.FindLine(curve)) l->construction = true;
+            if (sketch::Circle* c = sk.FindCircle(curve)) c->construction = true;
+            for (auto& a : sk.arcs)
+                if (a.id == curve) a.construction = true;
+        }
+        if (myOptions.projectLinked) {
+            f->projections.push_back({edge, curve});
+        } else {
+            // Независимая: ordinary geometry held where it is.
+            std::vector<ObjectId> own;
+            if (sketch::Line* l = sk.FindLine(curve)) {
+                l->projected = false;
+                own = {l->start, l->end};
+            }
+            if (sketch::Circle* c = sk.FindCircle(curve)) {
+                c->projected = false;
+                own = {c->center};
+                sketch::Constraint size;   // the size held too, as a dimension
+                size.type = sketch::ConstraintType::Diameter;
+                size.refs = {curve, {}, {}};
+                size.parameter.name = session.doc.NextParameterName();
+                size.parameter.expression = FormatValue(2 * c->radius, Quantity::Length, session.doc.units, 4);
+                size.parameter.quantity = Quantity::Length;
+                size.parameter.value = 2 * c->radius;
+                sk.AddConstraint(ids, size);
+            }
+            for (auto& a : sk.arcs)
+                if (a.id == curve) {
+                    a.projected = false;
+                    own = {a.center, a.start, a.end};
+                }
+            for (const ObjectId p : own)
+                if (sketch::Point* pt = sk.FindPoint(p); pt && pt->projected) {
+                    pt->projected = false;
+                    sketch::Constraint fix;
+                    fix.type = sketch::ConstraintType::Fix;
+                    fix.refs = {p, {}, {}};
+                    fix.fixedAt = pt->pos;
+                    sk.AddConstraint(ids, fix);
+                }
+        }
         ++added;
     }
     if (added == 0) {

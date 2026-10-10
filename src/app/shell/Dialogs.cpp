@@ -314,6 +314,11 @@ void DrawSettings(AppContext& app) {
         static constexpr std::array<const char*, 3> backgrounds{N_("Градиент"), N_("Светлый ровный"), N_("Тёмный ровный")};
         if (const int n = ui::Segmented(ui, "background", backgrounds, app.settings.viewBackground, 3, width); n != app.settings.viewBackground)
             app.settings.viewBackground = n;
+        ImGui::Dummy({0, ui.S(6)});
+        ui::FieldLabel(ui, Tr("Качество графики"));
+        static constexpr std::array<const char*, 3> quality{N_("Высокое"), N_("Среднее"), N_("Слабый компьютер")};
+        if (const int n = ui::Segmented(ui, "graphics", quality, app.settings.graphics, 3, width); n != app.settings.graphics)
+            app.settings.graphics = n;
 
     } else if (app.shell.settingsTab == 2) {
         DrawMouseSettings(app, width);

@@ -312,6 +312,7 @@ void Application::Frame() {
         }
         myViewport.Sync(s->model);
         myViewport.SetDisplayStyle(myShell.displayStyle);
+        myViewport.SetQuality(mySettings.graphics);
         if (myShell.keepModelInView) {   // the model was rebuilt and synced above
             myShell.keepModelInView = false;
             KeepInView(app, myViewport.ModelBounds());

@@ -8,6 +8,7 @@
 
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>
+#include <BRepTools.hxx>
 #include <BRep_Tool.hxx>
 #include <gp_Cylinder.hxx>
 #include <Aspect_DisplayConnection.hxx>
@@ -315,9 +316,11 @@ struct Viewport::Impl {
         // (they show its size); not the seam along a cylinder, which is
         // smooth beyond tangency.
         drawer->SetFaceBoundaryUpperContinuity(GeomAbs_C1);
-        // Finer tessellation than OCCT's default (20°): round faces look round.
-        drawer->SetDeviationAngle(4.0 * kPi / 180.0);
-        drawer->SetDeviationCoefficient(0.0005);
+        // Finer tessellation than OCCT's default (20°): round faces look
+        // round; coarser on the lower quality levels.
+        static constexpr double kAngle[] = {4.0, 8.0, 15.0}, kCoefficient[] = {0.0005, 0.001, 0.003};
+        drawer->SetDeviationAngle(kAngle[quality] * kPi / 180.0);
+        drawer->SetDeviationCoefficient(kCoefficient[quality]);
         drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(colors.edges), Aspect_TOL_SOLID, 1.0));
         // Wireframe and hidden-line styles draw edges in the edge colour (not
         // the body colour SetColor gave them) and no isolines.
@@ -335,6 +338,8 @@ struct Viewport::Impl {
         const bool wire = style == DisplayStyle::Wireframe || style == DisplayStyle::HiddenLines;
         context->SetDisplayMode(ais, wire ? AIS_WireFrame : AIS_Shaded, false);
     }
+
+    int quality = 0;   ///< see Viewport::SetQuality
 
     void ApplyStyleAll() {
         for (const Shown& s : shown) {
@@ -505,6 +510,21 @@ void Viewport::SetDisplayStyle(DisplayStyle style) {
     if (myImpl->style == style) return;
     myImpl->style = style;
     myImpl->ApplyStyleAll();
+}
+
+void Viewport::SetQuality(int level) {
+    Impl& m = *myImpl;
+    level = std::clamp(level, 0, 2);
+    if (m.quality == level) return;
+    m.quality = level;
+    static constexpr int kSamples[] = {4, 2, 0};
+    m.view->ChangeRenderingParams().NbMsaaSamples = kSamples[level];
+    // New tessellation: the old triangles stay on the shape until cleaned.
+    for (const auto& s : m.shown) {
+        BRepTools::Clean(s.shape->Shape());
+        s.shape->SetToUpdate();
+    }
+    m.ApplyStyleAll();
 }
 
 void Viewport::SetHoveredBody(ObjectId body) {

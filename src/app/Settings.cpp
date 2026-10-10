@@ -41,6 +41,7 @@ Settings Settings::Load(const std::filesystem::path& file) {
     s.gridSnap        = j.value("gridSnap", s.gridSnap);
     s.pointSnap       = j.value("pointSnap", s.pointSnap);
     s.orthoMode       = j.value("orthoMode", s.orthoMode);
+    s.graphics        = std::clamp(j.value("graphics", s.graphics), 0, 2);
     s.showAllConstraints = j.value("showAllConstraints", s.showAllConstraints);
     s.gridStep        = std::max(0.0, j.value("gridStep", s.gridStep));
     s.uiScale         = j.value("uiScale", s.uiScale);
@@ -94,6 +95,7 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"gridSnap", gridSnap},
         {"pointSnap", pointSnap},
         {"orthoMode", orthoMode},
+        {"graphics", graphics},
         {"showAllConstraints", showAllConstraints},
         {"gridStep", gridStep},
         {"uiScale", uiScale},

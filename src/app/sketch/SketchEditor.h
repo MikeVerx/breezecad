@@ -44,6 +44,7 @@ enum class LineStyle : unsigned char { Normal, Construction, Centerline };
 /// The tool panel's settings. Typed sizes lock the cursor while drawing
 /// and become dimensions of what is drawn.
 struct DrawOptions {
+    bool projectLinked = true;   ///< Проецирование: follows the model (зависимое) or a fixed copy (независимое)
     LineStyle     style = LineStyle::Normal;
     RectangleMode rectangle = RectangleMode::Corners;
     CircleMode    circle = CircleMode::CentreRadius;

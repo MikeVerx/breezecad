@@ -83,6 +83,9 @@ public:
     void Hover(std::optional<Vec2> pixel);
     void SetColors(const ViewportColors& colors);
     void SetDisplayStyle(DisplayStyle style);
+    /// Graphics quality: 0 high (smooth edges, fine round faces), 1
+    /// balanced, 2 for weak computers (no smoothing, coarse round faces).
+    void SetQuality(int level);
     void SetHoveredBody(ObjectId body);
 
     /// Renders into the texture. Cheap when nothing changed.

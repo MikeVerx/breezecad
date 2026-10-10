@@ -64,7 +64,7 @@ bool SketchEditor::HasToolPanel() const {
            myTool == SketchTool::Arc || myTool == SketchTool::Move || myTool == SketchTool::Rotate || myTool == SketchTool::Mirror ||
            myTool == SketchTool::Copy || myTool == SketchTool::Scale || myTool == SketchTool::PatternRect ||
            myTool == SketchTool::PatternCircular || myTool == SketchTool::Fillet || myTool == SketchTool::Offset ||
-           myTool == SketchTool::Spline || myTool == SketchTool::Text;
+           myTool == SketchTool::Spline || myTool == SketchTool::Text || myTool == SketchTool::Project;
 }
 
 void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width) {
@@ -166,6 +166,21 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         const int chosen = ui::Segmented(ui, "line-style", styles, current, 3, inner, lines ? 0 : 0b100);
         if (chosen != current) myOptions.style = static_cast<LineStyle>(chosen);
         ImGui::Dummy({0, ui.S(14)});
+    }
+
+    // Проецирование: linked to the model or a fixed copy.
+    if (myTool == SketchTool::Project) {
+        ui::FieldLabel(ui, Tr("Связь с моделью"));
+        ImGui::Dummy({0, ui.S(2)});
+        static constexpr std::array<const char*, 2> links{N_("Зависимая"), N_("Независимая")};
+        const int current = myOptions.projectLinked ? 0 : 1;
+        if (const int chosen = ui::Segmented(ui, "project-link", links, current, 2, inner); chosen != current)
+            myOptions.projectLinked = chosen == 0;
+        ImGui::Dummy({0, ui.S(4)});
+        Caption(ui, myOptions.projectLinked ? Tr("Проекция следует за моделью: изменится деталь — изменится и эскиз.")
+                                                 : Tr("Проекция становится обычной закреплённой геометрией и за моделью не следует."),
+                    inner);
+        ImGui::Dummy({0, ui.S(8)});
     }
 
     // Ways to draw.
