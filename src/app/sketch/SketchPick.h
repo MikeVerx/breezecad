@@ -47,6 +47,7 @@ struct SnapOptions {
     ObjectId            fromPoint;          ///< the existing point at `from`, if any (perpendicular to its lines)
     ObjectId            fromCurve;          ///< the line `from` lies on, if it was snapped onto one
     ObjectId            ignore;
+    bool                ortho = false;      ///< "Орто": from `from` only horizontally or vertically
 };
 
 /// Where a click at `mouse` lands, with the reason for the CAD feedback.

@@ -109,8 +109,12 @@ void RegisterActions(AppContext& app) {
            N_("Сделать выбранное вспомогательной геометрией: она не образует контуров (G)"),
            [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasSelection(); },
            [&app] { app.sketch.ToggleConstruction(*app.Doc()); }});
+    a.Add({"sketch.ortho", N_("Орто"), "c-perpendicular", ImGuiKey_F8,
+           N_("Ортогональный режим: отрезки рисуются только горизонтально или вертикально (F8)"),
+           [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch; },
+           [&app] { app.settings.orthoMode = !app.settings.orthoMode; }});
     a.Add({"sketch.centerline", N_("Осевая"), "sk-centerline", 0,
-           N_("Сделать выбранные отрезки осевыми: ось для вращения и пружины, в контуры не входят"),
+           N_("Сделать выбранные отрезки осевыми (штрихпунктир): ось для вращения и пружины, контур ограничивают как обычные"),
            [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasSelection(); },
            [&app] { app.sketch.ToggleCenterline(*app.Doc()); }});
     a.Add({"sketch.showConstraints", N_("Показать все зависимости"), "c-show-all", ImGuiKey_F8,

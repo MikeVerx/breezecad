@@ -286,6 +286,7 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.BeginColumn();
     r.Small("sketch.construction");
     r.Small("sketch.centerline");
+    r.Small("sketch.ortho", nullptr, r.App().settings.orthoMode);
     r.EndColumn();
     r.EndGroup();
 

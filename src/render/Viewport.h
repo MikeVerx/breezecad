@@ -123,6 +123,11 @@ public:
     /// over everything else; nullptr hides it. Cheap when unchanged.
     void ShowInterferences(const kernel::Model* model);
 
+    /// Outlines of a pattern's or mirror's sources (selection colour) and
+    /// copies (hover colour) over the model while its panel is open;
+    /// nullptr hides them. Cheap when unchanged.
+    void ShowCopyPreview(const kernel::Model* model, ObjectId feature);
+
     // --- measuring ---------------------------------------------------------
     /// While on, vertices, edges and faces of the shown bodies are hovered
     /// and picked for measuring (not while picking on an original body).

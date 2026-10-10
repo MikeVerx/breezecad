@@ -283,3 +283,30 @@ TEST_CASE("work plane tangent to a cylinder follows its radius") {
     REQUIRE(wp.status.state == FeatureState::Ok);
     CHECK(wp.frame->origin.x == doctest::Approx(15.0));
 }
+
+TEST_CASE("extrude up to a parallel plane and up to a slanted one") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddRect(d, sk, {-5, -5}, {5, 5});
+    auto& wp = AddWorkPlane(d, "25");
+    auto& ex = AddExtrude(d, sk.id, "10");
+    ex.extent = doc::ExtentType::ToPlane;
+    ex.toPlane = wp.id;
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(ex.status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(100.0 * 25));
+
+    // z = 10 + x over the square: the mean height is 10.
+    wp.method = doc::WorkPlaneMethod::ThreePoints;
+    wp.points = {{0, 0, 10}, {10, 0, 20}, {0, 10, 10}};
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(wp.id)));
+    model.Rebuild(d);
+    REQUIRE(ex.status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(1000.0).epsilon(1e-6));
+
+    ex.toPlane = {};
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(ex.id)));
+    model.Rebuild(d);
+    CHECK(ex.status.state == FeatureState::Error);   // nothing chosen yet
+}

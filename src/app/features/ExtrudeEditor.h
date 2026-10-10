@@ -27,6 +27,7 @@ protected:
 
 private:
     DragArrow   myArrow;
+    bool        myPickTarget = false;   ///< clicks in the view choose the plane "до", not profiles
     std::string myDistance;
     std::string myTaper;
 };

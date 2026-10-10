@@ -3,11 +3,13 @@
 #include "app/Format.h"
 #include "app/sketch/SketchView.h"
 #include "core/I18n.h"
+#include "document/Origin.h"
 #include "document/SketchFeature.h"
 #include "ui/Widgets.h"
 
 #include <array>
 #include <cmath>
+#include <span>
 
 namespace bz::app {
 
@@ -43,6 +45,31 @@ void ExtrudeEditor::CarryOver(const doc::SketchSolidFeature& previous, doc::Sket
 
 bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::SketchSolidFeature& feature, const SketchView& view) {
     auto& f = static_cast<doc::ExtrudeFeature&>(feature);
+    if (f.extent == ExtentType::ToPlane) {
+        myArrow.Release();
+        if (!f.toPlane && !f.toFace.IsSet()) myPickTarget = true;
+        if (!myPickTarget) return false;
+        // Origin and work planes first; else a flat face of the body.
+        const int index = session.doc.IndexOf(f.id);
+        if (index < 0) return false;
+        const ObjectId before = f.toPlane;
+        PickPlane(app, session, f.toPlane, view.vf);
+        if (f.toPlane != before) {
+            f.toFace = {};
+            myPickTarget = false;
+            return true;
+        }
+        app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Faces);
+        if (view.vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            if (const auto face = app.viewport.PickFace(view.vf.ToLocal(ImGui::GetMousePos()))) {
+                f.toFace = *face;
+                f.toPlane = {};
+                myPickTarget = false;
+                Changed(session);
+            }
+        }
+        return true;
+    }
     if (f.extent == ExtentType::ThroughAll || f.distance.HasError()) {
         myArrow.Release();
         return false;
@@ -94,23 +121,47 @@ void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
             else if (f.extent == ExtentType::Symmetric) f.extent = ExtentType::Distance;
             Changed(session);
         }
+        if (f.extent != ExtentType::Symmetric && f.extent != ExtentType::ToPlane &&
+            ui::LinkButton(ui, "##flip", Tr("Изменить направление"))) {
+            f.reversed = !f.reversed;
+            Changed(session);
+        }
     }
     Gap(app);
 
-    // Depth for cuts: a distance or through everything.
-    if (f.operation == BooleanOp::Cut) {
-        Section(app, Tr("Глубина"));
-        static constexpr std::array<const char*, 2> labels{N_("На расстояние"), N_("Насквозь")};
-        const int current = f.extent == ExtentType::ThroughAll ? 1 : 0;
-        const int chosen = ui::Segmented(ui, "depth", labels, current, 2, width);
+    // Depth: a distance, up to a plane or face, or (cuts) through everything.
+    Section(app, Tr("Глубина"));
+    {
+        static constexpr std::array<const char*, 3> labels{N_("На расстояние"), N_("До плоскости"), N_("Насквозь")};
+        const bool cut = f.operation == BooleanOp::Cut;
+        const int current = f.extent == ExtentType::ToPlane ? 1 : f.extent == ExtentType::ThroughAll ? 2 : 0;
+        const int chosen = ui::Segmented(ui, "depth", std::span(labels.data(), cut ? 3 : 2), current, cut ? 3 : 2, width);
         if (chosen != current) {
-            f.extent = chosen == 1 ? ExtentType::ThroughAll : ExtentType::Distance;
+            f.extent = chosen == 1 ? ExtentType::ToPlane : chosen == 2 ? ExtentType::ThroughAll : ExtentType::Distance;
+            myPickTarget = chosen == 1;
             Changed(session);
         }
-        Gap(app);
     }
+    if (f.extent == ExtentType::ToPlane) {
+        ImGui::Dummy({0, ui.S(6)});
+        std::string target;
+        if (f.toPlane == doc::origin::kPlaneXY) {
+            target = Tr("Плоскость XY");
+        } else if (f.toPlane == doc::origin::kPlaneXZ) {
+            target = Tr("Плоскость XZ");
+        } else if (f.toPlane == doc::origin::kPlaneYZ) {
+            target = Tr("Плоскость YZ");
+        } else if (const doc::Feature* p = f.toPlane ? session.doc.Find(f.toPlane) : nullptr) {
+            target = p->name;
+        } else if (f.toFace.IsSet()) {
+            target = Tr("плоская грань");
+        }
+        if (PickChip(ui, "##to", Tr("До"), target, myPickTarget, width)) myPickTarget = true;
+        Caption(app, Tr("Щёлкните плоскость или плоскую грань. Если она наклонена, конец выдавливания примет её наклон."), width);
+    }
+    Gap(app);
 
-    if (f.extent != ExtentType::ThroughAll) {
+    if (f.extent == ExtentType::Distance || f.extent == ExtentType::Symmetric) {
         Section(app, f.extent == ExtentType::Symmetric ? Tr("Расстояние (всего)") : Tr("Расстояние"));
         ParameterField(app, session, "distance", myDistance, f.distance, width, myFocusFirstField);
         Gap(app);

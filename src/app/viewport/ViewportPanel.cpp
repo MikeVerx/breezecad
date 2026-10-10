@@ -84,6 +84,7 @@ void ContextMenu(AppContext& app, Session& session) {
         item("sketch.dimension");
         ImGui::Separator();
         item("sketch.construction");
+        item("sketch.centerline");
         item("edit.delete");
     } else {
         if (app.shell.nav.facePlane && ui::MenuItem(ui, Tr("Эскиз на этой грани"), nullptr, "sketch")) {
@@ -313,6 +314,12 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const bool modelMode = session.mode == EditMode::Model;
     app.viewport.SetSection(modelMode ? SectionFrame(session, app.shell.section) : std::nullopt);
     app.viewport.ShowInterferences(modelMode && app.shell.interference ? &session.model : nullptr);
+    // A pattern or mirror being edited: its sources and copies outlined.
+    {
+        const OperationEditor* op = app.ops.Active();
+        const bool copying = op && (op == &app.ops.pattern || op == &app.ops.mirror);
+        app.viewport.ShowCopyPreview(copying ? &session.model : nullptr, copying ? op->EditedFeature() : ObjectId{});
+    }
     if (modelMode) DrawSectionBar(app, session, vf);
     if (measuring) DrawMeasure(app, session, vf);
     ContextMenu(app, session);

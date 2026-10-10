@@ -228,6 +228,9 @@ struct Viewport::Impl {
     std::vector<Handle(AIS_Shape)> planeShapes;   ///< their presentations
     std::vector<Handle(AIS_Shape)> overlapShapes;           ///< interferences shown
     std::uint64_t                  overlapRevision = 0;     ///< of the model they were taken from
+    std::vector<Handle(AIS_Shape)> copyShapes;              ///< pattern/mirror preview shown
+    std::uint64_t                  copyRevision = 0;
+    ObjectId                       copyFeature;
     std::uint64_t      syncedRevision = static_cast<std::uint64_t>(-1);
     const kernel::Model* syncedModel = nullptr;
     std::optional<Vec2>  hoverPixel;
@@ -796,6 +799,31 @@ void Viewport::ShowInterferences(const kernel::Model* model) {
         m.context->Display(ais, AIS_Shaded, -1, false);
         m.overlapShapes.push_back(ais);
     }
+}
+
+void Viewport::ShowCopyPreview(const kernel::Model* model, ObjectId feature) {
+    Impl& m = *myImpl;
+    const std::uint64_t revision = model ? model->Revision() + 1 : 0;
+    if (revision == m.copyRevision && feature == m.copyFeature) return;
+    m.copyRevision = revision;
+    m.copyFeature = feature;
+    for (const auto& s : m.copyShapes) m.context->Remove(s, false);
+    m.copyShapes.clear();
+    m.dirty = true;
+    if (!model) return;
+    const auto& previews = model->GetImpl().copyPreviews;
+    const auto it = previews.find(feature);
+    if (it == previews.end()) return;
+    const auto show = [&](const TopoDS_Shape& shape, const Color& color, double width) {
+        Handle(AIS_Shape) ais = new AIS_Shape(shape);
+        ais->SetColor(ToQuantity(color));
+        ais->SetWidth(width);
+        ais->SetZLayer(Graphic3d_ZLayerId_Topmost);   // seen through the body
+        m.context->Display(ais, AIS_WireFrame, -1, false);
+        m.copyShapes.push_back(ais);
+    };
+    for (const TopoDS_Shape& s : it->second.sources) show(s, m.colors.selection, 2.5);
+    for (const TopoDS_Shape& s : it->second.copies) show(s, m.colors.hover, 1.6);
 }
 
 void Viewport::SetSection(const std::optional<Frame>& plane) {

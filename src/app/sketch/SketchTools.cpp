@@ -299,6 +299,7 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
         options.from = myClicks.back().pos;
         options.fromPoint = myClicks.back().id;
         options.fromCurve = myClicks.back().onCurve;
+        options.ortho = app.settings.orthoMode;
     }
     mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
     // A typed size wins over snapping: the point lands where the size says.

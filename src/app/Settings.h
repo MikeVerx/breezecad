@@ -23,6 +23,7 @@ struct Settings {
     int         autosaveMinutes = 5;      ///< 0 turns autosave off
     bool        gridSnap       = true;
     bool        pointSnap      = true;
+    bool        orthoMode      = false;   ///< "Орто" (F8): lines only horizontal or vertical
     bool        showAllConstraints = false;   ///< sketch: every constraint glyph, or only those of the selection (F8 / F9)
     double      gridStep       = 0.0;     ///< mm; 0 = adaptive to zoom
     double      uiScale        = 0.0;     ///< interface scale; 0 = automatic (screen density and size)

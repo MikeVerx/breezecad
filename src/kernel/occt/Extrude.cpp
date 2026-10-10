@@ -2,6 +2,10 @@
 
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Common.hxx>
+#include <gp_Pln.hxx>
+#include <TopoDS_Solid.hxx>
+#include <BRepPrimAPI_MakeHalfSpace.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
@@ -54,15 +58,34 @@ TopoDS_Shape Sweep(const TopoDS_Face& face, const gp_Vec& dir, double length, do
 } // namespace
 
 Expected<TopoDS_Shape> MakeExtrusion(const std::vector<TopoDS_Face>& faces, const doc::ExtrudeFeature& f,
-                                     const Frame& frame, double throughAllLength) {
+                                     const Frame& frame, double throughAllLength, const std::optional<Frame>& target) {
     if (faces.empty()) return Error{"Нет замкнутого контура для выдавливания"};
 
     double length = f.distance.value;
     if (f.extent == doc::ExtentType::ThroughAll) length = throughAllLength;
-    if (length <= 1e-6) return Error{"Расстояние должно быть больше нуля"};
-
     gp_Vec dir(frame.normal.x, frame.normal.y, frame.normal.z);
     if (f.reversed) dir.Reverse();
+
+    // Up to a plane: parallel to the sketch, exactly that far (the side it is
+    // on decides the direction); at an angle, far enough and then cut by it,
+    // so the end takes the plane's slope.
+    std::optional<gp_Pln> slanted;
+    if (f.extent == doc::ExtentType::ToPlane) {
+        if (!target) return Error{"Выберите плоскость или плоскую грань, до которой выдавливать"};
+        const double across = target->normal.Dot(frame.normal);
+        if (std::abs(across) < 1e-6) return Error{"Плоскость «до» параллельна направлению выдавливания — до неё не дойти"};
+        if (std::abs(std::abs(across) - 1.0) < 1e-9) {
+            const double gap = (target->origin - frame.origin).Dot(frame.normal);
+            if (std::abs(gap) < 1e-6) return Error{"Плоскость «до» совпадает с плоскостью эскиза"};
+            dir = gp_Vec(frame.normal.x, frame.normal.y, frame.normal.z) * (gap < 0 ? -1.0 : 1.0);
+            length = std::abs(gap);
+        } else {
+            length = throughAllLength * 2;
+            slanted = gp_Pln(gp_Pnt(target->origin.x, target->origin.y, target->origin.z),
+                             gp_Dir(target->normal.x, target->normal.y, target->normal.z));
+        }
+    }
+    if (length <= 1e-6) return Error{"Расстояние должно быть больше нуля"};
 
     // Symmetric (and through-all both ways) start half a length behind the plane.
     const bool symmetric = f.extent == doc::ExtentType::Symmetric;
@@ -77,6 +100,15 @@ Expected<TopoDS_Shape> MakeExtrusion(const std::vector<TopoDS_Face>& faces, cons
             TopoDS_Shape piece = Sweep(start, dir, length, f.taper.value);
             if (IsEmpty(piece)) return Error{"Не удалось построить выдавливание (уклон слишком большой?)"};
             result = result.IsNull() ? piece : BRepAlgoAPI_Fuse(result, piece).Shape();
+        }
+        if (slanted) {
+            // Keep the part on the sketch's side of the plane.
+            GProp_GProps props;
+            for (const TopoDS_Face& face : faces) BRepGProp::SurfaceProperties(face, props);
+            const TopoDS_Face plane = BRepBuilderAPI_MakeFace(*slanted).Face();
+            const TopoDS_Solid half = BRepPrimAPI_MakeHalfSpace(plane, props.CentreOfMass()).Solid();
+            result = BRepAlgoAPI_Common(result, half).Shape();
+            if (IsEmpty(result)) return Error{"Плоскость «до» не пересекает выдавливание"};
         }
         return Clean(result);
     } catch (const Standard_Failure& failure) {

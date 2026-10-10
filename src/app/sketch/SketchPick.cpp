@@ -209,11 +209,13 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
         const Vec2 d = snap.pos - *options.from;
         const double len = d.Length();
         if (len > 1e-9) {
-            const double tolerance = std::sin(3.0 * kPi / 180.0);
-            if (std::abs(d.y) / len < tolerance) {
+            // "Орто": always the nearer of the two axes.
+            const double tolerance = options.ortho ? 2.0 : std::sin(3.0 * kPi / 180.0);
+            // (A snap to a point or curve returned above: it keeps its place.)
+            if (options.ortho ? std::abs(d.y) <= std::abs(d.x) : std::abs(d.y) / len < tolerance) {
                 snap.pos.y = options.from->y;
                 snap.horizontal = true;
-            } else if (std::abs(d.x) / len < tolerance) {
+            } else if (options.ortho || std::abs(d.x) / len < tolerance) {
                 snap.pos.x = options.from->x;
                 snap.vertical = true;
             }

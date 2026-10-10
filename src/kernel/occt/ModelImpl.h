@@ -43,6 +43,13 @@ struct Model::Impl {
     std::vector<Interference> interferences;
     std::vector<TopoDS_Shape> overlaps;
     std::uint64_t             interferenceRevision = ~std::uint64_t{0};
+
+    /// Patterns and mirrors: the source tools and their copies, for the
+    /// panel's preview (by feature id).
+    struct CopyPreview {
+        std::vector<TopoDS_Shape> sources, copies;
+    };
+    std::unordered_map<ObjectId, CopyPreview> copyPreviews;
 };
 
 } // namespace bz::kernel

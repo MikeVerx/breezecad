@@ -249,7 +249,7 @@ void ApplyThread(doc::ThreadFeature& thread, Model::Impl& impl, std::vector<Body
 
 /// Patterns and mirrors: the tools of the source operations, moved by each
 /// of `placements`, joined to or cut from the most recent body.
-void ApplyCopies(const doc::CopyFeature& f, const std::vector<gp_Trsf>& placements, const Model::Impl& impl,
+void ApplyCopies(const doc::CopyFeature& f, const std::vector<gp_Trsf>& placements, Model::Impl& impl,
                  std::vector<Body>& bodies, doc::FeatureStatus& status, const doc::Document& doc) {
     if (bodies.empty()) {
         status = {FeatureState::Error, "Нет тела, к которому применить копии"};
@@ -260,6 +260,8 @@ void ApplyCopies(const doc::CopyFeature& f, const std::vector<gp_Trsf>& placemen
         return;
     }
     std::vector<TopoDS_Shape> joins, cuts;
+    Model::Impl::CopyPreview& preview = impl.copyPreviews[f.id];
+    preview = {};
     for (ObjectId source : f.sources) {
         const auto tool = impl.tools.find(source);
         if (tool == impl.tools.end()) {
@@ -268,9 +270,11 @@ void ApplyCopies(const doc::CopyFeature& f, const std::vector<gp_Trsf>& placemen
                                                        sf ? sf->name : std::string("?"))};
             return;
         }
+        preview.sources.push_back(tool->second.shape);
         for (const gp_Trsf& t : placements) {
             const TopoDS_Shape copy = BRepBuilderAPI_Transform(tool->second.shape, t, true).Shape();
             (tool->second.op == doc::BooleanOp::Cut ? cuts : joins).push_back(copy);
+            preview.copies.push_back(copy);
         }
     }
     Body& target = bodies.back();
@@ -644,7 +648,14 @@ void Model::Rebuild(doc::Document& doc) {
             } else if (auto* ex = dynamic_cast<doc::ExtrudeFeature*>(&f)) {
                 ApplySketchSolid(*ex, impl, bodies, ex->status, doc,
                                  [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature&, const Frame& frame) {
-                                     return occt::MakeExtrusion(faces, *ex, frame, ThroughAllLength(bodies, frame));
+                                     std::optional<Frame> target;
+                                     if (ex->extent == doc::ExtentType::ToPlane) {
+                                         if (ex->toPlane) target = PlaneOf(ex->toPlane, doc);
+                                         else if (ex->toFace.IsSet())
+                                             for (auto it = bodies.rbegin(); it != bodies.rend() && !target; ++it)
+                                                 target = occt::ResolvePlaneFrame(it->shape, ex->toFace);
+                                     }
+                                     return occt::MakeExtrusion(faces, *ex, frame, ThroughAllLength(bodies, frame), target);
                                  });
             } else if (auto* rev = dynamic_cast<doc::RevolveFeature*>(&f)) {
                 ApplySketchSolid(*rev, impl, bodies, rev->status, doc,

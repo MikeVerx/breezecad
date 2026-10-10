@@ -146,7 +146,7 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
             dl->AddText(ui.fonts.mono, fs, {right, ty}, ui::ToU32(c.textSecondary), coords.c_str());
             right -= ui.S(18);
         }
-        const std::string snaps = Trf("Привязки: {}", app.settings.pointSnap && app.settings.gridSnap ? Tr("точки, сетка")
+        const std::string snaps = (app.settings.orthoMode ? std::string(Tr("Орто")) + "  \xC2\xB7  " : std::string()) + Trf("Привязки: {}", app.settings.pointSnap && app.settings.gridSnap ? Tr("точки, сетка")
                                                        : app.settings.pointSnap                       ? Tr("точки")
                                                        : app.settings.gridSnap                        ? Tr("сетка")
                                                                                                       : Tr("выкл"));
@@ -161,6 +161,7 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
             if (ui::MenuItem(ui, Tr("Привязка к точкам и кривым"), nullptr, {}, app.settings.pointSnap))
                 app.settings.pointSnap = !app.settings.pointSnap;
             if (ui::MenuItem(ui, Tr("Привязка к сетке"), nullptr, {}, app.settings.gridSnap)) app.settings.gridSnap = !app.settings.gridSnap;
+            if (ui::MenuItem(ui, Tr("Ортогональный режим"), "F8", {}, app.settings.orthoMode)) app.settings.orthoMode = !app.settings.orthoMode;
             ImGui::EndPopup();
         }
     }
