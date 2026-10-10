@@ -6,8 +6,12 @@
 //   BZ_SHOT_DIR=dir                saves a frame whenever dir/request appears.
 
 #include "app/Application.h"
+#include "core/Log.h"
 
+#include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <format>
 #include <string>
 #include <vector>
 
@@ -22,6 +26,35 @@ extern "C" {
 __declspec(dllexport) DWORD NvOptimusEnablement = 1;
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
+
+namespace {
+
+/// "module+0xoffset" for an address in a loaded exe or DLL.
+std::string Where(const void* address) {
+    HMODULE module = nullptr;
+    char name[MAX_PATH] = "?";
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           static_cast<LPCSTR>(address), &module) &&
+        GetModuleFileNameA(module, name, MAX_PATH)) {
+        const char* base = std::strrchr(name, '\\');
+        return std::format("{}+0x{:x}", base ? base + 1 : name,
+                           reinterpret_cast<std::uintptr_t>(address) - reinterpret_cast<std::uintptr_t>(module));
+    }
+    return std::format("0x{:x}", reinterpret_cast<std::uintptr_t>(address));
+}
+
+/// A crash leaves its trace in the log (the log never leaves the computer;
+/// the user can send it with a bug report). Unsaved work is in the autosave.
+LONG WINAPI OnCrash(EXCEPTION_POINTERS* info) {
+    bz::log::Error("Crash: exception 0x{:08x} at {}", info->ExceptionRecord->ExceptionCode,
+                   Where(info->ExceptionRecord->ExceptionAddress));
+    void* frames[32];
+    const USHORT count = CaptureStackBackTrace(0, 32, frames, nullptr);
+    for (USHORT i = 0; i < count; ++i) bz::log::Error("  #{} {}", i, Where(frames[i]));
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+} // namespace
 #endif
 
 namespace {
@@ -45,6 +78,9 @@ std::vector<std::filesystem::path> CommandLineFiles(int argc, char** argv) {
 } // namespace
 
 int main(int argc, char** argv) {
+#if defined(_WIN32)
+    SetUnhandledExceptionFilter(OnCrash);
+#endif
     bz::app::Application app;
     if (!app.Init(CommandLineFiles(argc, argv))) return 1;
     if (const char* shot = std::getenv("BZ_SCREENSHOT")) {
