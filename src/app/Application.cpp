@@ -4,6 +4,8 @@
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
 #include "app/shell/Splash.h"
+#include "app/Backgrounds.h"
+#include "core/Image.h"
 #include "app/viewport/ViewportPanel.h"
 #include "core/Log.h"
 #include "core/Version.h"
@@ -190,19 +192,33 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
 void Application::ApplyTheme(bool force) {
     const bool dark = mySettings.theme == ThemeChoice::Dark ||
                       (mySettings.theme == ThemeChoice::System && platform::SystemPrefersDark());
-    if (!force && dark == myDarkApplied && mySettings.viewBackground == myBackgroundApplied) return;
+    const std::string background = mySettings.background + "|" + mySettings.backgroundPicture;
+    if (!force && dark == myDarkApplied && background == myBackgroundApplied) return;
     myDarkApplied = dark;
-    myBackgroundApplied = mySettings.viewBackground;
+    const bool pictureChanged = background != myBackgroundApplied;
+    myBackgroundApplied = background;
     myTheme = dark ? ui::Theme::Dark() : ui::Theme::Light();
     ui::ApplyToImGui(myTheme, myScale);
     const ui::ThemeColors& c = myTheme.colors;
-    // The view background: the theme's gradient, or one of its two ends.
-    Color top = mySettings.viewBackground == 2 ? c.viewportBottom : c.viewportTop;
-    Color bottom = mySettings.viewBackground == 1 ? c.viewportTop : c.viewportBottom;
+    // The view background: a preset (under a picture, if there is one).
+    const BackgroundColours bg = ColoursOf(FindBackground(mySettings.background), c);
+    Color top = bg.top, bottom = bg.bottom;
     // Test hook: a flat background of a given colour (renders keyed out
     // against black and white for the splash picture, scripts/splash).
     if (const char* bg = std::getenv("BZ_VIEW_BG")) top = bottom = Color::Hex(static_cast<std::uint32_t>(std::strtoul(bg, nullptr, 16)));
-    myViewport.SetColors({top, bottom, c.body, c.bodyEdges, c.hoverHighlight, c.selection, c.danger});
+    myViewport.SetColors({top, bottom, c.body, c.bodyEdges, c.hoverHighlight, c.selection, c.danger, bg.radial});
+    if (pictureChanged) {
+        if (mySettings.background == kPictureBackground && !mySettings.backgroundPicture.empty()) {
+            if (const auto image = ReadImageFile(PathFromUtf8(mySettings.backgroundPicture))) {
+                myViewport.SetBackgroundPicture(image->width, image->height, image->rgba);
+            } else {
+                myNotes.Error(Tr(image.GetError().message));
+                myViewport.SetBackgroundPicture(0, 0, {});
+            }
+        } else {
+            myViewport.SetBackgroundPicture(0, 0, {});
+        }
+    }
     myFramesToDraw = 3;
 }
 
@@ -232,7 +248,7 @@ int Application::Run() {
         HandleCloseRequests();
         if (myShell.quitRequested && myWorkspace.sessions.empty()) break;
 
-        if (mySettings.viewBackground != myBackgroundApplied) ApplyTheme(true);   // chosen in the settings: at once
+        if (mySettings.background + "|" + mySettings.backgroundPicture != myBackgroundApplied) ApplyTheme(true);   // chosen: at once
         if (now - mySystemThemeCheck > 2.0) {
             mySystemThemeCheck = now;
             ApplyTheme(false);

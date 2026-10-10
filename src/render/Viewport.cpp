@@ -680,7 +680,7 @@ void Viewport::SetColors(const ViewportColors& colors) {
     Impl& m = *myImpl;
     m.colors = colors;
     m.view->SetBgGradientColors(ToQuantity(colors.backgroundTop), ToQuantity(colors.backgroundBottom),
-                                Aspect_GradientFillMethod_Vertical, false);
+                                colors.radialBackground ? Aspect_GradientFillMethod_Elliptical : Aspect_GradientFillMethod_Vertical, false);
     for (auto type : {Prs3d_TypeOfHighlight_LocalDynamic, Prs3d_TypeOfHighlight_Dynamic})
         m.context->HighlightStyle(type)->SetColor(ToQuantity(colors.hover));
     for (auto type : {Prs3d_TypeOfHighlight_LocalSelected, Prs3d_TypeOfHighlight_Selected})
@@ -719,6 +719,14 @@ bool Viewport::SameFace(ObjectId body, const doc::FaceReference& a, const doc::F
         return fa && fb && fa->IsSame(*fb);
     }
     return false;
+}
+
+void Viewport::SetBackgroundPicture(int width, int height, std::span<const std::uint8_t> rgba) {
+    Impl& m = *myImpl;
+    Handle(Graphic3d_Texture2D) texture;
+    if (width > 0 && height > 0) texture = MakePictureTexture(width, height, rgba);
+    m.view->SetBackgroundImage(texture, Aspect_FM_STRETCH, false);
+    m.dirty = true;
 }
 
 void Viewport::SetLook(const doc::Look& look, const void* owner, std::uint64_t revision) {

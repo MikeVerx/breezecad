@@ -42,6 +42,7 @@ struct ShellState {
     bool               quitRequested = false;
     bool               showAbout = false;
     bool               showSettings = false;
+    bool               backgroundMenu = false;   ///< open the "Фон" menu at the cursor
     int                settingsTab = 0;          ///< 0 interface, 1 keys
     std::string        captureShortcut;          ///< action whose new shortcut is being pressed
     std::string        shortcutFilter;

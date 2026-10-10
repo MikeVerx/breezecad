@@ -52,6 +52,8 @@ void RegisterActions(AppContext& app) {
            N_("Цвет и материал тел и граней: металлы, пластики, свои цвета с прозрачностью"),
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { app.ops.appearance.Start(app, *app.Doc()); }});
+    a.Add({"view.background", N_("Фон"), "view-background", 0, N_("Фон рабочей области: градиенты или своя картинка"), {},
+           [&app] { app.shell.backgroundMenu = true; }});
     a.Add({"view.section", N_("Разрез вида"), "section", 0, N_("Разрезать вид плоскостью, чтобы заглянуть внутрь детали"),
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { app.shell.section.on = !app.shell.section.on; }});

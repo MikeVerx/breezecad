@@ -305,6 +305,7 @@ void ViewRibbon(AppContext& app, RibbonBuilder& r) {
     const render::DisplayStyle style = app.shell.displayStyle;
     r.BeginGroup(Tr("Цвета"));
     r.Large("view.appearance", Tr("Внешний\nвид"), app.ops.appearance.IsOpen());
+    r.Large("view.background", Tr("Фон"));
     r.EndGroup();
 
     r.BeginGroup(Tr("Стиль отображения"));

@@ -34,7 +34,11 @@ Settings Settings::Load(const std::filesystem::path& file) {
     s.backgroundRebuild = j.value("backgroundRebuild", s.backgroundRebuild);
     s.showTriad       = j.value("showTriad", s.showTriad);
     s.reopenLast      = j.value("reopenLast", s.reopenLast);
-    s.viewBackground  = std::clamp(j.value("viewBackground", s.viewBackground), 0, 2);
+    // "viewBackground" (0..2) from earlier versions.
+    static constexpr const char* kOld[] = {"theme", "light", "dark"};
+    s.background = kOld[std::clamp(j.value("viewBackground", 0), 0, 2)];
+    s.background = j.value("background", s.background);
+    s.backgroundPicture = j.value("backgroundPicture", s.backgroundPicture);
     s.newPartLength   = std::clamp(j.value("newPartLength", s.newPartLength), 0, 3);
     s.orbitSpeed      = std::clamp(j.value("orbitSpeed", s.orbitSpeed), 0.25, 4.0);
     s.invertOrbit     = j.value("invertOrbit", s.invertOrbit);
@@ -103,7 +107,8 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"uiScale", uiScale},
         {"showTriad", showTriad},
         {"reopenLast", reopenLast},
-        {"viewBackground", viewBackground},
+        {"background", background},
+        {"backgroundPicture", backgroundPicture},
         {"newPartLength", newPartLength},
         {"orbitSpeed", orbitSpeed},
         {"invertOrbit", invertOrbit},

@@ -14,6 +14,8 @@
 #include "kernel/Measure.h"
 
 #include <array>
+#include <cstdint>
+#include <span>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -42,6 +44,7 @@ struct ViewportColors {
     Color hover            = Color::Hex(0x38A9E8);
     Color selection        = Color::Hex(0x1D4ED8);
     Color interference     = Color::Hex(0xE5484D);
+    bool  radialBackground = false;   ///< backgroundTop in the middle, backgroundBottom at the edges
 };
 
 /// A translucent square drawn in the scene, hidden where the body is in
@@ -88,6 +91,8 @@ public:
     /// Pre-highlights the face under the cursor (nullopt: nothing).
     void Hover(std::optional<Vec2> pixel);
     void SetColors(const ViewportColors& colors);
+    /// A static picture behind the model (stretched to the view); 0x0 removes it.
+    void SetBackgroundPicture(int width, int height, std::span<const std::uint8_t> rgba);
     void SetDisplayStyle(DisplayStyle style);
     /// Graphics quality: 0 high (smooth edges, fine round faces), 1
     /// balanced, 2 for weak computers (no smoothing, coarse round faces).

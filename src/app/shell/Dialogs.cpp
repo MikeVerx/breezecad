@@ -6,11 +6,15 @@
 #include "app/Materials.h"
 #include "app/Operations.h"
 #include "app/ShortcutPresets.h"
+#include "app/Backgrounds.h"
 #include "app/shell/Shell.h"
 #include "core/I18n.h"
 #include "core/Version.h"
 #include "document/Commands.h"
+#include "core/PathText.h"
 #include "platform/FileDialogs.h"
+#include "platform/Paths.h"
+#include "ui/Menus.h"
 #include "platform/Launch.h"
 #include "ui/Widgets.h"
 
@@ -48,6 +52,39 @@ void ValueRow(ui::Ui& ui, const char* label, const std::string& value) {
     const ImVec2 vs = ui.fonts.mono->CalcTextSizeA(ui.S(13), FLT_MAX, 0, value.c_str());
     dl->AddText(ui.fonts.mono, ui.S(13), {p.x + width - vs.x, p.y + ui.S(5)}, ui::ToU32(ui.C().text), value.c_str());
     ImGui::Dummy({width, h});
+}
+
+/// "Фон": the view's background, from the presets or a picture of one's own.
+void DrawBackgroundMenu(AppContext& app) {
+    ui::Ui& ui = app.ui;
+    if (app.shell.backgroundMenu) {
+        ImGui::OpenPopup("##backgrounds");
+        app.shell.backgroundMenu = false;
+    }
+    ui::MenuStyle style(ui);   // before Begin: must outlive the End call
+    if (!ImGui::BeginPopup("##backgrounds")) return;
+    const ui::ThemeColors& c = ui.C();
+    for (const BackgroundPreset& preset : BackgroundPresets()) {
+        const bool current = app.settings.background == preset.id;
+        // A small sample before the name.
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        if (ui::MenuItem(ui, ("          " + std::string(Tr(preset.name))).c_str(), nullptr, {}, current)) app.settings.background = preset.id;
+        const BackgroundColours bg = ColoursOf(preset, c);
+        const float h = ImGui::GetItemRectSize().y, s = ui.S(16);
+        const ImVec2 a{p.x + ui.S(34), p.y + (h - s) / 2}, b{a.x + s, a.y + s};
+        ImGui::GetWindowDrawList()->AddRectFilledMultiColor(a, b, ui::ToU32(bg.top), ui::ToU32(bg.top), ui::ToU32(bg.bottom), ui::ToU32(bg.bottom));
+        ImGui::GetWindowDrawList()->AddRect(a, b, ui::ToU32(c.fieldBorder), ui.S(3));
+    }
+    ImGui::Separator();
+    const bool picture = app.settings.background == kPictureBackground;
+    if (ui::MenuItem(ui, Tr("Своя картинка…"), nullptr, "ui-open", picture)) {
+        if (const auto file = platform::ShowOpenDialog(Tr("Картинка для фона"), {{Tr("Картинки"), "*.png *.jpg *.jpeg *.bmp *.tga"}},
+                                                       platform::DocumentsDir())) {
+            app.settings.backgroundPicture = ToUtf8(*file);
+            app.settings.background = std::string(kPictureBackground);
+        }
+    }
+    ImGui::EndPopup();
 }
 
 /// The "МЦХ" window: mass from the part's material, volume, area, centre of
@@ -341,9 +378,7 @@ void DrawSettings(AppContext& app) {
         if (const int n = ui::Segmented(ui, "triad", triad, t, 2, width); n != t) app.settings.showTriad = n == 0;
         ImGui::Dummy({0, ui.S(6)});
         ui::FieldLabel(ui, Tr("Фон вида"));
-        static constexpr std::array<const char*, 3> backgrounds{N_("Градиент"), N_("Светлый ровный"), N_("Тёмный ровный")};
-        if (const int n = ui::Segmented(ui, "background", backgrounds, app.settings.viewBackground, 3, width); n != app.settings.viewBackground)
-            app.settings.viewBackground = n;
+        if (ui::LinkButton(ui, "##open-backgrounds", Tr("Выбрать на вкладке «Вид» → «Фон»…"))) app.shell.backgroundMenu = true;
     } else if (app.shell.settingsTab == 4) {
         DrawOptimizationSettings(app, width);
     } else if (app.shell.settingsTab == 2) {
@@ -559,6 +594,7 @@ void DrawDialogs(AppContext& app) {
     }
 
     DrawMassProperties(app);
+    DrawBackgroundMenu(app);
 
     DrawSettings(app);
 

@@ -5,6 +5,7 @@ add_executable(breezecad WIN32
     AppearanceLibrary.cpp
     Application.cpp
     Autosave.cpp
+    Backgrounds.cpp
     Format.cpp
     Language.cpp
     Materials.cpp
