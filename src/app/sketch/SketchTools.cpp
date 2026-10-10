@@ -308,14 +308,8 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && view.vf.hovered) {
         myClicks.push_back(RefFromSnap(mySnap));
-        myLastClickTime = ImGui::GetIO().MouseClickedTime[ImGuiMouseButton_Left];
         FinishDrawingStep(app, session, mySnap);
     }
-}
-
-void SketchEditor::DropPressClick() {
-    // Only a click made by this very press (ImGui keeps the press time).
-    if (!myClicks.empty() && myLastClickTime == ImGui::GetIO().MouseClickedTime[ImGuiMouseButton_Left]) myClicks.pop_back();
 }
 
 void SketchEditor::HandleProject(AppContext& app, Session& session, const SketchView& view) {

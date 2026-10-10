@@ -156,6 +156,10 @@ void ApplySketchSolid(const doc::SketchSolidFeature& f, Model::Impl& impl, std::
         }
 
     const std::vector<TopoDS_Face> faces = occt::SelectFaces(profile->second, f.profiles);
+    if (faces.empty() && !f.profiles.automatic && !profile->second.faces.empty()) {
+        status = {FeatureState::Error, "Щёлкните замкнутый контур эскиза, который использовать"};
+        return;
+    }
     Expected<TopoDS_Shape> tool = makeTool(faces, *sketch, profile->second.frame);
     if (!tool) {
         status = {FeatureState::Error, tool.GetError().message};
@@ -539,9 +543,14 @@ bool PlaceProjected(sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& pc
 bool UpdateProjections(doc::SketchFeature& sk, const std::vector<Body>& bodies) {
     if (sk.projections.empty()) return true;
     bool allFound = true;
-    for (const doc::Projection& p : sk.projections) {
-        std::optional<TopoDS_Edge> edge;
-        if (!bodies.empty()) edge = occt::ResolveEdges({p.edge}, bodies.back().shape).front();
+    // All edges found in one pass: describing the body's edges is the costly part.
+    std::vector<doc::EdgeReference> refs;
+    for (const doc::Projection& p : sk.projections) refs.push_back(p.edge);
+    const std::vector<std::optional<TopoDS_Edge>> edges =
+        bodies.empty() ? std::vector<std::optional<TopoDS_Edge>>(refs.size()) : occt::ResolveEdges(refs, bodies.back().shape);
+    for (std::size_t i = 0; i < sk.projections.size(); ++i) {
+        const doc::Projection& p = sk.projections[i];
+        const std::optional<TopoDS_Edge>& edge = edges[i];
         const Expected<ProjectedCurve> projected =
             edge ? occt::ProjectEdge(*edge, sk.placement.frame) : Expected<ProjectedCurve>(Error{"ребро не найдено"});
         allFound = projected && PlaceProjected(sk.sketch, p.curve, *projected) && allFound;
@@ -613,7 +622,11 @@ void Model::Rebuild(doc::Document& doc) {
         impl.tools.erase(f.id);   // set again below if the operation succeeds
 
         const bool skip = !doc.IsActive(i) || f.suppressed;
-        if (!skip) {
+        // One failing operation must not take the program down: whatever OCCT
+        // or our code throws becomes that operation's error, and the bodies
+        // stay as they were before it.
+        const std::vector<Body> before = skip ? std::vector<Body>{} : bodies;
+        if (!skip) try {
             if (auto* sk = dynamic_cast<doc::SketchFeature*>(&f)) {
                 const bool placed = FollowSupport(*sk, doc, bodies);
                 const bool projectedFound = UpdateProjections(*sk, bodies);
@@ -699,6 +712,12 @@ void Model::Rebuild(doc::Document& doc) {
             } else if (f.status.state == FeatureState::NotComputed) {
                 f.status = {FeatureState::Error, "Операция этого типа не поддерживается"};
             }
+        } catch (const Standard_Failure& failure) {
+            bodies = before;
+            f.status = {FeatureState::Error, std::format("Ошибка геометрического ядра: {}", failure.GetMessageString())};
+        } catch (const std::exception& e) {
+            bodies = before;
+            f.status = {FeatureState::Error, std::format("Внутренняя ошибка: {}", e.what())};
         }
         if (f.status.state == FeatureState::Error) log::Warn("{}: {}", f.name, f.status.message);
         impl.bodiesAfter[i] = bodies;

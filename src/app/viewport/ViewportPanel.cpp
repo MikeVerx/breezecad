@@ -156,6 +156,11 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
     }
     // In a sketch, a right click that ends a chain is not a menu click.
     const bool sketchBusy = session.mode == EditMode::Sketch && app.sketch.Busy();
+    // The radial menu took this right press: its release opens nothing else.
+    if (nav.button == -2) {
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Right)) nav.button = -1;
+        return false;
+    }
     if (nav.button < 0 && ImGui::IsMouseReleased(ImGuiMouseButton_Right) && sceneHovered && !busy && !sketchBusy &&
         ImGui::GetMouseDragDelta(ImGuiMouseButton_Right).x == 0 && ImGui::GetMouseDragDelta(ImGuiMouseButton_Right).y == 0)
         ImGui::OpenPopup("##viewport-menu");

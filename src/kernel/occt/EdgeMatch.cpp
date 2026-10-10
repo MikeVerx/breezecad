@@ -77,7 +77,11 @@ bool SameFace(const FaceSignature& a, const FaceSignature& b) {
     return a.kind == SurfaceKind::Plane ? cos > kParallel : std::abs(cos) > kParallel;
 }
 
-EdgeReference Describe(const TopoDS_Edge& edge, const TopTools_IndexedDataMapOfShapeListOfShape& edgeFaces) {
+/// Face signatures computed once per face (a face borders many edges).
+using FaceCache = std::vector<std::optional<FaceSignature>>;
+
+EdgeReference Describe(const TopoDS_Edge& edge, const TopTools_IndexedDataMapOfShapeListOfShape& edgeFaces,
+                       const TopTools_IndexedMapOfShape* faceIndex = nullptr, FaceCache* cache = nullptr) {
     EdgeReference ref;
     const BRepAdaptor_Curve curve(edge);
     switch (curve.GetType()) {
@@ -97,7 +101,16 @@ EdgeReference Describe(const TopoDS_Edge& edge, const TopTools_IndexedDataMapOfS
     // The faces on both sides, in a canonical order.
     std::vector<FaceSignature> faces;
     if (const TopTools_ListOfShape* list = edgeFaces.Seek(edge))
-        for (const TopoDS_Shape& f : *list) faces.push_back(DescribeFace(TopoDS::Face(f)));
+        for (const TopoDS_Shape& f : *list) {
+            const int i = faceIndex && cache ? faceIndex->FindIndex(f) : 0;
+            if (i <= 0) {
+                faces.push_back(DescribeFace(TopoDS::Face(f)));
+                continue;
+            }
+            auto& slot = (*cache)[static_cast<std::size_t>(i)];
+            if (!slot) slot = DescribeFace(TopoDS::Face(f));
+            faces.push_back(*slot);
+        }
     while (faces.size() < 2) faces.emplace_back();
     std::sort(faces.begin(), faces.end(), [](const FaceSignature& a, const FaceSignature& b) {
         return std::tie(a.kind, a.direction.x, a.direction.y, a.direction.z) <
@@ -141,12 +154,16 @@ std::vector<std::optional<TopoDS_Edge>> ResolveEdges(const std::vector<doc::Edge
     TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
     TopExp::MapShapesAndAncestors(body, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
 
+    TopTools_IndexedMapOfShape faceIndex;
+    TopExp::MapShapes(body, TopAbs_FACE, faceIndex);
+    FaceCache cache(static_cast<std::size_t>(faceIndex.Extent()) + 1);
+
     std::vector<std::pair<TopoDS_Edge, EdgeReference>> candidates;
     Box3 box;
     for (int i = 1; i <= edgeFaces.Extent(); ++i) {
         const TopoDS_Edge& e = TopoDS::Edge(edgeFaces.FindKey(i));
         if (BRep_Tool::Degenerated(e)) continue;   // the pole of a sphere or cone
-        candidates.emplace_back(e, Describe(e, edgeFaces));
+        candidates.emplace_back(e, Describe(e, edgeFaces, &faceIndex, &cache));
         box.Include(candidates.back().second.middle);
     }
     const double size = box.IsEmpty() ? 1.0 : std::max((box.max - box.min).Length(), 1.0);

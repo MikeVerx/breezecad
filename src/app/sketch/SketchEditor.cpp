@@ -434,7 +434,9 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
             for (const auto& d : myDragOrigins) options.drags.push_back({d.point, d.target + delta});
             sketch::Solve(f->sketch, options);
         }
-        session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+        // No rebuild while dragging: the sketch draws itself from its own
+        // data, and rebuilding the part every frame froze large models.
+        // Releasing commits the edit, which rebuilds once.
     }
 
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {

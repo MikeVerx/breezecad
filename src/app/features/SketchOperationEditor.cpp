@@ -96,6 +96,11 @@ void SketchOperationEditor::StartNew(AppContext& app, Session& session, ObjectId
     std::unique_ptr<doc::SketchSolidFeature> f = Create(session, sketch);
     f->sketch = sketch;
     f->operation = HasSolidBefore(session.doc, session.doc.EndMarker()) ? BooleanOp::Join : BooleanOp::NewBody;
+    // As in Inventor: a lone closed contour is taken at once; with several,
+    // nothing is chosen until the user clicks the ones to use.
+    f->profiles = {false, {}};
+    if (const auto* regions = session.model.Regions(sketch); regions && regions->size() == 1)
+        f->profiles.regions.push_back(regions->front().sample);
     myHoveredRegion = -1;
     OpenNew(app, session, std::move(f));
 }
@@ -217,7 +222,7 @@ void SketchOperationEditor::DrawProfileSection(AppContext& app, Session& session
             f.profiles.automatic ? Tr("Все замкнутые контуры, вложенные стали отверстиями. Щёлкните по контуру, чтобы выбрать вручную.")
                                  : Tr("Щёлкните по контуру на модели, чтобы добавить или убрать его."),
             width);
-    if (!f.profiles.automatic && ui::LinkButton(ui, "##auto-profile", Tr("Выбрать автоматически"))) {
+    if (!f.profiles.automatic && ui::LinkButton(ui, "##auto-profile", Tr("Выбрать все контуры"))) {
         f.profiles = {true, {}};
         Changed(session);
     }

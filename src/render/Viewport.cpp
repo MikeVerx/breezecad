@@ -308,9 +308,10 @@ struct Viewport::Impl {
 
         const bool edges = style == DisplayStyle::ShadedWithEdges || style == DisplayStyle::Transparent;
         drawer->SetFaceBoundaryDraw(edges);
-        // Only sharp edges: no seam line along a cylinder, no lines between
-        // tangent faces (as in Inventor and KOMPAS).
-        drawer->SetFaceBoundaryUpperContinuity(GeomAbs_C0);
+        // Sharp edges and the tangent edges where a fillet starts and ends
+        // (they show its size); not the seam along a cylinder, which is
+        // smooth beyond tangency.
+        drawer->SetFaceBoundaryUpperContinuity(GeomAbs_C1);
         // Finer tessellation than OCCT's default (20°): round faces look round.
         drawer->SetDeviationAngle(4.0 * kPi / 180.0);
         drawer->SetDeviationCoefficient(0.0005);
@@ -710,6 +711,14 @@ std::optional<PickResult> Viewport::Pick(Vec2 pixel) {
     if (const Handle(StdSelect_BRepOwner) brep = Handle(StdSelect_BRepOwner)::DownCast(owner);
         !brep.IsNull() && brep->Shape().ShapeType() == TopAbs_FACE)
         result.plane = PlanarFaceFrame(TopoDS::Face(brep->Shape()));
+    // The face was clicked from where the camera is: its normal points
+    // that way (a face's stored orientation is not reliable for this), so
+    // a sketch on it is seen from the front, never from behind the part.
+    if (result.plane) {
+        double ex = 0, ey = 0, ez = 0;
+        m.view->Proj(ex, ey, ez);   // towards the eye
+        if (result.plane->normal.Dot(Vec3{ex, ey, ez}) < 0) result.plane->normal = -result.plane->normal;
+    }
     return result;
 }
 
