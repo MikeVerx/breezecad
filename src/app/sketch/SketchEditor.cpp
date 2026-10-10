@@ -194,6 +194,9 @@ void SketchEditor::SetTool(AppContext& app, Session& session, SketchTool tool) {
     myClicks.clear();
     myPicks.clear();
     myOffsetCurve = {};
+    myFieldSeed.clear();
+    myFocusField = mySeedField = -1;
+    myBackspaces = 0;
     if (tool != SketchTool::Text) EndTextEdit(session);
     myTool = tool;
     myMirrorAxisStep = tool == SketchTool::Mirror && !mySelection.empty();   // chosen beforehand: go to the line
@@ -322,6 +325,28 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
     for (ObjectId id : myPicks) style.picked.push_back(id);
     DrawSketch(app.ui, dl, *f, view, session.doc.units, style);
 
+    // Typing a number while a tool with sizes is on goes to its first field
+    // (as in Inventor: click the start, type the length); Backspace erases,
+    // Shift+Up/Down or Shift+W/S pick the next field.
+    if (myTool != SketchTool::Select && HasToolPanel() && !ImGui::GetIO().WantTextInput) {
+        const ImGuiIO& io = ImGui::GetIO();
+        for (const ImWchar ch : io.InputQueueCharacters)
+            if ((ch >= '0' && ch <= '9') || ch == '.' || ch == ',' || ch == '-') myFieldSeed.push_back(ch == ',' ? '.' : static_cast<char>(ch));
+        if (!myFieldSeed.empty() && mySeedField < 0) {
+            mySeedField = 0;
+            myClearOnSeed = true;
+        }
+        if (mySeedField >= 0 && ImGui::IsKeyPressed(ImGuiKey_Backspace)) ++myBackspaces;
+        if (mySeedField >= 0 && io.KeyShift && myFieldCount > 1) {
+            const bool down = ImGui::IsKeyPressed(ImGuiKey_DownArrow) || ImGui::IsKeyPressed(ImGuiKey_S);
+            const bool up = ImGui::IsKeyPressed(ImGuiKey_UpArrow) || ImGui::IsKeyPressed(ImGuiKey_W);
+            if (down || up) {
+                mySeedField = (mySeedField + (down ? 1 : myFieldCount - 1)) % myFieldCount;
+                myClearOnSeed = true;
+            }
+        }
+    }
+
     myClickUsed = false;
     if (myEditDimension) HandleInlineEdit(app, session, view);
     if (myClickUsed || (!vf.hovered && !myDragging)) return;
@@ -331,6 +356,14 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
         !myClicks.empty()) {
         if (myTool == SketchTool::Spline) FinishSpline(app, session, false);   // a spline ends where it was
         myClicks.clear();
+    }
+
+    // A right click on something not selected makes it the selection, so
+    // the context menu acts on what is under the cursor (deleting a
+    // constraint glyph must not take the lines selected earlier with it).
+    if (myTool == SketchTool::Select && myHover && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && !mySelection.count(myHover.id)) {
+        mySelection.clear();
+        mySelection.insert(myHover.id);
     }
 
     switch (myTool) {

@@ -295,7 +295,11 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
     options.points = app.settings.pointSnap;
     options.grid = app.settings.gridSnap;
     options.gridStep = app.settings.gridStep > 0 ? app.settings.gridStep : AdaptiveGridStep(view.MmPerPixel()) / 2;
-    if (!myClicks.empty() && (myTool == SketchTool::Line)) options.from = myClicks.back().pos;
+    if (!myClicks.empty() && (myTool == SketchTool::Line)) {
+        options.from = myClicks.back().pos;
+        options.fromPoint = myClicks.back().id;
+        options.fromCurve = myClicks.back().onCurve;
+    }
     mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
     // A typed size wins over snapping: the point lands where the size says.
     if (ApplyTypedSizes(session.doc.units, mySnap.pos)) {
@@ -1157,6 +1161,9 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
             // Inferred alignment becomes a constraint, unless already implied.
             if (snap.horizontal || snap.vertical) {
                 const sketch::Constraint c = Make(snap.horizontal ? ConstraintType::Horizontal : ConstraintType::Vertical, line);
+                if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
+            } else if (snap.perpendicularTo && sk.FindLine(snap.perpendicularTo)) {
+                const sketch::Constraint c = Make(ConstraintType::Perpendicular, snap.perpendicularTo, line);
                 if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
             }
             dims.push_back({Make(ConstraintType::Length, line), myOptions.length, {}});

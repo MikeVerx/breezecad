@@ -13,6 +13,8 @@ namespace bz::app {
 namespace {
 
 constexpr float kPointRadius = 8.0f;   // px
+constexpr float kMidRadius = 12.0f;    // px: the middle of a line pulls from a bit further
+constexpr double kSquareDegrees = 4.0; // a line this close to 90° to another becomes exactly 90°
 constexpr float kCurveRadius = 6.0f;   // px
 constexpr float kAlignRadius = 6.0f;   // px: lining up with a point's x or y
 
@@ -153,17 +155,18 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
             const float d = Distance(mouse, view.ToScreen(p.pos));
             if (d < best) {
                 best = d;
-                snap = {p.pos, SnapKind::Point, p.id, {}, false, false, {}, {}};
+                snap = {p.pos, SnapKind::Point, p.id, {}, false, false, {}, {}, {}};
             }
         }
         if (snap.kind == SnapKind::Point) return snap;
 
+        best = std::max(best, kMidRadius);
         for (const auto& l : sk.lines) {
             const Vec2 mid = (sk.PositionOf(l.start) + sk.PositionOf(l.end)) * 0.5;
             const float d = Distance(mouse, view.ToScreen(mid));
             if (d < best) {
                 best = d;
-                snap = {mid, SnapKind::Midpoint, {}, l.id, false, false, {}, {}};
+                snap = {mid, SnapKind::Midpoint, {}, l.id, false, false, {}, {}, {}};
             }
         }
         if (snap.kind == SnapKind::Midpoint) return snap;
@@ -182,6 +185,15 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
         for (const auto& a : sk.arcs) tryCurve(a.id);
         if (snap.kind == SnapKind::Curve) {
             snap.pos = ClosestOnCurve(sk, snap.curve, *local);
+            // Ending on a line nearly square to it: exactly square, at the foot.
+            if (const sketch::Line* l = sk.FindLine(snap.curve); l && options.from) {
+                const Vec2 a = sk.PositionOf(l->start), dir = (sk.PositionOf(l->end) - a).Normalized();
+                const Vec2 d = snap.pos - *options.from;
+                if (d.Length() > 1e-9 && std::abs(d.Normalized().Dot(dir)) < std::sin(kSquareDegrees * kPi / 180.0)) {
+                    snap.pos = a + dir * (*options.from - a).Dot(dir);
+                    snap.perpendicularTo = l->id;
+                }
+            }
             return snap;
         }
     }
@@ -208,7 +220,29 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
         }
     }
 
-    // Lining up with other points: the nearest same-x and same-y within a few pixels.
+    // Starting where a line ends (or on a line) and going nearly square to
+    // it: exactly square, keeping the length.
+    if (options.from && !snap.horizontal && !snap.vertical) {
+        std::vector<ObjectId> lines;
+        for (const auto& l : sk.lines)
+            if (options.fromPoint && (l.start == options.fromPoint || l.end == options.fromPoint)) lines.push_back(l.id);
+        if (options.fromCurve && sk.FindLine(options.fromCurve)) lines.push_back(options.fromCurve);
+        const Vec2 d = snap.pos - *options.from;
+        const double len = d.Length();
+        for (const ObjectId id : lines) {
+            if (len < 1e-9) break;
+            const sketch::Line* l = sk.FindLine(id);
+            const Vec2 dir = (sk.PositionOf(l->end) - sk.PositionOf(l->start)).Normalized();
+            if (std::abs(d.Dot(dir)) / len >= std::sin(kSquareDegrees * kPi / 180.0)) continue;
+            const Vec2 n{-dir.y, dir.x};
+            snap.pos = *options.from + n * (d.Dot(n) >= 0 ? len : -len);
+            snap.perpendicularTo = id;
+            break;
+        }
+    }
+
+    // Lining up with other points and the middles of lines: the nearest
+    // same-x and same-y within a few pixels.
     if (options.points) {
         const double reach = kAlignRadius * std::max(view.MmPerPixel(), 1e-9);
         double bestX = reach, bestY = reach;
@@ -223,8 +257,21 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
                 snap.alignedY = p.pos;
             }
         }
-        if (snap.alignedX) snap.pos.x = snap.alignedX->x;
-        if (snap.alignedY) snap.pos.y = snap.alignedY->y;
+        for (const auto& l : sk.lines) {
+            const Vec2 mid = (sk.PositionOf(l.start) + sk.PositionOf(l.end)) * 0.5;
+            if (const double dx = std::abs(snap.pos.x - mid.x); !snap.vertical && dx < bestX && std::abs(snap.pos.y - mid.y) > reach) {
+                bestX = dx;
+                snap.alignedX = mid;
+            }
+            if (const double dy = std::abs(snap.pos.y - mid.y); !snap.horizontal && dy < bestY && std::abs(snap.pos.x - mid.x) > reach) {
+                bestY = dy;
+                snap.alignedY = mid;
+            }
+        }
+        if (!snap.perpendicularTo) {   // a square line keeps its exact direction
+            if (snap.alignedX) snap.pos.x = snap.alignedX->x;
+            if (snap.alignedY) snap.pos.y = snap.alignedY->y;
+        }
     }
     return snap;
 }

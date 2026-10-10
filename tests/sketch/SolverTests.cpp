@@ -311,3 +311,23 @@ TEST_CASE("a line is tangent to a spline at its end, and to an ellipse") {
     CHECK(std::min(std::abs(lo), std::abs(hi)) < 1e-3);
     CHECK(lo * hi >= -1e-6);
 }
+
+TEST_CASE("removing a constraint removes only the constraint") {
+    IdGenerator ids;
+    Sketch sk;
+    const ObjectId a = sk.AddPoint(ids, {0, 0}), b = sk.AddPoint(ids, {20, 0}), c = sk.AddPoint(ids, {20, 10}), d = sk.AddPoint(ids, {0, 10});
+    const ObjectId bottom = sk.AddLine(ids, a, b);
+    sk.AddLine(ids, b, c);
+    sk.AddLine(ids, c, d);
+    const ObjectId left = sk.AddLine(ids, d, a);
+    for (Line& l : sk.lines)
+        if (l.id == left) l.centerline = true;
+    const ObjectId inner = sk.AddLine(ids, sk.AddPoint(ids, {10, 0}), sk.AddPoint(ids, {10, 8}));
+    const ObjectId perp = sk.AddConstraint(ids, Make2(ConstraintType::Perpendicular, bottom, inner));
+    REQUIRE(Solve(sk).converged);
+    sk.Remove(perp);
+    CHECK(sk.lines.size() == 5);
+    CHECK(sk.points.size() == 6);
+    CHECK(sk.FindLine(left)->centerline);
+    CHECK(sk.FindConstraint(perp) == nullptr);
+}

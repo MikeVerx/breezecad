@@ -33,6 +33,10 @@ struct Snap {
     /// Lined up with an existing point (same x / same y), for the dashed
     /// guide. Only the position is aligned; no constraint is made.
     std::optional<Vec2> alignedX, alignedY;
+    /// The new line would be square to this line (it ends on it, or starts
+    /// where it ends): the position is turned to exactly 90° within a few
+    /// degrees, and the line gets a Perpendicular constraint.
+    ObjectId perpendicularTo;
 };
 
 struct SnapOptions {
@@ -40,6 +44,8 @@ struct SnapOptions {
     bool                grid   = true;
     double              gridStep = 1.0;     ///< mm
     std::optional<Vec2> from;               ///< previous click, for H/V inference
+    ObjectId            fromPoint;          ///< the existing point at `from`, if any (perpendicular to its lines)
+    ObjectId            fromCurve;          ///< the line `from` lies on, if it was snapped onto one
     ObjectId            ignore;
 };
 

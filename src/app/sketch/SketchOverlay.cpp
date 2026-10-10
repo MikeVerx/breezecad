@@ -201,8 +201,9 @@ void DrawSnapMarker(ui::Ui& ui, ImDrawList* dl, ImVec2 at, const Snap& snap) {
             dl->AddCircleFilled(at, ui.S(2.5f), ui::ToU32(c.sketchHover));
             break;
     }
-    if (snap.horizontal || snap.vertical)
-        ui.icons.Draw(dl, snap.horizontal ? "c-horizontal" : "c-vertical", {at.x + ui.S(10), at.y + ui.S(8)}, ui.S(16), {1, 1, 1, 1});
+    if (snap.horizontal || snap.vertical || snap.perpendicularTo)
+        ui.icons.Draw(dl, snap.horizontal ? "c-horizontal" : snap.vertical ? "c-vertical" : "c-perpendicular",
+                      {at.x + ui.S(10), at.y + ui.S(8)}, ui.S(16), {1, 1, 1, 1});
 }
 
 void DrawSnapGuides(ui::Ui& ui, ImDrawList* dl, const SketchView& view, const Snap& snap) {

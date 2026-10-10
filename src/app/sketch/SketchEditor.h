@@ -228,6 +228,14 @@ private:
     void UpdateShownGlyphs(const sketch::Sketch& sk, bool all);
 
     // selection, picking
+    // Typing a size while drawing: the first field of the tool panel takes
+    // the keys; Shift+Up/Down (or Shift+W/S) moves between the fields.
+    int         myFocusField = -1;   ///< the field to focus on the next panel frame (Shift+Up/Down)
+    std::string myFieldSeed;         ///< keys typed in the view, not yet added to the field
+    int         myFieldCount = 0;    ///< fields shown on the last panel frame
+    int         mySeedField = -1;    ///< the field the keys typed in the view go to
+    bool        myClearOnSeed = false;   ///< the next typed key replaces the field's text
+    int         myBackspaces = 0;        ///< Backspaces typed in the view, not applied yet
     std::unordered_set<ObjectId> mySelection;
     std::vector<ObjectId>        myPicks;
     SketchHit                    myHover;
