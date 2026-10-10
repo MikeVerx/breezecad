@@ -1,4 +1,6 @@
 // Ресурсы приложения BreezeCAD (Windows)
 // Иконка приложения — в заголовке окна и в exe.
 
-IDI_APPICON ICON "app.ico"
+// GLFW_ICON: the name GLFW looks for, so every window gets it even before
+// the brand SVG is drawn into it at start-up.
+GLFW_ICON ICON "app.ico"

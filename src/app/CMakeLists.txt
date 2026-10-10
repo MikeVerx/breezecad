@@ -50,6 +50,9 @@ add_executable(breezecad WIN32
     viewport/Section.cpp
     viewport/ViewportPanel.cpp)
 if(WIN32)
+    # The icon in the exe (Explorer, a pinned taskbar button). Without the
+    # RC language the .rc file was silently left out.
+    enable_language(RC)
     target_sources(breezecad PRIVATE ${PROJECT_SOURCE_DIR}/resources/app.rc)
     # Keep main() as the entry point for a GUI (no console) application.
     if(MINGW)
