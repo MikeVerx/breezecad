@@ -1,9 +1,11 @@
 #include "sketch/Offset.h"
 #include "sketch/Shapes.h"
 #include "sketch/Solver.h"
+#include "sketch/SplineGeometry.h"
 
 #include <doctest.h>
 
+#include <algorithm>
 #include <cmath>
 
 using namespace bz;
@@ -89,4 +91,36 @@ TEST_CASE("offset a circle and an open chain") {
     REQUIRE(off);
     const Line* first = sk.FindLine(off->curves[0]);
     CHECK((sk.PositionOf(first->end) - Vec2{118, 2}).Length() == doctest::Approx(0.0));   // the inner corner
+}
+
+TEST_CASE("offset of a lone ellipse and a spline is a spline at that distance") {
+    IdGenerator ids;
+    Sketch sk;
+    const ObjectId e = sk.AddEllipse(ids, sk.AddPoint(ids, {0, 0}), sk.AddPoint(ids, {10, 0}), sk.AddPoint(ids, {0, 5}));
+    const auto chain = ChainOf(sk, e);
+    REQUIRE(chain);
+    CHECK(chain->closed);
+    const int side = SideOf(sk, *chain, {0, 0});   // inside
+    const auto made = OffsetChain(sk, ids, *chain, side * 1.0);
+    REQUIRE(made);
+    const Spline* copy = sk.FindSpline(made->curves.front());
+    REQUIRE(copy);
+    CHECK(copy->Closed());
+    // Every point of the copy is 1 inside the ellipse: on the ellipse 9 x 4 roughly.
+    const std::vector<Vec2> ring = SampleEllipse(sk, *sk.FindEllipse(e), 2000);
+    for (const ObjectId p : copy->points) {
+        double best = 1e300;
+        for (const Vec2 q : ring) best = std::min(best, (q - sk.PositionOf(p)).Length());
+        CHECK(best == doctest::Approx(1.0).epsilon(0.02));
+    }
+    // Too far inside: the copy would fold over itself.
+    CHECK_FALSE(OffsetChain(sk, ids, *chain, side * 6.0));
+
+    const ObjectId s = sk.AddSpline(ids, {sk.AddPoint(ids, {30, 0}), sk.AddPoint(ids, {40, 5}), sk.AddPoint(ids, {50, 0})}, true);
+    const auto open = ChainOf(sk, s);
+    REQUIRE(open);
+    CHECK_FALSE(open->closed);
+    const auto sm = OffsetChain(sk, ids, *open, 2.0);
+    REQUIRE(sm);
+    CHECK_FALSE(sk.FindSpline(sm->curves.front())->Closed());
 }

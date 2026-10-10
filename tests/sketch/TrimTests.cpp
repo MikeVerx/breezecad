@@ -116,3 +116,49 @@ TEST_CASE("split a line and an arc where clicked") {
     CHECK((sk.PositionOf(*q) - Vec2{100, 10}).Length() == doctest::Approx(0.0));
     CHECK(Solve(sk).converged);
 }
+
+TEST_CASE("trim a spline and an ellipse; lines are cut by them and extend to them") {
+    IdGenerator ids;
+    Sketch sk;
+    const ObjectId s0 = sk.AddPoint(ids, {0, 0}), s2 = sk.AddPoint(ids, {20, 0});
+    const ObjectId spline = sk.AddSpline(ids, {s0, sk.AddPoint(ids, {10, 6}), s2}, true);
+    const ObjectId cutter = sk.AddLine(ids, sk.AddPoint(ids, {10, -10}), sk.AddPoint(ids, {10, 20}));
+
+    // The vertical line is cut where the spline crosses it.
+    const std::vector<Cut> lineCuts = CutsOf(sk, cutter);
+    REQUIRE(lineCuts.size() == 1);
+    CHECK(lineCuts[0].by == spline);
+    CHECK(lineCuts[0].pos.x == doctest::Approx(10.0).epsilon(1e-6));
+
+    // Trimming the right half of the spline leaves a spline from its start to the line.
+    const auto span = FindTrimSpan(sk, spline, {16, 4});
+    REQUIRE(span);
+    REQUIRE(span->from);
+    CHECK_FALSE(span->to);
+    REQUIRE(Trim(sk, ids, *span));
+    REQUIRE(sk.splines.size() == 1);
+    const Spline& left = sk.splines.front();
+    CHECK(left.points.front() == s0);
+    CHECK(sk.PositionOf(left.points.back()).x == doctest::Approx(10.0).epsilon(1e-6));
+
+    // An ellipse cut twice by a line keeps the far side as one open spline.
+    const ObjectId e = sk.AddEllipse(ids, sk.AddPoint(ids, {50, 0}), sk.AddPoint(ids, {60, 0}), sk.AddPoint(ids, {50, 5}));
+    sk.AddLine(ids, sk.AddPoint(ids, {55, -10}), sk.AddPoint(ids, {55, 10}));
+    const auto ellipseSpan = FindTrimSpan(sk, e, {59, 0});
+    REQUIRE(ellipseSpan);
+    REQUIRE(Trim(sk, ids, *ellipseSpan));
+    CHECK(sk.ellipses.empty());
+    REQUIRE(sk.splines.size() == 2);
+    const Spline& rest = sk.splines.back();
+    CHECK_FALSE(rest.Closed());
+    CHECK(sk.PositionOf(rest.points.front()).x == doctest::Approx(55.0).epsilon(1e-6));
+    CHECK(sk.PositionOf(rest.points.back()).x == doctest::Approx(55.0).epsilon(1e-6));
+
+    // A line pointing at an ellipse extends to it.
+    const ObjectId e2 = sk.AddEllipse(ids, sk.AddPoint(ids, {100, 0}), sk.AddPoint(ids, {110, 0}), sk.AddPoint(ids, {100, 5}));
+    const ObjectId probe = sk.AddLine(ids, sk.AddPoint(ids, {70, 0}), sk.AddPoint(ids, {80, 0}));
+    const auto ext = FindExtension(sk, probe, {79, 0});
+    REQUIRE(ext);
+    CHECK(ext->target == e2);
+    CHECK(ext->to.x == doctest::Approx(90.0).epsilon(1e-4));
+}

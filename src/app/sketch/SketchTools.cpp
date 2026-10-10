@@ -492,7 +492,7 @@ void SketchEditor::AddTypedDimensions(doc::Document& doc, sketch::Sketch& sk, co
 
 void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchView& view) {
     doc::SketchFeature* f = Active(session);
-    const bool onCurve = myHover && IsCurve(myHover.kind);
+    const bool onCurve = myHover && IsAnyCurve(myHover.kind);
     if (!onCurve || !myCursor) return;
     // Projected geometry belongs to the model.
     const sketch::Sketch& sk = f->sketch;
@@ -552,7 +552,7 @@ void SketchEditor::HandleOffset(AppContext& app, Session& session, const SketchV
     // First the contour: a click on one of its curves.
     if (myOffsetCurve && !sketch::ChainOf(f->sketch, myOffsetCurve)) myOffsetCurve = {};
     if (!myOffsetCurve) {
-        if (!myHover || !IsCurve(myHover.kind) || !sketch::ChainOf(f->sketch, myHover.id)) return;
+        if (!myHover || !IsAnyCurve(myHover.kind) || !sketch::ChainOf(f->sketch, myHover.id)) return;
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) myOffsetCurve = myHover.id;
         return;
     }
