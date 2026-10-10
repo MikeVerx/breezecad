@@ -8,7 +8,9 @@ DocumentTypeRegistry& DocumentTypeRegistry::Default() {
     static DocumentTypeRegistry registry = [] {
         DocumentTypeRegistry r;
         r.Register({.id = std::string(kPartType), .title = "Деталь", .untitledBase = "Деталь"});
-        r.Register({.id = std::string(kAssemblyType), .title = "Сборка", .untitledBase = "Сборка"});
+        // Its own extension, so assemblies stand out among part files; the
+        // content says what it is, so a renamed file still opens.
+        r.Register({.id = std::string(kAssemblyType), .title = "Сборка", .untitledBase = "Сборка", .extension = ".bza"});
         r.Register({.id = std::string(kDrawingType), .title = "Чертёж", .untitledBase = "Чертёж",
                     .canCreate = false, .canOpen = false});
         return r;
@@ -22,6 +24,18 @@ void DocumentTypeRegistry::Register(DocumentTypeInfo info) {
         *it = std::move(info);
     else
         myTypes.push_back(std::move(info));
+}
+
+std::string DocumentTypeRegistry::OpenPatterns() const {
+    std::string out;
+    for (const DocumentTypeInfo& t : myTypes) {
+        if (!t.canOpen) continue;
+        const std::string pattern = "*" + t.extension;
+        if (out.find(pattern) != std::string::npos) continue;
+        if (!out.empty()) out += ' ';
+        out += pattern;
+    }
+    return out;
 }
 
 const DocumentTypeInfo* DocumentTypeRegistry::Find(std::string_view id) const {

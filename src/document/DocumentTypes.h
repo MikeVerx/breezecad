@@ -14,7 +14,7 @@ struct DocumentTypeInfo {
     std::string id;            ///< in the manifest: "part", "assembly", "drawing"
     std::string title;         ///< "Деталь" (translated by the UI when shown)
     std::string untitledBase;  ///< base of new names: "Деталь" -> "Деталь1"
-    std::string extension = ".bzc";
+    std::string extension = ".bzc";   ///< ".bza" for assemblies
     bool        canCreate = true;   ///< a "Создать" button is offered
     bool        canOpen   = true;   ///< this version can open such files
 };
@@ -29,6 +29,8 @@ public:
     void Register(DocumentTypeInfo info);
     const DocumentTypeInfo* Find(std::string_view id) const;
     const std::vector<DocumentTypeInfo>& All() const { return myTypes; }
+    /// "*.bzc *.bza": every extension this version opens, for file dialogs.
+    std::string OpenPatterns() const;
 
 private:
     std::vector<DocumentTypeInfo> myTypes;

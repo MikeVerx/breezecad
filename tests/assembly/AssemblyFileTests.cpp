@@ -43,6 +43,9 @@ TEST_CASE("document types are looked up, not assumed") {
     CHECK(reg.Find("assembly")->canOpen);
     CHECK_FALSE(reg.Find("drawing")->canOpen);   // placeholder until its module exists
     CHECK(reg.Find("nonsense") == nullptr);
+    CHECK(reg.Find("part")->extension == ".bzc");
+    CHECK(reg.Find("assembly")->extension == ".bza");   // assemblies stand out among part files
+    CHECK(reg.OpenPatterns() == "*.bzc *.bza");          // the drawing cannot be opened yet
 
     doc::DocumentTypeRegistry custom;   // a module may add its own kind
     custom.Register({.id = "schematic", .title = "Схема", .untitledBase = "Схема"});
@@ -97,7 +100,7 @@ TEST_CASE("assembly file skips what it cannot read, rejects what is broken") {
 TEST_CASE("assembly is saved in the .bzc container with its type") {
     const auto dir = std::filesystem::temp_directory_path() / PathFromUtf8("bz_сборка_tests");
     std::filesystem::create_directories(dir);
-    const auto file = dir / PathFromUtf8("Узел.bzc");
+    const auto file = dir / PathFromUtf8("Узел.bza");
     REQUIRE(SaveAssembly(SampleAssembly(), file, "tests"));
 
     auto type = doc::ReadDocumentType(file);
@@ -115,6 +118,10 @@ TEST_CASE("assembly is saved in the .bzc container with its type") {
     REQUIRE(doc::SaveBzc(doc::Document{}, partFile, "tests"));
     CHECK(*doc::ReadDocumentType(partFile) == "part");
     CHECK_FALSE(LoadAssembly(partFile));
+    // The kind comes from the content, not the name: a renamed file still opens.
+    const auto renamed = dir / "renamed.bzc";
+    std::filesystem::copy_file(file, renamed);
+    CHECK(*doc::ReadDocumentType(renamed) == "assembly");
     std::filesystem::remove_all(dir);
 }
 

@@ -114,8 +114,11 @@ bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settin
             return false;
         }
         const std::filesystem::path folder = session.path.empty() ? platform::DocumentsDir() : session.path.parent_path();
-        const auto chosen = platform::ShowSaveDialog(Tr("Сохранить документ"), folder / (session.Title() + ".bzc"),
-                                                     {{Tr("Документ BreezeCAD"), "*.bzc"}}, ".bzc");
+        const doc::DocumentTypeInfo* type = doc::DocumentTypeRegistry::Default().Find(session.DocumentType());
+        const std::string ext = type ? type->extension : std::string(".bzc");
+        const std::string name = session.assembly ? Tr("Сборка BreezeCAD") : Tr("Деталь BreezeCAD");
+        const auto chosen = platform::ShowSaveDialog(Tr("Сохранить документ"), folder / PathFromUtf8(session.Title() + ext),
+                                                     {{name, "*" + ext}}, ext);
         if (!chosen) return false;
         target = *chosen;
     }

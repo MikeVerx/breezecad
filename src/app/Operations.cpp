@@ -10,6 +10,7 @@
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
 #include "app/assembly/AssemblyUi.h"
+#include "document/DocumentTypes.h"
 #include "document/StandardParts.h"
 #include "document/WorkPlaneFeature.h"
 #include "platform/FileDialogs.h"
@@ -47,7 +48,7 @@ void OpenDocument(AppContext& app, std::optional<std::filesystem::path> file) {
             app.notes.Error(problem);
             return;
         }
-        file = platform::ShowOpenDialog(Tr("Открыть документ"), {{Tr("Документ BreezeCAD"), "*.bzc"}}, folder);
+        file = platform::ShowOpenDialog(Tr("Открыть документ"), {{Tr("Документ BreezeCAD"), doc::DocumentTypeRegistry::Default().OpenPatterns()}}, folder);
         if (!file) return;
     }
     EndEditing(app);
