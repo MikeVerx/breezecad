@@ -11,6 +11,8 @@
 #include "core/I18n.h"
 #include "document/Appearance.h"
 
+#include <imgui.h>
+
 #include <filesystem>
 #include <map>
 #include <optional>
@@ -37,11 +39,21 @@ public:
     const char* Title() const override { return Tr("Внешний вид"); }
     std::string Hint() const override;
 
+    /// The appearance picker of the top toolbar (as in Inventor): the part's
+    /// look with a sample, a list to choose from; the choice goes on every
+    /// body of the part (one undo step).
+    void DrawToolbarPicker(AppContext& app, Session* session, ImVec2 pos, float width, float height);
+
 private:
     /// The appearance chosen in the library (nullptr: back to the default look).
     const doc::Appearance* Chosen() const;
     void DrawLibrary(AppContext& app, float width);
-    bool Swatch(AppContext& app, const doc::Appearance* a, const std::string& label, float size);
+    /// A row of a list: sample and name. True when clicked.
+    bool Row(AppContext& app, const doc::Appearance* a, bool chosen, float width);
+    /// A small sample: a rounded square in the colour, outlined in the edge colour.
+    void Sample(AppContext& app, ImDrawList* dl, ImVec2 p, float size, const doc::Appearance* a);
+    /// Standard and own appearances as rows; returns the clicked id ("" default), or nullopt.
+    std::optional<std::string> List(AppContext& app, std::string_view chosen, float width, bool withOwnMenu);
     void DrawCreateDialog(AppContext& app, Session& session);
     /// A small texture of a library picture (or of the file being chosen), for swatches.
     unsigned Thumbnail(const std::string& key, const std::vector<std::uint8_t>& bytes);

@@ -148,53 +148,60 @@ void AppearanceEditor::DrawInViewport(AppContext& app, Session& session, const V
     session.doc.TouchLook();
 }
 
-bool AppearanceEditor::Swatch(AppContext& app, const doc::Appearance* a, const std::string& label, float size) {
+void AppearanceEditor::Sample(AppContext& app, ImDrawList* dl, ImVec2 p, float size, const doc::Appearance* a) {
+    const ui::ThemeColors& c = app.ui.C();
+    const ImVec2 q{p.x + size, p.y + size};
+    const float r = size * 0.28f;
+    const Color edges = a ? a->edges : c.bodyEdges;
+    if (const unsigned picture = ThumbnailOf(a)) {
+        dl->AddImageRounded(static_cast<ImTextureID>(picture), p, q, {0, 0}, {1, 1}, IM_COL32_WHITE, r);
+    } else {
+        const Color face = a ? a->face : c.body;
+        if (face.a < 0.999f) {   // see-through: a checkerboard shows through
+            dl->AddRectFilled(p, q, IM_COL32(255, 255, 255, 255), r);
+            const float half = size / 2;
+            dl->AddRectFilled({p.x + half, p.y}, {q.x, p.y + half}, IM_COL32(196, 200, 206, 255), r, ImDrawFlags_RoundCornersTopRight);
+            dl->AddRectFilled({p.x, p.y + half}, {p.x + half, q.y}, IM_COL32(196, 200, 206, 255), r, ImDrawFlags_RoundCornersBottomLeft);
+        }
+        dl->AddRectFilled(p, q, ui::ToU32(face), r);
+    }
+    dl->AddRect(p, q, ui::ToU32(edges.WithAlpha(1.0f)), r, 0, app.ui.S(1.2f));
+}
+
+bool AppearanceEditor::Row(AppContext& app, const doc::Appearance* a, bool chosen, float width) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     const std::string id = a ? a->id : std::string("default");
     ImGui::PushID(id.c_str());
     const ImVec2 p = ImGui::GetCursorScreenPos();
-    const bool clicked = ImGui::InvisibleButton("##swatch", {size, size});
+    const float h = ui.S(28);
+    const bool clicked = ImGui::InvisibleButton("##row", {width, h});
     const bool hovered = ImGui::IsItemHovered();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const float pad = ui.S(4);
-    DrawSample(dl, {p.x + pad, p.y + pad}, size - 2 * pad, a, c, ui.S(6), ThumbnailOf(a));
-    const bool chosen = (a ? a->id : std::string()) == myChosen;
-    if (chosen) dl->AddRect(p, {p.x + size, p.y + size}, ui::ToU32(c.accent), ui.S(9), 0, ui.S(2));
-    else if (hovered) dl->AddRect(p, {p.x + size, p.y + size}, ui::ToU32(c.fieldBorder), ui.S(9), 0, ui.S(1));
-    if (hovered) ui::ItemTooltip(ui, label.c_str());
+    if (chosen || hovered) dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(chosen ? c.accentSoft : c.hover), ui.S(6));
+    const float s = ui.S(18);
+    Sample(app, dl, {p.x + ui.S(6), p.y + (h - s) / 2}, s, a);
+    const std::string name = a ? NameOf(*a) : std::string(Tr("По умолчанию"));
+    dl->AddText(chosen ? ui.fonts.medium : ui.fonts.body, ui.S(13), {p.x + ui.S(32), p.y + (h - ui.S(13)) / 2 - ui.S(1)},
+                ui::ToU32(c.text), name.c_str());
     ImGui::PopID();
     return clicked;
 }
 
-void AppearanceEditor::DrawLibrary(AppContext& app, float width) {
+std::optional<std::string> AppearanceEditor::List(AppContext& app, std::string_view chosen, float width, bool withOwnMenu) {
     ui::Ui& ui = app.ui;
-    const float size = ui.S(46);
-    const int perRow = std::max(1, static_cast<int>((width + ui.S(4)) / (size + ui.S(4))));
-    int column = 0;
-    const auto next = [&] {
-        if (++column < perRow) ImGui::SameLine(0, ui.S(4));
-        else column = 0;
-    };
-
+    std::optional<std::string> picked;
     Section(app, Tr("Стандартные"));
-    column = 0;
-    if (Swatch(app, nullptr, Tr("По умолчанию (цвет темы)"), size)) myChosen.clear();
-    next();
-    for (const doc::Appearance& a : doc::StandardAppearances()) {
-        if (Swatch(app, &a, NameOf(a), size)) myChosen = a.id;
-        next();
-    }
-    if (column != 0) ImGui::NewLine();
-    ImGui::Dummy({0, ui.S(10)});
-
+    if (Row(app, nullptr, chosen.empty(), width)) picked = std::string();
+    for (const doc::Appearance& a : doc::StandardAppearances())
+        if (Row(app, &a, chosen == a.id, width)) picked = a.id;
+    ImGui::Dummy({0, ui.S(8)});
     Section(app, Tr("Мои"));
-    column = 0;
     std::string removeId;
     for (const doc::Appearance& a : myLibrary.Items()) {
-        if (Swatch(app, &a, NameOf(a), size)) myChosen = a.id;
+        if (Row(app, &a, chosen == a.id, width)) picked = a.id;
         // Right click: change or delete.
-        if (ImGui::BeginPopupContextItem(("##own-" + a.id).c_str())) {
+        if (withOwnMenu && ImGui::BeginPopupContextItem(("##own-" + a.id).c_str())) {
             ui::MenuStyle style(ui);
             if (ui::MenuItem(ui, Tr("Изменить…"))) {
                 myDraft = a;
@@ -205,39 +212,32 @@ void AppearanceEditor::DrawLibrary(AppContext& app, float width) {
             if (ui::MenuItem(ui, Tr("Удалить"))) removeId = a.id;
             ImGui::EndPopup();
         }
-        next();
     }
-    // "+": a new one.
-    {
-        const ImVec2 p = ImGui::GetCursorScreenPos();
-        if (ImGui::InvisibleButton("##new-look", {size, size})) {
-            myDraft = {};
-            myKind = 0;
-            myPictureFile.clear();
-            myDraft.name = Tr("Мой цвет");
-            if (const doc::Appearance* base = Chosen(); base && !base->HasPicture()) {
-                myDraft.face = base->face;
-                myDraft.edges = base->edges;
-                myDraft.finish = base->finish;
-            }
-            myCreating = true;
-        }
-        const bool hovered = ImGui::IsItemHovered();
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        const ImVec2 q{p.x + size, p.y + size};
-        dl->AddRect({p.x + ui.S(4), p.y + ui.S(4)}, {q.x - ui.S(4), q.y - ui.S(4)}, ui::ToU32(hovered ? ui.C().accent : ui.C().fieldBorder),
-                    ui.S(6), 0, ui.S(1.2f));
-        const ImVec2 m{(p.x + q.x) / 2, (p.y + q.y) / 2};
-        const ImU32 ink = ui::ToU32(hovered ? ui.C().accent : ui.C().textMuted);
-        dl->AddLine({m.x - ui.S(7), m.y}, {m.x + ui.S(7), m.y}, ink, ui.S(1.6f));
-        dl->AddLine({m.x, m.y - ui.S(7)}, {m.x, m.y + ui.S(7)}, ink, ui.S(1.6f));
-        if (hovered) ui::ItemTooltip(ui, Tr("Создать свой внешний вид"));
-    }
+    if (myLibrary.Items().empty()) Caption(app, Tr("Пока нет: создайте свой цвет или картинку."), width);
     if (!removeId.empty()) {
         if (myChosen == removeId) myChosen = "std.steel";
         if (const Status s = myLibrary.Remove(removeId); !s) app.notes.Error(Tr(s.GetError().message));
     }
+    return picked;
+}
+
+void AppearanceEditor::DrawLibrary(AppContext& app, float width) {
+    ui::Ui& ui = app.ui;
+    if (const auto picked = List(app, myChosen, width, true)) myChosen = *picked;
     ImGui::Dummy({0, ui.S(4)});
+    if (ui::LinkButton(ui, "##new-look", Tr("+ Создать свой…"))) {
+        myDraft = {};
+        myKind = 0;
+        myPictureFile.clear();
+        myDraft.name = Tr("Мой цвет");
+        if (const doc::Appearance* base = Chosen(); base && !base->HasPicture()) {
+            myDraft.face = base->face;
+            myDraft.edges = base->edges;
+            myDraft.finish = base->finish;
+        }
+        myCreating = true;
+    }
+    ImGui::SameLine(0, ui.S(14));
     if (ui::LinkButton(ui, "##import-looks", Tr("Импорт…"))) {
         if (const auto file = platform::ShowOpenDialog(Tr("Импорт внешних видов"), {{Tr("Внешние виды"), "*.zip *.json"}}, platform::DocumentsDir())) {
             if (const auto added = myLibrary.Import(*file)) app.notes.Success(Trf("Добавлено в «Мои»: {}", *added));
@@ -429,6 +429,59 @@ void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
     ImGui::EndPopup();
 }
 
+void AppearanceEditor::DrawToolbarPicker(AppContext& app, Session* session, ImVec2 pos, float width, float height) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    const bool enabled = session && !session->model.Bodies().empty();
+    // What the part looks like now: one appearance on every body, or a mix.
+    const doc::Appearance* current = nullptr;
+    bool mixed = false;
+    if (enabled) {
+        const doc::Look& look = session->doc.look;
+        const auto& bodies = session->model.Bodies();
+        current = look.OfBody(bodies.front().id);
+        for (const auto& b : bodies) mixed = mixed || look.OfBody(b.id) != current;
+        mixed = mixed || !look.faces.empty();
+    }
+    ImGui::SetCursorScreenPos(pos);
+    ImGui::BeginDisabled(!enabled);
+    const bool clicked = ImGui::InvisibleButton("##look-picker-button", {width, height});
+    const bool hovered = ImGui::IsItemHovered();
+    ImGui::EndDisabled();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(pos, {pos.x + width, pos.y + height}, ui::ToU32(hovered ? c.hover : c.panel), ui.S(6));
+    dl->AddRect(pos, {pos.x + width, pos.y + height}, ui::ToU32(c.fieldBorder), ui.S(6));
+    const float s = ui.S(16);
+    if (enabled) Sample(app, dl, {pos.x + ui.S(7), pos.y + (height - s) / 2}, s, mixed ? nullptr : current);
+    const std::string name = !enabled ? std::string(Tr("Внешний вид")) : mixed ? std::string(Tr("Разные")) : current ? NameOf(*current) : std::string(Tr("По умолчанию"));
+    const ImVec4 clip{pos.x, pos.y, pos.x + width - ui.S(22), pos.y + height};
+    dl->AddText(ui.fonts.body, ui.S(12), {pos.x + ui.S(30), pos.y + (height - ui.S(12)) / 2 - ui.S(1)},
+                ui::ToU32(enabled ? c.text : c.textMuted), name.c_str(), nullptr, 0, &clip);
+    ui.icons.Draw(dl, "ui-chevron-down", {pos.x + width - ui.S(18), pos.y + (height - ui.S(10)) / 2}, ui.S(10), c.textMuted);
+    if (hovered) ui::ItemTooltip(ui, Tr("Внешний вид детали (всех тел). Грани и отдельные тела — «Вид → Внешний вид»"));
+    if (clicked) {
+        myLibrary.Reload();
+        ImGui::OpenPopup("##look-picker");
+    }
+    ImGui::SetNextWindowPos({pos.x, pos.y + height + ui.S(4)});
+    ImGui::SetNextWindowSizeConstraints({ui.S(240), 0}, {ui.S(260), ui.S(460)});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui.S(8, 8));
+    const bool open = ImGui::BeginPopup("##look-picker");
+    ImGui::PopStyleVar();
+    if (!open) return;
+    const std::string chosen = mixed || !current ? std::string() : current->id;
+    if (const auto picked = List(app, mixed ? std::string_view("-") : std::string_view(chosen), ui.S(224), false); picked && session) {
+        const doc::Appearance* a = picked->empty() ? nullptr : doc::FindStandard(*picked);
+        if (!a && !picked->empty()) a = myLibrary.Find(*picked);
+        doc::Look look = session->doc.look;
+        for (const auto& b : session->model.Bodies()) look.SetBody(b.id, a);
+        if (a && a->HasPicture()) look.pictures[a->picture] = myLibrary.PictureBytes(a->picture);
+        if (look != session->doc.look) session->Execute(doc::SetLook(std::move(look), Tr("Внешний вид")));
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
 void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
@@ -469,7 +522,7 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
         const float h = ui.S(40);
         ImDrawList* dl = ImGui::GetWindowDrawList();
         dl->AddRectFilled(p, {p.x + inner, p.y + h}, ui::ToU32(c.accentSoft), ui.S(8));
-        DrawSample(dl, {p.x + ui.S(8), p.y + ui.S(8)}, h - ui.S(16), a, c, ui.S(5));
+        Sample(app, dl, {p.x + ui.S(10), p.y + ui.S(10)}, h - ui.S(20), a);
         const std::string name = a ? NameOf(*a) : std::string(Tr("По умолчанию"));
         dl->AddText(ui.fonts.medium, ui.S(13), {p.x + h + ui.S(4), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), name.c_str());
         ImGui::Dummy({inner, h});

@@ -2,6 +2,7 @@
 // search with its drop-down, and live stats (FPS, memory, objects).
 
 #include "app/Operations.h"
+#include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
 #include "core/I18n.h"
 #include "ui/Menus.h"
@@ -267,6 +268,10 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
         app.shell.leftTab = LeftTab::Variables;
     x += ui.S(32);
     qatAs("##qat-measure", "tools.measure", "ui-ruler");
+    // The part's appearance, as in Inventor's toolbar.
+    x += ui.S(6);
+    app.ops.appearance.DrawToolbarPicker(app, app.workspace.ShowsHome() ? nullptr : app.Doc(), {x, cy}, ui.S(170), ui.S(30));
+    x += ui.S(176);
 
     // Right side: search and stats.
     const float statsWidth = ui.S(190);
