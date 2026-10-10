@@ -1,5 +1,8 @@
 #include "app/Session.h"
 
+#include <imgui.h>
+
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <format>
@@ -38,7 +41,17 @@ void Session::CommitInPlaceEdit(std::unique_ptr<doc::Feature> before, std::strin
 
 bool Session::RebuildIfNeeded() {
     if (doc.Revision() == myBuiltRevision) return false;
+    // While a handle or a value is being dragged, a part that takes long to
+    // rebuild is rebuilt at most every so often, and once more on release:
+    // the drag stays smooth instead of waiting for every step.
+    const double now = ImGui::GetTime();
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left) && myLastRebuildSeconds > 0.04 &&
+        now - myLastRebuildAt < std::max(0.25, 3 * myLastRebuildSeconds))
+        return false;
+    const auto start = std::chrono::steady_clock::now();
     model.Rebuild(doc);
+    myLastRebuildSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    myLastRebuildAt = ImGui::GetTime();
     myBuiltRevision = doc.Revision();
     return true;
 }

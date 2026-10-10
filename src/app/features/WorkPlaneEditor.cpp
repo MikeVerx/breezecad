@@ -154,13 +154,20 @@ void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const Vi
         const std::string label = FormatValue(f->offset.value, Quantity::Length, session.doc.units, 2) + " " +
                                   UnitLabel(Quantity::Length, session.doc.units);
         if (auto offset = myArrow.Update(app, vf, tip - dir * f->offset.value, dir, f->offset.value, label)) {
+            const double was = f->reversed ? -f->offset.value : f->offset.value;   // signed, before any flip
             if (*offset < 0) {   // dragged past the start: the other side
                 f->reversed = !f->reversed;
                 *offset = -*offset;
                 myArrow.Flipped();
             }
             myOffset = FormatValue(*offset, Quantity::Length, session.doc.units, 3);
+            // The plane moves at once; the part catches up when the rebuild runs.
+            if (f->frame) {
+                const double now = f->reversed ? -*offset : *offset;
+                f->frame = doc::OffsetFrame(*f->frame, now - was);
+            }
             f->offset.expression = myOffset;
+            f->offset.value = *offset;
             Changed(session);
         }
     }
