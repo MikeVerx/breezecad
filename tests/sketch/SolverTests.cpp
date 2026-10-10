@@ -1,4 +1,5 @@
 #include "sketch/Solver.h"
+#include "sketch/SplineGeometry.h"
 
 #include <doctest.h>
 
@@ -238,4 +239,75 @@ TEST_CASE("a distance to an осевая is a diameter") {
     sk.AddConstraint(ids, d);
     REQUIRE(Solve(sk).converged);
     CHECK(std::abs(sk.PositionOf(p).x) == doctest::Approx(15.0));   // radius, from a diameter of 30
+}
+
+namespace {
+
+/// Distance from `p` to the drawn spline (dense samples).
+double DistanceToSpline(const Sketch& sk, const Spline& s, Vec2 p) {
+    double best = 1e300;
+    const std::vector<Vec2> pts = SampleSpline(SplineShape(sk, s), 400);
+    for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
+        const Vec2 a = pts[i], d = pts[i + 1] - a;
+        const double t = std::clamp((p - a).Dot(d) / std::max(d.Dot(d), 1e-18), 0.0, 1.0);
+        best = std::min(best, (p - (a + d * t)).Length());
+    }
+    return best;
+}
+
+Constraint Make2(ConstraintType t, ObjectId a, ObjectId b) {
+    Constraint c;
+    c.type = t;
+    c.refs = {a, b, {}};
+    return c;
+}
+
+} // namespace
+
+TEST_CASE("a point is held on a spline and on an ellipse") {
+    IdGenerator ids;
+    Sketch sk;
+    const ObjectId s = sk.AddSpline(ids, {sk.AddPoint(ids, {0, 0}), sk.AddPoint(ids, {10, 6}), sk.AddPoint(ids, {20, 0})}, true);
+    const ObjectId p = sk.AddPoint(ids, {9, 12});
+    sk.AddConstraint(ids, Make2(ConstraintType::PointOnCurve, p, s));
+    const ObjectId e = sk.AddEllipse(ids, sk.AddPoint(ids, {40, 0}), sk.AddPoint(ids, {50, 0}), sk.AddPoint(ids, {40, 4}));
+    const ObjectId q = sk.AddPoint(ids, {47, 6});
+    sk.AddConstraint(ids, Make2(ConstraintType::PointOnCurve, q, e));
+    REQUIRE(Solve(sk).converged);
+    CHECK(DistanceToSpline(sk, *sk.FindSpline(s), sk.PositionOf(p)) < 1e-3);
+    const Ellipse& el = *sk.FindEllipse(e);
+    const Vec2 c = sk.PositionOf(el.center), ma = sk.PositionOf(el.major) - c, mi = sk.PositionOf(el.minor) - c;
+    const Vec2 d = sk.PositionOf(q) - c;
+    const double u = d.Dot(ma) / ma.Dot(ma), v = d.Dot(mi) / mi.Dot(mi);
+    CHECK(u * u + v * v == doctest::Approx(1.0).epsilon(1e-4));
+}
+
+TEST_CASE("a line is tangent to a spline at its end, and to an ellipse") {
+    IdGenerator ids;
+    Sketch sk;
+    const ObjectId start = sk.AddPoint(ids, {0, 0});
+    const ObjectId s = sk.AddSpline(ids, {start, sk.AddPoint(ids, {10, 6}), sk.AddPoint(ids, {20, 0})}, true);
+    const ObjectId l = sk.AddLine(ids, sk.AddPoint(ids, {-10, 2}), start);
+    sk.AddConstraint(ids, Make2(ConstraintType::Tangent, l, s));
+    const ObjectId e = sk.AddEllipse(ids, sk.AddPoint(ids, {40, 0}), sk.AddPoint(ids, {50, 0}), sk.AddPoint(ids, {40, 4}));
+    const ObjectId l2 = sk.AddLine(ids, sk.AddPoint(ids, {30, 5}), sk.AddPoint(ids, {50, 6}));
+    sk.AddConstraint(ids, Make2(ConstraintType::Tangent, l2, e));
+    REQUIRE(Solve(sk).converged);
+
+    const BSpline b = SplineShape(sk, *sk.FindSpline(s));
+    const Vec2 t = (b.poles[1] - b.poles[0]).Normalized();
+    const Line& line = *sk.FindLine(l);
+    const Vec2 dl = (sk.PositionOf(line.end) - sk.PositionOf(line.start)).Normalized();
+    CHECK(std::abs(t.Cross(dl)) < 1e-6);
+
+    // The ellipse touches the line: the nearest sample is on it, none beyond.
+    const Line& tl = *sk.FindLine(l2);
+    const Vec2 a = sk.PositionOf(tl.start), n = (sk.PositionOf(tl.end) - a).Normalized();
+    double lo = 1e300, hi = -1e300;
+    for (const Vec2& pt : SampleEllipse(sk, *sk.FindEllipse(e), 2000)) {
+        lo = std::min(lo, n.Cross(pt - a));
+        hi = std::max(hi, n.Cross(pt - a));
+    }
+    CHECK(std::min(std::abs(lo), std::abs(hi)) < 1e-3);
+    CHECK(lo * hi >= -1e-6);
 }

@@ -122,6 +122,37 @@ bool ArcContains(Vec2 centre, Vec2 start, Vec2 end, Vec2 p) {
     return norm(angle(p) - a0) <= norm(angle(end) - a0);
 }
 bool IsCurve(EntityKind k) { return k == EntityKind::Line || IsRound(k); }
+/// Any curve a point can be held on.
+bool IsAnyCurve(EntityKind k) { return IsCurve(k) || k == EntityKind::Spline || k == EntityKind::Ellipse; }
+/// True when an end of spline `spline` is an end of curve `other` (the same
+/// point or tied by Coincident): only there can a spline be made tangent.
+bool SplineMeetsAtEnd(const sketch::Sketch& sk, ObjectId spline, ObjectId other) {
+    const sketch::Spline* s = sk.FindSpline(spline);
+    if (!s || s->points.empty() || s->Closed()) return false;
+    std::vector<ObjectId> ends;
+    if (const sketch::Line* l = sk.FindLine(other)) ends = {l->start, l->end};
+    else if (const sketch::Arc* ar = sk.FindArc(other)) ends = {ar->start, ar->end};
+    else if (const sketch::Spline* o = sk.FindSpline(other); o && !o->points.empty()) ends = {o->points.front(), o->points.back()};
+    const auto tied = [&](ObjectId p, ObjectId q) {
+        if (p == q) return true;
+        for (const sketch::Constraint& c : sk.constraints)
+            if (c.type == ConstraintType::Coincident && ((c.refs[0] == p && c.refs[1] == q) || (c.refs[0] == q && c.refs[1] == p)))
+                return true;
+        return false;
+    };
+    for (const ObjectId e : ends)
+        if (tied(e, s->points.front()) || tied(e, s->points.back())) return true;
+    return false;
+}
+
+/// Pairs the solver can make tangent: line/arc/circle among themselves, a
+/// line and an ellipse, a spline and a line/arc/spline meeting at its end.
+bool CanBeTangent(EntityKind a, EntityKind b) {
+    if ((IsCurve(a) && IsRound(b)) || (IsRound(a) && IsCurve(b))) return true;
+    const auto pair = [&](EntityKind x, EntityKind y) { return (a == x && b == y) || (a == y && b == x); };
+    return pair(EntityKind::Line, EntityKind::Ellipse) || pair(EntityKind::Spline, EntityKind::Line) ||
+           pair(EntityKind::Spline, EntityKind::Arc) || pair(EntityKind::Spline, EntityKind::Spline);
+}
 
 /// The constraint a tool makes from picked entities; nullopt when the picks
 /// do not fit the tool (yet). `complete` says whether more picks could help.
@@ -152,8 +183,8 @@ std::optional<sketch::Constraint> ConstraintFromPicks(SketchTool tool, const ske
         case SketchTool::Coincident:
             if (picks.size() < 2) { needMore = true; return std::nullopt; }
             if (k0 == EntityKind::Point && k1 == EntityKind::Point) return Make(ConstraintType::Coincident, a, b);
-            if (k0 == EntityKind::Point && IsCurve(k1)) return Make(ConstraintType::PointOnCurve, a, b);
-            if (IsCurve(k0) && k1 == EntityKind::Point) return Make(ConstraintType::PointOnCurve, b, a);
+            if (k0 == EntityKind::Point && IsAnyCurve(k1)) return Make(ConstraintType::PointOnCurve, a, b);
+            if (IsAnyCurve(k0) && k1 == EntityKind::Point) return Make(ConstraintType::PointOnCurve, b, a);
             return std::nullopt;
         case SketchTool::Parallel:
         case SketchTool::Perpendicular:
@@ -167,8 +198,10 @@ std::optional<sketch::Constraint> ConstraintFromPicks(SketchTool tool, const ske
                 return Make(ConstraintType::Equal, a, b);
             return std::nullopt;
         case SketchTool::Tangent:
-            if (picks.size() < 2) { needMore = IsCurve(k0); return std::nullopt; }
-            if ((IsCurve(k0) && IsRound(k1)) || (IsRound(k0) && IsCurve(k1))) return Make(ConstraintType::Tangent, a, b);
+            if (picks.size() < 2) { needMore = IsAnyCurve(k0); return std::nullopt; }
+            if (CanBeTangent(k0, k1) && (k0 != EntityKind::Spline || SplineMeetsAtEnd(sk, a, b)) &&
+                (k1 != EntityKind::Spline || SplineMeetsAtEnd(sk, b, a)))
+                return Make(ConstraintType::Tangent, a, b);
             return std::nullopt;
         case SketchTool::Midpoint:
             if (picks.size() < 2) { needMore = k0 == EntityKind::Point || k0 == EntityKind::Line; return std::nullopt; }

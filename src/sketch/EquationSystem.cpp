@@ -1,5 +1,9 @@
 #include "sketch/EquationSystem.h"
 
+#include "sketch/SplineGeometry.h"
+
+#include <algorithm>
+
 #include <cmath>
 #include <initializer_list>
 #include <utility>
@@ -29,6 +33,40 @@ Equation MakeLinear(std::initializer_list<std::pair<double, int>> terms, double 
         ++eq.count;
     }
     return eq;
+}
+
+/// The spline of an equation's `curve` (or `curve2`) at the values `xs`.
+BSpline SplineAt(const std::vector<int>& curve, bool interpolate, bool closed, const std::vector<double>& xs) {
+    std::vector<Vec2> pts;
+    pts.reserve(curve.size());
+    for (const int i : curve) pts.push_back({xs[static_cast<std::size_t>(i)], xs[static_cast<std::size_t>(i) + 1]});
+    return SplineShape(pts, interpolate, closed);
+}
+
+/// Unit tangent of a spline at its start (end 0) or its end (end 1), pointing along the curve.
+Vec2 EndTangent(const BSpline& b, int end) {
+    if (b.poles.size() < 2) return {1, 0};
+    const std::size_t n = b.poles.size();
+    const Vec2 d = end == 0 ? b.poles[1] - b.poles[0] : b.poles[n - 1] - b.poles[n - 2];
+    const double len = d.Length();
+    return len > kTiny ? d * (1.0 / len) : Vec2{1, 0};
+}
+
+/// Signed distance from `p` to a polyline: to its nearest segment, positive on the left.
+double SignedDistance(const std::vector<Vec2>& line, Vec2 p) {
+    double best = 1e300, sign = 1.0;
+    for (std::size_t i = 0; i + 1 < line.size(); ++i) {
+        const Vec2 a = line[i], d = line[i + 1] - a;
+        const double len2 = d.Dot(d);
+        const double t = len2 > kTiny ? std::clamp((p - a).Dot(d) / len2, 0.0, 1.0) : 0.0;
+        const Vec2 q = a + d * t;
+        const double dist = (p - q).Length();
+        if (dist < best) {
+            best = dist;
+            sign = SignOf(d.Cross(p - a));
+        }
+    }
+    return best < 1e299 ? sign * best : 0.0;
 }
 
 Equation MakeEq(EqKind kind, std::initializer_list<int> unknowns, double value, ObjectId source) {
@@ -108,6 +146,32 @@ void EquationSystem::AddConstraint(const Sketch& sk, const Constraint& c) {
     };
     const bool aIsLine = sk.FindLine(a) != nullptr;
     const bool bIsLine = sk.FindLine(b) != nullptr;
+    // First unknowns of a spline's points; empty when `id` is not a spline.
+    const auto splinePoints = [&](ObjectId id) {
+        std::vector<int> out;
+        if (const Spline* s = sk.FindSpline(id))
+            for (const ObjectId pt : s->points) {
+                const int i = P(pt);
+                if (i < 0) return std::vector<int>{};
+                out.push_back(i);
+            }
+        return out;
+    };
+    // Is the point `pt` the start (0) or end (1) of spline `s`, directly or
+    // through a Coincident constraint? -1: neither.
+    const auto endAt = [&](const Spline& s, ObjectId pt) {
+        if (s.Closed() || s.points.empty()) return -1;
+        const auto same = [&](ObjectId q) {
+            if (q == pt) return true;
+            for (const Constraint& k : sk.constraints)
+                if (k.type == ConstraintType::Coincident && ((k.refs[0] == q && k.refs[1] == pt) || (k.refs[0] == pt && k.refs[1] == q)))
+                    return true;
+            return false;
+        };
+        if (same(s.points.front())) return 0;
+        if (same(s.points.back())) return 1;
+        return -1;
+    };
 
     switch (c.type) {
         case ConstraintType::Coincident:
@@ -176,6 +240,17 @@ void EquationSystem::AddConstraint(const Sketch& sk, const Constraint& c) {
             if (bIsLine) {
                 const auto [s, e] = lineEnds(b);
                 Add(MakeEq(EqKind::PointLine, {p, p + 1, s, s + 1, e, e + 1}, 0, src));
+            } else if (const Spline* sp = sk.FindSpline(b)) {
+                Equation eq = MakeEq(EqKind::PointSpline, {p, p + 1}, 0, src);
+                eq.curve = splinePoints(b);
+                if (eq.curve.size() < 2) return;
+                eq.interpolate = sp->interpolate;
+                eq.closed = sp->Closed();
+                Add(eq);
+            } else if (const Ellipse* el = sk.FindEllipse(b)) {
+                const int ce = P(el->center), ma = P(el->major), mi = P(el->minor);
+                if (ce < 0 || ma < 0 || mi < 0) return;
+                Add(MakeEq(EqKind::PointEllipse, {p, p + 1, ce, ce + 1, ma, ma + 1, mi, mi + 1}, 0, src));
             } else {
                 const auto [center, r] = circleParts(b);
                 if (center < 0) return;
@@ -192,6 +267,64 @@ void EquationSystem::AddConstraint(const Sketch& sk, const Constraint& c) {
             return;
         }
         case ConstraintType::Tangent: {
+            const Spline* sa = sk.FindSpline(a);
+            const Spline* sb = sk.FindSpline(b);
+            if (sa || sb) {
+                // At the end where the spline meets the other curve.
+                const Spline& s = sa ? *sa : *sb;
+                const ObjectId other = sa ? b : a;
+                Equation eq = MakeEq(EqKind::SplineEndTangent, {}, 0, src);
+                eq.curve = splinePoints(s.id);
+                eq.interpolate = s.interpolate;
+                if (eq.curve.size() < 2) return;
+                const auto endOf = [&](std::initializer_list<ObjectId> candidates) {
+                    for (const ObjectId q : candidates)
+                        if (const int e = endAt(s, q); e >= 0) return e;
+                    return -1;
+                };
+                if (const Line* l = sk.FindLine(other)) {
+                    eq.end = endOf({l->start, l->end});
+                    eq.other = 0;
+                    const int ls = P(l->start), le = P(l->end);
+                    eq.v = {ls, ls + 1, le, le + 1};
+                    eq.count = 4;
+                } else if (const Arc* ar = sk.FindArc(other)) {
+                    eq.end = endOf({ar->start, ar->end});
+                    eq.other = 1;
+                    const int ce = P(ar->center);
+                    eq.v = {ce, ce + 1};
+                    eq.count = 2;
+                } else if (const Spline* o = sk.FindSpline(other)) {
+                    eq.other = 2;
+                    for (const ObjectId q : {o->points.front(), o->points.back()})
+                        if (const int e = endAt(s, q); e >= 0) {
+                            eq.end = e;
+                            eq.end2 = q == o->points.front() ? 0 : 1;
+                            break;
+                        } else {
+                            eq.end = -1;
+                        }
+                    eq.curve2 = splinePoints(o->id);
+                    eq.interpolate2 = o->interpolate;
+                    if (eq.curve2.size() < 2 || o->Closed()) return;
+                } else {
+                    return;
+                }
+                if (eq.end < 0) return;   // they do not meet at an end of the spline
+                Add(eq);
+                return;
+            }
+            const Ellipse* ea = sk.FindEllipse(a);
+            const Ellipse* eb = sk.FindEllipse(b);
+            if ((ea && bIsLine) || (eb && aIsLine)) {
+                const Ellipse& el = ea ? *ea : *eb;
+                const auto [s, e] = lineEnds(ea ? b : a);
+                const int ce = P(el.center), ma = P(el.major), mi = P(el.minor);
+                if (s < 0 || ce < 0 || ma < 0 || mi < 0) return;
+                Add(MakeEq(EqKind::LineEllipseTangent, {s, s + 1, e, e + 1, ce, ce + 1, ma, ma + 1, mi, mi + 1}, 0, src));
+                return;
+            }
+            if (ea || eb) return;
             if (aIsLine || bIsLine) {
                 const auto [s, e] = lineEnds(aIsLine ? a : b);
                 const auto [center, r] = circleParts(aIsLine ? b : a);
@@ -297,6 +430,42 @@ double EquationSystem::Residual(const Equation& eq, const std::vector<double>& x
             const double len = std::max((b - a).Length(), kTiny);
             if (eq.kind == EqKind::SymmetricMid) return (b - a).Cross((p + q) * 0.5 - a) / len;
             return (q - p).Dot(b - a) / len;
+        }
+        case EqKind::PointSpline:
+            return SignedDistance(SampleSpline(SplineAt(eq.curve, eq.interpolate, eq.closed, xs), 48), V(0));
+        case EqKind::PointEllipse:
+        case EqKind::LineEllipseTangent: {
+            const int at = eq.kind == EqKind::PointEllipse ? 2 : 4;
+            const Vec2 c = V(at), ma = V(at + 2) - c, mi = V(at + 4) - c;
+            const double ra = std::max(ma.Length(), kTiny), rb = std::max(mi.Length(), kTiny);
+            const Vec2 ua = ma * (1.0 / ra), ub = mi * (1.0 / rb);
+            if (eq.kind == EqKind::PointEllipse) {
+                const Vec2 d = V(0) - c;
+                const double u = d.Dot(ua) / ra, v = d.Dot(ub) / rb;
+                return (u * u + v * v - 1.0) * std::min(ra, rb) * 0.5;
+            }
+            // Line n.X = k in the ellipse's axes touches it when a^2 n_u^2 + b^2 n_v^2 = k^2.
+            const Vec2 a = V(0) - c, b = V(2) - c, d = b - a;
+            const double len = std::max(d.Length(), kTiny);
+            const Vec2 n{-d.y / len, d.x / len};
+            const double k = n.Dot(a), nu = n.Dot(ua), nv = n.Dot(ub);
+            return std::sqrt(ra * ra * nu * nu + rb * rb * nv * nv) - std::abs(k);
+        }
+        case EqKind::SplineEndTangent: {
+            const BSpline sp = SplineAt(eq.curve, eq.interpolate, false, xs);
+            const Vec2 t = EndTangent(sp, eq.end);
+            Vec2 d;
+            if (eq.other == 0) {
+                d = V(2) - V(0);
+            } else if (eq.other == 1) {
+                const Vec2 endPoint = eq.end == 0 ? sp.poles.front() : sp.poles.back();
+                d = endPoint - V(0);
+                d = Vec2{-d.y, d.x};   // the arc's tangent there
+            } else {
+                d = EndTangent(SplineAt(eq.curve2, eq.interpolate2, false, xs), eq.end2);
+            }
+            const double len = std::max(d.Length(), kTiny);
+            return t.Cross(d) / len;
         }
     }
     return 0.0;

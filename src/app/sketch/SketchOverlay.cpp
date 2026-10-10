@@ -273,6 +273,20 @@ std::vector<GlyphPlacement> LayoutGlyphs(const sketch::Sketch& sk, const SketchV
             const ImVec2 p = view.ToScreen(sk.PositionOf(entity));
             return ImVec2{p.x + offset + static_cast<float>(n) * spacing, p.y - offset};
         }
+        // Splines and ellipses: beside a point on the curve.
+        std::optional<Vec2> onCurve;
+        if (const sketch::Spline* s = sk.FindSpline(entity)) {
+            const std::vector<Vec2> pts = sketch::SampleSpline(sketch::SplineShape(sk, *s), 8);
+            if (!pts.empty()) onCurve = pts[pts.size() / 2];
+        }
+        if (const sketch::Ellipse* e = sk.FindEllipse(entity)) {
+            const std::vector<Vec2> pts = sketch::SampleEllipse(sk, *e, 8);
+            if (!pts.empty()) onCurve = pts[1];
+        }
+        if (onCurve) {
+            const ImVec2 p = view.ToScreen(*onCurve);
+            return ImVec2{p.x + offset + static_cast<float>(n) * spacing, p.y - offset};
+        }
         ObjectId center;
         double r = 0;
         if (const sketch::Circle* c = sk.FindCircle(entity)) center = c->center, r = c->radius;

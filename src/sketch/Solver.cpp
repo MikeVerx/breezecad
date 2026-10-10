@@ -59,13 +59,9 @@ Matrix Jacobian(const EquationSystem& sys, const Columns& cols, std::vector<doub
     Matrix J(static_cast<int>(sys.equations.size()), cols.count);
     for (std::size_t row = 0; row < sys.equations.size(); ++row) {
         const Equation& eq = sys.equations[row];
-        for (int slot = 0; slot < eq.count; ++slot) {
-            const int u = eq.v[static_cast<std::size_t>(slot)];
+        for (const int u : eq.Unknowns()) {
             const int col = cols.ofUnknown[static_cast<std::size_t>(u)];
             if (col < 0) continue;
-            bool seen = false;   // the same unknown may appear twice in one equation
-            for (int prev = 0; prev < slot; ++prev) seen = seen || eq.v[static_cast<std::size_t>(prev)] == u;
-            if (seen) continue;
 
             double& xu = xs[static_cast<std::size_t>(u)];
             const double saved = xu;
