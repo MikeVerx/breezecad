@@ -102,8 +102,13 @@ void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const Vi
         myArrow.Release();
         if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
         if (const auto v = app.viewport.PickVertex(local)) {
-            if (f->points.size() >= 3) f->points.clear();   // a fourth click starts over
-            f->points.push_back(*v);
+            if (f->points.size() >= 3) {   // a fourth click starts over
+                f->points.clear();
+                f->pointEdges.clear();
+            }
+            f->pointEdges.resize(f->points.size());
+            f->points.push_back(v->point);
+            f->pointEdges.push_back(v->edge);
             Changed(session);
         }
         return;
@@ -227,7 +232,7 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
             if (PickChip(ui, "##first", Tr("Плоскость"), first, mySlot == 0, width)) mySlot = 0;
             ImGui::Dummy({0, ui.S(4)});
             if (PickChip(ui, "##edge", Tr("Ребро"), f.edge ? std::string(Tr("выбрано")) : std::string(), mySlot == 1, width)) mySlot = 1;
-            Caption(app, Tr("Прямое ребро, параллельное плоскости: новая плоскость проходит через него под углом к ней."), width);
+            Caption(app, Tr("Прямое ребро: новая плоскость проходит через него под углом к исходной. Ребро не должно быть ей перпендикулярно."), width);
             Gap(app);
             Section(app, Tr("Угол"));
             ParameterField(app, session, "angle", myAngle, f.angle, width, myFocusFirstField);
@@ -242,7 +247,7 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
             const std::string count = f.points.size() >= 3 ? std::string(Tr("выбраны")) : f.points.empty() ? std::string()
                                                                                             : Trf("{} из 3", f.points.size());
             PickChip(ui, "##points", Tr("Вершины"), count, true, width);
-            Caption(app, Tr("Щёлкните три вершины тела. Четвёртый щелчок начинает выбор заново. Плоскость остаётся там, где были вершины, и за изменениями детали не следует."), width);
+            Caption(app, Tr("Щёлкните три вершины тела. Четвёртый щелчок начинает выбор заново. Плоскость следует за вершинами, когда деталь меняется."), width);
             break;
         }
     }

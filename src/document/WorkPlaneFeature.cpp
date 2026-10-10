@@ -56,6 +56,10 @@ void WorkPlaneFeature::SaveFields(Json& out) const {
         Json pts = Json::array();
         for (const Vec3& p : points) pts.push_back({p.x, p.y, p.z});
         out["points"] = std::move(pts);
+        Json edges = Json::array();
+        for (std::size_t i = 0; i < points.size(); ++i)
+            edges.push_back(i < pointEdges.size() && pointEdges[i] ? json_io::ToJson(*pointEdges[i]) : Json());
+        out["pointEdges"] = std::move(edges);
     }
     if (method == WorkPlaneMethod::Angle) {
         if (edge) out["edge"] = json_io::ToJson(*edge);
@@ -90,6 +94,10 @@ Status WorkPlaneFeature::LoadFields(const Json& in) {
                 return Error{"Рабочая плоскость: повреждены точки"};
             pts.push_back({p[0].get<double>(), p[1].get<double>(), p[2].get<double>()});
         }
+    std::vector<std::optional<EdgeReference>> ptEdges(pts.size());
+    if (const auto it = in.find("pointEdges"); it != in.end() && it->is_array())
+        for (std::size_t i = 0; i < it->size() && i < ptEdges.size(); ++i)
+            if (EdgeReference ref; !(*it)[i].is_null() && json_io::Read((*it)[i], ref)) ptEdges[i] = ref;
     std::optional<CylinderTouch> cyl;
     if (const auto it = in.find("cylinder"); it != in.end()) {
         const auto vec = [&](const char* key, Vec3& out) {
@@ -120,6 +128,7 @@ Status WorkPlaneFeature::LoadFields(const Json& in) {
     angle = std::move(ang);
     edge = e;
     points = std::move(pts);
+    pointEdges = std::move(ptEdges);
     cylinder = cyl;
     return Status::Ok();
 }

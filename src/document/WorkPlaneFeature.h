@@ -47,8 +47,11 @@ public:
     /// Angle: the edge it turns about, and by how much (reversed: the other way).
     std::optional<EdgeReference> edge;
     Parameter angle{.name = "", .expression = "90", .quantity = Quantity::Angle, .value = kPi / 2, .error = {}};
-    /// ThreePoints: the picked vertices, model space (up to three).
-    std::vector<Vec3> points;
+    /// ThreePoints: the picked vertices, model space (up to three), each with
+    /// an edge it ends (when known) so it is found again after the part
+    /// changes; `points` are updated to where the vertices are now.
+    std::vector<Vec3>                         points;
+    std::vector<std::optional<EdgeReference>> pointEdges;   ///< parallel to `points`
     /// Tangent: the cylinder.
     std::optional<CylinderTouch> cylinder;
 

@@ -432,6 +432,16 @@ void PlaceWorkPlane(doc::WorkPlaneFeature& wp, const doc::Document& doc, const s
     }
     if (wp.method == WorkPlaneMethod::ThreePoints) {
         if (wp.points.size() < 3) return fail("Выберите три вершины");
+        // Each vertex found again: the end of its edge nearest to where it was.
+        wp.pointEdges.resize(wp.points.size());
+        for (std::size_t i = 0; i < wp.points.size(); ++i) {
+            if (!wp.pointEdges[i]) continue;
+            for (auto it = bodies.rbegin(); it != bodies.rend(); ++it)
+                if (const auto at = occt::ResolveVertex(*wp.pointEdges[i], wp.points[i], it->shape)) {
+                    wp.points[i] = *at;
+                    break;
+                }
+        }
         const Vec3 a = wp.points[0], u = wp.points[1] - a, v = wp.points[2] - a;
         const Vec3 n = u.Cross(v);
         if (n.Length() < 1e-9 * std::max(1.0, u.Length() * v.Length())) return fail("Точки лежат на одной прямой — плоскость через них не одна");
@@ -472,12 +482,15 @@ void PlaceWorkPlane(doc::WorkPlaneFeature& wp, const doc::Document& doc, const s
             for (auto it = bodies.rbegin(); it != bodies.rend() && !line; ++it) line = occt::ResolveLine(*wp.edge, it->shape);
             if (!line) return fail("Ребро не найдено или оно не прямое");
             const auto& [point, axis] = *line;
-            if (std::abs(axis.Dot(first->normal)) > 1e-6) return fail("Ребро должно быть параллельно плоскости, от которой строить");
-            // The start's normal turned about the edge (Rodrigues; axis is across the normal).
+            // The start's normal made square to the edge (unchanged when the
+            // edge is parallel to the start), then turned about the edge.
+            const Vec3 across = first->normal - axis * first->normal.Dot(axis);
+            if (across.Length() < 1e-6) return fail("Ребро перпендикулярно плоскости, от которой строить — повернуть её вокруг него нельзя");
+            const Vec3 n0 = across.Normalized();
             const double t = wp.reversed ? -wp.angle.value : wp.angle.value;
             Frame f;
             f.origin = point;
-            f.normal = (first->normal * std::cos(t) + axis.Cross(first->normal) * std::sin(t)).Normalized();
+            f.normal = (n0 * std::cos(t) + axis.Cross(n0) * std::sin(t)).Normalized();
             f.xDir = axis;
             wp.frame = f;
             break;

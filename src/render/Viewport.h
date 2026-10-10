@@ -165,8 +165,13 @@ public:
         double radius = 0;
     };
     std::optional<CylinderPick> PickCylinder(Vec2 pixel);
-    /// Vertex under the cursor (PickTarget::Vertices), model space.
-    std::optional<Vec3> PickVertex(Vec2 pixel);
+    /// Vertex under the cursor (PickTarget::Vertices), model space, with an
+    /// edge ending there (to find the vertex again after a rebuild).
+    struct VertexPick {
+        Vec3                              point;
+        std::optional<doc::EdgeReference> edge;
+    };
+    std::optional<VertexPick> PickVertex(Vec2 pixel);
     /// Flat face under the cursor (PickTarget::Faces); nullopt for a curved one.
     std::optional<doc::FaceReference> PickFace(Vec2 pixel);
     /// True when both references point at the same face of the original

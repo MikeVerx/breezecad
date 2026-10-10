@@ -971,7 +971,7 @@ std::optional<Viewport::CylinderPick> Viewport::PickCylinder(Vec2 pixel) {
     return std::nullopt;
 }
 
-std::optional<Vec3> Viewport::PickVertex(Vec2 pixel) {
+std::optional<Viewport::VertexPick> Viewport::PickVertex(Vec2 pixel) {
     Impl& m = *myImpl;
     if (!m.original.active || m.original.target != PickTarget::Vertices) return std::nullopt;
     const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
@@ -981,7 +981,11 @@ std::optional<Vec3> Viewport::PickVertex(Vec2 pixel) {
     for (int i = 1; i <= selector->NbPicked(); ++i) {
         const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
         if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_VERTEX) continue;
-        return ToVec(BRep_Tool::Pnt(TopoDS::Vertex(owner->Shape())).XYZ());
+        const TopoDS_Vertex& vertex = TopoDS::Vertex(owner->Shape());
+        VertexPick pick{ToVec(BRep_Tool::Pnt(vertex).XYZ()), std::nullopt};
+        for (auto body = m.original.bodies.rbegin(); body != m.original.bodies.rend() && !pick.edge; ++body)
+            pick.edge = kernel::occt::DescribeVertexEdge(vertex, *body);
+        return pick;
     }
     return std::nullopt;
 }

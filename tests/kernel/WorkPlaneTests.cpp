@@ -197,6 +197,72 @@ TEST_CASE("work plane through three points") {
     CHECK(wp.status.state == FeatureState::Error);
 }
 
+TEST_CASE("work plane at an angle about an edge not parallel to its start") {
+    doc::Document d = BoxDocument();
+    auto& tilted = AddWorkPlane(d, "0");   // 45° about the top front edge (along X)
+    tilted.method = doc::WorkPlaneMethod::Angle;
+    tilted.face = {{0, 0, 1}, {0, 0, 30}};
+    doc::EdgeReference front;
+    front.curve = doc::CurveKind::Line;
+    front.direction = {1, 0, 0};
+    front.middle = {0, -40, 30};
+    front.faces = {{{doc::SurfaceKind::Plane, {0, -1, 0}}, {doc::SurfaceKind::Plane, {0, 0, 1}}}};
+    tilted.edge = front;
+    tilted.angle.expression = "45";
+    auto& wp = AddWorkPlane(d, "0");   // from the tilted plane, about the top right edge (along Y)
+    wp.method = doc::WorkPlaneMethod::Angle;
+    wp.base = tilted.id;
+    doc::EdgeReference right;
+    right.curve = doc::CurveKind::Line;
+    right.direction = {0, 1, 0};
+    right.middle = {60, 0, 30};
+    right.faces = {{{doc::SurfaceKind::Plane, {1, 0, 0}}, {doc::SurfaceKind::Plane, {0, 0, 1}}}};
+    wp.edge = right;
+    wp.angle.expression = "0";
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(wp.status.state == FeatureState::Ok);
+    CHECK(std::abs(wp.frame->normal.z) == doctest::Approx(1.0));   // the tilt squared to the edge
+    CHECK(wp.frame->origin.x == doctest::Approx(60.0));
+
+    wp.edge = front;
+    wp.base = doc::origin::kPlaneYZ;   // X normal: the edge along X is perpendicular to it
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(wp.id)));
+    model.Rebuild(d);
+    CHECK(wp.status.state == FeatureState::Error);
+}
+
+TEST_CASE("work plane through three vertices follows the part") {
+    doc::Document d = BoxDocument();
+    auto& wp = AddWorkPlane(d, "0");
+    wp.method = doc::WorkPlaneMethod::ThreePoints;
+    doc::EdgeReference front;
+    front.curve = doc::CurveKind::Line;
+    front.direction = {1, 0, 0};
+    front.middle = {0, -40, 30};
+    front.faces = {{{doc::SurfaceKind::Plane, {0, -1, 0}}, {doc::SurfaceKind::Plane, {0, 0, 1}}}};
+    doc::EdgeReference right = front;
+    right.direction = {0, 1, 0};
+    right.middle = {60, 0, 30};
+    right.faces = {{{doc::SurfaceKind::Plane, {1, 0, 0}}, {doc::SurfaceKind::Plane, {0, 0, 1}}}};
+    wp.points = {{-60, -40, 30}, {60, -40, 30}, {60, 40, 30}};
+    wp.pointEdges = {front, front, right};
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(wp.status.state == FeatureState::Ok);
+    CHECK(wp.frame->origin.z == doctest::Approx(30.0));
+
+    for (const auto& f : d.Features())
+        if (auto* ex = dynamic_cast<doc::ExtrudeFeature*>(f.get())) {
+            ex->distance.expression = "45";
+            d.MarkChanged(static_cast<std::size_t>(d.IndexOf(ex->id)));
+        }
+    model.Rebuild(d);
+    REQUIRE(wp.status.state == FeatureState::Ok);
+    CHECK(wp.frame->origin.z == doctest::Approx(45.0));
+    CHECK(std::abs(wp.frame->normal.z) == doctest::Approx(1.0));
+}
+
 TEST_CASE("work plane tangent to a cylinder follows its radius") {
     doc::Document d;
     auto& sk = AddSketch(d);
