@@ -32,4 +32,6 @@ std::string Offenders(const std::regex& pattern) {
 TEST_CASE("no identifiers that windows.h turns into macros") {
     // near, far: empty macros; min, max: function-like macros (std::min( is fine with NOMINMAX, plain min( is not).
     CHECK(Offenders(std::regex(R"(\b(near|far)\b)")) == "");
+    // Win32 API names that are macros (…A / …W): a function of ours by that name breaks.
+    CHECK(Offenders(std::regex(R"(\b(LoadImage|DrawText|CreateWindow|GetObject|SendMessage|CreateFont)\s*\()")) == "");
 }

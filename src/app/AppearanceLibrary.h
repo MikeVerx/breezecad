@@ -6,6 +6,7 @@
 #include "core/Expected.h"
 #include "document/Appearance.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <vector>
 
@@ -20,15 +21,18 @@ public:
     const std::vector<doc::Appearance>& Items() const { return myItems; }
     const doc::Appearance* Find(std::string_view id) const;
 
-    /// Adds or replaces (same id) and saves it. A new one without an id gets one.
-    Expected<doc::Appearance> Save(doc::Appearance appearance);
+    /// Adds or replaces (same id) and saves it. A new one without an id gets
+    /// one. With `pictureFile`, the picture is copied into the library.
+    Expected<doc::Appearance> Save(doc::Appearance appearance, const std::filesystem::path& pictureFile = {});
+    /// Bytes of a picture of the library (empty when missing).
+    std::vector<std::uint8_t> PictureBytes(std::string_view picture) const;
     Status Remove(std::string_view id);
 
     /// Reads a pack (.zip) or a single appearance (.json) into the library.
     /// Returns how many were added.
     Expected<int> Import(const std::filesystem::path& file);
     /// Writes the given appearances as a pack (.zip).
-    static Status Export(const std::vector<doc::Appearance>& items, const std::filesystem::path& file);
+    Status Export(const std::vector<doc::Appearance>& items, const std::filesystem::path& file) const;
 
 private:
     std::filesystem::path        myFolder;

@@ -2,7 +2,7 @@ add_executable(bz_tests
     main.cpp
     core/ExpressionTests.cpp
     core/I18nTests.cpp
-    core/PngTests.cpp
+    core/ImageTests.cpp
     core/SourceRulesTests.cpp
     document/AppearanceTests.cpp
     document/DocumentTests.cpp

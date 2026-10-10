@@ -9,11 +9,20 @@
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
 
+#include "core/Image.h"
+
+#include <GLFW/glfw3.h>
 #include <imgui.h>
+
+#include <format>
+#include <fstream>
+#include <iterator>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
+#include <cstring>
 
 namespace bz::app {
 namespace {
@@ -37,8 +46,14 @@ std::string NameOf(const doc::Appearance& a) { return a.id.starts_with("std.") ?
 
 /// A sample of the appearance: its colour (over a checkerboard where it is
 /// see-through), a shine for metal, a glint for glass.
-void DrawSample(ImDrawList* dl, ImVec2 p, float size, const doc::Appearance* a, const ui::ThemeColors& c, float rounding) {
+void DrawSample(ImDrawList* dl, ImVec2 p, float size, const doc::Appearance* a, const ui::ThemeColors& c, float rounding,
+                unsigned picture = 0) {
     const ImVec2 q{p.x + size, p.y + size};
+    if (a && picture) {   // a picture: a piece of it
+        dl->AddImageRounded(static_cast<ImTextureID>(picture), p, q, {0, 0}, {1, 1}, IM_COL32_WHITE, rounding);
+        dl->AddRect(p, q, ui::ToU32(a->edges.WithAlpha(0.8f)), rounding, 0, 1.0f);
+        return;
+    }
     if (!a) {   // the default look: the theme's body colour, crossed out
         dl->AddRectFilled(p, q, ui::ToU32(c.body), rounding);
         dl->AddLine({p.x + size * 0.2f, q.y - size * 0.2f}, {q.x - size * 0.2f, p.y + size * 0.2f}, ui::ToU32(c.textMuted), 1.5f);
@@ -127,6 +142,9 @@ void AppearanceEditor::DrawInViewport(AppContext& app, Session& session, const V
     } else {
         session.doc.look.SetBody(hit->body, Chosen());
     }
+    // A picture goes into the part's file with it.
+    if (const doc::Appearance* a = Chosen(); a && a->HasPicture() && !session.doc.look.pictures.contains(a->picture))
+        session.doc.look.pictures[a->picture] = myLibrary.PictureBytes(a->picture);
     session.doc.TouchLook();
 }
 
@@ -140,7 +158,7 @@ bool AppearanceEditor::Swatch(AppContext& app, const doc::Appearance* a, const s
     const bool hovered = ImGui::IsItemHovered();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const float pad = ui.S(4);
-    DrawSample(dl, {p.x + pad, p.y + pad}, size - 2 * pad, a, c, ui.S(6));
+    DrawSample(dl, {p.x + pad, p.y + pad}, size - 2 * pad, a, c, ui.S(6), ThumbnailOf(a));
     const bool chosen = (a ? a->id : std::string()) == myChosen;
     if (chosen) dl->AddRect(p, {p.x + size, p.y + size}, ui::ToU32(c.accent), ui.S(9), 0, ui.S(2));
     else if (hovered) dl->AddRect(p, {p.x + size, p.y + size}, ui::ToU32(c.fieldBorder), ui.S(9), 0, ui.S(1));
@@ -180,6 +198,8 @@ void AppearanceEditor::DrawLibrary(AppContext& app, float width) {
             ui::MenuStyle style(ui);
             if (ui::MenuItem(ui, Tr("Изменить…"))) {
                 myDraft = a;
+                myKind = a.HasPicture() ? 1 : 0;
+                myPictureFile.clear();
                 myCreating = true;
             }
             if (ui::MenuItem(ui, Tr("Удалить"))) removeId = a.id;
@@ -192,8 +212,10 @@ void AppearanceEditor::DrawLibrary(AppContext& app, float width) {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         if (ImGui::InvisibleButton("##new-look", {size, size})) {
             myDraft = {};
+            myKind = 0;
+            myPictureFile.clear();
             myDraft.name = Tr("Мой цвет");
-            if (const doc::Appearance* base = Chosen()) {
+            if (const doc::Appearance* base = Chosen(); base && !base->HasPicture()) {
                 myDraft.face = base->face;
                 myDraft.edges = base->edges;
                 myDraft.finish = base->finish;
@@ -227,11 +249,43 @@ void AppearanceEditor::DrawLibrary(AppContext& app, float width) {
         if (ui::LinkButton(ui, "##export-looks", Tr("Экспорт «Моих»…"))) {
             if (const auto file = platform::ShowSaveDialog(Tr("Экспорт внешних видов"), platform::DocumentsDir() / "appearances.zip",
                                                            {{Tr("Пакет внешних видов"), "*.zip"}}, ".zip")) {
-                if (const Status s = AppearanceLibrary::Export(myLibrary.Items(), *file); s) app.notes.Success(Tr("Внешние виды сохранены"));
+                if (const Status s = myLibrary.Export(myLibrary.Items(), *file); s) app.notes.Success(Tr("Внешние виды сохранены"));
                 else app.notes.Error(Tr(s.GetError().message));
             }
         }
     }
+}
+
+unsigned AppearanceEditor::Thumbnail(const std::string& key, const std::vector<std::uint8_t>& bytes) {
+    if (const auto it = myThumbnails.find(key); it != myThumbnails.end()) return it->second;
+    GLuint texture = 0;
+    if (const auto image = DecodeImage(bytes)) {
+        // A small copy is plenty for a swatch (nearest pixels).
+        const int side = 128;
+        std::vector<std::uint8_t> small(static_cast<std::size_t>(side) * side * 4);
+        for (int y = 0; y < side; ++y)
+            for (int x = 0; x < side; ++x) {
+                const int sx = x * image->width / side, sy = y * image->height / side;
+                std::memcpy(&small[(static_cast<std::size_t>(y) * side + static_cast<std::size_t>(x)) * 4],
+                            &image->rgba[(static_cast<std::size_t>(sy) * static_cast<std::size_t>(image->width) + static_cast<std::size_t>(sx)) * 4], 4);
+            }
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, side, side, 0, GL_RGBA, GL_UNSIGNED_BYTE, small.data());
+    }
+    myThumbnails[key] = texture;
+    return texture;
+}
+
+unsigned AppearanceEditor::ThumbnailOf(const doc::Appearance* a) {
+    if (!a || !a->HasPicture()) return 0;
+    if (const auto it = myThumbnails.find(a->picture); it != myThumbnails.end()) return it->second;
+    if (a->picture.starts_with("draft:")) return 0;
+    return Thumbnail(a->picture, myLibrary.PictureBytes(a->picture));
 }
 
 void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
@@ -262,14 +316,57 @@ void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
     ui::TextField(ui, "##look-name", myDraft.name, width);
     ImGui::Dummy({0, ui.S(6)});
 
-    static int kind = 0;
     static constexpr std::array<const char*, 2> kinds{N_("Однородный цвет"), N_("Картинка")};
-    kind = ui::Segmented(ui, "look-kind", kinds, kind, 2, width, 0b10);   // the picture comes next
+    myKind = ui::Segmented(ui, "look-kind", kinds, myKind, 2, width);
     ImGui::Dummy({0, ui.S(6)});
 
-    // Left: the colour of the faces; right: preview, edges, finish.
+    // Left: the colour (or the picture) of the faces; right: preview, edges, finish.
     const float left = ui.S(270);
     ImGui::BeginGroup();
+    if (myKind == 1) {
+        Section(app, Tr("Картинка"));
+        if (ui::SecondaryButton(ui, "##pick-picture", Tr("Выбрать картинку…"), nullptr, {left, ui.S(34)})) {
+            if (const auto file = platform::ShowOpenDialog(Tr("Картинка для поверхности"),
+                                                           {{Tr("Картинки"), "*.png *.jpg *.jpeg *.bmp *.tga"}}, platform::DocumentsDir())) {
+                std::ifstream in(*file, std::ios::binary);
+                const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+                if (const auto image = DecodeImage(bytes)) {
+                    myPictureFile = *file;
+                    myDraft.picture = "draft:" + ToUtf8(*file);   // shown in the preview until saved
+                    myThumbnails.erase(myDraft.picture);
+                    Thumbnail(myDraft.picture, bytes);
+                    // As it is: one pixel is a tenth of a millimetre on the part.
+                    myDraft.pictureSize = std::max(1.0, image->width * 0.1);
+                    myDraft.face = Color::Hex(0xFFFFFF, myDraft.face.a);
+                    myDraft.edges = Color::Hex(0x000000);
+                    if (myDraft.name.empty() || myDraft.name == Tr("Мой цвет")) myDraft.name = ToUtf8(file->stem());
+                } else {
+                    app.notes.Error(Tr(image.GetError().message));
+                }
+            }
+        }
+        if (myDraft.HasPicture()) {
+            ImGui::Dummy({0, ui.S(4)});
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            const float h = ui.S(150);
+            if (const unsigned t = ThumbnailOf(&myDraft)) ImGui::GetWindowDrawList()->AddImageRounded(static_cast<ImTextureID>(t), p, {p.x + left, p.y + h}, {0, 0}, {left / h, 1}, IM_COL32_WHITE, ui.S(8));
+            ImGui::Dummy({left, h});
+            ImGui::Dummy({0, ui.S(4)});
+            Section(app, Tr("Ширина одной копии на детали, мм"));
+            std::string size = std::format("{:g}", myDraft.pictureSize);
+            if (ui::TextField(ui, "##picture-size", size, left)) {
+                double value = 0;
+                if (std::sscanf(size.c_str(), "%lf", &value) == 1 && value > 0.01) myDraft.pictureSize = value;
+            }
+            Caption(app, Tr("Картинка повторяется без зазоров, огибает цилиндры и сферы. Сначала 1 пиксель = 0,1 мм."), left);
+            Section(app, Tr("Прозрачность"));
+            float transparency = 1.0f - myDraft.face.a;
+            if (ui::Slider(ui, "##picture-alpha", transparency, left)) myDraft.face.a = 1.0f - transparency;
+        } else {
+            Caption(app, Tr("PNG, JPEG, BMP или TGA. Картинка копируется в библиотеку и сохраняется в файле детали."), left);
+        }
+        ImGui::EndGroup();
+    } else {
     Section(app, Tr("Цвет граней"));
     float face[4] = {myDraft.face.r, myDraft.face.g, myDraft.face.b, myDraft.face.a};
     ImGui::SetNextItemWidth(left);
@@ -279,13 +376,14 @@ void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
         myDraft.face = {face[0], face[1], face[2], face[3]};
     Caption(app, Tr("Правая полоса — прозрачность: ниже — прозрачнее (A: 255 — непрозрачный)."), left);
     ImGui::EndGroup();
+    }
     ImGui::SameLine(0, ui.S(20));
     ImGui::BeginGroup();
     const float right = width - left - ui.S(20);
     Section(app, Tr("Образец"));
     {
         const ImVec2 p = ImGui::GetCursorScreenPos();
-        DrawSample(ImGui::GetWindowDrawList(), p, ui.S(96), &myDraft, c, ui.S(10));
+        DrawSample(ImGui::GetWindowDrawList(), p, ui.S(96), &myDraft, c, ui.S(10), myKind == 1 ? ThumbnailOf(&myDraft) : 0u);
         ImGui::Dummy({ui.S(96), ui.S(96)});
     }
     ImGui::Dummy({0, ui.S(6)});
@@ -307,12 +405,21 @@ void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
         ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine(0, ui.S(8));
-    const bool named = !myDraft.name.empty();
-    if (ui::PrimaryButton(ui, "##look-save", Tr("Сохранить в «Мои»"), nullptr, {bw, ui.S(36)}, named)) {
-        if (const auto saved = myLibrary.Save(myDraft)) {
+    const bool ready = !myDraft.name.empty() && (myKind == 0 || myDraft.HasPicture());
+    if (ui::PrimaryButton(ui, "##look-save", Tr("Сохранить в «Мои»"), nullptr, {bw, ui.S(36)}, ready)) {
+        doc::Appearance draft = myDraft;
+        if (myKind == 0) draft.picture.clear();
+        else if (!myPictureFile.empty()) draft.picture.clear();   // set by the library from the file
+        if (const auto saved = myLibrary.Save(draft, myKind == 1 ? myPictureFile : std::filesystem::path{})) {
             myChosen = saved->id;
-            // Already on the part: it takes the changed definition.
-            if (app.Doc()->doc.look.Refresh(*saved)) app.Doc()->doc.TouchLook();
+            if (saved->HasPicture()) myThumbnails.erase(saved->picture);   // a new picture under the same name
+            // Already on the part: it takes the changed definition (and picture).
+            doc::Look& look = app.Doc()->doc.look;
+            if (look.Refresh(*saved)) {
+                if (saved->HasPicture()) look.pictures[saved->picture] = myLibrary.PictureBytes(saved->picture);
+                look.Prune();
+                app.Doc()->doc.TouchLook();
+            }
         } else {
             app.notes.Error(Tr(saved.GetError().message));
         }

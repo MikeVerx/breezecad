@@ -6,8 +6,15 @@
 #include "kernel/occt/FaceMatch.h"
 #include "kernel/occt/Measure.h"
 #include "kernel/occt/ModelImpl.h"
+#include "render/TexturedFaces.h"
+#include "core/Image.h"
 
 #include <AIS_InteractiveContext.hxx>
+#include <BRepLib.hxx>
+#include <BRep_Builder.hxx>
+#include <TopoDS_Compound.hxx>
+#include <TopExp_Explorer.hxx>
+#include <map>
 #include <AIS_ColoredDrawer.hxx>
 #include <AIS_ColoredShape.hxx>
 #include <AIS_Shape.hxx>
@@ -381,21 +388,90 @@ struct Viewport::Impl {
 
     /// A body's style with its look: the body's appearance, then the faces
     /// that have their own.
-    void ApplyLook(const Shown& s) const {
-        ApplyStyle(s.shape, s.body == hovered, look.OfBody(s.body));
+    /// Pictures of the look as textures, by picture name.
+    std::map<std::string, Handle(Graphic3d_Texture2D)> textures;
+    /// Faces covered with pictures, by the body presentation they belong to.
+    std::map<const AIS_ColoredShape*, std::vector<Handle(AIS_InteractiveObject)>> textured;
+
+    Handle(Graphic3d_Texture2D) TextureFor(const std::string& picture) {
+        if (const auto it = textures.find(picture); it != textures.end()) return it->second;
+        Handle(Graphic3d_Texture2D) texture;
+        if (const auto bytes = look.pictures.find(picture); bytes != look.pictures.end())
+            if (const auto image = DecodeImage(bytes->second))
+                texture = MakePictureTexture(image->width, image->height, image->rgba);
+        textures[picture] = texture;
+        return texture;
+    }
+
+    void ClearTextured(const AIS_ColoredShape* ais) {
+        const auto it = textured.find(ais);
+        if (it == textured.end()) return;
+        for (const auto& obj : it->second) context->Remove(obj, false);
+        textured.erase(it);
+    }
+
+    /// A body's style with its look: the body's appearance, then the faces
+    /// that have their own; faces with a picture are hidden on the body and
+    /// drawn textured over it (TexturedFaces), with their edges.
+    void ApplyLook(const Shown& s) {
+        ClearTextured(s.shape.get());
+        const doc::Appearance* bodyLook = look.OfBody(s.body);
+        ApplyStyle(s.shape, s.body == hovered, bodyLook);
         s.shape->ClearCustomAspects();
         if (style == DisplayStyle::Wireframe || style == DisplayStyle::HiddenLines) return;
+        const TopoDS_Shape& shape = s.shape->Shape();
+
+        std::map<std::string, std::vector<TopoDS_Face>> pictured;   // appearance id -> faces
+        TopTools_IndexedMapOfShape ownLook;
         for (const doc::Look::FaceLook& f : look.faces) {
             if (f.body != s.body) continue;
             const doc::Appearance* a = look.Find(f.appearance);
-            const std::optional<TopoDS_Face> face = a ? kernel::occt::ResolveAnyFace(s.shape->Shape(), f.face) : std::nullopt;
+            const std::optional<TopoDS_Face> face = a ? kernel::occt::ResolveAnyFace(shape, f.face) : std::nullopt;
             if (!face) continue;
+            ownLook.Add(*face);
+            if (a->HasPicture()) {
+                pictured[a->id].push_back(*face);
+                continue;
+            }
             Handle(AIS_ColoredDrawer) aspects = s.shape->CustomAspects(*face);
             const Color colour = a->face.WithAlpha(1.0f);
             aspects->SetupOwnShadingAspect();
             aspects->ShadingAspect()->SetMaterial(MaterialOf(colour, a->finish));
             aspects->ShadingAspect()->SetColor(ToQuantity(colour));
             if (style != DisplayStyle::Transparent) aspects->ShadingAspect()->SetTransparency(1.0 - a->face.a);
+        }
+        if (bodyLook && bodyLook->HasPicture())
+            for (TopExp_Explorer e(shape, TopAbs_FACE); e.More(); e.Next())
+                if (!ownLook.Contains(e.Current())) pictured[bodyLook->id].push_back(TopoDS::Face(e.Current()));
+
+        for (const auto& [id, faces] : pictured) {
+            const doc::Appearance* a = look.Find(id);
+            const Handle(Graphic3d_Texture2D) texture = a ? TextureFor(a->picture) : nullptr;
+            if (texture.IsNull()) continue;   // picture missing: the body's colour stays
+            for (const TopoDS_Face& face : faces) s.shape->CustomAspects(face)->SetHidden(true);
+            const double transparency = style == DisplayStyle::Transparent ? 0.55 : 1.0 - a->face.a;
+            Handle(TexturedFaces) skin = new TexturedFaces(faces, texture, a->pictureSize, MaterialOf(Color::Hex(0xFFFFFF), a->finish), transparency);
+            context->Display(skin, 0, -1, false);
+            textured[s.shape.get()].push_back(skin);
+            // Their edges: the sharp ones (not seams, not between tangent faces).
+            if (style != DisplayStyle::ShadedWithEdges && style != DisplayStyle::Transparent) continue;
+            BRepLib::EncodeRegularity(shape);
+            TopoDS_Compound edges;
+            BRep_Builder builder;
+            builder.MakeCompound(edges);
+            TopTools_IndexedMapOfShape seen;
+            for (const TopoDS_Face& face : faces)
+                for (TopExp_Explorer e(face, TopAbs_EDGE); e.More(); e.Next()) {
+                    const TopoDS_Edge& edge = TopoDS::Edge(e.Current());
+                    if (seen.Contains(edge) || BRep_Tool::IsClosed(edge, face) || BRep_Tool::MaxContinuity(edge) >= GeomAbs_G1) continue;
+                    seen.Add(edge);
+                    builder.Add(edges, edge);
+                }
+            Handle(AIS_Shape) lines = new AIS_Shape(edges);
+            lines->SetColor(ToQuantity(a->edges));
+            lines->SetWidth(1.0);
+            context->Display(lines, AIS_WireFrame, -1, false);
+            textured[s.shape.get()].push_back(lines);
         }
     }
 
@@ -552,6 +628,7 @@ void Viewport::Sync(const kernel::Model& model) {
     }
     for (const auto& s : previous) {
         if (s.shape.IsNull()) continue;
+        m.ClearTextured(s.shape.get());
         m.context->Erase(s.shape, false);
         m.spare.push_back(s);
     }
@@ -650,6 +727,7 @@ void Viewport::SetLook(const doc::Look& look, const void* owner, std::uint64_t r
     m.lookRevision = revision;
     m.lookOwner = owner;
     m.look = look;
+    m.textures.clear();   // made again from this look's pictures
     m.ApplyStyleAll();
 }
 

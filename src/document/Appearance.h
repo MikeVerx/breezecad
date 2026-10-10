@@ -12,6 +12,8 @@
 
 #include <nlohmann/json_fwd.hpp>
 
+#include <cstdint>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
@@ -31,7 +33,13 @@ struct Appearance {
     Color       face = Color::Hex(0xC9CFD7);
     Color       edges = Color::Hex(0x3D4552);
     Finish      finish = Finish::Matte;
+    /// A picture on the surface instead of a plain colour: its file name
+    /// ("user.123.jpg"), the bytes are in Look::pictures or the library.
+    /// It repeats edge to edge; one copy is `pictureSize` mm wide.
+    std::string picture;
+    double      pictureSize = 100.0;
 
+    bool HasPicture() const { return !picture.empty(); }
     bool operator==(const Appearance&) const = default;
 };
 
@@ -49,6 +57,8 @@ struct Look {
         bool operator==(const FaceLook&) const = default;
     };
     std::vector<Appearance> used;   ///< definitions of every appearance referred to below
+    /// Bytes of the pictures those use, by file name (saved inside the .bzc).
+    std::map<std::string, std::vector<std::uint8_t>> pictures;
     std::vector<BodyLook>   bodies;
     std::vector<FaceLook>   faces;
 

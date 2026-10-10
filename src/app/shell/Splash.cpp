@@ -3,7 +3,7 @@
 #include "core/I18n.h"
 #include "core/Log.h"
 #include "core/PathText.h"
-#include "core/PngImage.h"
+#include "core/Image.h"
 #include "core/Version.h"
 #include "ui/Theme.h"
 #include "ui/Ui.h"
@@ -136,7 +136,7 @@ bool Splash::Open(const std::filesystem::path& assets, bool dark) {
     }
 
     // The part, rendered by BreezeCAD itself in the theme's colours.
-    if (const auto image = LoadPng(assets / "splash" / (dark ? "part-dark.png" : "part-light.png"))) {
+    if (const auto image = ReadImageFile(assets / "splash" / (dark ? "part-dark.png" : "part-light.png"))) {
         myPart = Upload(image->rgba.data(), image->width, image->height, 0);
         myPartW = image->width;
         myPartH = image->height;

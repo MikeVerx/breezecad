@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <format>
+#include <map>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -149,9 +150,12 @@ Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::stri
 
     mz_zip_archive zip{};
     if (!mz_zip_writer_init_heap(&zip, 0, 64 * 1024)) return Error{"Не удалось подготовить архив"};
-    const bool added =
+    bool added =
         mz_zip_writer_add_mem(&zip, kManifestName, manifest.data(), manifest.size(), MZ_BEST_COMPRESSION) &&
         mz_zip_writer_add_mem(&zip, kDocumentName, document.data(), document.size(), MZ_BEST_COMPRESSION);
+    // Pictures of the appearances (already compressed formats: stored as they are).
+    for (const auto& [name, data] : doc.look.pictures)
+        added = added && mz_zip_writer_add_mem(&zip, ("pictures/" + name).c_str(), data.data(), data.size(), MZ_NO_COMPRESSION);
     void* buffer = nullptr;
     std::size_t size = 0;
     const bool finalized = added && mz_zip_writer_finalize_heap_archive(&zip, &buffer, &size);
@@ -187,6 +191,19 @@ Expected<Document> LoadBzc(const std::filesystem::path& path, LoadReport* report
 
     Expected<std::string> manifestText = ExtractEntry(zip, kManifestName);
     Expected<std::string> documentText = ExtractEntry(zip, kDocumentName);
+    std::map<std::string, std::vector<std::uint8_t>> pictures;
+    for (mz_uint i = 0; i < mz_zip_reader_get_num_files(&zip); ++i) {
+        char name[512];
+        mz_zip_reader_get_filename(&zip, i, name, sizeof(name));
+        const std::string entry = name;
+        if (!entry.starts_with("pictures/") || entry.size() <= 9) continue;
+        std::size_t size = 0;
+        void* data = mz_zip_reader_extract_to_heap(&zip, i, &size, 0);
+        if (!data) continue;
+        const auto* bytesOf = static_cast<const std::uint8_t*>(data);
+        pictures[entry.substr(9)] = std::vector<std::uint8_t>(bytesOf, bytesOf + size);
+        mz_free(data);
+    }
     mz_zip_reader_end(&zip);
     if (!manifestText) return manifestText.GetError();
     if (!documentText) return documentText.GetError();
@@ -198,7 +215,12 @@ Expected<Document> LoadBzc(const std::filesystem::path& path, LoadReport* report
     if (version > kBzcFormatVersion && report)
         report->warnings.push_back("Файл создан более новой версией BreezeCAD. Новые возможности могут не открыться.");
 
-    return DocumentFromJson(*documentText, report);
+    Expected<Document> doc = DocumentFromJson(*documentText, report);
+    if (doc) {
+        doc->look.pictures = std::move(pictures);
+        doc->look.Prune();   // pictures nothing refers to
+    }
+    return doc;
 }
 
 } // namespace bz::doc

@@ -4,6 +4,9 @@
 #include "document/Commands.h"
 
 #include <doctest.h>
+#include <nlohmann/json.hpp>
+
+#include <filesystem>
 
 using namespace bz;
 using namespace bz::test;
@@ -58,4 +61,30 @@ TEST_CASE("a look: whole bodies, single faces, saved and undone") {
     look.SetBody(ex.id, nullptr);
     CHECK(look.Empty());
     CHECK(look.used.empty());
+}
+
+TEST_CASE("a picture appearance travels inside the .bzc file") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddRect(d, sk, {0, 0}, {10, 10});
+    auto& ex = AddExtrude(d, sk.id, "5");
+    doc::Appearance bricks{"user.7", "Кирпич", Color::Hex(0xFFFFFF), Color::Hex(0x000000), doc::Finish::Matte, "user.7.png", 25.0};
+    d.look.SetBody(ex.id, &bricks);
+    d.look.pictures["user.7.png"] = {1, 2, 3, 4, 5};
+    d.look.pictures["unused.png"] = {9};   // nothing refers to it: not kept
+
+    const auto file = std::filesystem::temp_directory_path() / "bz-picture-test.bzc";
+    REQUIRE(doc::SaveBzc(d, file, "test"));
+    const auto loaded = doc::LoadBzc(file);
+    std::filesystem::remove(file);
+    REQUIRE(loaded);
+    REQUIRE(loaded->look.Find("user.7"));
+    CHECK(loaded->look.Find("user.7")->pictureSize == doctest::Approx(25.0));
+    CHECK(loaded->look.pictures.size() == 1);
+    CHECK(loaded->look.pictures.at("user.7.png") == std::vector<std::uint8_t>{1, 2, 3, 4, 5});
+
+    // A picture name never leads out of its folder.
+    const auto bad = doc::AppearanceFromJson(nlohmann::json{{"id", "x"}, {"face", "#FFFFFF"}, {"edges", "#000000"}, {"picture", "../evil.png"}});
+    REQUIRE(bad);
+    CHECK_FALSE(bad->HasPicture());
 }

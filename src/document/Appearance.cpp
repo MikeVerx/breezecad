@@ -113,6 +113,7 @@ void Look::Prune() {
         return std::ranges::none_of(bodies, [&](const BodyLook& b) { return b.appearance == a.id; }) &&
                std::ranges::none_of(faces, [&](const FaceLook& f) { return f.appearance == a.id; });
     });
+    std::erase_if(pictures, [&](const auto& p) { return std::ranges::none_of(used, [&](const Appearance& a) { return a.picture == p.first; }); });
 }
 
 std::string ColorToHex(const Color& c) {
@@ -133,7 +134,12 @@ std::optional<Color> ColorFromHex(std::string_view text) {
 }
 
 Json ToJson(const Appearance& a) {
-    return Json{{"id", a.id}, {"name", a.name}, {"face", ColorToHex(a.face)}, {"edges", ColorToHex(a.edges)}, {"finish", FinishId(a.finish)}};
+    Json j{{"id", a.id}, {"name", a.name}, {"face", ColorToHex(a.face)}, {"edges", ColorToHex(a.edges)}, {"finish", FinishId(a.finish)}};
+    if (a.HasPicture()) {
+        j["picture"] = a.picture;
+        j["pictureSize"] = a.pictureSize;
+    }
+    return j;
 }
 
 std::optional<Appearance> AppearanceFromJson(const Json& j) {
@@ -148,6 +154,10 @@ std::optional<Appearance> AppearanceFromJson(const Json& j) {
     a.edges = *edges;
     const std::string finish = j.value("finish", "matte");
     a.finish = finish == "metal" ? Finish::Metal : finish == "glass" ? Finish::Glass : Finish::Matte;
+    a.picture = j.value("picture", "");
+    // A picture name is a plain file name: never a path out of its folder.
+    if (a.picture.find_first_of("/\\") != std::string::npos || a.picture.starts_with(".")) a.picture.clear();
+    a.pictureSize = std::max(0.01, j.value("pictureSize", 100.0));
     return a;
 }
 
