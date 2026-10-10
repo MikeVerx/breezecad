@@ -258,6 +258,20 @@ TEST_CASE("a mirror takes a pattern along, and can mirror the whole body") {
     model.Rebuild(p.d);
     REQUIRE(mirror.status.state == FeatureState::Ok);
     CHECK(model.Volume() == doctest::Approx(2 * (kPlate - 2 * kHole)).epsilon(1e-6));
+
+    // The same about the plate's own left face instead of a plane.
+    mirror.plane = {};
+    mirror.face = {.normal = {-1, 0, 0}, .point = {0, 10, 5}};
+    p.d.MarkChanged(static_cast<std::size_t>(p.d.IndexOf(mirror.id)));
+    model.Rebuild(p.d);
+    REQUIRE(mirror.status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(2 * (kPlate - 2 * kHole)).epsilon(1e-6));
+    const auto loaded = doc::DocumentFromJson(doc::DocumentToJson(p.d));
+    REQUIRE(loaded);
+    const auto* lm = loaded->FindAs<doc::MirrorFeature>(mirror.id);
+    REQUIRE(lm);
+    CHECK(lm->face == mirror.face);
+    CHECK_FALSE(lm->plane);
 }
 
 TEST_CASE("the operation under a point of the model") {

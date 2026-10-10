@@ -426,9 +426,14 @@ void ApplySection(doc::SectionFeature& section, const doc::Document& doc, std::v
 }
 
 
-/// The reflection of a mirror, about an origin plane or a work plane.
-Expected<gp_Trsf> MirrorPlacement(const doc::MirrorFeature& f, const doc::Document& doc) {
-    const std::optional<Frame> plane = PlaneOf(f.plane, doc);
+/// The reflection of a mirror, about an origin plane, a work plane or a
+/// flat face of a body.
+Expected<gp_Trsf> MirrorPlacement(const doc::MirrorFeature& f, const doc::Document& doc, const std::vector<Body>& bodies) {
+    std::optional<Frame> plane = f.plane ? PlaneOf(f.plane, doc) : std::nullopt;
+    if (!f.plane && f.face.IsSet()) {
+        for (auto it = bodies.rbegin(); it != bodies.rend() && !plane; ++it) plane = occt::ResolvePlaneFrame(it->shape, f.face);
+        if (!plane) return Error{"Грань плоскости зеркала не найдена: выберите плоскость заново"};
+    }
     if (!plane) return Error{"Выберите плоскость зеркала"};
     gp_Trsf mirror;
     mirror.SetMirror(gp_Ax2(gp_Pnt(plane->origin.x, plane->origin.y, plane->origin.z),
@@ -740,7 +745,7 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                 else
                     pattern->status = {FeatureState::Error, placements.GetError().message};
             } else if (auto* mirror = dynamic_cast<doc::MirrorFeature*>(&f)) {
-                const auto placement = MirrorPlacement(*mirror, doc);
+                const auto placement = MirrorPlacement(*mirror, doc, bodies);
                 if (!placement) {
                     mirror->status = {FeatureState::Error, placement.GetError().message};
                 } else if (mirror->wholeBody) {

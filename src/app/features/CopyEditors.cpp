@@ -246,6 +246,19 @@ void MirrorEditor::StartNew(AppContext& app, Session& session) {
 void MirrorEditor::DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) {
     auto* f = dynamic_cast<doc::MirrorFeature*>(Edited(session));
     if (!f) return;
+    if (myPickFace) {   // a flat face of the body as the plane
+        const int index = session.doc.IndexOf(f->id);
+        if (index < 0) return;
+        app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Faces);
+        if (vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            if (const auto face = app.viewport.PickFace(vf.ToLocal(ImGui::GetMousePos()))) {
+                f->face = *face;
+                f->plane = {};
+                myPickFace = false;
+                Changed(session);
+            }
+        return;
+    }
     // A click on the body picks an operation to mirror; elsewhere it picks
     // the plane (the planes are drawn over the body, so the body comes first).
     const bool onBody = !f->wholeBody && vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
@@ -253,7 +266,10 @@ void MirrorEditor::DrawInViewport(AppContext& app, Session& session, const Viewp
     ObjectId plane = f->plane;
     PickPlane(app, session, plane, vf);
     if (onBody) PickSourceInView(app, session, vf);
-    else if (plane != f->plane) f->plane = plane;
+    else if (plane != f->plane) {
+        f->plane = plane;
+        f->face = {};
+    }
 }
 
 void MirrorEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
@@ -269,7 +285,15 @@ void MirrorEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
     if (!f.wholeBody) DrawSources(app, session, f, width);
     Gap(app);
     Section(app, Tr("Плоскость симметрии"));
+    const ObjectId before = f.plane;
     PlaneChoice(app, session, f.plane, width);
+    if (f.plane != before) {
+        f.face = {};
+        myPickFace = false;
+    }
+    const std::string faceText = !f.plane && f.face.IsSet() ? Tr("выбрана") : std::string(Tr("не выбрана"));
+    if (PickChip(app.ui, "##mirror-face", Tr("Плоская грань"), faceText, myPickFace, width)) myPickFace = !myPickFace;
+    Caption(app, Tr("Нажмите и щёлкните плоскую грань тела — она станет плоскостью симметрии."), width);
 }
 
 } // namespace bz::app

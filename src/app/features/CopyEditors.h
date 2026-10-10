@@ -53,12 +53,20 @@ public:
     const char* Title() const override { return Tr("Зеркало"); }
     std::string Hint() const override;
     bool        DrawsPlanes() const override { return true; }
+    bool        PicksOriginal() const override { return myPickFace; }
+    bool        PicksFaces() const override { return myPickFace; }
     void        DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;
 
 protected:
     const char* Icon() const override { return "tree-mirror"; }
-    void LoadTexts(const doc::Feature& feature) override { (void)feature; }
+    void LoadTexts(const doc::Feature& feature) override {
+        (void)feature;
+        myPickFace = false;
+    }
     void DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) override;
+
+private:
+    bool myPickFace = false;   ///< the next click on the body picks a flat face as the plane
 };
 
 } // namespace bz::app
