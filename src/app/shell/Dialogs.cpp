@@ -8,6 +8,7 @@
 #include "app/ShortcutPresets.h"
 #include "app/shell/Shell.h"
 #include "core/I18n.h"
+#include "core/Version.h"
 #include "document/Commands.h"
 #include "platform/FileDialogs.h"
 #include "platform/Launch.h"
@@ -566,10 +567,15 @@ void DrawDialogs(AppContext& app) {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ui.icons.Draw(dl, "brand-mark", p, ui.S(48), {1, 1, 1, 1});
-        dl->AddText(ui.fonts.display, ui.S(24), {p.x + ui.S(62), p.y + ui.S(2)}, ui::ToU32(c.text), "BreezeCAD 0.2.0");
+        const std::string title = std::string("BreezeCAD ") + Version();
+        dl->AddText(ui.fonts.display, ui.S(24), {p.x + ui.S(62), p.y + ui.S(2)}, ui::ToU32(c.text), title.c_str());
         dl->AddText(ui.fonts.body, ui.S(13), {p.x + ui.S(63), p.y + ui.S(32)}, ui::ToU32(c.textMuted),
                     Tr("Свободный параметрический САПР"));
-        ImGui::Dummy({0, ui.S(60)});
+        // Exactly which build: the commit names it on GitHub.
+        const std::string build = *Commit() ? Trf("Сборка {} {} от {}", Branch(), Commit(), BuildDate())
+                                            : Trf("Сборка от {}", BuildDate());
+        dl->AddText(ui.fonts.mono, ui.S(11), {p.x + ui.S(63), p.y + ui.S(52)}, ui::ToU32(c.textMuted), build.c_str());
+        ImGui::Dummy({0, ui.S(74)});
         {
             ui::FontScope font(ui.fonts.bodySmall);
             ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textSecondary));

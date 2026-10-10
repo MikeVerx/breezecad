@@ -4,6 +4,7 @@
 #include "app/Settings.h"
 #include "core/I18n.h"
 #include "core/Log.h"
+#include "core/Version.h"
 #include "core/PathText.h"
 #include "document/BzcFile.h"
 #include "document/ThreadFeature.h"
@@ -16,7 +17,7 @@
 namespace bz::app {
 namespace {
 
-constexpr const char* kGenerator = "BreezeCAD 0.2.0";
+const std::string kGenerator = std::string("BreezeCAD ") + Version();
 
 } // namespace
 

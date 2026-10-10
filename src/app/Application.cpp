@@ -5,6 +5,7 @@
 #include "app/shell/Shell.h"
 #include "app/viewport/ViewportPanel.h"
 #include "core/Log.h"
+#include "core/Version.h"
 #include "core/Profile.h"
 #include "core/PathText.h"
 #include "kernel/TextGeometry.h"
@@ -76,7 +77,7 @@ Application::~Application() {
 bool Application::Init(const std::vector<std::filesystem::path>& files) {
     const std::filesystem::path config = platform::ConfigDir();
     log::OpenFile(config / "logs" / "breezecad.log");
-    log::Info("BreezeCAD 0.2.0 starting");
+    log::Info("BreezeCAD {} starting", VersionLine());
 
     // A lock file left from the last run means it did not exit normally.
     myShell.crashedLastTime = std::filesystem::exists(config / "running.lock");
