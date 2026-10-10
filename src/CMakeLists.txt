@@ -4,7 +4,8 @@
 #   core      — ids, units, expressions, logging           (no dependencies)
 #   sketch    — 2D sketch model and constraint solver       (core)
 #   document  — features, parameters, undo, .bzc format     (core, sketch)
-#   kernel    — builds solids from a document with OCCT     (document)
+#   assembly  — components, constraints and their solver    (document)
+#   kernel    — builds solids from a document with OCCT     (document, assembly)
 #   render    — 3D viewport on top of OCCT visualization    (kernel)
 #   ui        — Dear ImGui interface, knows nothing of OCCT (document)
 #   app       — the executable: wires everything together   (all)
@@ -12,6 +13,7 @@
 add_subdirectory(core)
 add_subdirectory(sketch)
 add_subdirectory(document)
+add_subdirectory(assembly)
 add_subdirectory(kernel)
 
 if(BZ_BUILD_APP)

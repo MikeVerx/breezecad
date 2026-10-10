@@ -3,6 +3,7 @@ add_library(bz_document STATIC
     BzcFile.cpp
     Commands.cpp
     Document.cpp
+    DocumentTypes.cpp
     CoilFeature.cpp
     SectionFeature.cpp
     ShellFeature.cpp

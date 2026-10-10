@@ -1,5 +1,6 @@
 add_executable(bz_tests
     main.cpp
+    assembly/AssemblyFileTests.cpp
     core/ExpressionTests.cpp
     core/I18nTests.cpp
     core/ImageTests.cpp
@@ -30,7 +31,7 @@ add_executable(bz_tests
     sketch/ShapesTests.cpp
     sketch/SolverTests.cpp
     sketch/TrimTests.cpp)
-target_link_libraries(bz_tests PRIVATE bz::miniz bz::core bz::sketch bz::document bz::kernel bz::doctest)
+target_link_libraries(bz_tests PRIVATE bz::miniz bz::core bz::sketch bz::document bz::assembly bz::kernel bz::doctest)
 target_compile_definitions(bz_tests PRIVATE BZ_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 bz_set_warnings(bz_tests)
 add_test(NAME bz_tests COMMAND bz_tests)

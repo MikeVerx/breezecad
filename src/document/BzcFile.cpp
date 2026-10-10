@@ -1,6 +1,7 @@
 #include "document/BzcFile.h"
 
 #include "core/PathText.h"
+#include "document/DocumentTypes.h"
 #include "document/FeatureRegistry.h"
 #include "document/JsonIO.h"
 #include "document/UnknownFeature.h"
@@ -30,11 +31,11 @@ std::string NowIso() {
     return std::format("{:%Y-%m-%dT%H:%M:%SZ}", now);
 }
 
-Json Manifest(std::string_view generator) {
+Json Manifest(std::string_view documentType, std::string_view generator) {
     return Json{
         {"format", "bzc"},
         {"formatVersion", kBzcFormatVersion},
-        {"documentType", "part"},
+        {"documentType", documentType},
         {"generator", generator},
         {"modified", NowIso()},
         {"internalUnits", {{"length", "mm"}, {"angle", "rad"}}},
@@ -144,9 +145,9 @@ Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
     return doc;
 }
 
-Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::string_view generator) {
-    const std::string manifest = Manifest(generator).dump(1, '\t');
-    const std::string document = DocumentToJson(doc);
+Status WriteBzcArchive(const std::filesystem::path& path, std::string_view documentType, std::string_view generator,
+                       const std::string& document, const std::map<std::string, std::vector<std::uint8_t>>& pictures) {
+    const std::string manifest = Manifest(documentType, generator).dump(1, '\t');
 
     mz_zip_archive zip{};
     if (!mz_zip_writer_init_heap(&zip, 0, 64 * 1024)) return Error{"Не удалось подготовить архив"};
@@ -154,7 +155,7 @@ Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::stri
         mz_zip_writer_add_mem(&zip, kManifestName, manifest.data(), manifest.size(), MZ_BEST_COMPRESSION) &&
         mz_zip_writer_add_mem(&zip, kDocumentName, document.data(), document.size(), MZ_BEST_COMPRESSION);
     // Pictures of the appearances (already compressed formats: stored as they are).
-    for (const auto& [name, data] : doc.look.pictures)
+    for (const auto& [name, data] : pictures)
         added = added && mz_zip_writer_add_mem(&zip, ("pictures/" + name).c_str(), data.data(), data.size(), MZ_NO_COMPRESSION);
     void* buffer = nullptr;
     std::size_t size = 0;
@@ -181,7 +182,7 @@ Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::stri
     return Status::Ok();
 }
 
-Expected<Document> LoadBzc(const std::filesystem::path& path, LoadReport* report) {
+Expected<BzcArchive> ReadBzcArchive(const std::filesystem::path& path) {
     Expected<std::string> bytes = ReadWholeFile(path);
     if (!bytes) return bytes.GetError();
 
@@ -191,7 +192,7 @@ Expected<Document> LoadBzc(const std::filesystem::path& path, LoadReport* report
 
     Expected<std::string> manifestText = ExtractEntry(zip, kManifestName);
     Expected<std::string> documentText = ExtractEntry(zip, kDocumentName);
-    std::map<std::string, std::vector<std::uint8_t>> pictures;
+    BzcArchive archive;
     for (mz_uint i = 0; i < mz_zip_reader_get_num_files(&zip); ++i) {
         char name[512];
         mz_zip_reader_get_filename(&zip, i, name, sizeof(name));
@@ -201,7 +202,7 @@ Expected<Document> LoadBzc(const std::filesystem::path& path, LoadReport* report
         void* data = mz_zip_reader_extract_to_heap(&zip, i, &size, 0);
         if (!data) continue;
         const auto* bytesOf = static_cast<const std::uint8_t*>(data);
-        pictures[entry.substr(9)] = std::vector<std::uint8_t>(bytesOf, bytesOf + size);
+        archive.pictures[entry.substr(9)] = std::vector<std::uint8_t>(bytesOf, bytesOf + size);
         mz_free(data);
     }
     mz_zip_reader_end(&zip);
@@ -211,13 +212,35 @@ Expected<Document> LoadBzc(const std::filesystem::path& path, LoadReport* report
     const Json manifest = Json::parse(*manifestText, nullptr, false);
     if (manifest.is_discarded() || manifest.value("format", "") != "bzc")
         return Error{"Файл не является документом BreezeCAD (.bzc)"};
-    const int version = manifest.value("formatVersion", 0);
-    if (version > kBzcFormatVersion && report)
+    archive.formatVersion = manifest.value("formatVersion", 0);
+    archive.documentType  = manifest.value("documentType", std::string(kPartType));
+    archive.documentJson  = std::move(*documentText);
+    return archive;
+}
+
+Expected<std::string> ReadDocumentType(const std::filesystem::path& path) {
+    Expected<BzcArchive> archive = ReadBzcArchive(path);
+    if (!archive) return archive.GetError();
+    return archive->documentType;
+}
+
+Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::string_view generator) {
+    return WriteBzcArchive(path, kPartType, generator, DocumentToJson(doc), doc.look.pictures);
+}
+
+Expected<Document> LoadBzc(const std::filesystem::path& path, LoadReport* report) {
+    Expected<BzcArchive> archive = ReadBzcArchive(path);
+    if (!archive) return archive.GetError();
+    if (archive->documentType != kPartType) {
+        const DocumentTypeInfo* type = DocumentTypeRegistry::Default().Find(archive->documentType);
+        return Error{std::format("Это не деталь, а документ «{}»", type ? type->title : archive->documentType)};
+    }
+    if (archive->formatVersion > kBzcFormatVersion && report)
         report->warnings.push_back("Файл создан более новой версией BreezeCAD. Новые возможности могут не открыться.");
 
-    Expected<Document> doc = DocumentFromJson(*documentText, report);
+    Expected<Document> doc = DocumentFromJson(archive->documentJson, report);
     if (doc) {
-        doc->look.pictures = std::move(pictures);
+        doc->look.pictures = std::move(archive->pictures);
         doc->look.Prune();   // pictures nothing refers to
     }
     return doc;
