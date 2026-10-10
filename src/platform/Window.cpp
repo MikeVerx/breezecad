@@ -78,8 +78,9 @@ bool Window::Create(const WindowConfig& config) {
     }
     const bool remembered = config.x >= 0 && config.y >= 0 && config.x < wx + ww - 100 && config.y < wy + wh - 100;
     glfwSetWindowPos(myWindow, remembered ? config.x : wx + (ww - width) / 2, remembered ? config.y : wy + (wh - height) / 2);
-    if (config.maximized) glfwMaximizeWindow(myWindow);
-    glfwShowWindow(myWindow);
+    // Maximized only once shown: maximizing a hidden window shows it on some systems.
+    myMaximizeOnShow = config.maximized;
+    if (config.visible) Show();
     glfwMakeContextCurrent(myWindow);
     glfwSwapInterval(1);
     glfwSetWindowSizeLimits(myWindow, 800, 500, GLFW_DONT_CARE, GLFW_DONT_CARE);
@@ -127,6 +128,12 @@ void Window::Geometry(int& x, int& y, int& width, int& height, bool& maximized) 
     maximized = glfwGetWindowAttrib(myWindow, GLFW_MAXIMIZED) != 0;
     glfwGetWindowPos(myWindow, &x, &y);
     glfwGetWindowSize(myWindow, &width, &height);
+}
+
+void Window::Show() {
+    if (myMaximizeOnShow) glfwMaximizeWindow(myWindow);
+    myMaximizeOnShow = false;
+    glfwShowWindow(myWindow);
 }
 
 bool Window::IsMinimized() const { return glfwGetWindowAttrib(myWindow, GLFW_ICONIFIED) != 0; }

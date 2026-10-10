@@ -3,6 +3,7 @@
 #include "app/Language.h"
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
+#include "app/shell/Splash.h"
 #include "app/viewport/ViewportPanel.h"
 #include "core/Log.h"
 #include "core/Version.h"
@@ -87,7 +88,18 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     mySettings = Settings::Load(config / "settings.json");
     if (const std::string problem = ApplyLanguage(mySettings); !problem.empty())
         myNotes.Error(Tr(problem));
+    // The splash while the rest starts; the main window appears when ready.
+    const std::filesystem::path assets = platform::AssetsDir();
+    Splash splash;
+    const bool dark = mySettings.theme == ThemeChoice::Dark ||
+                      (mySettings.theme == ThemeChoice::System && platform::SystemPrefersDark());
+    const bool splashShown = splash.Open(assets, dark);
+    const int steps = 4 + static_cast<int>(files.size());
+    int step = 0;
+    const auto progress = [&](const std::string& status) { splash.Step(status, static_cast<float>(++step) / static_cast<float>(steps)); };
+
     platform::WindowConfig windowConfig;
+    windowConfig.visible = !splashShown;
     if (mySettings.windowW > 0 && mySettings.windowH > 0) {
         windowConfig.width = mySettings.windowW;
         windowConfig.height = mySettings.windowH;
@@ -95,6 +107,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
         windowConfig.y = mySettings.windowY;
     }
     windowConfig.maximized = mySettings.windowMaximized;
+    progress(Tr("Создание окна…"));
     if (!myWindow.Create(windowConfig)) return false;
 
     glfwSetWindowUserPointer(myWindow.Handle(), &myInput);
@@ -107,7 +120,6 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     glfwSetWindowFocusCallback(myWindow.Handle(), [](GLFWwindow* w, int) { OnAnyInput(w); });
     glfwSetWindowRefreshCallback(myWindow.Handle(), [](GLFWwindow* w) { OnAnyInput(w); });
 
-    const std::filesystem::path assets = platform::AssetsDir();
     kernel::SetTextFont(assets / "fonts" / "IBMPlexSans-Medium.ttf", assets / "fonts" / "IBMPlexSans-SemiBold.ttf");   // sketch text
     log::Info("Assets: {}", ToUtf8(assets));
 
@@ -135,11 +147,13 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myAssets = assets;
     myScale = ChooseScale();
     myAppliedScaleSetting = mySettings.uiScale;
+    progress(Tr("Шрифты и значки…"));
     myFonts.Load(assets, myScale * framebufferScale);
     io.FontGlobalScale = 1.0f / framebufferScale;
     myIcons.SetDirectory(assets / "icons");
     myIcons.SetScale(framebufferScale);
 
+    progress(Tr("Загрузка ядра геометрии…"));
     if (!myViewport.Init(myWindow.NativeSurface())) return false;
 
     myUi = std::make_unique<ui::Ui>(ui::Ui{myTheme, myFonts, myIcons, myScale});
@@ -153,13 +167,19 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     RegisterActions(*myContext);
     for (const auto& [id, chord] : mySettings.shortcuts) myActions.SetChord(id, ActionRegistry::ParseChord(chord));
 
-    for (const auto& file : files) myWorkspace.Open(file, myNotes, mySettings);
+    for (const auto& file : files) {
+        progress(Trf("Открытие {}…", ToUtf8(file.filename())));
+        myWorkspace.Open(file, myNotes, mySettings);
+    }
     // Nothing asked for: the last file, if the user wants it (and it is still there).
     if (files.empty() && mySettings.reopenLast && !mySettings.recentFiles.empty()) {
         std::error_code ec;
         const std::filesystem::path last = mySettings.recentFiles.front();
         if (std::filesystem::exists(last, ec)) myWorkspace.Open(last, myNotes, mySettings);
     }
+    progress(Tr("Готово"));
+    splash.Close();
+    myWindow.Show();
     if (myShell.crashedLastTime && !myShell.recoverable.empty())
         myNotes.Info(Tr("Прошлый сеанс завершился неожиданно. Несохранённую работу можно восстановить на главной странице."));
     return true;

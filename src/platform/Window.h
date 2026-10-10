@@ -13,6 +13,7 @@ struct WindowConfig {
     int         height    = 900;
     int         x = -1, y = -1;   ///< -1: centred on the primary monitor
     bool        maximized = true;
+    bool        visible   = true;   ///< false: shown later with Window::Show (after the splash)
     std::string title     = "BreezeCAD";
 };
 
@@ -43,6 +44,8 @@ public:
     /// The windowed place and size, and whether it is maximized now.
     void  Geometry(int& x, int& y, int& width, int& height, bool& maximized) const;
     bool  IsMinimized() const;
+    /// Shows a window created hidden (maximized then, if it was asked to be).
+    void  Show();
 
     /// Waits for input; returns early after `timeoutSeconds`.
     static void WaitEvents(double timeoutSeconds);
@@ -50,6 +53,7 @@ public:
 
 private:
     GLFWwindow* myWindow = nullptr;
+    bool        myMaximizeOnShow = false;
 };
 
 } // namespace bz::platform
