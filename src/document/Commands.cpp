@@ -167,6 +167,22 @@ private:
     PartInfo myOther;
 };
 
+class SetLookCommand final : public Command {
+public:
+    SetLookCommand(Look other, std::string label) : myOther(std::move(other)), myLabel(std::move(label)) {}
+
+    std::string Label() const override { return myLabel; }
+    void Do(Document& doc) override {
+        std::swap(doc.look, myOther);
+        doc.TouchLook();
+    }
+    void Undo(Document& doc) override { Do(doc); }
+
+private:
+    Look        myOther;
+    std::string myLabel;
+};
+
 class GroupCommand final : public Command {
 public:
     GroupCommand(std::string label, std::vector<std::unique_ptr<Command>> commands)
@@ -223,6 +239,10 @@ std::unique_ptr<Command> SetUnits(UnitSystem units) {
 
 std::unique_ptr<Command> SetPartInfo(PartInfo info) {
     return std::make_unique<SetPartInfoCommand>(std::move(info));
+}
+
+std::unique_ptr<Command> SetLook(Look look, std::string label) {
+    return std::make_unique<SetLookCommand>(std::move(look), std::move(label));
 }
 
 std::unique_ptr<Command> Group(std::string label, std::vector<std::unique_ptr<Command>> commands) {

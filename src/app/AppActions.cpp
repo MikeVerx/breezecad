@@ -3,6 +3,7 @@
 
 #include "app/Application.h"
 #include "app/Operations.h"
+#include "app/features/OperationEditors.h"
 #include "core/I18n.h"
 #include "document/Origin.h"
 
@@ -47,6 +48,10 @@ void RegisterActions(AppContext& app) {
     a.Add({"tools.interference", N_("Коллизии"), "interference", 0, N_("Показать красным, где тела детали заходят друг в друга"),
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { ToggleInterference(app); }});
+    a.Add({"view.appearance", N_("Внешний вид"), "appearance", 0,
+           N_("Цвет и материал тел и граней: металлы, пластики, свои цвета с прозрачностью"),
+           [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
+           [&app] { app.ops.appearance.Start(app, *app.Doc()); }});
     a.Add({"view.section", N_("Разрез вида"), "section", 0, N_("Разрезать вид плоскостью, чтобы заглянуть внутрь детали"),
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { app.shell.section.on = !app.shell.section.on; }});

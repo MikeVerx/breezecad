@@ -18,6 +18,7 @@ Document Document::Clone() const {
     copy.info = info;
     copy.units = units;
     copy.variables = variables;
+    copy.look = look;
     copy.myFeatures.reserve(myFeatures.size());
     for (const auto& f : myFeatures) copy.myFeatures.push_back(f->Clone());
     copy.myIds = myIds;

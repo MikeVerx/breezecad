@@ -80,6 +80,9 @@ std::unique_ptr<Command> SetUnits(UnitSystem units);
 std::unique_ptr<Command> SetPartInfo(PartInfo info);
 
 /// Several commands as one undo step.
+/// Replaces the look of the part (colours of bodies and faces).
+std::unique_ptr<Command> SetLook(Look look, std::string label);
+
 std::unique_ptr<Command> Group(std::string label, std::vector<std::unique_ptr<Command>> commands);
 
 } // namespace bz::doc

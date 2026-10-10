@@ -1,6 +1,7 @@
 // Mode tabs and the ribbon. Commands that are not built yet are shown
 // greyed out with a note, so the layout matches the approved mockup.
 
+#include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
 #include "core/I18n.h"
@@ -302,6 +303,10 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
 
 void ViewRibbon(AppContext& app, RibbonBuilder& r) {
     const render::DisplayStyle style = app.shell.displayStyle;
+    r.BeginGroup(Tr("Цвета"));
+    r.Large("view.appearance", Tr("Внешний\nвид"), app.ops.appearance.IsOpen());
+    r.EndGroup();
+
     r.BeginGroup(Tr("Стиль отображения"));
     r.BeginColumn();
     r.Small("view.shaded", nullptr, style == render::DisplayStyle::Shaded);

@@ -251,16 +251,22 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
         DisplayStyleMenu(app);
         x += ui.S(32);
     }
-    ImGui::SetCursorScreenPos({x, cy});
-    ui::IconButton(ui, "##qat-materials", "ui-materials", 30, 18, Tr("Материалы и текстуры — в следующей версии"), false);
-    x += ui.S(32);
+    // The toolbar's own icons for two ribbon commands.
+    const auto qatAs = [&](const char* id, const char* actionId, const char* icon) {
+        const Action* a = app.actions.Find(actionId);
+        ImGui::SetCursorScreenPos({x, cy});
+        if (ui::IconButton(ui, id, icon, 30, 18, a->Label(), a->IsEnabled())) {
+            const std::string action = actionId;
+            app.Later([&app, action] { app.actions.Run(action); });
+        }
+        x += ui.S(32);
+    };
+    qatAs("##qat-materials", "view.appearance", "ui-materials");
     ImGui::SetCursorScreenPos({x, cy});
     if (ui::IconButton(ui, "##qat-fx", "ui-fx", 30, 18, Tr("Переменные (fx)"), app.Doc() != nullptr))
         app.shell.leftTab = LeftTab::Variables;
     x += ui.S(32);
-    ImGui::SetCursorScreenPos({x, cy});
-    ui::IconButton(ui, "##qat-measure", "ui-ruler", 30, 18, Tr("Измерение — в следующей версии"), false);
-    x += ui.S(32);
+    qatAs("##qat-measure", "tools.measure", "ui-ruler");
 
     // Right side: search and stats.
     const float statsWidth = ui.S(190);

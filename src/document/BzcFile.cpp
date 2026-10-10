@@ -87,6 +87,7 @@ std::string DocumentToJson(const Document& doc) {
         {"features", std::move(features)},
     };
     if (doc.EndMarker() < doc.FeatureCount()) root["endMarker"] = doc.EndMarker();
+    if (!doc.look.Empty()) root["look"] = ToJson(doc.look);
     return root.dump(1, '\t');
 }
 
@@ -134,6 +135,8 @@ Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
     for (const auto& f : doc.Features()) f->ReserveIds(doc.Ids());
     if (const auto marker = root.find("endMarker"); marker != root.end() && marker->is_number_unsigned())
         doc.SetEndMarker(marker->get<std::size_t>());
+
+    if (const auto look = root.find("look"); look != root.end()) doc.look = LookFromJson(*look);
 
     doc.ClearDirty();
     doc.MarkChanged(0);   // everything needs a first rebuild

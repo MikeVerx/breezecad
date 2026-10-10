@@ -2,6 +2,7 @@ add_executable(breezecad WIN32
     main.cpp
     Actions.cpp
     AppActions.cpp
+    AppearanceLibrary.cpp
     Application.cpp
     Autosave.cpp
     Format.cpp
@@ -12,6 +13,7 @@ add_executable(breezecad WIN32
     Session.cpp
     Settings.cpp
     Workspace.cpp
+    features/AppearanceEditor.cpp
     features/CopyEditors.cpp
     features/CoilEditor.cpp
     features/SketchAxis.cpp
@@ -64,7 +66,7 @@ if(WIN32)
 endif()
 target_link_libraries(breezecad PRIVATE
     bz::core bz::document bz::kernel bz::render bz::ui bz::platform
-    bz::imgui lunasvg::lunasvg glfw OpenGL::GL)
+    bz::imgui bz::miniz bz::json lunasvg::lunasvg glfw OpenGL::GL)
 bz_set_warnings(breezecad)
 
 # Assets next to the executable: the portable layout the app looks for first.

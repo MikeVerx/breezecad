@@ -1,4 +1,5 @@
 add_library(bz_document STATIC
+    Appearance.cpp
     BzcFile.cpp
     Commands.cpp
     Document.cpp

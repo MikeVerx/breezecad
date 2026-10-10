@@ -4,6 +4,7 @@ add_executable(bz_tests
     core/I18nTests.cpp
     core/PngTests.cpp
     core/SourceRulesTests.cpp
+    document/AppearanceTests.cpp
     document/DocumentTests.cpp
     kernel/BracketTests.cpp
     kernel/CoilTests.cpp

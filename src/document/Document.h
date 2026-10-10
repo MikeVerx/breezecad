@@ -3,6 +3,7 @@
 #include "core/Id.h"
 #include "core/Parameter.h"
 #include "core/Units.h"
+#include "document/Appearance.h"
 #include "document/Feature.h"
 
 #include <cstddef>
@@ -45,6 +46,7 @@ public:
     PartInfo               info;
     UnitSystem             units;
     std::vector<Parameter> variables;   ///< the user variables table
+    Look                   look;        ///< colours of bodies and faces (never rebuilt)
 
     // --- features -------------------------------------------------------
     const std::vector<std::unique_ptr<Feature>>& Features() const { return myFeatures; }
@@ -98,6 +100,12 @@ public:
     // --- change tracking ------------------------------------------------
     /// Bumped on every change; used by autosave and the viewport.
     std::uint64_t Revision() const { return myRevision; }
+    /// The look changed (counts as a change for saving, needs no rebuild).
+    void TouchLook() {
+        ++myRevision;
+        ++myLookRevision;
+    }
+    std::uint64_t LookRevision() const { return myLookRevision; }
     /// Marks features from `index` on as needing a rebuild.
     void MarkChanged(std::size_t fromIndex = 0);
     /// First feature index that needs a rebuild (FeatureCount() if none).
@@ -111,6 +119,7 @@ private:
     IdGenerator                           myIds;
     std::size_t                           myEndMarker = 0;
     std::uint64_t                         myRevision  = 0;
+    std::uint64_t                         myLookRevision = 0;
     std::size_t                           myDirtyFrom = 0;
 };
 

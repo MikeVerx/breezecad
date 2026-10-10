@@ -115,6 +115,11 @@ bool Session::Rebuild(double budgetMs) {
     const std::size_t limit = myRebuildLimit ? *myRebuildLimit : static_cast<std::size_t>(-1);
     const bool leftOver = doc.DirtyFrom() < doc.FeatureCount() && doc.DirtyFrom() <= limit;
     if (doc.Revision() == myBuiltRevision && !leftOver) return adopted;
+    // A change that needs no rebuild (the look of the part).
+    if (doc.DirtyFrom() >= doc.FeatureCount() && !leftOver && model.Revision() > 0) {
+        myBuiltRevision = doc.Revision();
+        return adopted;
+    }
     // While a handle or a value is being dragged, a part that takes long to
     // rebuild is rebuilt at most every so often, and once more on release:
     // the drag stays smooth instead of waiting for every step.

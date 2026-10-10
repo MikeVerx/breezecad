@@ -8,6 +8,8 @@
 #include "kernel/occt/ModelImpl.h"
 
 #include <AIS_InteractiveContext.hxx>
+#include <AIS_ColoredDrawer.hxx>
+#include <AIS_ColoredShape.hxx>
 #include <AIS_Shape.hxx>
 #include <BRepTools.hxx>
 #include <BRep_Tool.hxx>
@@ -215,8 +217,8 @@ struct Viewport::Impl {
     int    fbWidth = 1, fbHeight = 1;
 
     struct Shown {
-        ObjectId           body;
-        Handle(AIS_Shape)  shape;
+        ObjectId                 body;
+        Handle(AIS_ColoredShape) shape;   ///< coloured face by face where the look says so
     };
     std::vector<Shown> shown;
     /// Bodies shown a moment ago, hidden but kept with their meshes: closing
@@ -265,6 +267,9 @@ struct Viewport::Impl {
     ViewportColors colors;
     DisplayStyle   style = DisplayStyle::ShadedWithEdges;
     ObjectId       hovered;
+    doc::Look      look;                ///< colours of bodies and faces (Viewport::SetLook)
+    std::uint64_t  lookRevision = ~std::uint64_t{0};
+    const void*    lookOwner = nullptr;
     bool           dirty = true;
 
     /// Picking on the body as it was before an operation (fillet, shell;
@@ -324,17 +329,26 @@ struct Viewport::Impl {
 
     Handle(OpenGl_Context) GlContext() const { return driver->GetSharedContext(); }
 
-    void ApplyStyle(const Handle(AIS_Shape)& ais, bool hoveredBody) const {
-        Handle(Prs3d_Drawer) drawer = ais->Attributes();
-        const Color body = hoveredBody ? colors.hover : colors.body;
-        ais->SetColor(ToQuantity(body));
-        // Matte with a faint highlight. The ambient part is the body colour
-        // itself, so faces turned away from the lights stay readable.
+    /// Material for a colour and a finish: matte with a faint highlight,
+    /// metal with a bright one, glass glossy. The ambient part is the colour
+    /// itself, so faces turned away from the lights stay readable.
+    static Graphic3d_MaterialAspect MaterialOf(const Color& colour, doc::Finish finish) {
         Graphic3d_MaterialAspect material(Graphic3d_NameOfMaterial_Plastified);
-        material.SetColor(ToQuantity(body));
-        material.SetAmbientColor(ToQuantity(body));
-        material.SetSpecularColor(Quantity_Color(0.12, 0.12, 0.12, Quantity_TOC_RGB));
-        ais->SetMaterial(material);
+        material.SetColor(ToQuantity(colour));
+        const double ambient = finish == doc::Finish::Metal ? 0.75 : 1.0;
+        material.SetAmbientColor(Quantity_Color(colour.r * ambient, colour.g * ambient, colour.b * ambient, Quantity_TOC_RGB));
+        const double shine = finish == doc::Finish::Metal ? 0.55 : finish == doc::Finish::Glass ? 0.45 : 0.12;
+        material.SetSpecularColor(Quantity_Color(shine, shine, shine, Quantity_TOC_RGB));
+        material.SetShininess(finish == doc::Finish::Matte ? 0.1f : 0.6f);
+        return material;
+    }
+
+    void ApplyStyle(const Handle(AIS_Shape)& ais, bool hoveredBody, const doc::Appearance* appearance = nullptr) const {
+        Handle(Prs3d_Drawer) drawer = ais->Attributes();
+        const Color body = hoveredBody ? colors.hover : appearance ? appearance->face.WithAlpha(1.0f) : colors.body;
+        ais->SetColor(ToQuantity(body));
+        ais->SetMaterial(MaterialOf(body, appearance ? appearance->finish : doc::Finish::Matte));
+        const Color edgeColour = appearance ? appearance->edges : colors.edges;
 
         const bool edges = style == DisplayStyle::ShadedWithEdges || style == DisplayStyle::Transparent;
         drawer->SetFaceBoundaryDraw(edges);
@@ -345,10 +359,10 @@ struct Viewport::Impl {
         // Finer tessellation than OCCT's default (20°): round faces look
         // round; coarser on the lower quality levels.
         SetMeshPrecision(drawer, quality);
-        drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(colors.edges), Aspect_TOL_SOLID, 1.0));
+        drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(edgeColour), Aspect_TOL_SOLID, 1.0));
         // Wireframe and hidden-line styles draw edges in the edge colour (not
         // the body colour SetColor gave them) and no isolines.
-        const Quantity_Color ink = ToQuantity(colors.edges);
+        const Quantity_Color ink = ToQuantity(edgeColour);
         drawer->SetWireAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
         drawer->SetLineAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
         drawer->SetFreeBoundaryAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
@@ -357,7 +371,7 @@ struct Viewport::Impl {
         drawer->SetVIsoAspect(new Prs3d_IsoAspect(ink, Aspect_TOL_SOLID, 1.0, 0));
         // "Скрытые линии": only the visible edges, in the edge colour.
         drawer->SetSeenLineAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
-        ais->SetTransparency(style == DisplayStyle::Transparent ? 0.55 : 0.0);
+        ais->SetTransparency(style == DisplayStyle::Transparent ? 0.55 : appearance ? 1.0 - appearance->face.a : 0.0);
 
         const bool wire = style == DisplayStyle::Wireframe || style == DisplayStyle::HiddenLines;
         context->SetDisplayMode(ais, wire ? AIS_WireFrame : AIS_Shaded, false);
@@ -365,9 +379,29 @@ struct Viewport::Impl {
 
     int quality = 0;   ///< see Viewport::SetQuality
 
+    /// A body's style with its look: the body's appearance, then the faces
+    /// that have their own.
+    void ApplyLook(const Shown& s) const {
+        ApplyStyle(s.shape, s.body == hovered, look.OfBody(s.body));
+        s.shape->ClearCustomAspects();
+        if (style == DisplayStyle::Wireframe || style == DisplayStyle::HiddenLines) return;
+        for (const doc::Look::FaceLook& f : look.faces) {
+            if (f.body != s.body) continue;
+            const doc::Appearance* a = look.Find(f.appearance);
+            const std::optional<TopoDS_Face> face = a ? kernel::occt::ResolveAnyFace(s.shape->Shape(), f.face) : std::nullopt;
+            if (!face) continue;
+            Handle(AIS_ColoredDrawer) aspects = s.shape->CustomAspects(*face);
+            const Color colour = a->face.WithAlpha(1.0f);
+            aspects->SetupOwnShadingAspect();
+            aspects->ShadingAspect()->SetMaterial(MaterialOf(colour, a->finish));
+            aspects->ShadingAspect()->SetColor(ToQuantity(colour));
+            if (style != DisplayStyle::Transparent) aspects->ShadingAspect()->SetTransparency(1.0 - a->face.a);
+        }
+    }
+
     void ApplyStyleAll() {
         for (const Shown& s : shown) {
-            ApplyStyle(s.shape, s.body == hovered);
+            ApplyLook(s);
             context->Redisplay(s.shape, false);
         }
         view->SetComputedMode(style == DisplayStyle::HiddenLines);
@@ -505,14 +539,14 @@ void Viewport::Sync(const kernel::Model& model) {
             return s.body == body.id && s.shape->Shape().IsEqual(body.shape);
         });
         if (kept != m.spare.end()) {
-            m.ApplyStyle(kept->shape, body.id == m.hovered);
+            m.ApplyLook(*kept);
             m.context->Display(kept->shape, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
             m.shown.push_back(*kept);
             m.spare.erase(kept);
             continue;
         }
-        Handle(AIS_Shape) ais = new AIS_Shape(body.shape);
-        m.ApplyStyle(ais, body.id == m.hovered);
+        Handle(AIS_ColoredShape) ais = new AIS_ColoredShape(body.shape);
+        m.ApplyLook({body.id, ais});
         m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
         m.shown.push_back({body.id, ais});
     }
@@ -597,6 +631,25 @@ void Viewport::SetQuality(int level) {
         BRepTools::Clean(s.shape->Shape());
         s.shape->SetToUpdate();
     }
+    m.ApplyStyleAll();
+}
+
+bool Viewport::SameFace(ObjectId body, const doc::FaceReference& a, const doc::FaceReference& b) const {
+    for (const auto& s : myImpl->shown) {
+        if (s.body != body) continue;
+        const auto fa = kernel::occt::ResolveAnyFace(s.shape->Shape(), a);
+        const auto fb = kernel::occt::ResolveAnyFace(s.shape->Shape(), b);
+        return fa && fb && fa->IsSame(*fb);
+    }
+    return false;
+}
+
+void Viewport::SetLook(const doc::Look& look, const void* owner, std::uint64_t revision) {
+    Impl& m = *myImpl;
+    if (revision == m.lookRevision && owner == m.lookOwner) return;
+    m.lookRevision = revision;
+    m.lookOwner = owner;
+    m.look = look;
     m.ApplyStyleAll();
 }
 
@@ -805,8 +858,11 @@ std::optional<PickResult> Viewport::Pick(Vec2 pixel) {
         if (owner->Selectable() == s.shape) result.body = s.body;
 
     if (const Handle(StdSelect_BRepOwner) brep = Handle(StdSelect_BRepOwner)::DownCast(owner);
-        !brep.IsNull() && brep->Shape().ShapeType() == TopAbs_FACE)
+        !brep.IsNull() && brep->Shape().ShapeType() == TopAbs_FACE) {
         result.plane = PlanarFaceFrame(TopoDS::Face(brep->Shape()));
+        if (const auto normal = kernel::occt::NormalAt(TopoDS::Face(brep->Shape()), result.point))
+            result.face = doc::FaceReference{*normal, result.point, true};
+    }
     // The face was clicked from where the camera is: its normal points
     // that way (a face's stored orientation is not reliable for this), so
     // a sketch on it is seen from the front, never from behind the part.

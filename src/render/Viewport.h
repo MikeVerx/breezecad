@@ -9,6 +9,7 @@
 #include "core/NativeSurface.h"
 #include "core/ViewProjection.h"
 #include "document/EdgeReference.h"
+#include "document/Appearance.h"
 #include "document/FaceReference.h"
 #include "kernel/Measure.h"
 
@@ -62,6 +63,7 @@ struct PickResult {
     Vec3                 point;
     ObjectId             body;
     std::optional<Frame> plane;   ///< set when the picked face is planar
+    std::optional<doc::FaceReference> face;   ///< the face clicked (curved too), found again by its point
 };
 
 class Viewport {
@@ -91,6 +93,11 @@ public:
     /// balanced, 2 for weak computers (no smoothing, coarse round faces).
     void SetQuality(int level);
     void SetHoveredBody(ObjectId body);
+    /// Both references point at the same face of the shown body `body`.
+    bool SameFace(ObjectId body, const doc::FaceReference& a, const doc::FaceReference& b) const;
+    /// Colours of bodies and faces of the document `owner` (any pointer that
+    /// tells documents apart); applied when it or `revision` changes.
+    void SetLook(const doc::Look& look, const void* owner, std::uint64_t revision);
 
     /// Renders into the texture. Cheap when nothing changed.
     void Render();
