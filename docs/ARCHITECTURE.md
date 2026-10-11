@@ -12,7 +12,8 @@ sketch    ← core            эскиз 2D: сущности, связи, ре�
 document  ← core, sketch    дерево операций, параметры, команды undo, файл .bzc
 kernel    ← document, OCCT  перестроение модели (тела, регионы эскизов, экспорт)
 modules   ← kernel          модули: module.json (требования к железу), загрузка/отключение,
-                            защита от падений, C-ABI `modules/bz_module.h`, пример `examples/modules/hello`
+                            защита от падений, C-ABI `modules/bz_module.h`, пример `examples/modules/hello`;
+                            команды для модулей — `app/scripting` (JSON, ADR-0002), модуль MCP — `modules/mcp`
 render    ← core, kernel    вьюпорт OCCT/OpenGL, выбор (pick), подсветка
 ui        ← core, ImGui     тема, шрифты, иконки, виджеты, видовой куб
 platform  ← core            окна, пути, файловые диалоги, запуск браузера/папки
@@ -68,6 +69,14 @@ Zip: `manifest.json` (версия формата) + `document.json` (дерев
 операций сохраняются и показываются с ошибкой, а не теряются; новые поля читаются
 `ReadMember` (отсутствует — значение по умолчанию), поэтому старые файлы открываются.
 
+## Команды для модулей (ADR-0002)
+Модуль меняет документ только командами: `host->execute("{\"command\": …}")` в главном
+потоке (из своего потока — `request_main()` → `main_tick()`). Команды — `app/scripting/`:
+таблица `Command` (имя, описание, JSON-схема, `changes`, функция), группы по файлам
+(`DocumentCommands`, `PartCommands`, `SketchCommands`, `SolidCommands`). Правка — через
+`Session::Execute`, один вызов = один шаг отмены. Модуль `modules/mcp` отдаёт команды
+Claude как инструменты MCP (`part.tree` → `part_tree`) по `127.0.0.1` + ключ; `bz-mcp-bridge` — stdio.
+
 ## Как добавить…
 - **Инструмент эскиза**: `SketchTool` (SketchEditor.h) → строка в `kTools`
   (SketchEditor.cpp, размер массива +1) → `case` в диспетчере → `Handle…` в
@@ -77,6 +86,9 @@ Zip: `manifest.json` (версия формата) + `document.json` (дерев
 - **Операцию модели**: `document/XxxFeature.{h,cpp}` (поля, Save/Load, регистрация в
   FeatureRegistry) → применение в `kernel/Model.cpp` (+ `occt/Xxx.cpp`) → панель
   `app/features/XxxEditor` → команда в AppActions + кнопка в Ribbon → тест в `tests/kernel`.
+- **Команду для модулей/MCP**: функция `Json Xxx(AppContext&, const Json& args)` в своей
+  группе `app/scripting/*Commands.cpp` + строка в её `AddXxxCommands` (описание для ИИ, схема
+  через `Schema`/`NumberArg`/…, `changes = true`, если меняет документ). Модуль не трогать.
 - **Настройку**: поле в `Settings.h`, чтение/запись в `Settings.cpp`, строка в
   `Dialogs.cpp`.
 
