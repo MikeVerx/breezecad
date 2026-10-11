@@ -619,6 +619,9 @@ void SketchEditor::HandleInlineEdit(AppContext& app, Session& session, const Ske
             const auto a = view.FromScreen(was), b = view.FromScreen(now);
             if (a && b) c->labelOffset = c->labelOffset + (*b - *a);
         }
+        // Pressing the grip takes focus from the field; that press must not
+        // read as "a click elsewhere", which closes the edit.
+        if (ImGui::IsItemActive()) myClickUsed = true;
         if (ImGui::IsItemDeactivated()) myEditFocus = true;   // back to typing
         ImGui::SetCursorScreenPos({at.x - width / 2, at.y - ui.S(18)});
     }
