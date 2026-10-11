@@ -1100,6 +1100,15 @@ Expected<ProjectedCurve> Model::ProjectEdge(const doc::EdgeReference& edge, cons
     return occt::ProjectEdge(*found, plane);
 }
 
+Expected<RevolvedProjection> Model::ProjectRevolved(const doc::FaceReference& face, const Frame& plane, std::size_t featureIndex) const {
+    const auto& after = myImpl->bodiesAfter;
+    if (featureIndex == 0 || featureIndex > after.size() || after[featureIndex - 1].empty()) return Error{"Нет тела, с которого проецировать"};
+    const TopoDS_Shape& body = after[featureIndex - 1].back().shape;
+    const std::optional<TopoDS_Face> found = occt::ResolveAnyFace(body, face);
+    if (!found) return Error{"Грань не найдена"};
+    return occt::ProjectRevolved(body, *found, plane);
+}
+
 std::optional<MassProperties> Model::Properties() const {
     if (myImpl->bodies.empty()) return std::nullopt;
     GProp_GProps volume, surface;

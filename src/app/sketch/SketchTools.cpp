@@ -323,12 +323,30 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
     if (index < 0 || !view.vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
     // The viewport picks the bodies before this sketch (ViewportPanel turns
     // that on while this tool is active): an edge near the cursor, else the
-    // whole outline of the face under it.
+    // whole outline of the face under it. A face of a body of revolution
+    // gives the body's axis, outline and cut by the sketch plane instead.
     const Vec2 pixel = view.vf.ToLocal(ImGui::GetMousePos());
     std::vector<doc::EdgeReference> edges;
-    if (const std::optional<doc::EdgeReference> edge = app.viewport.PickEdge(pixel)) edges.push_back(*edge);
-    else edges = app.viewport.PickFaceEdges(pixel);
-    if (edges.empty()) return;
+    const std::optional<doc::EdgeReference> pickedEdge = app.viewport.PickEdge(pixel);
+    if (pickedEdge) edges.push_back(*pickedEdge);
+    std::optional<kernel::RevolvedProjection> revolved;
+    std::string revolvedProblem;
+    const auto tryRevolved = [&] {
+        const std::optional<doc::FaceReference> face = app.viewport.PickFace(pixel, true);
+        if (!face || !face->curved) return;
+        Expected<kernel::RevolvedProjection> r = session.model.ProjectRevolved(*face, f->placement.frame, static_cast<std::size_t>(index));
+        if (r) revolved = std::move(*r);
+        else revolvedProblem = r.GetError().message;
+    };
+    // An edge that does not project on its own (a circle of a turned part
+    // seen from the side) is taken as a click on the body of revolution.
+    if (pickedEdge && !session.model.ProjectEdge(*pickedEdge, f->placement.frame, static_cast<std::size_t>(index))) tryRevolved();
+    if (!pickedEdge) {
+        tryRevolved();
+        if (!revolved) edges = app.viewport.PickFaceEdges(pixel);
+    }
+    if (revolved) edges.clear();
+    if (edges.empty() && !revolved) return;
 
     auto before = f->Clone();
     sketch::Sketch& sk = f->sketch;
@@ -342,49 +360,37 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
         sk.FindPoint(id)->projected = true;
         return id;
     };
-    int added = 0, already = 0;
-    std::string problem;
-    for (const doc::EdgeReference& edge : edges) {
-        bool known = false;
-        for (const doc::Projection& p : f->projections)
-            known = known || (p.edge.curve == edge.curve && (p.edge.middle - edge.middle).Length() < 1e-6);
-        if (known) {
-            ++already;
-            continue;
-        }
-        const Expected<kernel::ProjectedCurve> projected =
-            session.model.ProjectEdge(edge, f->placement.frame, static_cast<std::size_t>(index));
-        if (!projected) {
-            problem = projected.GetError().message;
-            continue;
-        }
+    // Puts one projected curve into the sketch; `link` makes it follow the
+    // model edge. Returns false when there is nothing to draw.
+    const auto place = [&](const kernel::ProjectedCurve& projected, const doc::EdgeReference* link, bool axis) {
         ObjectId curve;
-        switch (projected->kind) {
+        switch (projected.kind) {
             case kernel::ProjectedCurve::Kind::Line:
                 // An edge seen end-on projects to a point: nothing to draw.
-                if ((projected->end - projected->start).Length() < tolerance) continue;
-                curve = sk.AddLine(ids, point(projected->start), point(projected->end));
+                if ((projected.end - projected.start).Length() < tolerance) return false;
+                curve = sk.AddLine(ids, point(projected.start), point(projected.end));
                 sk.FindLine(curve)->projected = true;
+                sk.FindLine(curve)->centerline = axis;
                 break;
             case kernel::ProjectedCurve::Kind::Circle:
-                curve = sk.AddCircle(ids, point(projected->centre), projected->radius);
+                curve = sk.AddCircle(ids, point(projected.centre), projected.radius);
                 sk.FindCircle(curve)->projected = true;
                 break;
             case kernel::ProjectedCurve::Kind::Arc:
-                curve = sk.AddArc(ids, point(projected->centre), point(projected->start), point(projected->end));
+                curve = sk.AddArc(ids, point(projected.centre), point(projected.start), point(projected.end));
                 for (auto& a : sk.arcs)
                     if (a.id == curve) a.projected = true;
                 break;
         }
-        if (myOptions.style != LineStyle::Normal) {   // "Вспомогат." chosen before picking
+        if (myOptions.style != LineStyle::Normal && !axis) {   // "Вспомогат." chosen before picking
             if (sketch::Line* l = sk.FindLine(curve)) l->construction = true;
             if (sketch::Circle* c = sk.FindCircle(curve)) c->construction = true;
             for (auto& a : sk.arcs)
                 if (a.id == curve) a.construction = true;
         }
-        if (myOptions.projectLinked) {
-            f->projections.push_back({edge, curve});
-        } else {
+        if (myOptions.projectLinked && link) {
+            f->projections.push_back({*link, curve});
+        } else if (!myOptions.projectLinked) {
             // Независимая: ordinary geometry held where it is.
             std::vector<ObjectId> own;
             if (sketch::Line* l = sk.FindLine(curve)) {
@@ -418,15 +424,50 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
                     sk.AddConstraint(ids, fix);
                 }
         }
-        ++added;
+        return true;
+    };
+    int added = 0, already = 0;
+    std::string problem;
+    for (const doc::EdgeReference& edge : edges) {
+        bool known = false;
+        for (const doc::Projection& p : f->projections)
+            known = known || (p.edge.curve == edge.curve && (p.edge.middle - edge.middle).Length() < 1e-6);
+        if (known) {
+            ++already;
+            continue;
+        }
+        const Expected<kernel::ProjectedCurve> projected =
+            session.model.ProjectEdge(edge, f->placement.frame, static_cast<std::size_t>(index));
+        if (!projected) {
+            problem = projected.GetError().message;
+            continue;
+        }
+        if (place(*projected, &edge, false)) ++added;
+    }
+    if (revolved) {
+        // Not linked to the model: an outline is not an edge to find again.
+        if (revolved->axis && place(*revolved->axis, nullptr, true)) ++added;
+        if (revolved->centre) {
+            const ObjectId c = point(*revolved->centre);
+            if (!myOptions.projectLinked)
+                if (sketch::Point* pt = sk.FindPoint(c)) pt->projected = false;
+            ++added;
+        }
+        for (const kernel::ProjectedCurve& c : revolved->outline) added += place(c, nullptr, false) ? 1 : 0;
+        for (const kernel::ProjectedCurve& c : revolved->section) added += place(c, nullptr, false) ? 1 : 0;
+        if (revolved->outlineSkipped)
+            app.notes.Info(Tr("Ось тела вращения наклонена к плоскости эскиза: спроецированы только ось и сечение"));
     }
     if (added == 0) {
-        app.notes.Info(!problem.empty() ? problem : already > 0 ? Tr("Это уже спроецировано") : Tr("Здесь нечего проецировать"));
+        if (problem.empty()) problem = revolvedProblem;
+        app.notes.Info(!problem.empty() ? Tr(problem) : already > 0 ? Tr("Это уже спроецировано") : Tr("Здесь нечего проецировать"));
         return;
     }
     if (!problem.empty()) app.notes.Info(Trf("Часть рёбер не спроецирована: {}", Tr(problem)));
     session.doc.MarkChanged(static_cast<std::size_t>(index));
-    session.CommitInPlaceEdit(std::move(before), edges.size() > 1 ? Tr("Проецирование грани") : Tr("Проецирование геометрии"));
+    session.CommitInPlaceEdit(std::move(before), revolved         ? Tr("Проецирование тела вращения")
+                                                 : edges.size() > 1 ? Tr("Проецирование грани")
+                                                                    : Tr("Проецирование геометрии"));
 }
 
 std::size_t SketchEditor::ClicksNeeded() const {

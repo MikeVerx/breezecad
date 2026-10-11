@@ -4,6 +4,9 @@
 
 #include "core/Math.h"
 
+#include <optional>
+#include <vector>
+
 namespace bz::kernel {
 
 struct ProjectedCurve {
@@ -11,6 +14,16 @@ struct ProjectedCurve {
     Vec2   start, end;      ///< line ends; arc ends, counter-clockwise on the sketch plane
     Vec2   centre;          ///< circles and arcs
     double radius = 0.0;
+};
+
+/// A body of revolution as it appears on a sketch plane: its axis, its
+/// outline (the extreme positions of the profile) and where the plane cuts it.
+struct RevolvedProjection {
+    std::optional<ProjectedCurve> axis;     ///< a line, when the axis is not seen end-on
+    std::optional<Vec2>           centre;   ///< the axis seen end-on
+    std::vector<ProjectedCurve>   outline;
+    std::vector<ProjectedCurve>   section;  ///< empty when the plane does not cut the body
+    bool                          outlineSkipped = false;   ///< axis slanted to the plane: no outline
 };
 
 } // namespace bz::kernel

@@ -132,6 +132,9 @@ public:
     /// A model edge as it would appear on `plane`, taken from the bodies as
     /// they were before feature number `featureIndex` (a sketch projecting it).
     Expected<ProjectedCurve> ProjectEdge(const doc::EdgeReference& edge, const Frame& plane, std::size_t featureIndex) const;
+    /// The body of revolution with the face `face` (of the body before
+    /// feature `featureIndex`) on `plane`: axis, outline and cut by the plane.
+    Expected<RevolvedProjection> ProjectRevolved(const doc::FaceReference& face, const Frame& plane, std::size_t featureIndex) const;
 
     /// Volume, area, centre and exact size of all bodies; nullopt without bodies.
     std::optional<MassProperties> Properties() const;

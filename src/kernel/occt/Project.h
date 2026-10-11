@@ -4,6 +4,8 @@
 #include "kernel/Projection.h"
 
 #include <TopoDS_Edge.hxx>
+#include <TopoDS_Face.hxx>
+#include <TopoDS_Shape.hxx>
 
 namespace bz::kernel::occt {
 
@@ -11,5 +13,12 @@ namespace bz::kernel::occt {
 /// any direction, and circles and arcs that lie parallel to the plane; other
 /// edges (an ellipse in projection, splines) are reported as errors.
 Expected<ProjectedCurve> ProjectEdge(const TopoDS_Edge& edge, const Frame& frame);
+
+/// The body of revolution `face` belongs to (the faces of `body` around the
+/// same axis, connected to `face`) seen on the plane of `frame`: the axis,
+/// the outline and the cut by the plane. Curves that are neither lines nor
+/// circles come as short lines. An error when `face` is not a surface of
+/// revolution.
+Expected<RevolvedProjection> ProjectRevolved(const TopoDS_Shape& body, const TopoDS_Face& face, const Frame& frame);
 
 } // namespace bz::kernel::occt

@@ -20,6 +20,7 @@ add_executable(bz_tests
     kernel/ModelTests.cpp
     kernel/PatternTests.cpp
     kernel/ProjectionTests.cpp
+    kernel/RevolvedProjectionTests.cpp
     kernel/RevolveTests.cpp
     kernel/SectionTests.cpp
     kernel/ShellTests.cpp
