@@ -2,6 +2,7 @@ add_library(bz_kernel STATIC
     AssemblyModel.cpp
     AssemblyReadApi.cpp
     AutoDrop.cpp
+    ComponentPattern.cpp
     Model.cpp
     occt/Coil.cpp
     occt/Section.cpp

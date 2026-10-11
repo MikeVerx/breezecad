@@ -92,6 +92,45 @@ struct Freedom {
     int Total() const { return translations + rotations; }
 };
 
+/// How a component pattern ("Массив") repeats its seed.
+enum class PatternKind : unsigned char {
+    Holes,         ///< into the holes like the one the seed sits in (same size, plane and side of a part)
+    Rectangular,   ///< rows and columns along two directions
+    Circular,      ///< around an axis
+};
+
+/// A component pattern: copies ("instances") of a group of components (the
+/// seed: a bolt with its washer and nut...) placed by a rule, each tied by
+/// constraints like the seed's. One node in the tree; edited and removed as
+/// a whole. The instances are ordinary components the kernel rebuilds
+/// (kernel/ComponentPattern.h) when the pattern changes.
+struct ComponentPattern {
+    ObjectId              id;
+    std::string           name;   ///< "Массив:1"
+    PatternKind           kind = PatternKind::Holes;
+    std::vector<ObjectId> seed;   ///< the components repeated, the main one first
+
+    /// Holes: the rim of the hole the seed sits in (a Circle of the holder).
+    GeometryRef rim;
+    /// Rectangular: unit directions in the assembly, counts (with the seed) and steps, mm.
+    Vec3   direction1{1, 0, 0}, direction2{0, 1, 0};
+    int    count1 = 2, count2 = 1;
+    double spacing1 = 20.0, spacing2 = 20.0;
+    /// Circular: an axis of a component (Axis, Cylinder or Circle); unset:
+    /// `axisOrigin`/`axisDirection` in the assembly. `angle` is the total
+    /// sweep (2π: evenly all round), `count` includes the seed.
+    GeometryRef axis;
+    Vec3        axisOrigin, axisDirection{0, 0, 1};
+    int         count = 4;
+    double      angle = 2 * kPi;
+
+    /// Per instance, the components made for it, in the order of `seed`.
+    std::vector<std::vector<ObjectId>> instances;
+
+    bool Contains(ObjectId component) const;   ///< in the seed or an instance
+    bool IsInstance(ObjectId component) const;
+};
+
 struct AssemblyInfo {
     std::string name;
     std::string designation;
@@ -102,6 +141,7 @@ public:
     AssemblyInfo            info;
     std::vector<Component>  components;
     std::vector<Constraint> constraints;
+    std::vector<ComponentPattern> patterns;
 
     IdGenerator&       Ids() { return myIds; }
     const IdGenerator& Ids() const { return myIds; }
@@ -114,11 +154,24 @@ public:
 
     /// Adds a component with a fresh id and a tree name "<base>:N".
     Component& AddComponent(std::string path, std::string_view baseName, const Placement& at = {});
-    /// Removes it and every constraint on it.
+    /// Removes it and every constraint on it. Removing a pattern's seed
+    /// component removes the pattern with its instances; removing an
+    /// instance drops it from its pattern.
     void RemoveComponent(ObjectId id);
     /// Adds a constraint with a fresh id and a name "<type>:N".
     Constraint& AddConstraint(Constraint c);
     void RemoveConstraint(ObjectId id);
+
+    /// Adds a pattern with a fresh id and a name "Массив:N" (no instances yet).
+    ComponentPattern&       AddPattern(ComponentPattern p);
+    ComponentPattern*       FindPattern(ObjectId id);
+    const ComponentPattern* FindPattern(ObjectId id) const;
+    /// The pattern `component` is an instance of, or nullptr.
+    const ComponentPattern* PatternOfInstance(ObjectId component) const;
+    /// Removes the instances of pattern `id` (components and their constraints).
+    void ClearInstances(ObjectId id);
+    /// Removes the pattern with its instances; the seed stays.
+    void RemovePattern(ObjectId id);
 
     /// Constraints that tie component `id`.
     std::vector<const Constraint*> ConstraintsOf(ObjectId id) const;

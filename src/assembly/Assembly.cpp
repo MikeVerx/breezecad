@@ -64,6 +64,15 @@ Component& Assembly::AddComponent(std::string path, std::string_view baseName, c
 }
 
 void Assembly::RemoveComponent(ObjectId id) {
+    for (std::size_t i = patterns.size(); i-- > 0;) {
+        ComponentPattern& p = patterns[i];
+        if (std::find(p.seed.begin(), p.seed.end(), id) != p.seed.end()) {
+            RemovePattern(p.id);
+        } else {
+            for (auto& instance : p.instances) std::erase(instance, id);
+            std::erase_if(p.instances, [](const auto& instance) { return instance.empty(); });
+        }
+    }
     std::erase_if(constraints, [&](const Constraint& c) { return c.first.component == id || c.second.component == id; });
     std::erase_if(components, [&](const Component& c) { return c.id == id; });
     Touch();
@@ -79,6 +88,55 @@ Constraint& Assembly::AddConstraint(Constraint c) {
 
 void Assembly::RemoveConstraint(ObjectId id) {
     std::erase_if(constraints, [&](const Constraint& c) { return c.id == id; });
+    Touch();
+}
+
+bool ComponentPattern::IsInstance(ObjectId component) const {
+    for (const auto& instance : instances)
+        if (std::find(instance.begin(), instance.end(), component) != instance.end()) return true;
+    return false;
+}
+
+bool ComponentPattern::Contains(ObjectId component) const {
+    return std::find(seed.begin(), seed.end(), component) != seed.end() || IsInstance(component);
+}
+
+ComponentPattern& Assembly::AddPattern(ComponentPattern p) {
+    p.id   = myIds.Next();
+    p.name = NextName(patterns, "Массив");
+    patterns.push_back(std::move(p));
+    Touch();
+    return patterns.back();
+}
+
+ComponentPattern* Assembly::FindPattern(ObjectId id) {
+    for (ComponentPattern& p : patterns)
+        if (p.id == id) return &p;
+    return nullptr;
+}
+const ComponentPattern* Assembly::FindPattern(ObjectId id) const { return const_cast<Assembly*>(this)->FindPattern(id); }
+
+const ComponentPattern* Assembly::PatternOfInstance(ObjectId component) const {
+    for (const ComponentPattern& p : patterns)
+        if (p.IsInstance(component)) return &p;
+    return nullptr;
+}
+
+void Assembly::ClearInstances(ObjectId id) {
+    ComponentPattern* p = FindPattern(id);
+    if (!p) return;
+    std::vector<ObjectId> gone;
+    for (const auto& instance : p->instances) gone.insert(gone.end(), instance.begin(), instance.end());
+    p->instances.clear();
+    const auto removed = [&](ObjectId c) { return std::find(gone.begin(), gone.end(), c) != gone.end(); };
+    std::erase_if(constraints, [&](const Constraint& c) { return removed(c.first.component) || removed(c.second.component); });
+    std::erase_if(components, [&](const Component& c) { return removed(c.id); });
+    Touch();
+}
+
+void Assembly::RemovePattern(ObjectId id) {
+    ClearInstances(id);
+    std::erase_if(patterns, [&](const ComponentPattern& p) { return p.id == id; });
     Touch();
 }
 

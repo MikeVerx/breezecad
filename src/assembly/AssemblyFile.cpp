@@ -61,6 +61,27 @@ Json ToJson(const GeometryRef& g) {
     return j;
 }
 
+constexpr std::array<std::pair<PatternKind, std::string_view>, 3> kPatternKinds{{
+    {PatternKind::Holes, "holes"},
+    {PatternKind::Rectangular, "rectangular"},
+    {PatternKind::Circular, "circular"},
+}};
+
+Json IdsToJson(const std::vector<ObjectId>& ids) {
+    Json j = Json::array();
+    for (ObjectId id : ids) j.push_back(id.value);
+    return j;
+}
+
+bool ReadIds(const Json& j, std::vector<ObjectId>& out) {
+    if (!j.is_array()) return false;
+    for (const Json& v : j) {
+        if (!v.is_number_unsigned()) return false;
+        out.push_back(ObjectId{v.get<std::uint64_t>()});
+    }
+    return true;
+}
+
 bool Read(const Json& j, GeometryRef& out) {
     if (!j.is_object()) return false;
     GeometryRef g;
@@ -111,6 +132,35 @@ std::string AssemblyToJson(const Assembly& a) {
         {"components", std::move(components)},
         {"constraints", std::move(constraints)},
     };
+    if (!a.patterns.empty()) {
+        Json patterns = Json::array();
+        for (const ComponentPattern& p : a.patterns) {
+            Json j{{"id", p.id.value}, {"name", p.name}, {"kind", jio::IdOf(kPatternKinds, p.kind)}, {"seed", IdsToJson(p.seed)}};
+            switch (p.kind) {
+                case PatternKind::Holes: j["rim"] = ToJson(p.rim); break;
+                case PatternKind::Rectangular:
+                    j["direction1"] = jio::ToJson(p.direction1);
+                    j["count1"] = p.count1;
+                    j["spacing1"] = p.spacing1;
+                    j["direction2"] = jio::ToJson(p.direction2);
+                    j["count2"] = p.count2;
+                    j["spacing2"] = p.spacing2;
+                    break;
+                case PatternKind::Circular:
+                    if (p.axis.IsSet()) j["axis"] = ToJson(p.axis);
+                    j["axisOrigin"] = jio::ToJson(p.axisOrigin);
+                    j["axisDirection"] = jio::ToJson(p.axisDirection);
+                    j["count"] = p.count;
+                    j["angle"] = p.angle;
+                    break;
+            }
+            Json instances = Json::array();
+            for (const auto& instance : p.instances) instances.push_back(IdsToJson(instance));
+            j["instances"] = std::move(instances);
+            patterns.push_back(std::move(j));
+        }
+        root["patterns"] = std::move(patterns);
+    }
     return root.dump(1, '\t');
 }
 
@@ -163,6 +213,39 @@ Expected<Assembly> AssemblyFromJson(std::string_view text, std::vector<std::stri
         }
         reserve(c.id);
         a.constraints.push_back(std::move(c));
+    }
+
+    for (const Json& j : root.value("patterns", Json::array())) {
+        ComponentPattern p;
+        if (!j.is_object()) return Error{"Повреждён массив компонентов"};
+        const std::string kind = j.value("kind", "");
+        if (!jio::FromId(kPatternKinds, kind, p.kind)) {
+            if (warnings) warnings->push_back(std::format("Массив вида «{}» не поддерживается и пропущен", kind));
+            continue;
+        }
+        const auto seed = j.find("seed");
+        if (!ReadMember(j, "id", p.id) || !p.id || !ReadMember(j, "name", p.name) || seed == j.end() ||
+            !ReadIds(*seed, p.seed) || !ReadMember(j, "direction1", p.direction1) || !ReadMember(j, "count1", p.count1) ||
+            !ReadMember(j, "spacing1", p.spacing1) || !ReadMember(j, "direction2", p.direction2) ||
+            !ReadMember(j, "count2", p.count2) || !ReadMember(j, "spacing2", p.spacing2) ||
+            !ReadMember(j, "axisOrigin", p.axisOrigin) || !ReadMember(j, "axisDirection", p.axisDirection) ||
+            !ReadMember(j, "count", p.count) || !ReadMember(j, "angle", p.angle))
+            return Error{"Повреждён массив компонентов"};
+        if (const auto r = j.find("rim"); r != j.end() && !Read(*r, p.rim)) return Error{std::format("Повреждён массив «{}»", p.name)};
+        if (const auto r = j.find("axis"); r != j.end() && !Read(*r, p.axis)) return Error{std::format("Повреждён массив «{}»", p.name)};
+        for (const Json& instance : j.value("instances", Json::array())) {
+            std::vector<ObjectId> ids;
+            if (!ReadIds(instance, ids)) return Error{std::format("Повреждён массив «{}»", p.name)};
+            std::erase_if(ids, [&](ObjectId id) { return !a.FindComponent(id); });
+            if (!ids.empty()) p.instances.push_back(std::move(ids));
+        }
+        std::erase_if(p.seed, [&](ObjectId id) { return !a.FindComponent(id); });
+        if (p.seed.empty()) {
+            if (warnings) warnings->push_back(std::format("Массив «{}» ссылается на удалённые компоненты и пропущен", p.name));
+            continue;
+        }
+        reserve(p.id);
+        a.patterns.push_back(std::move(p));
     }
 
     if (std::uint64_t next = root.value("nextId", std::uint64_t{0}); next > 0) a.Ids().Reserve(ObjectId{next - 1});

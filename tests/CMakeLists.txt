@@ -10,6 +10,7 @@ add_executable(bz_tests
     document/DocumentTests.cpp
     kernel/AssemblyModelTests.cpp
     kernel/AutoDropTests.cpp
+    kernel/ComponentPatternTests.cpp
     kernel/BracketTests.cpp
     kernel/CoilTests.cpp
     kernel/FilletTests.cpp

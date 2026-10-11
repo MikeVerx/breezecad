@@ -135,6 +135,22 @@ std::optional<GeometryRef> FromFace(const TopoDS_Face& face, Vec3 pick, bool axi
 
 /// The circular edge of `shape` nearest `p`, oriented by the flat face it
 /// bounds (outward), so "Вставка" puts faces against each other.
+GeometryRef CircleOf(const BRepAdaptor_Curve& curve, const TopTools_ListOfShape& faces, Vec3 pick) {
+    const gp_Circ circle = curve.Circle();
+    GeometryRef g;
+    g.kind = GeometryKind::Circle;
+    g.origin = ToVec(circle.Location().XYZ());
+    g.direction = ToVec(circle.Axis().Direction().XYZ()).Normalized();
+    g.radius = circle.Radius();
+    g.pick = pick;
+    for (const TopoDS_Shape& f : faces)
+        if (auto n = PlaneNormal(TopoDS::Face(f)); n && std::abs(n->Dot(g.direction)) > 0.999) {
+            g.direction = *n;
+            break;
+        }
+    return g;
+}
+
 std::optional<GeometryRef> NearestCircle(const TopoDS_Shape& shape, Vec3 pick, double tolerance) {
     TopTools_IndexedDataMapOfShapeListOfShape faces;
     TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, faces);
@@ -147,22 +163,29 @@ std::optional<GeometryRef> NearestCircle(const TopoDS_Shape& shape, Vec3 pick, d
         if (curve.GetType() != GeomAbs_Circle) continue;
         const double d = DistanceTo(edge, p);
         if (d >= bestDistance) continue;
-        const gp_Circ circle = curve.Circle();
-        GeometryRef g;
-        g.kind = GeometryKind::Circle;
-        g.origin = ToVec(circle.Location().XYZ());
-        g.direction = ToVec(circle.Axis().Direction().XYZ()).Normalized();
-        g.radius = circle.Radius();
-        g.pick = pick;
-        for (const TopoDS_Shape& f : faces.FindFromIndex(i))
-            if (auto n = PlaneNormal(TopoDS::Face(f)); n && std::abs(n->Dot(g.direction)) > 0.999) {
-                g.direction = *n;
-                break;
-            }
         bestDistance = d;
-        best = g;
+        best = CircleOf(curve, faces.FindFromIndex(i), pick);
     }
     return best;
+}
+
+/// Every full circular edge of `shape`, oriented as NearestCircle does.
+std::vector<GeometryRef> AllCircles(const TopoDS_Shape& shape) {
+    TopTools_IndexedDataMapOfShapeListOfShape faces;
+    TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, faces);
+    std::vector<GeometryRef> out;
+    for (int i = 1; i <= faces.Extent(); ++i) {
+        const TopoDS_Edge edge = TopoDS::Edge(faces.FindKey(i));
+        const BRepAdaptor_Curve curve(edge);
+        if (curve.GetType() != GeomAbs_Circle) continue;
+        // Arcs (a slot's end, a rounded corner) are not holes.
+        if (std::abs(curve.LastParameter() - curve.FirstParameter() - 2 * kPi) > 1e-6) continue;
+        GeometryRef g = CircleOf(curve, faces.FindFromIndex(i), {});
+        const Vec3 side{g.direction.y, -g.direction.x, 0};   // in the circle's plane
+        g.pick = g.origin + (side.Length() > 1e-9 ? side.Normalized() : Vec3{1, 0, 0}) * g.radius;
+        out.push_back(g);
+    }
+    return out;
 }
 
 } // namespace
@@ -371,6 +394,36 @@ bool AssemblyModel::Refresh(const assembly::Assembly& a, GeometryRef& ref) const
         found->direction = -found->direction;   // an axis keeps the sense it had
     ref = *found;
     return true;
+}
+
+std::vector<GeometryRef> AssemblyModel::SameHoles(const assembly::Assembly& a, const GeometryRef& rim) const {
+    std::vector<GeometryRef> out;
+    const Impl::Part* part = myImpl->PartFor(rim.component);
+    if (!a.FindComponent(rim.component) || !part || part->shape.IsNull() || rim.kind != GeometryKind::Circle) return out;
+    const Vec3 n = rim.direction.Normalized();
+    try {
+        for (GeometryRef g : AllCircles(part->shape)) {
+            if (std::abs(g.radius - rim.radius) > 1e-6 || g.direction.Dot(n) < 0.999 ||
+                std::abs((g.origin - rim.origin).Dot(n)) > 1e-4)
+                continue;
+            if (std::any_of(out.begin(), out.end(), [&](const GeometryRef& o) { return (o.origin - g.origin).Length() < 1e-4; }))
+                continue;
+            g.component = rim.component;
+            g.direction = rim.direction;
+            out.push_back(g);
+        }
+    } catch (const Standard_Failure&) {
+        return {};
+    }
+    // The picked one first, the rest by distance from it (a stable order).
+    std::sort(out.begin(), out.end(), [&](const GeometryRef& x, const GeometryRef& y) {
+        const double dx = (x.origin - rim.origin).Length(), dy = (y.origin - rim.origin).Length();
+        if (std::abs(dx - dy) > 1e-6) return dx < dy;
+        if (std::abs(x.origin.x - y.origin.x) > 1e-6) return x.origin.x < y.origin.x;
+        if (std::abs(x.origin.y - y.origin.y) > 1e-6) return x.origin.y < y.origin.y;
+        return x.origin.z < y.origin.z;
+    });
+    return out;
 }
 
 std::optional<Bounds> AssemblyModel::ComponentBounds(ObjectId component) const {

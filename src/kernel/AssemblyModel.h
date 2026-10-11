@@ -86,6 +86,12 @@ public:
     /// Nullopt when there is no material there.
     std::optional<HoleStack> StackAt(const assembly::Assembly& assembly, const assembly::GeometryRef& rim) const;
 
+    /// Holes of `rim`'s component like it: rims of the same radius on the
+    /// same plane, facing the same way (a pattern of holes, a bolt circle...),
+    /// in the part's coordinates; `rim` itself first, then by distance.
+    std::vector<assembly::GeometryRef> SameHoles(const assembly::Assembly& assembly,
+                                                 const assembly::GeometryRef& rim) const;
+
     /// Box of a component in the assembly; nullopt without geometry.
     std::optional<Bounds> ComponentBounds(ObjectId component) const;
 
