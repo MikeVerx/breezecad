@@ -2,6 +2,7 @@
 #include "assembly/AssemblyFile.h"
 #include "document/BzcFile.h"
 #include "kernel/AssemblyModel.h"
+#include "kernel/AssemblyReadApi.h"
 
 #include <doctest.h>
 
@@ -169,4 +170,59 @@ TEST_CASE("a missing part is reported once, a changed one is reloaded") {
     CHECK(f.a.constraints[0].first.direction.z == Approx(1));
     CHECK(f.a.Revision() != revision);   // to be solved again
     CHECK(m.Shown().Volume() == Approx(40 * 40 * 15 + kPi * 25 * 20).epsilon(1e-3));
+}
+
+TEST_CASE("clashes are reported under the components' tree names") {
+    Fixture f;
+    kernel::AssemblyModel m;
+    f.a.FindComponent(f.pin)->placement.translation = {20, 20, 5};
+    f.a.FindComponent(f.pin)->name = "Ось:7";   // renamed in the tree
+    f.a.Touch();
+    m.Update(f.a, f.assemblyFile);
+    const auto& bodies = m.Shown().Bodies();
+    const auto& found  = m.Shown().Interferences();   // what the "Коллизии" button lists
+    REQUIRE(found.size() == 1);
+    CHECK(bodies[found[0].first].name == "Плита:1");
+    CHECK(bodies[found[0].second].name == "Ось:7");
+    CHECK(bodies[found[0].second].id == f.pin);
+}
+
+TEST_CASE("read-only API: components, properties from the part, placed bodies") {
+    Fixture f;
+    f.a.info = {"Узел", "БРЗ.100"};
+    f.a.FindComponent(f.pin)->properties.material = "Латунь";
+    f.a.FindComponent(f.pin)->properties.quantity = 4;
+    f.a.AddComponent("parts/nothing.bzc", "Нет");
+    kernel::AssemblyModel m;
+    m.Update(f.a, f.assemblyFile);
+    const kernel::AssemblyReader read(f.a, m);
+    CHECK(read.Info().name == "Узел");
+
+    const auto all = read.Components();
+    REQUIRE(all.size() == 3);
+    CHECK(all[0].treeName == "Плита:1");
+    CHECK(all[0].name == "Плита");          // from the part
+    CHECK(all[0].designation == "БРЗ.001");
+    CHECK(all[0].material == "Сталь 3");
+    CHECK(all[0].grounded);
+    CHECK(all[0].hasGeometry);
+    CHECK(all[1].name == "pin");            // part has no name: the file's
+    CHECK(all[1].material == "Латунь");     // the component's own value wins
+    CHECK(all[1].quantity == 4);
+    CHECK(all[1].placement.translation.x == Approx(100));
+    CHECK_FALSE(all[2].hasGeometry);
+    CHECK_FALSE(all[2].problem.empty());
+    CHECK_FALSE(read.Component(ObjectId{}).has_value());
+
+    const auto pin = read.BodiesOf(f.pin);
+    REQUIRE(pin.has_value());
+    CHECK(pin->Volume() == Approx(kPi * 25 * 20).epsilon(1e-3));
+    const auto box = pin->BoundingBox();
+    REQUIRE(box.has_value());
+    CHECK(box->min.x == Approx(95).epsilon(1e-3));
+    CHECK(box->max.x == Approx(105).epsilon(1e-3));
+    CHECK(box->max.z == Approx(20).epsilon(1e-3));
+    CHECK_FALSE(read.BodiesOf(all[2].id).has_value());
+    // Reading changes nothing.
+    CHECK(m.Shown().Bodies().size() == 2);
 }

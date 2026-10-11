@@ -59,6 +59,9 @@ public:
     const doc::Document* PartOf(ObjectId component) const;
     /// Its bodies before placing (in the part's own coordinates), or nullptr.
     const Model* PartModelOf(ObjectId component) const;
+    /// Copies of its part's bodies placed at `at` (the component's placement):
+    /// a separate model in assembly coordinates, nullopt without geometry.
+    std::optional<Model> PlacedModelOf(ObjectId component, const assembly::Placement& at) const;
     /// Why a component has no geometry ("Файл не найден: …"), or empty.
     std::string ProblemOf(ObjectId component) const;
 

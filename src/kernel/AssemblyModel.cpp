@@ -382,6 +382,21 @@ std::optional<Bounds> AssemblyModel::ComponentBounds(ObjectId component) const {
     return std::nullopt;
 }
 
+std::optional<Model> AssemblyModel::PlacedModelOf(ObjectId component, const Placement& at) const {
+    const Model* part = PartModelOf(component);
+    if (!part || part->GetImpl().bodies.empty()) return std::nullopt;
+    const TopLoc_Location where(ToTrsf(at));
+    Model out;
+    Model::Impl& impl = out.EditImpl();
+    for (const Body& b : part->GetImpl().bodies) {
+        impl.bodies.push_back({b.id, b.name, b.shape.Moved(where)});
+        impl.infos.push_back({b.id, b.name});
+    }
+    impl.bodiesSet = true;
+    ++impl.revision;
+    return out;
+}
+
 std::vector<ComponentClash> AssemblyModel::Clashes() const {
     const Model& shown = *myImpl->shown;
     const auto& bodies = shown.GetImpl().bodies;
