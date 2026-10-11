@@ -1008,3 +1008,86 @@ Expected<Made> MakePart(const Request& q) {
 }
 
 } // namespace bz::doc::parts
+
+// ===========================================================================
+// Fitting into a hole of an assembly (AutoDrop).
+// ===========================================================================
+
+namespace bz::doc::parts {
+
+double ThreadPitch(double d) { return Pitch(d); }
+
+std::string SizeForHole(const StandardInfo& standard, double diameter) {
+    std::string best;
+    double bestD = 0;
+    for (const std::string& size : Sizes(standard)) {
+        const std::optional<double> d = SizeNumber(size);
+        if (!d) continue;
+        // Passes through, and the hole is not much wider than a clearance
+        // hole (ISO 273 coarse: 1.1·d + 1 at most) — then it is meant for a
+        // bigger part.
+        if (*d > diameter + 0.05 || diameter > 1.3 * *d + 1.2) continue;
+        if (*d > bestD) bestD = *d, best = size;
+    }
+    return best;
+}
+
+double LengthFor(const StandardInfo& standard, std::string_view size, double needed) {
+    std::vector<double> lengths = Lengths(standard, size);
+    std::ranges::sort(lengths);
+    for (double l : lengths)
+        if (l >= needed - 1e-6) return l;
+    return 0;
+}
+
+double HeightOf(const StandardInfo& standard, std::string_view size) {
+    const std::optional<double> d = SizeNumber(size);
+    if (!d) return 0;
+    switch (standard.kind) {
+        case PartKind::HexNut:
+        case PartKind::LockNut:
+            if (const NutRow* r = FindRow(NutRows(standard.id), *d)) return standard.kind == PartKind::LockNut ? r->h : r->m;
+            break;
+        case PartKind::FlatWasher:
+        case PartKind::SpringWasher:
+            if (const WasherRow* r = FindRow(WasherRows(standard.id), *d)) return r->h;
+            break;
+        default: break;
+    }
+    return 0;
+}
+
+std::optional<Seat> SeatOf(const Request& request) {
+    const StandardInfo* s = FindStandard(request.standard);
+    if (!s) return std::nullopt;
+    const std::optional<double> d = SizeNumber(request.size);
+    if (!d) return std::nullopt;
+    const Vec3 down{0, 0, -1};
+    switch (s->kind) {
+        case PartKind::HexBolt:
+        case PartKind::SocketScrew:
+        case PartKind::PanScrew:   // under the head, around the shank
+            return Seat{{0, 0, 0}, down, *d / 2};
+        case PartKind::HexNut:
+        case PartKind::LockNut:    // the underside, around the threaded hole
+            if (!FindRow(NutRows(s->id), *d)) return std::nullopt;
+            return Seat{{0, 0, 0}, down, (*d - 1.0825 * Pitch(*d)) / 2};
+        case PartKind::FlatWasher:
+        case PartKind::SpringWasher:
+            if (const WasherRow* r = FindRow(WasherRows(s->id), *d)) return Seat{{0, 0, 0}, down, r->inner / 2};
+            return std::nullopt;
+        default: return std::nullopt;
+    }
+}
+
+std::optional<Seat> TopOf(const Request& request) {
+    const StandardInfo* s = FindStandard(request.standard);
+    if (!s || (s->kind != PartKind::FlatWasher && s->kind != PartKind::SpringWasher)) return std::nullopt;
+    std::optional<Seat> seat = SeatOf(request);
+    if (!seat) return std::nullopt;
+    seat->centre = {0, 0, HeightOf(*s, request.size)};
+    seat->normal = {0, 0, 1};
+    return seat;
+}
+
+} // namespace bz::doc::parts

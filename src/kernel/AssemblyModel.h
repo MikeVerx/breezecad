@@ -25,6 +25,13 @@ enum class AssemblyPick : unsigned char {
     Axis,     ///< the axis of the round face under the cursor (Совпадение осей)
 };
 
+/// What is around a hole: the stack of components its axis goes through.
+struct HoleStack {
+    double                thickness = 0;   ///< mm, from the picked rim to where the material ends
+    ObjectId              last;            ///< the component the stack ends in
+    assembly::GeometryRef farRim;          ///< the hole's rim on the far side (Circle), when found
+};
+
 /// A pair of components that share material.
 struct ComponentClash {
     ObjectId first, second;   ///< component ids
@@ -72,6 +79,12 @@ public:
     /// Finds a constraint's geometry again after its part changed (by the
     /// point it was picked at). False when it is gone.
     bool Refresh(const assembly::Assembly& assembly, assembly::GeometryRef& ref) const;
+
+    /// The stack of material under a hole's rim `rim` (a Circle picked with
+    /// GeometryAt): along the axis, into the material, across touching
+    /// components. Measured beside the hole, just outside its radius.
+    /// Nullopt when there is no material there.
+    std::optional<HoleStack> StackAt(const assembly::Assembly& assembly, const assembly::GeometryRef& rim) const;
 
     /// Box of a component in the assembly; nullopt without geometry.
     std::optional<Bounds> ComponentBounds(ObjectId component) const;

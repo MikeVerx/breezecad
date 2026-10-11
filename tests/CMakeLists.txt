@@ -9,6 +9,7 @@ add_executable(bz_tests
     document/AppearanceTests.cpp
     document/DocumentTests.cpp
     kernel/AssemblyModelTests.cpp
+    kernel/AutoDropTests.cpp
     kernel/BracketTests.cpp
     kernel/CoilTests.cpp
     kernel/FilletTests.cpp

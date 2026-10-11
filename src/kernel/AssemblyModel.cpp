@@ -9,6 +9,9 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
+#include <BRepClass3d_SolidClassifier.hxx>
+#include <IntCurvesFace_ShapeIntersector.hxx>
+#include <gp_Lin.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRep_Builder.hxx>
 #include <Bnd_Box.hxx>
@@ -21,6 +24,7 @@
 #include <TopoDS_Compound.hxx>
 #include <gp_Trsf.hxx>
 
+#include <algorithm>
 #include <cmath>
 #include <format>
 #include <map>
@@ -380,6 +384,82 @@ std::optional<Bounds> AssemblyModel::ComponentBounds(ObjectId component) const {
             return Bounds{{x0, y0, z0}, {x1, y1, z1}};
         }
     return std::nullopt;
+}
+
+std::optional<HoleStack> AssemblyModel::StackAt(const assembly::Assembly& a, const GeometryRef& rim) const {
+    const assembly::Component* c = a.FindComponent(rim.component);
+    if (!c || rim.kind != GeometryKind::Circle) return std::nullopt;
+    const Vec3 o = c->placement.Point(rim.origin);
+    const Vec3 n = c->placement.Direction(rim.direction).Normalized();
+    const Vec3 u = (std::abs(n.x) < 0.9 ? Vec3{1, 0, 0} : Vec3{0, 1, 0}).Cross(n).Normalized();
+    const Vec3 v = n.Cross(u);
+    const auto& bodies = myImpl->shown->GetImpl().bodies;
+    constexpr double kStart = 1.0, kReach = 5000.0, kGap = 0.05;
+
+    struct Run {
+        double   end = 0;
+        ObjectId last;
+    };
+    // Material along one line parallel to the axis, from kStart outside the rim inwards.
+    const auto along = [&](Vec3 side) -> std::optional<Run> {
+        const Vec3 p0 = o + side + n * kStart;
+        const gp_Lin line(ToPnt(p0), gp_Dir(-n.x, -n.y, -n.z));
+        struct Span {
+            double t0, t1;
+            ObjectId id;
+        };
+        std::vector<Span> spans;
+        for (const Body& b : bodies) {
+            IntCurvesFace_ShapeIntersector hits;
+            hits.Load(b.shape, 1e-6);
+            hits.Perform(line, 0, kReach);
+            std::vector<double> ts;
+            for (int i = 1; i <= hits.NbPnt(); ++i) ts.push_back(hits.WParameter(i));
+            std::ranges::sort(ts);
+            for (std::size_t i = 0; i + 1 < ts.size(); ++i) {
+                if (ts[i + 1] - ts[i] < 1e-6) continue;
+                const double mid = (ts[i] + ts[i + 1]) / 2;
+                BRepClass3d_SolidClassifier inside(b.shape, ToPnt(p0 - n * mid), 1e-6);
+                if (inside.State() == TopAbs_IN) spans.push_back({ts[i], ts[i + 1], b.id});
+            }
+        }
+        std::ranges::sort(spans, {}, &Span::t0);
+        Run run{kStart, {}};
+        for (const Span& s : spans) {
+            if (s.t0 > run.end + kGap) break;
+            if (s.t1 > run.end) run = {s.t1, s.id};
+        }
+        if (!run.last) return std::nullopt;
+        run.end -= kStart;
+        return run;
+    };
+
+    // Four lines around the hole; the stack is what most of them agree on
+    // (one may run off the edge of a part or into a neighbouring feature).
+    std::vector<Run> runs;
+    try {
+        const double rho = rim.radius + 0.4;
+        for (const Vec3& side : {u * rho, v * rho, u * -rho, v * -rho})
+            if (auto r = along(side)) runs.push_back(*r);
+    } catch (const Standard_Failure&) {
+        return std::nullopt;
+    }
+    if (runs.empty()) return std::nullopt;
+    const Run* best = &runs.front();
+    int bestVotes = 0;
+    for (const Run& r : runs) {
+        const int votes = int(std::ranges::count_if(runs, [&](const Run& q) { return std::abs(q.end - r.end) < 0.01; }));
+        if (votes > bestVotes || (votes == bestVotes && r.end > best->end)) best = &r, bestVotes = votes;
+    }
+    HoleStack out{best->end, best->last, {}};
+    // The rim on the far side: a circle of the last component there, facing away.
+    const Vec3 farPoint = o - n * out.thickness + u * rim.radius;
+    if (auto g = GeometryAt(a, out.last, farPoint, AssemblyPick::Circle)) {
+        const assembly::Component* fc = a.FindComponent(out.last);
+        const Vec3 centre = fc->placement.Point(g->origin), dir = fc->placement.Direction(g->direction);
+        if (dir.Dot(n) < -0.999 && (centre - (o - n * out.thickness)).Length() < 0.05) out.farRim = *g;
+    }
+    return out;
 }
 
 std::optional<Model> AssemblyModel::PlacedModelOf(ObjectId component, const Placement& at) const {

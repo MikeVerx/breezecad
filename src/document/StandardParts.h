@@ -12,6 +12,7 @@
 #include "core/Expected.h"
 #include "document/Document.h"
 
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -114,5 +115,34 @@ Expected<Made> MakePart(const Request& request);
 
 /// "Болт М10×40 ГОСТ 7798-70"; empty for an unknown request.
 std::string Designation(const Request& request);
+
+// --- Fitting into a hole of an assembly (AutoDrop) ---------------------------
+
+/// Coarse thread pitch of a nominal diameter, mm.
+double ThreadPitch(double d);
+/// The size of `standard` for a round hole of `diameter`: the largest
+/// nominal diameter that passes through it while the hole is still a
+/// clearance hole for it (up to 1.3·d + 1.2 mm). Empty when none fits.
+std::string SizeForHole(const StandardInfo& standard, double diameter);
+/// The shortest length of the standard not shorter than `needed` (0 when
+/// even the longest is short, or the part has no length).
+double LengthFor(const StandardInfo& standard, std::string_view size, double needed);
+/// Height along the axis of a washer or a nut (lock nut: with its collar);
+/// 0 for other kinds or an unknown size.
+double HeightOf(const StandardInfo& standard, std::string_view size);
+
+/// The circular edge a part sits on when it is put into a hole, in the
+/// part's own coordinates: centre, outward normal of its flat face, radius.
+/// Screws and bolts: under the head; washers and nuts: their underside.
+struct Seat {
+    Vec3   centre;
+    Vec3   normal;
+    double radius = 0;
+};
+/// Nullopt for kinds that are not put into holes this way (countersunk
+/// screws — their head sits in a cone —, bearings, rings, pins).
+std::optional<Seat> SeatOf(const Request& request);
+/// The top of a washer (its far side from the seat), to stack on it.
+std::optional<Seat> TopOf(const Request& request);
 
 } // namespace bz::doc::parts
