@@ -19,6 +19,10 @@
 #include <unordered_set>
 #include <vector>
 
+namespace bz::modules {
+class ModuleManager;
+}
+
 namespace bz::app {
 
 class SketchEditor;
@@ -44,7 +48,7 @@ struct ShellState {
     bool               showAbout = false;
     bool               showSettings = false;
     bool               backgroundMenu = false;   ///< open the "Фон" menu at the cursor
-    int                settingsTab = 0;          ///< 0 interface, 1 keys
+    int                settingsTab = 0;          ///< 0 interface, 1 keys, 2 mouse, 3 general, 4 performance, 5 modules
     std::string        captureShortcut;          ///< action whose new shortcut is being pressed
     std::string        shortcutFilter;
     std::string        shortcutNote;             ///< "taken from …" after a reassignment
@@ -165,6 +169,7 @@ struct AppContext {
     double            now = 0.0;
     FrameStats        stats;
     std::vector<ImGuiKeyChord> pressedChords;    ///< key chords pressed this frame (for shortcut capture)
+    modules::ModuleManager*    modules = nullptr; ///< set once the modules are loaded
 
     Session* Doc() { return workspace.Active(); }
 

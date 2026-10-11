@@ -84,7 +84,8 @@ bool Window::Create(const WindowConfig& config) {
     glfwMakeContextCurrent(myWindow);
     glfwSwapInterval(1);
     glfwSetWindowSizeLimits(myWindow, 800, 500, GLFW_DONT_CARE, GLFW_DONT_CARE);
-    log::Info("Window: OpenGL {}", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+    if (const auto* version = reinterpret_cast<const char*>(glGetString(GL_VERSION))) myGLVersion = version;
+    log::Info("Window: OpenGL {}", myGLVersion);
     return true;
 }
 

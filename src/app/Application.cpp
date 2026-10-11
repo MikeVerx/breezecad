@@ -5,6 +5,8 @@
 #include "app/shell/Shell.h"
 #include "app/shell/Splash.h"
 #include "app/Backgrounds.h"
+#include "modules/ModuleHost.h"
+#include "modules/ModuleManager.h"
 #include "core/Image.h"
 #include "app/viewport/ViewportPanel.h"
 #include "core/Log.h"
@@ -69,6 +71,7 @@ void OnKey(GLFWwindow* window, int key, int scancode, int action, int mods) {
 Application::Application() = default;
 
 Application::~Application() {
+    myModules.reset();   // modules shut down while everything they may touch is still there
     if (myUi) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
@@ -169,6 +172,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myContext = std::make_unique<AppContext>(AppContext{*myUi, mySettings, myWorkspace, myActions, myNotes, *myAutosave,
                                                         myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}});
     RegisterActions(*myContext);
+    StartModules();
     for (const auto& [id, chord] : mySettings.shortcuts) myActions.SetChord(id, ActionRegistry::ParseChord(chord));
 
     for (const auto& file : files) {
@@ -266,6 +270,24 @@ int Application::Run() {
     mySettings.Save(platform::ConfigDir() / "settings.json");
     log::Info("BreezeCAD exits normally");
     return 0;
+}
+
+/// Modules from the folder next to the program (shipped) and from the user's
+/// config folder (installed by the user); see src/modules/ModuleManager.h.
+void Application::StartModules() {
+    const std::filesystem::path config = platform::ConfigDir();
+    myModules = std::make_unique<modules::ModuleManager>(config / "modules.json", modules::HostApi());
+    modules::HostInfo host = modules::HostInfo::Detect();
+    host.openGL            = myWindow.OpenGLVersion();
+    myModules->Discover(platform::AssetsDir().parent_path() / "modules", host);
+    myModules->Discover(config / "modules", host);
+    myModules->LoadAll();
+    myContext->modules = myModules.get();
+    if (const std::string& id = myModules->CrashedLastRun(); !id.empty()) {
+        const modules::ModuleEntry* m = myModules->Find(id);
+        myNotes.Error(Trf("Модуль «{}» аварийно закрыл BreezeCAD в прошлый раз и отключён. Включить снова: Настройки → Модули.",
+                          m ? m->manifest.name : id));
+    }
 }
 
 bool Application::NeedsAnotherFrame() const {

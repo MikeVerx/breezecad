@@ -44,6 +44,8 @@ public:
     /// The windowed place and size, and whether it is maximized now.
     void  Geometry(int& x, int& y, int& width, int& height, bool& maximized) const;
     bool  IsMinimized() const;
+    /// "4.6.0 NVIDIA …" as the driver reports it; empty before Create.
+    const std::string& OpenGLVersion() const { return myGLVersion; }
     /// Shows a window created hidden (maximized then, if it was asked to be).
     void  Show();
 
@@ -54,6 +56,7 @@ public:
 private:
     GLFWwindow* myWindow = nullptr;
     bool        myMaximizeOnShow = false;
+    std::string myGLVersion;
 };
 
 } // namespace bz::platform

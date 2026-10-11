@@ -70,6 +70,9 @@ public:
     const std::vector<ModuleEntry>& Modules() const { return myModules; }
     const ModuleEntry*              Find(const std::string& id) const;
 
+    /// Id of the module the previous run died in; empty when it ended normally.
+    const std::string& CrashedLastRun() const { return myCrashedLastRun; }
+
     /// The marker file (for tests and diagnostics).
     std::filesystem::path MarkerPath() const;
 
@@ -87,6 +90,7 @@ private:
     std::vector<ModuleEntry> myModules;
     std::vector<std::string> myOff;                                  ///< switched off by the user
     std::vector<std::pair<std::string, std::string>> myCrashed;      ///< id, what happened
+    std::string              myCrashedLastRun;
 };
 
 } // namespace bz::modules

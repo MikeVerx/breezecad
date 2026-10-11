@@ -84,6 +84,8 @@ private:
 
     std::unique_ptr<ui::Ui>     myUi;
     std::unique_ptr<AppContext> myContext;
+    std::unique_ptr<modules::ModuleManager> myModules;   ///< unloaded first in ~Application
+    void StartModules();
 
     InputTap myInput;
     int    myFramesToDraw = 3;

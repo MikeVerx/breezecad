@@ -152,6 +152,7 @@ TEST_CASE("a module that crashed last time is switched off") {
     {
         ModuleManager mm(f.state, HostApi());
         CHECK_FALSE(fs::exists(mm.MarkerPath()));
+        CHECK(mm.CrashedLastRun() == "hello");
         mm.Discover(f.mods, Roomy());
         mm.LoadAll();
         const ModuleEntry* m = mm.Find("hello");

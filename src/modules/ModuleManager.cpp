@@ -52,6 +52,7 @@ ModuleManager::ModuleManager(std::filesystem::path statePath, const BzHostApi* h
         Erase(myCrashed, id);
         myCrashed.emplace_back(id, "BreezeCAD аварийно закрылся во время работы модуля — модуль отключён");
         log::Warn("Модуль «{}» упал в прошлый раз и отключён", id);
+        myCrashedLastRun = id;
         WriteState();
     }
     ClearMarker();

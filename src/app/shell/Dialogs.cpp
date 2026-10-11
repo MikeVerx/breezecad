@@ -14,6 +14,7 @@
 #include "app/assembly/AssemblyUi.h"
 #include "document/StandardParts.h"
 #include "core/PathText.h"
+#include "modules/ModuleManager.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
 #include "ui/Menus.h"
@@ -593,6 +594,66 @@ void DrawOptimizationSettings(AppContext& app, float width) {
                "«Сразу» — по-старому, на случай если фоновый расчёт ведёт себя странно."));
 }
 
+/// The "Модули" tab: what was found, whether it runs, why not; on/off.
+void DrawModuleSettings(AppContext& app, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    const auto caption = [&](const std::string& text, const Color& color) {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(color));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(text.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    };
+    const std::filesystem::path folder = platform::ConfigDir() / "modules";
+    if (!app.modules || app.modules->Modules().empty())
+        caption(Tr("Модули не найдены. Модуль — папка с module.json и библиотекой; положите её в папку модулей "
+                   "и перезапустите BreezeCAD."),
+                c.textMuted);
+    if (app.modules) {
+        for (const modules::ModuleEntry& m : app.modules->Modules()) {
+            ImGui::Dummy({0, ui.S(4)});
+            {
+                ui::FontScope font(ui.fonts.strong);
+                ImGui::TextUnformatted(m.manifest.version.empty() ? m.manifest.name.c_str()
+                                                                  : std::format("{} {}", m.manifest.name, m.manifest.version).c_str());
+            }
+            if (!m.manifest.description.empty()) caption(m.manifest.description, c.textMuted);
+            using modules::ModuleState;
+            const char* state = N_("Найден");
+            switch (m.state) {
+                case ModuleState::Found: state = N_("Не загружен"); break;
+                case ModuleState::Loaded: state = N_("Работает"); break;
+                case ModuleState::Off: state = N_("Выключен"); break;
+                case ModuleState::Unsupported: state = N_("Не подходит для этого компьютера"); break;
+                case ModuleState::Failed: state = N_("Не запустился"); break;
+                case ModuleState::Crashed: state = N_("Отключён после сбоя"); break;
+            }
+            const bool bad = m.state == ModuleState::Unsupported || m.state == ModuleState::Failed || m.state == ModuleState::Crashed;
+            caption(m.problem.empty() ? std::string(Tr(state)) : Trf("{}: {}", Tr(state), Tr(m.problem)),
+                    bad ? c.danger : m.state == ModuleState::Loaded ? c.success : c.textMuted);
+            if (m.state == ModuleState::Unsupported) continue;   // nothing to switch: the computer lacks something
+            static constexpr std::array<const char*, 2> onOff{N_("Включён"), N_("Выключен")};
+            const int now = m.state == ModuleState::Loaded ? 0 : 1;
+            const std::string id = "module-" + m.manifest.id;
+            if (const int n = ui::Segmented(ui, id.c_str(), onOff, now, 2, width); n != now) {
+                const std::string moduleId = m.manifest.id;   // the list may change: act after the frame
+                app.Later([&app, moduleId, n] {
+                    const bool done = n == 0 ? app.modules->TurnOn(moduleId) : app.modules->TurnOff(moduleId);
+                    if (!done && n == 0) app.notes.Error(Tr("Модуль не запустился — причина в списке модулей"));
+                });
+            }
+        }
+    }
+    ImGui::Dummy({0, ui.S(6)});
+    if (ui::LinkButton(ui, "##modules-folder", Tr("Папка модулей"))) {
+        std::error_code ec;
+        std::filesystem::create_directories(folder, ec);
+        if (!platform::OpenFolder(folder)) app.notes.Error(Tr("Не удалось открыть папку"));
+    }
+}
+
 /// The "Мышь" tab: a ready-made set of view gestures, or each one by hand.
 void DrawMouseSettings(AppContext& app, float width) {
     ui::Ui& ui = app.ui;
@@ -687,8 +748,9 @@ void DrawSettings(AppContext& app) {
         ImGui::TextUnformatted(Tr("Настройки"));
     }
     const float width = ImGui::GetContentRegionAvail().x;
-    static constexpr std::array<const char*, 5> tabs{N_("Интерфейс"), N_("Клавиши"), N_("Мышь"), N_("Общие"), N_("Оптимизация")};
-    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 5, width);
+    static constexpr std::array<const char*, 6> tabs{N_("Интерфейс"), N_("Клавиши"), N_("Мышь"), N_("Общие"), N_("Оптимизация"),
+                                                     N_("Модули")};
+    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 6, width);
     ImGui::Dummy({0, ui.S(6)});
 
     if (app.shell.settingsTab == 0) {
@@ -727,6 +789,8 @@ void DrawSettings(AppContext& app) {
         if (ui::LinkButton(ui, "##open-backgrounds", Tr("Выбрать на вкладке «Вид» → «Фон»…"))) app.shell.backgroundMenu = true;
     } else if (app.shell.settingsTab == 4) {
         DrawOptimizationSettings(app, width);
+    } else if (app.shell.settingsTab == 5) {
+        DrawModuleSettings(app, width);
     } else if (app.shell.settingsTab == 2) {
         DrawMouseSettings(app, width);
     } else if (app.shell.settingsTab == 3) {

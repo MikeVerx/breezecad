@@ -71,7 +71,7 @@ if(WIN32)
     endif()
 endif()
 target_link_libraries(breezecad PRIVATE
-    bz::core bz::document bz::assembly bz::kernel bz::render bz::ui bz::platform
+    bz::core bz::document bz::assembly bz::kernel bz::modules bz::render bz::ui bz::platform
     bz::imgui bz::miniz bz::json lunasvg::lunasvg glfw OpenGL::GL)
 bz_set_warnings(breezecad)
 
