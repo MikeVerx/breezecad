@@ -1,5 +1,6 @@
 #include "kernel/Model.h"
 
+#include "core/FaultGuard.h"
 #include "core/Log.h"
 #include "document/CoilFeature.h"
 #include "document/SectionFeature.h"
@@ -800,7 +801,10 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
         // or our code throws becomes that operation's error, and the bodies
         // stay as they were before it.
         const std::vector<Body> before = skip ? std::vector<Body>{} : bodies;
-        if (!skip) try {
+        // A crash inside OCCT itself (it happens on some degenerate shapes)
+        // costs this operation only: RunGuarded stops it and the part goes on.
+        std::string fault;
+        const bool survived = skip || guard::RunGuarded([&] { try {
             if (auto* sk = dynamic_cast<doc::SketchFeature*>(&f)) {
                 const bool placed = FollowSupport(*sk, doc, bodies);
                 const bool projectedFound = UpdateProjections(*sk, bodies);
@@ -936,6 +940,11 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
         } catch (const std::exception& e) {
             bodies = before;
             f.status = {FeatureState::Error, std::format("Внутренняя ошибка: {}", e.what())};
+        } }, &fault);
+        if (!survived) {
+            bodies = before;
+            f.status = {FeatureState::Error, "Геометрическое ядро не смогло выполнить операцию (сбой внутри OpenCASCADE): измените параметры или геометрию"};
+            log::Error("{}: OCCT fault ({}) — operation skipped", f.name, fault);
         }
         if (f.status.state == FeatureState::Error) log::Warn("{}: {}", f.name, f.status.message);
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - featureStart).count();
