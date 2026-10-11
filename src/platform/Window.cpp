@@ -85,7 +85,10 @@ bool Window::Create(const WindowConfig& config) {
     glfwSwapInterval(1);
     glfwSetWindowSizeLimits(myWindow, 800, 500, GLFW_DONT_CARE, GLFW_DONT_CARE);
     if (const auto* version = reinterpret_cast<const char*>(glGetString(GL_VERSION))) myGLVersion = version;
+    if (const auto* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR))) myGLVendor = vendor;
+    if (const auto* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER))) myGLRenderer = renderer;
     log::Info("Window: OpenGL {}", myGLVersion);
+    log::Info("Graphics: {} / {}", myGLVendor, myGLRenderer);
     return true;
 }
 

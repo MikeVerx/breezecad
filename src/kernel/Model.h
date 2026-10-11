@@ -148,4 +148,7 @@ private:
     std::unique_ptr<Impl> myImpl;
 };
 
+/// "OpenCASCADE 7.9.3": the geometry kernel the program was built with (for reports).
+std::string GeometryKernelVersion();
+
 } // namespace bz::kernel

@@ -1,5 +1,7 @@
 #include "kernel/Model.h"
 
+#include <Standard_Version.hxx>
+
 #include "core/FaultGuard.h"
 #include "core/Log.h"
 #include "document/CoilFeature.h"
@@ -1206,5 +1208,7 @@ double Model::Volume() const {
     }
     return volume;
 }
+
+std::string GeometryKernelVersion() { return std::string("OpenCASCADE ") + OCC_VERSION_COMPLETE; }
 
 } // namespace bz::kernel

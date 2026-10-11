@@ -46,6 +46,9 @@ public:
     bool  IsMinimized() const;
     /// "4.6.0 NVIDIA …" as the driver reports it; empty before Create.
     const std::string& OpenGLVersion() const { return myGLVersion; }
+    /// Graphics card and driver as OpenGL names them (for reports).
+    const std::string& OpenGLVendor() const { return myGLVendor; }
+    const std::string& OpenGLRenderer() const { return myGLRenderer; }
     /// Shows a window created hidden (maximized then, if it was asked to be).
     void  Show();
 
@@ -56,7 +59,7 @@ public:
 private:
     GLFWwindow* myWindow = nullptr;
     bool        myMaximizeOnShow = false;
-    std::string myGLVersion;
+    std::string myGLVersion, myGLVendor, myGLRenderer;
 };
 
 } // namespace bz::platform

@@ -9,6 +9,9 @@ namespace bz::platform {
 /// the app bundle's Resources (macOS).
 std::filesystem::path AssetsDir();
 
+/// Folder of the running program (breezecad.exe).
+std::filesystem::path ExecutableDir();
+
 /// Per-user settings folder, created on demand:
 /// Windows %APPDATA%\BreezeCAD, macOS ~/Library/Application Support/BreezeCAD,
 /// Linux $XDG_CONFIG_HOME/breezecad.

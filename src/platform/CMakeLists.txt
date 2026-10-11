@@ -3,6 +3,7 @@ add_library(bz_platform STATIC
     Launch.cpp
     Paths.cpp
     ProcessInfo.cpp
+    SystemInfo.cpp
     SystemTheme.cpp
     Window.cpp)
 target_link_libraries(bz_platform PUBLIC bz::core PRIVATE glfw OpenGL::GL bz::pfd)
