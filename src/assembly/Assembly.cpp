@@ -12,6 +12,12 @@ std::string_view ConstraintTitle(ConstraintType type) {
         case ConstraintType::Angle:    return "Угол";
         case ConstraintType::Tangent:  return "Касание";
         case ConstraintType::AxisMate: return "Совпадение осей";
+        case ConstraintType::Rotational:  return "Вращение";
+        case ConstraintType::Slider:      return "Ползун";
+        case ConstraintType::Cylindrical: return "Цилиндрическое";
+        case ConstraintType::Planar:      return "Плоское";
+        case ConstraintType::Ball:        return "Шаровое";
+        case ConstraintType::Rigid:       return "Жёсткое";
     }
     return "Зависимость";
 }

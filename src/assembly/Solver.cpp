@@ -16,10 +16,37 @@ struct WorldGeometry {
     GeometryKind kind;
     Vec3         p, d;
     double       r = 0.0;
+    Vec3         x;   ///< joints: the frame's X
 };
 
 WorldGeometry ToWorld(const Placement& at, const GeometryRef& g) {
-    return {g.kind, at.Point(g.origin), at.Direction(g.direction).Normalized(), g.radius};
+    return {g.kind, at.Point(g.origin), at.Direction(g.direction).Normalized(), g.radius,
+            at.Direction(JointFrameX(g)).Normalized()};
+}
+
+/// An angle brought into (-π, π].
+double Wrap(double a) {
+    a = std::remainder(a, 2 * kPi);
+    return a <= -kPi ? a + 2 * kPi : a;
+}
+
+/// The coordinate of a one-coordinate joint between frames a and b.
+double Coordinate(ConstraintType type, const WorldGeometry& a, const WorldGeometry& b) {
+    if (MotionOf(type) == JointMotion::Slide) return (b.p - a.p).Dot(a.d);
+    const Vec3 y = a.d.Cross(a.x);
+    return std::atan2(b.x.Dot(y), b.x.Dot(a.x));
+}
+
+/// How far `q` is outside the limits (signed: past `upper` positive), 0 inside.
+double OutsideLimits(JointMotion motion, const JointLimits& l, double q) {
+    if (motion == JointMotion::Slide) return q < l.lower ? q - l.lower : q > l.upper ? q - l.upper : 0.0;
+    // Angles go round: from `lower`, `range` forward is inside.
+    const double range = std::clamp(l.upper - l.lower, 0.0, 2 * kPi);
+    double from = std::fmod(q - l.lower, 2 * kPi);
+    if (from < 0) from += 2 * kPi;
+    if (from <= range) return 0.0;
+    const double past = from - range, before = 2 * kPi - from;
+    return past < before ? past : -before;
 }
 
 bool IsPlane(const WorldGeometry& g) { return g.kind == GeometryKind::Plane; }
@@ -42,9 +69,12 @@ void Collinear(std::vector<double>& out, const WorldGeometry& a, const WorldGeom
     Push(out, Across(b.p - a.p, a.d));
 }
 
-/// Equations of one constraint; all in millimetres.
-void Residuals(const Constraint& c, WorldGeometry a, WorldGeometry b, std::vector<double>& out) {
+/// Equations of one constraint; all in millimetres. `limits`: with the rows
+/// that keep joints within their limits (not when counting freedom: a limit
+/// does not take a freedom away).
+void Residuals(const Constraint& c, WorldGeometry a, WorldGeometry b, std::vector<double>& out, bool limits = true) {
     const double sign = c.flipped ? -1.0 : 1.0;
+    const Vec3   facing = c.flipped ? a.d - b.d : a.d + b.d;   // joints: Z opposed, or the same way
     switch (c.type) {
         case ConstraintType::Mate:
             if (IsPlane(a) && IsPlane(b)) {
@@ -92,6 +122,41 @@ void Residuals(const Constraint& c, WorldGeometry a, WorldGeometry b, std::vecto
             }
             break;
         }
+        case ConstraintType::Rotational:
+            Push(out, facing, kScale);
+            Push(out, Across(b.p - a.p, a.d));
+            out.push_back((b.p - a.p).Dot(a.d) - c.value);
+            break;
+        case ConstraintType::Slider:
+            Push(out, facing, kScale);
+            Push(out, Across(b.p - a.p, a.d));
+            Push(out, b.x - a.x, kScale);
+            break;
+        case ConstraintType::Cylindrical:
+            Push(out, facing, kScale);
+            Push(out, Across(b.p - a.p, a.d));
+            break;
+        case ConstraintType::Planar:
+            Push(out, facing, kScale);
+            out.push_back((b.p - a.p).Dot(a.d) - c.value);
+            break;
+        case ConstraintType::Ball:
+            Push(out, b.p - a.p);
+            break;
+        case ConstraintType::Rigid:
+            Push(out, facing, kScale);
+            Push(out, b.p - a.p - a.d * c.value);
+            Push(out, b.x - a.x, kScale);
+            break;
+    }
+    // The coordinate of a one-coordinate joint: held when locked, kept within
+    // limits. Always the same number of rows (zero when free).
+    if (const JointMotion motion = MotionOf(c.type); motion != JointMotion::None) {
+        const double q = Coordinate(c.type, a, b);
+        const double k = motion == JointMotion::Rotation ? kScale : 1.0;
+        const double off = motion == JointMotion::Rotation ? Wrap(q - c.position) : q - c.position;
+        out.push_back(c.locked ? off * k : 0.0);
+        if (limits) out.push_back(c.limits.enabled ? OutsideLimits(motion, c.limits, q) * k : 0.0);
     }
 }
 
@@ -175,6 +240,7 @@ struct System {
     std::vector<Placement>       start;        ///< their placements at the start
     std::vector<double>          weight;       ///< how readily each moves (1; less for the kept one)
     std::unordered_map<ObjectId, std::size_t> index;
+    bool                         limits = true;   ///< with the joint-limit rows
 
     Placement PoseOf(std::size_t i, const std::vector<double>& y) const {
         const double* v = &y[6 * i];
@@ -197,7 +263,7 @@ struct System {
         for (const Constraint* c : active) {
             if (rows) rows->push_back(out.size());
             Residuals(*c, ToWorld(PlacementOf(c->first.component, y), c->first),
-                      ToWorld(PlacementOf(c->second.component, y), c->second), out);
+                      ToWorld(PlacementOf(c->second.component, y), c->second), out, limits);
         }
         if (rows) rows->push_back(out.size());
         return out;
@@ -249,6 +315,64 @@ double ConstraintError(const Assembly& assembly, const Constraint& c) {
     std::vector<double> out;
     Residuals(c, ToWorld(a->placement, c.first), ToWorld(b->placement, c.second), out);
     return Norm(out);
+}
+
+Vec3 JointFrameX(const GeometryRef& g) {
+    const Vec3 d = g.direction.Length() > 0.5 ? g.direction.Normalized() : Vec3{0, 0, 1};
+    Vec3 x = g.reference - d * g.reference.Dot(d);
+    if (x.Length() < 1e-6) {
+        const Vec3 e = std::abs(d.x) < 0.9 ? Vec3{1, 0, 0} : Vec3{0, 1, 0};
+        x = e - d * e.Dot(d);
+    }
+    return x.Normalized();
+}
+
+std::optional<double> JointPosition(const Assembly& assembly, const Constraint& c) {
+    const Component* a = assembly.FindComponent(c.first.component);
+    const Component* b = assembly.FindComponent(c.second.component);
+    if (!a || !b || MotionOf(c.type) == JointMotion::None) return std::nullopt;
+    return Coordinate(c.type, ToWorld(a->placement, c.first), ToWorld(b->placement, c.second));
+}
+
+void FitJoint(const Assembly& assembly, Constraint& c) {
+    const Component* a = assembly.FindComponent(c.first.component);
+    const Component* b = assembly.FindComponent(c.second.component);
+    if (!a || !b) return;
+    const WorldGeometry wa = ToWorld(a->placement, c.first), wb = ToWorld(b->placement, c.second);
+    c.flipped = wa.d.Dot(wb.d) > 0;
+    // The first frame's X, square to the second's Z, in the second part's coordinates.
+    const Vec3 x = wa.x - wb.d * wa.x.Dot(wb.d);
+    if (x.Length() > 1e-9) c.second.reference = b->placement.rotation.Transposed() * x.Normalized();
+    if (MotionOf(c.type) == JointMotion::Slide) c.position = (wb.p - wa.p).Dot(wa.d);
+    else if (MotionOf(c.type) == JointMotion::Rotation) c.position = 0.0;
+}
+
+SolveResult DriveJoint(Assembly& assembly, ObjectId id, double position, SolveOptions options) {
+    Constraint* c = assembly.FindConstraint(id);
+    if (!c || MotionOf(c->type) == JointMotion::None) return {};
+    const JointMotion motion = MotionOf(c->type);
+    if (c->limits.enabled) {
+        if (motion == JointMotion::Slide) {
+            position = std::clamp(position, c->limits.lower, c->limits.upper);
+        } else {
+            const double out = OutsideLimits(motion, c->limits, position);
+            if (out != 0.0) position -= out;   // to the nearer end
+        }
+    }
+    if (motion == JointMotion::Rotation) position = Wrap(position);
+    const bool   wasLocked = c->locked;
+    const double was = c->position;
+    c->locked   = true;
+    c->position = position;
+    if (!options.keep) options.keep = c->first.component;
+    const SolveResult r = Solve(assembly, options);
+    c = assembly.FindConstraint(id);   // Solve does not add or remove, but stay safe
+    if (!wasLocked) {
+        c->locked   = false;
+        c->position = was;
+    }
+    assembly.Touch();
+    return r;
 }
 
 SolveResult Solve(Assembly& a, const SolveOptions& options) {
@@ -327,6 +451,7 @@ SolveResult Solve(Assembly& a, const SolveOptions& options) {
     // Against the final placements (the system above started from the old ones).
     std::vector<std::size_t> rows;
     System fin = MakeSystem(a, {});
+    fin.limits = false;   // a joint at its limit is not "redundant" or "failed" for it
     std::vector<double> y0(6 * fin.free.size(), 0.0);
     const std::vector<double> f0 = fin.F(y0, &rows);
     const Matrix j = y0.empty() ? Matrix(f0.size()) : fin.J(y0, f0);
@@ -355,7 +480,8 @@ SolveResult Solve(Assembly& a, const SolveOptions& options) {
 std::unordered_map<ObjectId, Freedom> AnalyzeFreedom(const Assembly& a) {
     std::unordered_map<ObjectId, Freedom> out;
     auto& mutableAssembly = const_cast<Assembly&>(a);   // the system only reads it here
-    const System s = MakeSystem(mutableAssembly, {});
+    System s = MakeSystem(mutableAssembly, {});
+    s.limits = false;
     for (const Component& c : a.components) out[c.id] = c.grounded ? Freedom{0, 0} : Freedom{3, 3};
     if (s.free.empty()) return out;
     const std::vector<double> y(6 * s.free.size(), 0.0);

@@ -54,6 +54,9 @@ struct GeometryRef {
     Vec3         direction;        ///< normal or axis, unit; zero for a point
     double       radius = 0.0;     ///< cylinder, sphere, circle
     Vec3         pick;             ///< where it was picked (to find it again after the part changes)
+    /// Joints: the frame's X, across `direction` (part coordinates). Zero:
+    /// one made from `direction` (see JointFrameX).
+    Vec3         reference{};
 
     bool IsSet() const { return component.IsValid(); }
     bool HasAxis() const {
@@ -67,6 +70,39 @@ enum class ConstraintType : unsigned char {
     Angle,       ///< "Угол" between two planes or axes
     Tangent,     ///< "Касание": a cylinder or a sphere touches a plane, cylinder or sphere
     AxisMate,    ///< "Совпадение осей": two axes on one line
+
+    // Joints ("соединения"): two frames (origin, Z = direction, X =
+    // reference) tied so that only the motion the joint names is left.
+    // Z of the frames face each other unless `flipped`.
+    Rotational,  ///< "Вращение": one axis, origins' planes `value` apart; turns about Z
+    Slider,      ///< "Ползун": one line, X kept; slides along Z
+    Cylindrical, ///< "Цилиндрическое": one axis; turns and slides
+    Planar,      ///< "Плоское": Z opposed, planes `value` apart; slides in the plane, turns about Z
+    Ball,        ///< "Шаровое": origins coincide; turns any way
+    Rigid,       ///< "Жёсткое": frames coincide; nothing left
+};
+
+/// A joint (Rotational…Rigid), not a plain constraint.
+constexpr bool IsJoint(ConstraintType t) { return t >= ConstraintType::Rotational; }
+
+/// What the one free coordinate of a joint measures.
+enum class JointMotion : unsigned char {
+    None,       ///< several or none (Cylindrical, Planar, Ball, Rigid)
+    Rotation,   ///< Rotational: angle about Z, rad
+    Slide,      ///< Slider: shift along Z, mm
+};
+constexpr JointMotion MotionOf(ConstraintType t) {
+    return t == ConstraintType::Rotational ? JointMotion::Rotation
+         : t == ConstraintType::Slider     ? JointMotion::Slide
+                                           : JointMotion::None;
+}
+
+/// Where a joint's coordinate may go (rad or mm). An angle range is taken
+/// round from `lower` to `upper`.
+struct JointLimits {
+    bool   enabled = false;
+    double lower = 0.0, upper = 0.0;
+    bool operator==(const JointLimits&) const = default;
 };
 
 enum class ConstraintState : unsigned char { Unknown, Satisfied, Failed, Redundant };
@@ -79,6 +115,11 @@ struct Constraint {
     double         value   = 0.0;   ///< gap / offset in mm; angle in radians
     bool           flipped = false; ///< Mate: flush (normals the same way); Insert: aligned; Tangent: inside
     bool           suppressed = false;
+    /// Joints with one coordinate: held at `position` (rad or mm, measured
+    /// from where the frames' X agree / the origins' planes meet).
+    bool           locked   = false;
+    double         position = 0.0;
+    JointLimits    limits;
 
     // Computed by the solver, not saved.
     ConstraintState state = ConstraintState::Unknown;

@@ -153,3 +153,28 @@ TEST_CASE("removing a component removes its constraints") {
     // Names keep counting from what is free.
     CHECK(a.AddComponent("x.bzc", "Основание").name == "Основание:2");
 }
+
+TEST_CASE("joint: lock, position, limits and frame X survive a round trip") {
+    Assembly a = SampleAssembly();
+    Constraint j;
+    j.type   = ConstraintType::Rotational;
+    j.first  = {a.components[0].id, GeometryKind::Circle, {0, 0, 10}, {0, 0, 1}, 5.0, {5, 0, 10}};
+    j.second = {a.components[1].id, GeometryKind::Circle, {0, 0, 0}, {0, 0, -1}, 5.0, {5, 0, 0}, {0, 1, 0}};
+    j.locked = true;
+    j.position = 0.5;
+    j.limits = {true, -1.0, 1.25};
+    a.AddConstraint(j);
+    const std::string text = AssemblyToJson(a);
+    Expected<Assembly> b = AssemblyFromJson(text);
+    REQUIRE(b);
+    REQUIRE(b->constraints.size() == 2);
+    const Constraint& c = b->constraints[1];
+    CHECK(c.type == ConstraintType::Rotational);
+    CHECK(c.name == "Вращение:1");
+    CHECK(c.locked);
+    CHECK(c.position == doctest::Approx(0.5));
+    CHECK(c.limits == JointLimits{true, -1.0, 1.25});
+    CHECK(c.second.reference.y == doctest::Approx(1));
+    CHECK(b->constraints[0].second.reference.Length() == 0);   // not written for plain constraints
+    CHECK(AssemblyToJson(*b) == text);
+}

@@ -25,12 +25,18 @@ constexpr std::array<std::pair<GeometryKind, std::string_view>, 6> kKinds{{
     {GeometryKind::Circle, "circle"},
 }};
 
-constexpr std::array<std::pair<ConstraintType, std::string_view>, 5> kTypes{{
+constexpr std::array<std::pair<ConstraintType, std::string_view>, 11> kTypes{{
     {ConstraintType::Mate, "mate"},
     {ConstraintType::Insert, "insert"},
     {ConstraintType::Angle, "angle"},
     {ConstraintType::Tangent, "tangent"},
     {ConstraintType::AxisMate, "axisMate"},
+    {ConstraintType::Rotational, "jointRotational"},
+    {ConstraintType::Slider, "jointSlider"},
+    {ConstraintType::Cylindrical, "jointCylindrical"},
+    {ConstraintType::Planar, "jointPlanar"},
+    {ConstraintType::Ball, "jointBall"},
+    {ConstraintType::Rigid, "jointRigid"},
 }};
 
 Json ToJson(const Placement& p) {
@@ -58,6 +64,7 @@ Json ToJson(const GeometryRef& g) {
            {"pick", jio::ToJson(g.pick)}};
     if (g.direction.Length() > 0) j["direction"] = jio::ToJson(g.direction);
     if (g.radius > 0) j["radius"] = g.radius;
+    if (g.reference.Length() > 0) j["reference"] = jio::ToJson(g.reference);
     return j;
 }
 
@@ -89,7 +96,7 @@ bool Read(const Json& j, GeometryRef& out) {
     if (!jio::FromId(kKinds, kind, g.kind)) return false;
     if (!ReadMember(j, "component", g.component) || !ReadMember(j, "origin", g.origin) ||
         !ReadMember(j, "direction", g.direction) || !ReadMember(j, "radius", g.radius) ||
-        !ReadMember(j, "pick", g.pick))
+        !ReadMember(j, "pick", g.pick) || !ReadMember(j, "reference", g.reference))
         return false;
     out = g;
     return true;
@@ -123,6 +130,9 @@ std::string AssemblyToJson(const Assembly& a) {
                {"value", c.value}};
         if (c.flipped) j["flipped"] = true;
         if (c.suppressed) j["suppressed"] = true;
+        if (c.locked) j["locked"] = true;
+        if (c.locked || c.position != 0.0) j["position"] = c.position;
+        if (c.limits.enabled) j["limits"] = Json{{"lower", c.limits.lower}, {"upper", c.limits.upper}};
         constraints.push_back(std::move(j));
     }
     Json root{
@@ -205,8 +215,14 @@ Expected<Assembly> AssemblyFromJson(std::string_view text, std::vector<std::stri
         if (!ReadMember(j, "id", c.id) || !c.id || !ReadMember(j, "name", c.name) ||
             !ReadMember(j, "value", c.value) || !ReadMember(j, "flipped", c.flipped) ||
             !ReadMember(j, "suppressed", c.suppressed) || first == j.end() || second == j.end() ||
-            !Read(*first, c.first) || !Read(*second, c.second))
+            !Read(*first, c.first) || !Read(*second, c.second) || !ReadMember(j, "locked", c.locked) ||
+            !ReadMember(j, "position", c.position))
             return Error{"Повреждена зависимость сборки"};
+        if (const auto lim = j.find("limits"); lim != j.end()) {
+            if (!lim->is_object() || !ReadMember(*lim, "lower", c.limits.lower) || !ReadMember(*lim, "upper", c.limits.upper))
+                return Error{"Повреждена зависимость сборки"};
+            c.limits.enabled = true;
+        }
         if (!a.FindComponent(c.first.component) || !a.FindComponent(c.second.component)) {
             if (warnings) warnings->push_back(std::format("Зависимость «{}» ссылается на удалённый компонент и пропущена", c.name));
             continue;

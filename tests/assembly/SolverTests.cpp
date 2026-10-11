@@ -186,3 +186,127 @@ TEST_CASE("a free part without constraints has six freedoms; the kept one gives 
     CHECK(a.FindComponent(other)->placement.translation.z == Approx(50).epsilon(0.02));
     CHECK(a.FindComponent(base)->placement.translation.z == Approx(40).epsilon(0.02));
 }
+
+// --- joints --------------------------------------------------------------------------
+
+namespace {
+
+/// A joint made where the parts stand, as the UI makes it.
+ObjectId AddJoint(Assembly& a, ConstraintType type, GeometryRef first, GeometryRef second, double value = 0) {
+    Constraint c = Make(type, first, second, value);
+    FitJoint(a, c);
+    return a.AddConstraint(c).id;
+}
+
+} // namespace
+
+TEST_CASE("joints leave exactly the motion they name") {
+    struct Case { ConstraintType type; int translations, rotations; };
+    for (const Case k : {Case{ConstraintType::Rotational, 0, 1}, Case{ConstraintType::Slider, 1, 0},
+                         Case{ConstraintType::Cylindrical, 1, 1}, Case{ConstraintType::Planar, 2, 1},
+                         Case{ConstraintType::Ball, 0, 3}, Case{ConstraintType::Rigid, 0, 0}}) {
+        CAPTURE(static_cast<int>(k.type));
+        Pair t;
+        AddJoint(t.a, k.type, Circle(t.base, {0, 0, 10}, {0, 0, 1}, 4), Circle(t.part, {0, 0, 0}, {0, 0, -1}, 4));
+        const SolveResult r = Solve(t.a);
+        CHECK(r.converged);
+        CHECK(t.a.constraints[0].state == ConstraintState::Satisfied);
+        const Freedom f = AnalyzeFreedom(t.a).at(t.part);
+        CHECK(f.translations == k.translations);
+        CHECK(f.rotations == k.rotations);
+    }
+}
+
+TEST_CASE("rotational joint: puts the axis on the axis, then turns when driven") {
+    Pair t;
+    const ObjectId id = AddJoint(t.a, ConstraintType::Rotational, Circle(t.base, {20, 0, 10}, {0, 0, 1}, 4),
+                                 Circle(t.part, {0, 0, 0}, {0, 0, -1}, 4));
+    CHECK_FALSE(t.a.constraints[0].flipped);   // the part's Z looks down at the base's: facing
+    REQUIRE(Solve(t.a).converged);
+    CHECK(t.P().Point({0, 0, 0}).x == Approx(20).epsilon(1e-6));
+    CHECK(t.P().Point({0, 0, 0}).z == Approx(10).epsilon(1e-6));
+    const double start = *JointPosition(t.a, t.a.constraints[0]);
+    CHECK(std::abs(start) < 0.35);   // turned only by what the axis needed
+
+    const Vec3 tip0 = t.P().Point({10, 0, 0});
+    const SolveResult r = DriveJoint(t.a, id, kPi / 2);
+    CHECK(r.converged);
+    CHECK(*JointPosition(t.a, t.a.constraints[0]) == Approx(kPi / 2).epsilon(1e-6));
+    CHECK_FALSE(t.a.constraints[0].locked);   // driving does not lock
+    // Still on the axis; a point 10 mm out went a quarter round it.
+    CHECK(t.P().Point({0, 0, 0}).x == Approx(20).epsilon(1e-6));
+    const Vec3 tip = t.P().Point({10, 0, 0});
+    CHECK(tip.z == Approx(10).epsilon(1e-6));
+    CHECK((tip - Vec3{20, 0, 10}).Length() == Approx(10).epsilon(1e-6));
+    CHECK((tip - tip0).Length() > 5);
+}
+
+TEST_CASE("locked joint holds its position; limits keep it in range") {
+    Pair t;
+    const ObjectId id = AddJoint(t.a, ConstraintType::Rotational, Circle(t.base, {0, 0, 10}, {0, 0, 1}, 4),
+                                 Circle(t.part, {0, 0, 0}, {0, 0, -1}, 4));
+    Solve(t.a);
+    Constraint& c = *t.a.FindConstraint(id);
+    c.locked = true;
+    c.position = 0.4;
+    CHECK(Solve(t.a).converged);
+    CHECK(*JointPosition(t.a, c) == Approx(0.4).epsilon(1e-6));
+    CHECK(AnalyzeFreedom(t.a).at(t.part).Total() == 0);
+
+    // Driving a locked joint moves the lock.
+    DriveJoint(t.a, id, -0.2);
+    CHECK(c.locked);
+    CHECK(c.position == Approx(-0.2));
+
+    // Limits: driven past them, it stops at the nearer end; they do not take a freedom.
+    c.locked = false;
+    c.limits = {true, -0.5, 0.5};
+    DriveJoint(t.a, id, 1.2);
+    CHECK(*JointPosition(t.a, c) == Approx(0.5).epsilon(1e-5));
+    DriveJoint(t.a, id, -3.0);   // round past −π: nearer to −0.5
+    CHECK(*JointPosition(t.a, c) == Approx(-0.5).epsilon(1e-5));
+    CHECK(AnalyzeFreedom(t.a).at(t.part).rotations == 1);
+    CHECK(c.state == ConstraintState::Satisfied);
+
+    // Moved outside by hand: the next solve brings it back to the limit.
+    Placement& p = t.P();
+    p.rotation = Rotation::AxisAngle({0, 0, 1}, -1.0) * p.rotation;
+    CHECK(*JointPosition(t.a, c) == Approx(-1.5).epsilon(1e-5));
+    const SolveResult back = Solve(t.a);
+    CAPTURE(back.error);
+    CAPTURE(back.iterations);
+    CHECK(back.converged);
+    CHECK(*JointPosition(t.a, c) == Approx(-0.5).epsilon(1e-5));
+}
+
+TEST_CASE("slider joint: slides along the axis without turning, within limits") {
+    Pair t;
+    t.P() = {Rotation{}, {0, 0, 30}};
+    const ObjectId id = AddJoint(t.a, ConstraintType::Slider, Plane(t.base, {0, 0, 10}, {0, 0, 1}),
+                                 Plane(t.part, {0, 0, 0}, {0, 0, 1}));
+    CHECK(t.a.constraints[0].flipped);   // both normals up
+    CHECK(t.a.constraints[0].position == Approx(20));
+    CHECK(Solve(t.a).converged);
+    CHECK_FALSE(t.a.FindComponent(t.part)->placement.translation.z != Approx(30));   // already holds
+
+    t.a.FindConstraint(id)->limits = {true, 0.0, 25.0};
+    DriveJoint(t.a, id, 5.0);
+    CHECK(t.P().translation.z == Approx(15).epsilon(1e-6));
+    CHECK(t.P().Direction({1, 0, 0}).x == Approx(1).epsilon(1e-6));
+    DriveJoint(t.a, id, 100.0);
+    CHECK(*JointPosition(t.a, *t.a.FindConstraint(id)) == Approx(25).epsilon(1e-6));
+}
+
+TEST_CASE("joint with both parts free moves the second, keeps the first") {
+    Assembly a;
+    const ObjectId g = a.AddComponent("g.bzc", "Земля").id;   // grounded, ties nothing
+    const ObjectId p1 = a.AddComponent("a.bzc", "А", {Rotation{}, {0, 0, 0}}).id;
+    const ObjectId p2 = a.AddComponent("b.bzc", "Б", {Rotation{}, {0, 0, 5}}).id;
+    (void)g;
+    const ObjectId id = AddJoint(a, ConstraintType::Rotational, Circle(p1, {0, 0, 5}, {0, 0, 1}, 3),
+                                 Circle(p2, {0, 0, 0}, {0, 0, -1}, 3));
+    REQUIRE(Solve(a).converged);
+    DriveJoint(a, id, 1.0);
+    CHECK(a.FindComponent(p1)->placement.IsIdentity(1e-2));   // moved least, not nothing
+    CHECK(*JointPosition(a, *a.FindConstraint(id)) == Approx(1.0).epsilon(1e-6));
+}

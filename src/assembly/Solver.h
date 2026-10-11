@@ -11,6 +11,7 @@
 
 #include "assembly/Assembly.h"
 
+#include <optional>
 #include <unordered_map>
 
 namespace bz::assembly {
@@ -40,5 +41,28 @@ std::unordered_map<ObjectId, Freedom> AnalyzeFreedom(const Assembly& assembly);
 /// The residual of one constraint at the current placements (0 = holds),
 /// mm; for tests and the tree's tooltip.
 double ConstraintError(const Assembly& assembly, const Constraint& constraint);
+
+// --- joints ---------------------------------------------------------------------
+
+/// The X of a joint frame in the part's coordinates: `g.reference` made
+/// square to the direction, or a fixed one made from the direction.
+Vec3 JointFrameX(const GeometryRef& g);
+
+/// The coordinate of a one-coordinate joint (Rotational: rad in (-π, π],
+/// Slider: mm) at the components' current places; nullopt for other types
+/// or a missing component.
+std::optional<double> JointPosition(const Assembly& assembly, const Constraint& joint);
+
+/// For a joint just made where the parts stand: Z the way they face now
+/// (`flipped`), the second frame's X turned to agree with the first's, so
+/// that the coordinate starts at 0 (a slider: at the current shift) and
+/// nothing turns when the joint is first solved.
+void FitJoint(const Assembly& assembly, Constraint& joint);
+
+/// Moves a one-coordinate joint to `position` (kept within its limits) and
+/// places the rest by their constraints: the "drive" of a joint. A locked
+/// joint keeps the new position; an unlocked one stays free. By default the
+/// first component of the joint moves least.
+SolveResult DriveJoint(Assembly& assembly, ObjectId joint, double position, SolveOptions options = {});
 
 } // namespace bz::assembly
