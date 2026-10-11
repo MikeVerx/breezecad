@@ -17,6 +17,8 @@
 #include "ui/Widgets.h"
 
 #include <algorithm>
+#include <array>
+#include <functional>
 #include <cmath>
 #include <format>
 
@@ -200,6 +202,114 @@ void DrawComponentProperties(AppContext& app, Session& session, Component& c, fl
     }
 }
 
+kernel::AssemblyPick PickFor(assembly::ConstraintType type) {
+    switch (type) {
+        case assembly::ConstraintType::Insert:   return kernel::AssemblyPick::Circle;
+        case assembly::ConstraintType::AxisMate: return kernel::AssemblyPick::Axis;
+        default:                                 return kernel::AssemblyPick::Face;
+    }
+}
+
+/// Why `g` cannot be used for this constraint (with `first` already
+/// picked, if any), or nullptr when it can.
+const char* Unfit(assembly::ConstraintType type, const assembly::GeometryRef& g, const assembly::GeometryRef* first) {
+    using assembly::GeometryKind;
+    switch (type) {
+        case assembly::ConstraintType::Angle:
+            if (g.direction.Length() < 0.5) return N_("Для угла нужна плоская грань или ось");
+            break;
+        case assembly::ConstraintType::Tangent:
+            if (g.kind != GeometryKind::Plane && g.kind != GeometryKind::Cylinder && g.kind != GeometryKind::Sphere)
+                return N_("Для касания нужна плоская, цилиндрическая или сферическая грань");
+            if (first && first->kind == GeometryKind::Plane && g.kind == GeometryKind::Plane)
+                return N_("Две плоскости не касаются — выберите цилиндр или сферу");
+            break;
+        case assembly::ConstraintType::Mate:
+            if (first && first->kind == GeometryKind::Plane && g.HasAxis())
+                return nullptr;   // an axis in a plane
+            if (first && first->HasAxis() != g.HasAxis() && first->kind != GeometryKind::Plane && g.kind != GeometryKind::Plane)
+                return N_("Совмещаются две плоскости или две оси");
+            break;
+        default: break;
+    }
+    return nullptr;
+}
+
+const char* PickPrompt(assembly::ConstraintType type, int picked) {
+    switch (type) {
+        case assembly::ConstraintType::Insert:
+            return picked == 0 ? N_("Вставка: щёлкните у круглой кромки первого компонента (отверстие, торец)")
+                               : N_("Вставка: щёлкните у круглой кромки второго компонента");
+        case assembly::ConstraintType::AxisMate:
+            return picked == 0 ? N_("Совпадение осей: выберите цилиндрическую грань первого компонента")
+                               : N_("Совпадение осей: выберите цилиндрическую грань второго компонента");
+        case assembly::ConstraintType::Angle:
+            return picked == 0 ? N_("Угол: выберите грань первого компонента") : N_("Угол: выберите грань второго компонента");
+        case assembly::ConstraintType::Tangent:
+            return picked == 0 ? N_("Касание: выберите грань первого компонента")
+                               : N_("Касание: выберите грань второго компонента");
+        case assembly::ConstraintType::Mate:
+            return picked == 0 ? N_("Совмещение: выберите грань первого компонента")
+                               : N_("Совмещение: выберите грань второго компонента");
+    }
+    return "";
+}
+
+void Prompt(ui::Ui& ui, const ViewportFrame& vf, const char* text) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImFont* font = ui.fonts.medium;
+    const ImVec2 ts = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, text);
+    const ImVec2 p{(vf.min.x + vf.max.x - ts.x) / 2 - ui.S(14), vf.min.y + ui.S(14)};
+    dl->AddRectFilled(p, {p.x + ts.x + ui.S(28), p.y + ui.S(34)}, ui::ToU32(ui.C().panel.WithAlpha(0.94f)), ui.S(17));
+    dl->AddText(font, ui.S(13), {p.x + ui.S(14), p.y + ui.S(9)}, ui::ToU32(ui.C().textSecondary), text);
+}
+
+/// Value and options of a constraint (being made or chosen in the tree).
+/// Returns true when something changed (`before` is called first, once).
+bool ConstraintOptions(AppContext& app, assembly::Constraint& c, float width, const std::function<void()>& before) {
+    ui::Ui& ui = app.ui;
+    bool changed = false;
+    const bool angle = c.type == assembly::ConstraintType::Angle;
+    if (c.type != assembly::ConstraintType::AxisMate) {
+        ui::FieldLabel(ui, angle ? Tr("Угол, °") : Tr("Зазор, мм"));
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddRect(p, {p.x + width, p.y + ui.S(28)}, ui::ToU32(ui.C().fieldBorder), ui.S(5));
+        const std::string shown = FormatNumber(angle ? c.value * 180.0 / kPi : c.value, 3);
+        if (ui::CommitInput(ui, "##con-value", shown, app.shell.edit, width, true)) {
+            UnitSystem units;
+            units.angle = AngleUnit::Degree;
+            const Expected<double> v = EvaluateExpression(app.shell.edit.text, angle ? Quantity::Angle : Quantity::Length, units, {});
+            if (!v) {
+                app.notes.Error(Tr("Не число"));
+            } else {
+                before();
+                c.value = *v;
+                changed = true;
+            }
+        }
+        ImGui::Dummy({0, ui.S(10)});
+    }
+    const char* option = nullptr;
+    switch (c.type) {
+        case assembly::ConstraintType::Mate:    option = N_("Заподлицо (грани смотрят в одну сторону)"); break;
+        case assembly::ConstraintType::Insert:  option = N_("Соосно в одну сторону (не навстречу)"); break;
+        case assembly::ConstraintType::Tangent: option = N_("Внутреннее касание"); break;
+        default: break;
+    }
+    if (option) {
+        static constexpr std::array<const char*, 2> labels{N_("Нет"), N_("Да")};
+        ui::FieldLabel(ui, Tr(option));
+        const int v = ui::Segmented(ui, "con-flip", labels, c.flipped ? 1 : 0, 2, width);
+        if (v != (c.flipped ? 1 : 0)) {
+            before();
+            c.flipped = v == 1;
+            changed = true;
+        }
+        ImGui::Dummy({0, ui.S(10)});
+    }
+    return changed;
+}
+
 } // namespace
 
 bool InAssembly(AppContext& app) { return ActiveAssembly(app) != nullptr; }
@@ -301,6 +411,46 @@ bool PlaceStandardPart(AppContext& app, const doc::parts::Request& request) {
     return true;
 }
 
+void StartConstraint(AppContext& app, assembly::ConstraintType type) {
+    Session* s = ActiveAssembly(app);
+    if (!s) return;
+    StopEditing(app);
+    AssemblyState& st = *s->assembly;
+    st.creating = {};
+    st.creating.active = true;
+    st.creating.constraint.type = type;
+    if (type == assembly::ConstraintType::Angle) st.creating.constraint.value = kPi / 2;
+    st.drag = {};
+    app.shell.leftTab = LeftTab::Tree;
+}
+
+void DrawConstraintPanel(AppContext& app, Session& session, float width) {
+    ui::Ui& ui = app.ui;
+    AssemblyState& st = *session.assembly;
+    auto& creating = st.creating;
+    {
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float h = ui.S(40);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const std::string title = Tr(std::string(assembly::ConstraintTitle(creating.constraint.type)));
+        dl->AddText(ui.fonts.strong, ui.S(13), {p.x + ui.S(14), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(ui.C().text),
+                    title.c_str());
+        dl->AddLine({p.x, p.y + h - 1}, {p.x + width, p.y + h - 1}, ui::ToU32(ui.C().dividerSoft));
+        ImGui::Dummy({width, h});
+    }
+    const float inner = width - ui.S(28);
+    ImGui::SetCursorPos({ui.S(14), ImGui::GetCursorPosY() + ui.S(14)});
+    ImGui::BeginGroup();
+    LabelText(ui, Tr(PickPrompt(creating.constraint.type, creating.picked)), ui.C().textSecondary);
+    if (creating.picked == 1)
+        if (const Component* c = st.assembly.FindComponent(creating.constraint.first.component))
+            LabelText(ui, Trf("Первый: {}", c->name), ui.C().text);
+    ImGui::Dummy({0, ui.S(10)});
+    ConstraintOptions(app, creating.constraint, inner, [] {});
+    if (ui::SecondaryButton(ui, "##con-cancel", Tr("Отмена"), "Esc", {inner, ui.S(32)})) creating = {};
+    ImGui::EndGroup();
+}
+
 void ToggleGrounded(AppContext& app) {
     Session* s = ActiveAssembly(app);
     if (!s) return;
@@ -315,6 +465,12 @@ void ToggleGrounded(AppContext& app) {
 bool AssemblyEscape(AppContext& app, Session& session) {
     (void)app;
     AssemblyState& st = *session.assembly;
+    if (st.creating.active) {
+        // Back one step: the first pick, then the command.
+        if (st.creating.picked > 0) st.creating.picked = 0;
+        else st.creating = {};
+        return true;
+    }
     if (st.drag.moving || st.drag.armed) {
         if (st.drag.moving)
             if (Component* c = st.assembly.FindComponent(st.drag.component)) {
@@ -357,7 +513,10 @@ void DrawAssemblyProperties(AppContext& app, Session& session, float width) {
         const float h = ui.S(40);
         ImDrawList* dl = ImGui::GetWindowDrawList();
         Component* c = st.assembly.FindComponent(st.selected);
-        const std::string title = c ? Trf("Компонент {}", c->name) : std::string(Tr("Свойства сборки"));
+        const assembly::Constraint* con = st.assembly.FindConstraint(st.selected);
+        const std::string title = c     ? Trf("Компонент {}", c->name)
+                                  : con ? Trf("Зависимость {}", con->name)
+                                        : std::string(Tr("Свойства сборки"));
         dl->AddText(ui.fonts.strong, ui.S(13), {p.x + ui.S(14), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(ui.C().text),
                     title.c_str());
         dl->AddLine({p.x, p.y + h - 1}, {p.x + width, p.y + h - 1}, ui::ToU32(ui.C().dividerSoft));
@@ -368,6 +527,21 @@ void DrawAssemblyProperties(AppContext& app, Session& session, float width) {
     ImGui::BeginGroup();
     if (Component* c = st.assembly.FindComponent(st.selected)) {
         DrawComponentProperties(app, session, *c, inner);
+    } else if (assembly::Constraint* con = st.assembly.FindConstraint(st.selected)) {
+        const Component* a = st.assembly.FindComponent(con->first.component);
+        const Component* b = st.assembly.FindComponent(con->second.component);
+        LabelText(ui, Trf("{} — {}", a ? a->name : "?", b ? b->name : "?"), ui.C().textSecondary);
+        ImGui::Dummy({0, ui.S(8)});
+        if (ConstraintOptions(app, *con, inner, [&st] { st.Checkpoint(N_("Изменение зависимости")); })) st.assembly.Touch();
+        switch (con->state) {
+            case assembly::ConstraintState::Failed:
+                LabelText(ui, Trf("Не выполняется (ошибка {} мм)", FormatNumber(con->error, 4)), ui.C().danger);
+                break;
+            case assembly::ConstraintState::Redundant:
+                LabelText(ui, Tr("Лишняя: то же уже задано другими зависимостями"), ui.C().warning);
+                break;
+            default: break;
+        }
     } else {
         const auto field = [&](const char* label, const char* id, std::string assembly::AssemblyInfo::*member, const char* hint) {
             ui::FieldLabel(ui, label);
@@ -404,6 +578,47 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
     const ObjectId hovered = hit ? hit->body : ObjectId{};
     app.viewport.SetHoveredBody(drag.moving ? drag.component : hovered ? hovered : st.selected);
 
+    if (st.creating.active) {
+        auto& creating = st.creating;
+        Prompt(ui, vf, Tr(PickPrompt(creating.constraint.type, creating.picked)));
+        if (vf.hovered && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            const assembly::GeometryRef* first = creating.picked == 1 ? &creating.constraint.first : nullptr;
+            std::optional<assembly::GeometryRef> g =
+                st.geometry.GeometryAt(st.assembly, hovered, hit->point, PickFor(creating.constraint.type));
+            if (!g) {
+                app.notes.Info(Tr(creating.constraint.type == assembly::ConstraintType::Insert
+                                      ? "Здесь нет круглой кромки"
+                                      : creating.constraint.type == assembly::ConstraintType::AxisMate
+                                            ? "У этой грани нет оси — выберите цилиндр или конус"
+                                            : "Эту грань нельзя использовать"));
+            } else if (const char* why = Unfit(creating.constraint.type, *g, first)) {
+                app.notes.Info(Tr(why));
+            } else if (first && first->component == g->component) {
+                app.notes.Info(Tr("Вторую грань выберите на другом компоненте"));
+            } else if (!first) {
+                creating.constraint.first = *g;
+                creating.picked = 1;
+            } else {
+                creating.constraint.second = *g;
+                const Component* a = st.assembly.FindComponent(creating.constraint.first.component);
+                const Component* b = st.assembly.FindComponent(g->component);
+                if (a && b && a->grounded && b->grounded) app.notes.Info(Tr("Оба компонента закреплены — зависимость их не сдвинет"));
+                st.Checkpoint(N_("Зависимость"));
+                const ObjectId id = st.assembly.AddConstraint(creating.constraint).id;
+                st.selected = id;
+                // Ready for the next one of the same kind, as in Inventor.
+                const assembly::Constraint keep = creating.constraint;
+                creating = {};
+                creating.active = true;
+                creating.constraint.type = keep.type;
+                creating.constraint.value = keep.value;
+                creating.constraint.flipped = keep.flipped;
+            }
+        }
+        for (const std::string& p : st.problems) app.notes.Error(Tr(p));
+        st.problems.clear();
+        return;
+    }
     if (vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         drag = {};
         if (hovered) {
@@ -455,15 +670,8 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
     if (drag.moving) app.shell.handleHot = true;   // no menus while dragging
 
     // Prompt for an empty assembly.
-    if (st.assembly.components.empty()) {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        const char* text = Tr("Вставьте первый компонент: «Вставить» на ленте — деталь из файла или стандартное изделие");
-        ImFont* font = ui.fonts.medium;
-        const ImVec2 ts = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, text);
-        const ImVec2 p{(vf.min.x + vf.max.x - ts.x) / 2 - ui.S(14), vf.min.y + ui.S(14)};
-        dl->AddRectFilled(p, {p.x + ts.x + ui.S(28), p.y + ui.S(34)}, ui::ToU32(ui.C().panel.WithAlpha(0.94f)), ui.S(17));
-        dl->AddText(font, ui.S(13), {p.x + ui.S(14), p.y + ui.S(9)}, ui::ToU32(ui.C().textSecondary), text);
-    }
+    if (st.assembly.components.empty())
+        Prompt(ui, vf, Tr("Вставьте первый компонент: «Вставить» на ленте — деталь из файла или стандартное изделие"));
     // Problems with part files: once each.
     for (const std::string& p : st.problems) app.notes.Error(Tr(p));
     st.problems.clear();

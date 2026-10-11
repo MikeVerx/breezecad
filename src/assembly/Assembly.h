@@ -87,7 +87,7 @@ struct Constraint {
 
 /// Remaining freedom of a component, as the tree shows it.
 struct Freedom {
-    int translations = 6;   ///< 0..3
+    int translations = 3;   ///< 0..3
     int rotations    = 3;   ///< 0..3
     int Total() const { return translations + rotations; }
 };

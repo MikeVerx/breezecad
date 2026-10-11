@@ -213,6 +213,16 @@ void AssemblyRibbon(AppContext& app, RibbonBuilder& r) {
     r.Large("assembly.placeStandard", Tr("Стандартное\nизделие"));
     r.EndGroup();
 
+    r.BeginGroup(Tr("Зависимости"));
+    r.Large("assembly.mate", Tr("Совме-\nщение"));
+    r.Large("assembly.insert", Tr("Вставка"));
+    r.BeginColumn();
+    r.Small("assembly.angle");
+    r.Small("assembly.tangent");
+    r.Small("assembly.axisMate");
+    r.EndColumn();
+    r.EndGroup();
+
     r.BeginGroup(Tr("Положение"));
     r.BeginColumn();
     r.Small("assembly.move", nullptr, tool == AssemblyState::Tool::Move);

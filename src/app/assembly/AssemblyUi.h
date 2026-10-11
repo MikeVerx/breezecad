@@ -33,6 +33,11 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
 bool AssemblyEscape(AppContext& app, Session& session);
 bool AssemblyDelete(AppContext& app, Session& session);
 
+/// Starts making a constraint of this type: pick on two components.
+void StartConstraint(AppContext& app, assembly::ConstraintType type);
+/// The panel of the constraint being made (replaces the tree meanwhile).
+void DrawConstraintPanel(AppContext& app, Session& session, float width);
+
 /// "Закрепить" / "Освободить" the selected component.
 void ToggleGrounded(AppContext& app);
 

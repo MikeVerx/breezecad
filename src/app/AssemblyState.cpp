@@ -1,6 +1,7 @@
 #include "app/AssemblyState.h"
 
 #include "assembly/AssemblyFile.h"
+#include "assembly/Solver.h"
 
 namespace bz::app {
 namespace {
@@ -46,8 +47,14 @@ bool AssemblyState::Update(const std::filesystem::path& file) {
     const std::uint64_t before = geometry.Shown().Revision();
     geometry.Update(assembly, file, &problems);
     if (assembly.Revision() != mySolvedRevision) {
+        // While a component is dragged it stays near the cursor and the
+        // ones tied to it follow; otherwise the smallest change wins.
+        assembly::SolveOptions options;
+        if (drag.moving) options.keep = drag.component;
+        if (assembly::Solve(assembly, options).moved) assembly.Touch();
+        freedom = assembly::AnalyzeFreedom(assembly);
         mySolvedRevision = assembly.Revision();
-        geometry.Update(assembly, file);   // the solver moved components: show them there
+        geometry.Update(assembly, file);   // show them where the solver put them
     }
     return geometry.Shown().Revision() != before;
 }

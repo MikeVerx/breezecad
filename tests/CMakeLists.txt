@@ -1,6 +1,7 @@
 add_executable(bz_tests
     main.cpp
     assembly/AssemblyFileTests.cpp
+    assembly/SolverTests.cpp
     core/ExpressionTests.cpp
     core/I18nTests.cpp
     core/ImageTests.cpp

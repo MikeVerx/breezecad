@@ -400,6 +400,10 @@ const char* ConstraintIcon(assembly::ConstraintType type) {
 }
 
 void DrawAssemblyTree(AppContext& app, Session& session, float width) {
+    if (session.assembly->creating.active) {
+        DrawConstraintPanel(app, session, width);
+        return;
+    }
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     AssemblyState& st = *session.assembly;

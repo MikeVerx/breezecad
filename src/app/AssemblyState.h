@@ -33,6 +33,13 @@ public:
         Vec3                pivot;            ///< rotating: centre of its box
     } drag;
 
+    /// A constraint being made: its type, options and what is picked so far.
+    struct NewConstraint {
+        bool                    active = false;
+        assembly::Constraint    constraint;     ///< type, value, flipped; first/second filled by picks
+        int                     picked = 0;     ///< 0, 1 (first chosen)
+    } creating;
+
     /// Freedom left to each component after the last solve (tree badges).
     std::unordered_map<ObjectId, assembly::Freedom> freedom;
     /// Problems found by the last Update (missing part files...), to show once.

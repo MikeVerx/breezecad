@@ -45,6 +45,18 @@ void RegisterActions(AppContext& app) {
     a.Add({"assembly.ground", N_("Закрепить"), "ui-lock", 0, N_("Закрепить или освободить выбранный компонент"),
            [&app] { return InAssembly(app) && app.Doc()->assembly->assembly.FindComponent(app.Doc()->assembly->selected); },
            [&app] { ToggleGrounded(app); }});
+    a.Add({"assembly.mate", N_("Совмещение"), "a-mate", ImGuiKey_C,
+           N_("Грань к грани (или заподлицо) с зазором; также две оси на одной линии (C)"), asmDoc,
+           [&app] { StartConstraint(app, assembly::ConstraintType::Mate); }});
+    a.Add({"assembly.insert", N_("Вставка"), "a-insert", ImGuiKey_I,
+           N_("Болт в отверстие: оси совпадают, торцы прилегают — по двум круглым кромкам (I)"), asmDoc,
+           [&app] { StartConstraint(app, assembly::ConstraintType::Insert); }});
+    a.Add({"assembly.angle", N_("Угол"), "a-angle", 0, N_("Угол между двумя гранями или осями"), asmDoc,
+           [&app] { StartConstraint(app, assembly::ConstraintType::Angle); }});
+    a.Add({"assembly.tangent", N_("Касание"), "a-tangent", 0, N_("Цилиндр или сфера касается плоскости, цилиндра или сферы"),
+           asmDoc, [&app] { StartConstraint(app, assembly::ConstraintType::Tangent); }});
+    a.Add({"assembly.axisMate", N_("Совпадение осей"), "a-axis", 0, N_("Оси двух цилиндрических граней на одной линии"),
+           asmDoc, [&app] { StartConstraint(app, assembly::ConstraintType::AxisMate); }});
     a.Add({"file.open", N_("Открыть…"), "ui-open", Ctrl(ImGuiKey_O), {}, {}, [&app] { OpenDocument(app); }});
     a.Add({"file.save", N_("Сохранить"), "ui-save", Ctrl(ImGuiKey_S), {}, hasDoc, [&app] { SaveDocument(app, false); }});
     a.Add({"file.saveAs", N_("Сохранить как…"), "ui-save", CtrlShift(ImGuiKey_S), {}, hasDoc, [&app] { SaveDocument(app, true); }});
