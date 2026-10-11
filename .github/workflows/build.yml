@@ -79,6 +79,8 @@ jobs:
         run: |
           mkdir -p dist/BreezeCAD
           cp -r build/windows-mingw/bin/breezecad.exe build/windows-mingw/bin/assets dist/BreezeCAD/
+          # Shipped modules (the MCP server; off until the user turns it on).
+          if [ -d build/windows-mingw/bin/modules ]; then cp -r build/windows-mingw/bin/modules dist/BreezeCAD/; fi
           bash scripts/deploy-runtime.sh dist/BreezeCAD breezecad.exe /mingw64/bin
           # The testers' build: the same program in "program/", the flag that turns
           # on reports, the launcher and the instructions on top.

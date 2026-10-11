@@ -1,0 +1,13 @@
+{
+	"id": "mcp",
+	"name": "MCP-сервер для Claude",
+	"version": "1.0.0",
+	"description": "Даёт Claude (и другим MCP-клиентам) читать и строить детали в открытом BreezeCAD: дерево, параметры, эскизы, выдавливание, вращение, экспорт. Слушает только этот компьютер (127.0.0.1) и пускает по ключу из mcp/connection.json папки настроек.",
+	"abiVersion": 1,
+	"library": "bz-mcp",
+	"enabledByDefault": false,
+	"requirements": {
+		"os": ["windows", "linux", "macos"],
+		"minHostVersion": "0.2.0"
+	}
+}

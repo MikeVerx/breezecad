@@ -16,6 +16,7 @@ endif()
 
 option(BZ_BUILD_APP   "Build the BreezeCAD desktop application" ON)
 option(BZ_BUILD_TESTS "Build unit tests"                          ON)
+option(BZ_BUILD_MCP   "Build the MCP server module (modules/mcp)"  ON)
 
 # All binaries land in one folder so the app finds assets next to itself.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
@@ -26,6 +27,10 @@ include(ThirdParty)
 include(OpenCascade)
 
 add_subdirectory(src)
+
+if(BZ_BUILD_MCP)
+    add_subdirectory(modules/mcp)
+endif()
 
 if(BZ_BUILD_TESTS)
     enable_testing()
