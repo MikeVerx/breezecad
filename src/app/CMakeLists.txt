@@ -17,6 +17,11 @@ add_executable(breezecad WIN32
     Session.cpp
     Settings.cpp
     Workspace.cpp
+    scripting/Scripting.cpp
+    scripting/DocumentCommands.cpp
+    scripting/PartCommands.cpp
+    scripting/SketchCommands.cpp
+    scripting/SolidCommands.cpp
     features/AppearanceEditor.cpp
     features/CopyEditors.cpp
     features/CoilEditor.cpp

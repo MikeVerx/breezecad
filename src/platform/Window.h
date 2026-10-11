@@ -55,6 +55,8 @@ public:
     /// Waits for input; returns early after `timeoutSeconds`.
     static void WaitEvents(double timeoutSeconds);
     static void PollEvents();
+    /// Wakes WaitEvents up; any thread.
+    static void PostEmptyEvent();
 
 private:
     GLFWwindow* myWindow = nullptr;

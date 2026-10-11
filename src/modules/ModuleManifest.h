@@ -10,6 +10,7 @@
 //     "description": "…",
 //     "abiVersion": 1,                     // BZ_MODULE_ABI_VERSION it was built with
 //     "library": "hello",                  // -> hello.dll / libhello.so / libhello.dylib
+//     "enabledByDefault": true,            // false: stays off until the user turns it on
 //     // or per system: {"windows": "hello.dll", "linux": "libhello.so", "macos": "…"}
 //     "requirements": {
 //       "os": ["windows", "linux", "macos"],  // empty or missing: any
@@ -44,6 +45,7 @@ struct Manifest {
     std::string  description;
     unsigned     abiVersion = 0;
     std::string  library;                   ///< file name for this system
+    bool         enabledByDefault = true;   ///< false: off until turned on (e.g. it opens a port)
     Requirements requirements;
 };
 

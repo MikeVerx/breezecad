@@ -235,3 +235,77 @@ TEST_CASE("C read API answers about the active assembly") {
     CHECK(host->component_bounds(999, lo, hi) == BZ_ENOTFOUND);
     SetActiveAssembly(nullptr);
 }
+
+TEST_CASE("a module off by default waits for the user's consent") {
+    Fixture f;
+    f.Add("hello", BZ_EXAMPLE_MODULE);
+    std::string manifest = ReadFile(f.mods / "hello" / "module.json");
+    manifest.insert(manifest.find('{') + 1, R"("enabledByDefault": false, )");
+    WriteFile(f.mods / "hello" / "module.json", manifest);
+    {
+        ModuleManager mm(f.state, HostApi());
+        mm.Discover(f.mods, Roomy());
+        mm.LoadAll();
+        CHECK(mm.Find("hello")->state == ModuleState::Off);
+        CHECK(mm.TurnOn("hello"));
+    }
+    {
+        ModuleManager mm(f.state, HostApi());   // a new run: the consent is remembered
+        mm.Discover(f.mods, Roomy());
+        mm.LoadAll();
+        CHECK(mm.Find("hello")->state == ModuleState::Loaded);
+        CHECK(mm.TurnOff("hello"));
+    }
+    ModuleManager mm(f.state, HostApi());   // switched off again: off, not "on by consent"
+    mm.Discover(f.mods, Roomy());
+    mm.LoadAll();
+    CHECK(mm.Find("hello")->state == ModuleState::Off);
+
+    CHECK_FALSE(ParseManifest(R"({"id": "x", "name": "x", "version": "1", "description": "", "abiVersion": 1, "library": "x",
+                                  "enabledByDefault": "no"})", "linux"));
+}
+
+TEST_CASE("modules run commands on the main thread when they ask") {
+    const BzHostApi* host = HostApi();
+    REQUIRE(BZ_HAS(host, execute));
+    REQUIRE(BZ_HAS(host, config_dir));
+
+    const char* reply = nullptr;
+    SetCommandHandler({});
+    REQUIRE(host->execute(R"({"command": "app.documents"})", &reply) == BZ_OK);
+    CHECK(std::string(reply).find(R"("ok":false)") != std::string::npos);   // the program is not ready
+    CHECK(host->execute(nullptr, &reply) == BZ_EARGUMENT);
+
+    std::string seen;
+    SetCommandHandler([&](std::string_view request) {
+        seen = request;
+        return std::string(R"({"ok":true,"result":1})");
+    });
+    REQUIRE(host->execute(R"({"command": "app.documents"})", &reply) == BZ_OK);
+    CHECK(std::string(reply) == R"({"ok":true,"result":1})");
+    CHECK(seen == R"({"command": "app.documents"})");
+
+    SetConfigDir("/home/me/.config/breezecad");
+    CHECK(std::string(host->config_dir()) == "/home/me/.config/breezecad");
+
+    int wakes = 0;
+    SetWakeHandler([&] { ++wakes; });
+    TakeMainRequest();
+    host->request_main();
+    CHECK(wakes == 1);
+    CHECK(TakeMainRequest());
+    CHECK_FALSE(TakeMainRequest());
+
+    // The example asks for a main_tick in init and runs a command there.
+    Fixture f;
+    f.Add("hello", BZ_EXAMPLE_MODULE);
+    ModuleManager mm(f.state, host);
+    mm.Discover(f.mods, Roomy());
+    seen.clear();
+    mm.LoadAll();
+    CHECK(mm.Tick());
+    CHECK(seen.find("app.documents") != std::string::npos);
+    CHECK_FALSE(mm.Tick());   // nobody asked again
+    SetCommandHandler({});
+    SetWakeHandler({});
+}

@@ -92,6 +92,10 @@ Expected<Manifest> ParseManifest(std::string_view json, std::string_view os) {
         !ReadString(root, "description", m.description) || !ReadUnsigned(root, "abiVersion", m.abiVersion))
         return Error{std::format("Описание модуля «{}» повреждено", m.id)};
     if (m.name.empty()) m.name = m.id;
+    if (const auto on = root.find("enabledByDefault"); on != root.end()) {
+        if (!on->is_boolean()) return Error{std::format("Описание модуля «{}»: «enabledByDefault» — не true/false", m.id)};
+        m.enabledByDefault = on->get<bool>();
+    }
     if (m.abiVersion == 0) return Error{std::format("В описании модуля «{}» нет «abiVersion»", m.id)};
 
     const auto lib = root.find("library");

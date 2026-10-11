@@ -1,10 +1,12 @@
 #include "modules/ModuleManager.h"
 
 #include "core/Log.h"
+#include "modules/ModuleHost.h"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <format>
 #include <fstream>
@@ -80,6 +82,8 @@ void ModuleManager::ReadState() {
     if (root.is_discarded() || !root.is_object()) return;
     for (const Json& v : root.value("off", Json::array()))
         if (v.is_string()) myOff.push_back(v.get<std::string>());
+    for (const Json& v : root.value("on", Json::array()))
+        if (v.is_string()) myOn.push_back(v.get<std::string>());
     for (const Json& v : root.value("crashed", Json::array()))
         if (v.is_object() && v.contains("id") && v["id"].is_string())
             myCrashed.emplace_back(v["id"].get<std::string>(), v.value("problem", ""));
@@ -88,7 +92,7 @@ void ModuleManager::ReadState() {
 void ModuleManager::WriteState() const {
     Json crashed = Json::array();
     for (const auto& [id, problem] : myCrashed) crashed.push_back({{"id", id}, {"problem", problem}});
-    const Json      root{{"off", myOff}, {"crashed", std::move(crashed)}};
+    const Json      root{{"off", myOff}, {"on", myOn}, {"crashed", std::move(crashed)}};
     std::error_code ec;
     std::filesystem::create_directories(myStatePath.parent_path(), ec);
     std::ofstream out(myStatePath, std::ios::binary | std::ios::trunc);
@@ -146,6 +150,9 @@ void ModuleManager::Discover(const std::filesystem::path& dir, const HostInfo& h
             m.problem = Join(missing);
         } else if (std::find(myOff.begin(), myOff.end(), m.manifest.id) != myOff.end()) {
             m.state = ModuleState::Off;
+        } else if (!m.manifest.enabledByDefault &&
+                   std::find(myOn.begin(), myOn.end(), m.manifest.id) == myOn.end()) {
+            m.state = ModuleState::Off;   // waits for the user's consent
         }
         myModules.push_back(std::move(m));
     }
@@ -173,7 +180,7 @@ void ModuleManager::Load(ModuleEntry& m) {
     SetMarker(m.manifest.id);
     const BzModuleApi* api = entry();
     int32_t            rc  = BZ_EFAIL;
-    const bool         fits = api && api->abi_version == BZ_MODULE_ABI_VERSION && api->struct_size >= sizeof(BzModuleApi) &&
+    const bool         fits = api && api->abi_version == BZ_MODULE_ABI_VERSION && api->struct_size >= offsetof(BzModuleApi, main_tick) &&   // 0.2 modules end there
                       api->init && api->shutdown;
     if (fits) rc = api->init(myHost);
     ClearMarker();
@@ -219,6 +226,7 @@ bool ModuleManager::TurnOff(const std::string& id) {
     Unload(*m);
     if (m->state == ModuleState::Found || m->state == ModuleState::Failed) m->state = ModuleState::Off;
     if (std::find(myOff.begin(), myOff.end(), id) == myOff.end()) myOff.push_back(id);
+    Erase(myOn, id);
     WriteState();
     return true;
 }
@@ -228,6 +236,7 @@ bool ModuleManager::TurnOn(const std::string& id) {
     if (!m) return false;
     Erase(myOff, id);
     Erase(myCrashed, id);
+    if (!m->manifest.enabledByDefault && std::find(myOn.begin(), myOn.end(), id) == myOn.end()) myOn.push_back(id);
     WriteState();
     if (m->state == ModuleState::Off || m->state == ModuleState::Crashed || m->state == ModuleState::Failed) {
         m->state = ModuleState::Found;
@@ -235,6 +244,16 @@ bool ModuleManager::TurnOn(const std::string& id) {
     }
     Load(*m);
     return m->state == ModuleState::Loaded;
+}
+
+bool ModuleManager::Tick() {
+    if (!TakeMainRequest()) return false;
+    bool ran = false;
+    for (ModuleEntry& m : myModules) {
+        if (m.state != ModuleState::Loaded || !BZ_HAS(m.api, main_tick)) continue;
+        ran = Call(m.manifest.id, [](const BzModuleApi& api) { api.main_tick(); }) || ran;
+    }
+    return ran;
 }
 
 bool ModuleManager::Call(const std::string& id, const std::function<void(const BzModuleApi&)>& call) {

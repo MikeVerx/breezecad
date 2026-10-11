@@ -63,6 +63,10 @@ public:
     /// Unloads everything (shutdown first); the choices stay.
     void UnloadAll();
 
+    /// When a module asked for it (request_main): calls main_tick of every
+    /// loaded module that has one. Main thread; true when any ran.
+    bool Tick();
+
     /// Runs `call` into module `id` under the crash marker; false when the
     /// module is not loaded. Use for every call into a module's functions.
     bool Call(const std::string& id, const std::function<void(const BzModuleApi&)>& call);
@@ -89,6 +93,7 @@ private:
     const BzHostApi*         myHost;
     std::vector<ModuleEntry> myModules;
     std::vector<std::string> myOff;                                  ///< switched off by the user
+    std::vector<std::string> myOn;                                   ///< turned on by the user (modules off by default)
     std::vector<std::pair<std::string, std::string>> myCrashed;      ///< id, what happened
     std::string              myCrashedLastRun;
 };

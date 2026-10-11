@@ -9,6 +9,7 @@
 #include "app/Backgrounds.h"
 #include "modules/ModuleHost.h"
 #include "modules/ModuleManager.h"
+#include "app/scripting/Scripting.h"
 #include "core/Image.h"
 #include "app/viewport/ViewportPanel.h"
 #include "core/Log.h"
@@ -74,6 +75,7 @@ Application::Application() = default;
 
 Application::~Application() {
     myModules.reset();   // modules shut down while everything they may touch is still there
+    modules::SetCommandHandler({});
     if (myUi) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
@@ -259,6 +261,7 @@ int Application::Run() {
             myFramesToDraw = std::max(myFramesToDraw, 3);
         }
         PollShotRequest();
+        if (myModules && myModules->Tick()) myFramesToDraw = std::max(myFramesToDraw, 3);   // show what they changed
         HandleCloseRequests();
         if (myShell.quitRequested && myWorkspace.sessions.empty()) break;
 
@@ -287,6 +290,11 @@ int Application::Run() {
 void Application::StartModules() {
     const std::filesystem::path config = platform::ConfigDir();
     myModules = std::make_unique<modules::ModuleManager>(config / "modules.json", modules::HostApi());
+    // Modules' own threads wake the loop up; their commands run here, between frames.
+    modules::SetWakeHandler(&platform::Window::PostEmptyEvent);
+    const std::u8string generic = config.generic_u8string();
+    modules::SetConfigDir(std::string(generic.begin(), generic.end()));
+    modules::SetCommandHandler([this](std::string_view request) { return scripting::Run(*myContext, request); });
     modules::HostInfo host = modules::HostInfo::Detect();
     host.openGL            = myWindow.OpenGLVersion();
     myModules->Discover(platform::AssetsDir().parent_path() / "modules", host);

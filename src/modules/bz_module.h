@@ -15,7 +15,12 @@
  *    pointers after shutdown().
  *  - Both tables start with abi_version and struct_size: a newer host may
  *    append functions, a module checks struct_size before using them.
- *  - The read API is read-only: a module cannot change a document through it.
+ *  - The read API is read-only. A module changes documents only through
+ *    execute() (JSON commands, the same undoable steps as the user's own).
+ *  - Threads: a module may run its own threads, but calls into the host
+ *    (except log and request_main) happen on the program's main thread, in
+ *    init/shutdown or in main_tick. A thread asks for a main_tick with
+ *    request_main().
  *
  * A crash inside a module is noted: the next start of BreezeCAD turns that
  * module off and tells the user why.
@@ -23,6 +28,7 @@
 #ifndef BZ_MODULE_H
 #define BZ_MODULE_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -87,7 +93,39 @@ typedef struct BzHostApi {
     int32_t (*component_at)(int32_t index, BzComponentInfo* out);
     /* Box of the component in assembly coordinates, mm. */
     int32_t (*component_bounds)(uint64_t id, double min_xyz[3], double max_xyz[3]);
+
+    /* --- added later: check with BZ_HAS(host, field) before use ---------- */
+
+    /* Any thread: asks the host to call main_tick() of every module soon,
+     * on the main thread (wakes the program up when it is idle). */
+    void (*request_main)(void);
+    /* Main thread only. Runs one command on the open documents:
+     *   request: {"command": "part.tree", "args": {...}}
+     *   reply:   {"ok": true, "result": ...} | {"ok": false, "error": "..."}
+     * "commands.list" describes every command (name, description, JSON
+     * schema of args). Changes are undo steps of the active document.
+     * Returns BZ_OK when a reply was written (also for {"ok": false});
+     * the reply lives until the next execute(). */
+    int32_t (*execute)(const char* request_json, const char** reply_json);
+    /* The user's settings folder of BreezeCAD (UTF-8, '/' separators); a
+     * module keeps its own files in a subfolder named after its id. */
+    const char* (*config_dir)(void);
 } BzHostApi;
+
+/* Is `field` of a table there? (A table from an older build is shorter.)
+ *   if (BZ_HAS(host, execute)) host->execute(...);                        */
+#ifdef __cplusplus
+#define BZ_HAS(table, field)                                                                                       \
+    ((table)->struct_size >= static_cast<uint32_t>(                                                                \
+                                 static_cast<size_t>(reinterpret_cast<const char*>(&(table)->field) -              \
+                                                     reinterpret_cast<const char*>(table)) +                       \
+                                 sizeof((table)->field)) &&                                                        \
+     (table)->field != nullptr)
+#else
+#define BZ_HAS(table, field) \
+    ((table)->struct_size >= (uint32_t)((size_t)((const char*)&(table)->field - (const char*)(table)) + sizeof((table)->field)) && \
+     (table)->field != 0)
+#endif
 
 /* What a module offers BreezeCAD. */
 typedef struct BzModuleApi {
@@ -100,6 +138,11 @@ typedef struct BzModuleApi {
     int32_t (*init)(const BzHostApi* host);
     /* Called once before unloading (switching the module off, closing the program). */
     void (*shutdown)(void);
+
+    /* --- added later; NULL or a shorter struct_size: not offered --------- */
+
+    /* Main thread, after the module (or any module) called request_main(). */
+    void (*main_tick)(void);
 } BzModuleApi;
 
 /* The one symbol every module exports. */
