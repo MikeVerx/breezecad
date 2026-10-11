@@ -29,5 +29,6 @@ add_subdirectory(src)
 
 if(BZ_BUILD_TESTS)
     enable_testing()
+    add_subdirectory(examples/modules)
     add_subdirectory(tests)
 endif()
