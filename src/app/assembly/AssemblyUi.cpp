@@ -944,7 +944,8 @@ void DrawAssemblyProperties(AppContext& app, Session& session, float width) {
         const assembly::Constraint* con = st.assembly.FindConstraint(st.selected);
         const assembly::ComponentPattern* pat = st.assembly.FindPattern(st.selected);
         const std::string title = c     ? Trf("Компонент {}", c->name)
-                                  : con ? Trf("Зависимость {}", con->name)
+                                  : con ? (assembly::IsJoint(con->type) ? Trf("Соединение {}", con->name)
+                                                                        : Trf("Зависимость {}", con->name))
                                   : pat ? pat->name
                                         : std::string(Tr("Свойства сборки"));
         dl->AddText(ui.fonts.strong, ui.S(13), {p.x + ui.S(14), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(ui.C().text),
@@ -1067,7 +1068,7 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
                 const Component* a = st.assembly.FindComponent(creating.constraint.first.component);
                 const Component* b = st.assembly.FindComponent(g->component);
                 if (a && b && a->grounded && b->grounded) app.notes.Info(Tr("Оба компонента закреплены — зависимость их не сдвинет"));
-                st.Checkpoint(N_("Зависимость"));
+                st.Checkpoint(assembly::IsJoint(creating.constraint.type) ? N_("Соединение") : N_("Зависимость"));
                 if (assembly::IsJoint(creating.constraint.type)) assembly::FitJoint(st.assembly, creating.constraint);
                 const ObjectId id = st.assembly.AddConstraint(creating.constraint).id;
                 st.selected = id;

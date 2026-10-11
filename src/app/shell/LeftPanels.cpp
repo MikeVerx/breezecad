@@ -241,8 +241,8 @@ void DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             const char* icon;
             const char* tip;
             LeftTab     tab;
-        } tabs[] = {{"##rail-tree", "ui-tree", Tr("Дерево построения"), LeftTab::Tree},
-                    {"##rail-props", "ui-sliders", Tr("Свойства детали"), LeftTab::Properties},
+        } tabs[] = {{"##rail-tree", "ui-tree", session.assembly ? Tr("Дерево сборки") : Tr("Дерево построения"), LeftTab::Tree},
+                    {"##rail-props", "ui-sliders", session.assembly ? Tr("Свойства") : Tr("Свойства детали"), LeftTab::Properties},
                     {"##rail-vars", "ui-variables", Tr("Переменные"), LeftTab::Variables}};
         float y = pos.y + ui.S(8);
         if (session.assembly && app.shell.leftTab == LeftTab::Variables) app.shell.leftTab = LeftTab::Tree;
