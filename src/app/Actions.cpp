@@ -1,5 +1,7 @@
 #include "app/Actions.h"
 
+#include "core/Monitor.h"
+
 #include <algorithm>
 #include <cctype>
 
@@ -52,6 +54,7 @@ const Action* ActionRegistry::Find(std::string_view id) const {
 bool ActionRegistry::Run(std::string_view id) const {
     const Action* a = Find(id);
     if (!a || !a->run || !a->IsEnabled()) return false;
+    mon::Action("action", a->id);
     a->run();
     return true;
 }
@@ -65,6 +68,7 @@ void ActionRegistry::HandleShortcuts(const std::vector<ImGuiKeyChord>& pressed) 
     for (const ImGuiKeyChord chord : pressed) {
         for (const auto& a : myActions) {
             if (a.chord != chord || !a.run || !a.IsEnabled()) continue;
+            mon::Action("key", a.id);
             a.run();
             break;
         }

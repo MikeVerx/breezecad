@@ -4,6 +4,7 @@
 
 #include "assembly/AssemblyFile.h"
 #include "core/Log.h"
+#include "core/Monitor.h"
 #include "document/BzcFile.h"
 #include "document/DocumentTypes.h"
 
@@ -31,6 +32,8 @@ struct Session::Background {
     std::atomic<std::size_t>   done{0}, total{0};
     std::atomic<bool>          finished{false};
     std::thread                thread;
+    std::chrono::steady_clock::time_point began = std::chrono::steady_clock::now();
+    double                     rebuildMs = 0, meshMs = 0;   ///< for the monitor
 };
 
 Session::Session() : autosaveKey(NewAutosaveKey()) {}
@@ -60,7 +63,10 @@ void Session::StartBackground(std::size_t limit) {
                 b->total = p.total;
                 b->done = p.done;
             }
+            const auto rebuilt = std::chrono::steady_clock::now();
+            b->rebuildMs = std::chrono::duration<double, std::milli>(rebuilt - b->began).count();
             render::Viewport::PrepareMeshes(b->model, quality);
+            b->meshMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - rebuilt).count();
         } catch (const std::exception& e) {
             log::Error("Background rebuild failed: {}", e.what());
         } catch (...) {   // an OCCT failure outside an operation (meshing)
@@ -74,6 +80,11 @@ void Session::StartBackground(std::size_t limit) {
 bool Session::FinishBackground() {
     std::unique_ptr<Background> job = std::move(myBackground);
     job->thread.join();
+    if (mon::Enabled())
+        mon::Timed("rebuild", std::format("в фоне, операции {}..{}, сетка {:.0f} мс, всего до показа {:.0f} мс", job->start, doc.FeatureCount(),
+                                          job->meshMs,
+                                          std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - job->began).count()),
+                   job->rebuildMs);
     // Made for the document as it is now: take everything. The document
     // changed meanwhile (a value dragged on): still show the shape it got
     // to, the features themselves stay to be rebuilt again.
@@ -91,12 +102,17 @@ std::string Session::Title() const {
     return {stem.begin(), stem.end()};
 }
 
-void Session::Execute(std::unique_ptr<doc::Command> command) { history.Execute(doc, std::move(command)); }
+void Session::Execute(std::unique_ptr<doc::Command> command) {
+    mon::Action("command", command->Label());
+    history.Execute(doc, std::move(command));
+}
 void Session::Undo() {
+    mon::Action("undo", UndoLabel());
     if (assembly) assembly->Undo();
     else history.Undo(doc);
 }
 void Session::Redo() {
+    mon::Action("redo", "");
     if (assembly) assembly->Redo();
     else history.Redo(doc);
 }
@@ -126,6 +142,7 @@ void Session::MarkSaved() {
 }
 
 void Session::CommitInPlaceEdit(std::unique_ptr<doc::Feature> before, std::string label) {
+    mon::Action("edit", label);
     // Put the old version back and take the edited one, then run the edit
     // as a normal command so undo/redo and the saved-state marker work.
     std::unique_ptr<doc::Feature> edited = doc.Replace(std::move(before));
@@ -140,6 +157,7 @@ bool Session::RebuildNow() { return Rebuild(-1.0); }
 bool Session::Rebuild(double budgetMs) {
     if (assembly) {
         // Parts are rebuilt as they load; what is left is cheap (placing).
+        prof::Scope scope("assembly");
         const bool changed = assembly->Update(path);
         myRebuilding = false;
         return changed;
@@ -175,6 +193,10 @@ bool Session::Rebuild(double budgetMs) {
         return adopted;
     }
     const auto start = std::chrono::steady_clock::now();
+    if (!myRebuilding) {
+        myRebuildBeganAt = ImGui::GetTime();
+        myRebuildWorkMs = 0;
+    }
     // A slice at a time: the window keeps answering while a large part
     // rebuilds; the part shown changes when the rebuild is done.
     const bool done = model.RebuildSlice(doc, limit, myShowAtLimit ? kernel::Model::Stopped::ShowAtStop : kernel::Model::Stopped::KeepShown,
@@ -183,6 +205,11 @@ bool Session::Rebuild(double budgetMs) {
     myLastRebuildAt = ImGui::GetTime();
     myBuiltRevision = doc.Revision();
     myRebuilding = !done;
+    myRebuildWorkMs += myLastRebuildSeconds * 1000.0;
+    if (done && mon::Enabled())
+        mon::Timed("rebuild", std::format("в окне{}, от начала до конца {:.0f} мс", budgetMs < 0 ? " сразу" : " кусками",
+                                          (myLastRebuildAt - myRebuildBeganAt) * 1000.0),
+                   myRebuildWorkMs);
     return done;
 }
 

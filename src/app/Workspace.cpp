@@ -4,6 +4,7 @@
 #include "app/Settings.h"
 #include "core/I18n.h"
 #include "core/Log.h"
+#include "core/Monitor.h"
 #include "core/Version.h"
 #include "core/PathText.h"
 #include "assembly/AssemblyFile.h"
@@ -14,6 +15,7 @@
 #include "platform/Paths.h"
 
 #include <algorithm>
+#include <chrono>
 #include <format>
 #include <optional>
 
@@ -91,8 +93,13 @@ bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Se
         }
     }
     std::vector<std::string> warnings;
+    mon::Action("open", ToUtf8(file.filename()));
+    const auto loadStart = std::chrono::steady_clock::now();
     Expected<std::unique_ptr<Session>> loaded = LoadSession(file, &warnings);
+    mon::Timed("open", "чтение файла (геометрия — потом, в перестроении)",
+               std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - loadStart).count());
     if (!loaded) {
+        log::Warn("Could not open {}: {}", ToUtf8(file), loaded.GetError().message);
         notes.Error(Trf("Не удалось открыть «{}»: {}", ToUtf8(file.filename()), Tr(loaded.GetError().message)));
         settings.RemoveRecent(file);
         return false;

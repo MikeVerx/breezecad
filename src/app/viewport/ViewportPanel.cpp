@@ -1,4 +1,5 @@
 #include "app/viewport/ViewportPanel.h"
+#include "core/Monitor.h"
 
 #include "app/Operations.h"
 #include "app/features/OperationEditors.h"
@@ -168,7 +169,10 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
         ImGui::OpenPopup("##viewport-menu");
 
     if (nav.orbiting || nav.panning || nav.zooming) {
-        if (ImGui::IsMouseDragging(nav.button, 3.0f)) nav.moved = true;
+        if (!nav.moved && ImGui::IsMouseDragging(nav.button, 3.0f)) {
+            nav.moved = true;
+            mon::Action("view", nav.orbiting ? "вращение" : nav.panning ? "сдвиг" : "масштаб");
+        }
         if (nav.moved && (io.MouseDelta.x != 0 || io.MouseDelta.y != 0)) {
             if (nav.orbiting) {
                 const double k = kOrbitPerPixel * app.settings.orbitSpeed;
@@ -188,6 +192,9 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
         }
     }
     if (sceneHovered && io.MouseWheel != 0.0f) {
+        static double lastWheel = -10.0;   // one action per burst of wheel turns
+        if (app.now - lastWheel > 1.0) mon::Action("view", "колесо");
+        lastWheel = app.now;
         const double steps = static_cast<double>(m.invertWheel ? -io.MouseWheel : io.MouseWheel);
         app.viewport.ZoomAt(std::pow(1.15, steps), vf.ToLocal(mouse));
     }

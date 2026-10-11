@@ -1,6 +1,7 @@
 #include "app/Application.h"
 
 #include "app/Language.h"
+#include "core/Monitor.h"
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
 #include "app/shell/Splash.h"
@@ -228,6 +229,7 @@ void Application::ApplyTheme(bool force) {
 
 int Application::Run() {
     while (true) {
+        mon::Beat();
         if (NeedsAnotherFrame()) {
             platform::Window::PollEvents();
         } else {
@@ -375,6 +377,7 @@ void Application::Frame() {
     myStats.fps = myFps;
     if (now - myMemoryReadAt >= 1.0) {   // a system call: once a second is enough
         myStats.memoryMb = platform::ResidentMemoryMb();
+        mon::Memory(myStats.memoryMb);
         myMemoryReadAt = now;
     }
     myStats.hoverMs = app.stats.hoverMs;
@@ -461,6 +464,7 @@ void Application::Frame() {
     }
     myWindow.SwapBuffers();
     smooth(myStats.presentMs, msSince(presentStart));
+    prof::Add("present", msSince(presentStart));   // drawing the interface and the swap
     ++myFrameIndex;
     if (now - mySecondStart >= 1.0) {
         myStats.sceneFrames = mySceneFramesThisSecond;
@@ -481,6 +485,8 @@ void Application::Frame() {
     const double frameMs = (glfwGetTime() - now) * 1000.0;
     const std::vector<prof::Part> parts = prof::TakeFrame();
     if (frameMs > 80.0) log::Info("Slow frame {:.0f} ms: {}", frameMs, prof::Describe(parts));
+    mon::Frame(frameMs, parts);
+    mon::Beat();
 
     UpdateTitle();
 }

@@ -12,6 +12,7 @@ add_library(bz_core STATIC
     Expression.cpp
     I18n.cpp
     Log.cpp
+    Monitor.cpp
     Image.cpp
     Profile.cpp
     Units.cpp

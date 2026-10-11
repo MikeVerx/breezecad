@@ -132,6 +132,8 @@ private:
     std::uint64_t myBuiltRevision = static_cast<std::uint64_t>(-1);
     double        myLastRebuildSeconds = 0;   ///< how long the last rebuild took
     double        myLastRebuildAt = 0;        ///< when it finished (ImGui time)
+    double        myRebuildBeganAt = 0;       ///< first slice of the rebuild under way (monitor)
+    double        myRebuildWorkMs = 0;        ///< its slices together (monitor)
 };
 
 } // namespace bz::app

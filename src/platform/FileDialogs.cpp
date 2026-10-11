@@ -1,4 +1,5 @@
 #include "platform/FileDialogs.h"
+#include "core/Monitor.h"
 #include "core/PathText.h"
 
 #include <portable-file-dialogs.h>
@@ -24,6 +25,7 @@ std::string FileDialogProblem() {
 
 std::optional<std::filesystem::path> ShowOpenDialog(const std::string& title, const std::vector<FileFilter>& filters,
                                                     const std::filesystem::path& folder) {
+    const mon::Waiting waiting;   // the window waits for the dialog: not a hang
     const std::vector<std::string> result = pfd::open_file(title, ToUtf8(folder), Flatten(filters)).result();
     if (result.empty()) return std::nullopt;
     return PathFromUtf8(result.front());
@@ -31,6 +33,7 @@ std::optional<std::filesystem::path> ShowOpenDialog(const std::string& title, co
 
 std::optional<std::filesystem::path> ShowSaveDialog(const std::string& title, const std::filesystem::path& suggested,
                                                     const std::vector<FileFilter>& filters, const std::string& extension) {
+    const mon::Waiting waiting;
     const std::string result = pfd::save_file(title, ToUtf8(suggested), Flatten(filters)).result();
     if (result.empty()) return std::nullopt;
     std::filesystem::path path = PathFromUtf8(result);

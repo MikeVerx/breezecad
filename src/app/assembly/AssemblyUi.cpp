@@ -1,6 +1,7 @@
 #include "app/assembly/AssemblyUi.h"
 
 #include "app/Format.h"
+#include "core/Monitor.h"
 #include "app/Operations.h"
 #include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
@@ -1132,7 +1133,10 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
                 st.assembly.Touch();
             }
     }
-    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) drag = {};
+    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        if (drag.moving) mon::Action("assembly", "конец перетаскивания");
+        drag = {};
+    }
     if (drag.moving) app.shell.handleHot = true;   // no menus while dragging
 
     // Prompt for an empty assembly.
