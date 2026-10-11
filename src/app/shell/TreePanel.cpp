@@ -395,6 +395,12 @@ const char* ConstraintIcon(assembly::ConstraintType type) {
         case assembly::ConstraintType::Angle:    return "a-angle";
         case assembly::ConstraintType::Tangent:  return "a-tangent";
         case assembly::ConstraintType::AxisMate: return "a-axis";
+        case assembly::ConstraintType::Rotational:  return "j-rotational";
+        case assembly::ConstraintType::Slider:      return "j-slider";
+        case assembly::ConstraintType::Cylindrical: return "j-cylindrical";
+        case assembly::ConstraintType::Planar:      return "j-planar";
+        case assembly::ConstraintType::Ball:        return "j-ball";
+        case assembly::ConstraintType::Rigid:       return "j-rigid";
     }
     return "a-mate";
 }

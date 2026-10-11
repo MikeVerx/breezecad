@@ -6,6 +6,7 @@
 #include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
 #include "assembly/AssemblyFile.h"
+#include "assembly/Solver.h"
 #include "core/Expression.h"
 #include "core/I18n.h"
 #include "core/PathText.h"
@@ -206,7 +207,8 @@ void DrawComponentProperties(AppContext& app, Session& session, Component& c, fl
 
 kernel::AssemblyPick PickFor(assembly::ConstraintType type) {
     switch (type) {
-        case assembly::ConstraintType::Insert:   return kernel::AssemblyPick::Circle;
+        case assembly::ConstraintType::Insert:
+        case assembly::ConstraintType::Rotational: return kernel::AssemblyPick::Circle;
         case assembly::ConstraintType::AxisMate: return kernel::AssemblyPick::Axis;
         default:                                 return kernel::AssemblyPick::Face;
     }
@@ -225,6 +227,12 @@ const char* Unfit(assembly::ConstraintType type, const assembly::GeometryRef& g,
                 return N_("Для касания нужна плоская, цилиндрическая или сферическая грань");
             if (first && first->kind == GeometryKind::Plane && g.kind == GeometryKind::Plane)
                 return N_("Две плоскости не касаются — выберите цилиндр или сферу");
+            break;
+        case assembly::ConstraintType::Slider:
+        case assembly::ConstraintType::Cylindrical:
+        case assembly::ConstraintType::Planar:
+        case assembly::ConstraintType::Rigid:
+            if (g.direction.Length() < 0.5) return N_("Нужна плоская или круглая грань: от неё берётся ось соединения");
             break;
         case assembly::ConstraintType::Mate:
             if (first && first->kind == GeometryKind::Plane && g.HasAxis())
@@ -253,6 +261,16 @@ const char* PickPrompt(assembly::ConstraintType type, int picked) {
         case assembly::ConstraintType::Mate:
             return picked == 0 ? N_("Совмещение: выберите грань первого компонента")
                                : N_("Совмещение: выберите грань второго компонента");
+        case assembly::ConstraintType::Rotational:
+            return picked == 0 ? N_("Вращение: щёлкните у круглой кромки неподвижного компонента")
+                               : N_("Вращение: щёлкните у круглой кромки вращающегося компонента");
+        case assembly::ConstraintType::Slider:
+        case assembly::ConstraintType::Cylindrical:
+        case assembly::ConstraintType::Planar:
+        case assembly::ConstraintType::Ball:
+        case assembly::ConstraintType::Rigid:
+            return picked == 0 ? N_("Соединение: выберите грань первого компонента (вдоль её оси или нормали — движение)")
+                               : N_("Соединение: выберите грань второго компонента");
     }
     return "";
 }
@@ -272,8 +290,10 @@ bool ConstraintOptions(AppContext& app, assembly::Constraint& c, float width, co
     ui::Ui& ui = app.ui;
     bool changed = false;
     const bool angle = c.type == assembly::ConstraintType::Angle;
-    if (c.type != assembly::ConstraintType::AxisMate) {
-        ui::FieldLabel(ui, angle ? Tr("Угол, °") : Tr("Зазор, мм"));
+    const bool noValue = c.type == assembly::ConstraintType::AxisMate || c.type == assembly::ConstraintType::Slider ||
+                         c.type == assembly::ConstraintType::Cylindrical || c.type == assembly::ConstraintType::Ball;
+    if (!noValue) {
+        ui::FieldLabel(ui, angle ? Tr("Угол, °") : assembly::IsJoint(c.type) ? Tr("Смещение вдоль оси, мм") : Tr("Зазор, мм"));
         const ImVec2 p = ImGui::GetCursorScreenPos();
         ImGui::GetWindowDrawList()->AddRect(p, {p.x + width, p.y + ui.S(28)}, ui::ToU32(ui.C().fieldBorder), ui.S(5));
         const std::string shown = FormatNumber(angle ? c.value * 180.0 / kPi : c.value, 3);
@@ -296,7 +316,10 @@ bool ConstraintOptions(AppContext& app, assembly::Constraint& c, float width, co
         case assembly::ConstraintType::Mate:    option = N_("Заподлицо (грани смотрят в одну сторону)"); break;
         case assembly::ConstraintType::Insert:  option = N_("Соосно в одну сторону (не навстречу)"); break;
         case assembly::ConstraintType::Tangent: option = N_("Внутреннее касание"); break;
-        default: break;
+        case assembly::ConstraintType::Ball:    break;
+        default:
+            if (assembly::IsJoint(c.type)) option = N_("Оси в одну сторону (не навстречу)");
+            break;
     }
     if (option) {
         static constexpr std::array<const char*, 2> labels{N_("Нет"), N_("Да")};
@@ -310,6 +333,75 @@ bool ConstraintOptions(AppContext& app, assembly::Constraint& c, float width, co
         ImGui::Dummy({0, ui.S(10)});
     }
     return changed;
+}
+
+/// One number field; true with the new value in `out` when committed.
+bool NumberField(AppContext& app, const char* id, const char* label, double shown, bool angle, float width, double& out) {
+    ui::Ui& ui = app.ui;
+    ui::FieldLabel(ui, label);
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::GetWindowDrawList()->AddRect(p, {p.x + width, p.y + ui.S(28)}, ui::ToU32(ui.C().fieldBorder), ui.S(5));
+    bool done = false;
+    if (ui::CommitInput(ui, id, FormatNumber(angle ? shown * 180.0 / kPi : shown, 3), app.shell.edit, width, true)) {
+        UnitSystem units;
+        units.angle = AngleUnit::Degree;
+        const Expected<double> v = EvaluateExpression(app.shell.edit.text, angle ? Quantity::Angle : Quantity::Length, units, {});
+        if (!v) app.notes.Error(Tr("Не число"));
+        else {
+            out  = *v;
+            done = true;
+        }
+    }
+    ImGui::Dummy({0, ui.S(10)});
+    return done;
+}
+
+/// Position, lock and limits of a joint with one coordinate (chosen in the tree).
+void JointMotionOptions(AppContext& app, AssemblyState& st, assembly::Constraint& c, float width) {
+    const assembly::JointMotion motion = assembly::MotionOf(c.type);
+    if (motion == assembly::JointMotion::None) return;
+    ui::Ui& ui = app.ui;
+    const bool angle = motion == assembly::JointMotion::Rotation;
+    const double now = assembly::JointPosition(st.assembly, c).value_or(0.0);
+    double v = 0.0;
+    if (NumberField(app, "##joint-pos", angle ? Tr("Положение, °") : Tr("Положение, мм"), now, angle, width, v)) {
+        st.Checkpoint(N_("Положение соединения"));
+        assembly::DriveJoint(st.assembly, c.id, v);
+    }
+    static constexpr std::array<const char*, 2> labels{N_("Нет"), N_("Да")};
+    ui::FieldLabel(ui, Tr("Заблокировать в этом положении"));
+    if (const int k = ui::Segmented(ui, "joint-lock", labels, c.locked ? 1 : 0, 2, width); k != (c.locked ? 1 : 0)) {
+        st.Checkpoint(N_("Изменение зависимости"));
+        c.locked   = k == 1;
+        c.position = now;
+        st.assembly.Touch();
+    }
+    ImGui::Dummy({0, ui.S(10)});
+    ui::FieldLabel(ui, Tr("Пределы"));
+    if (const int k = ui::Segmented(ui, "joint-limits", labels, c.limits.enabled ? 1 : 0, 2, width);
+        k != (c.limits.enabled ? 1 : 0)) {
+        st.Checkpoint(N_("Изменение зависимости"));
+        c.limits.enabled = k == 1;
+        if (c.limits.enabled) {
+            const double span = angle ? kPi / 4 : 10.0;
+            c.limits.lower = now - span;
+            c.limits.upper = now + span;
+        }
+        st.assembly.Touch();
+    }
+    ImGui::Dummy({0, ui.S(10)});
+    if (!c.limits.enabled) return;
+    if (NumberField(app, "##joint-lo", angle ? Tr("От, °") : Tr("От, мм"), c.limits.lower, angle, width, v)) {
+        st.Checkpoint(N_("Изменение зависимости"));
+        c.limits.lower = v;
+        st.assembly.Touch();
+    }
+    if (NumberField(app, "##joint-hi", angle ? Tr("До, °") : Tr("До, мм"), c.limits.upper, angle, width, v)) {
+        st.Checkpoint(N_("Изменение зависимости"));
+        c.limits.upper = v;
+        st.assembly.Touch();
+    }
+    if (c.limits.upper < c.limits.lower) LabelText(ui, Tr("«До» меньше «От» — пределы не действуют как задумано"), ui.C().danger);
 }
 
 } // namespace
@@ -873,6 +965,7 @@ void DrawAssemblyProperties(AppContext& app, Session& session, float width) {
         LabelText(ui, Trf("{} — {}", a ? a->name : "?", b ? b->name : "?"), ui.C().textSecondary);
         ImGui::Dummy({0, ui.S(8)});
         if (ConstraintOptions(app, *con, inner, [&st] { st.Checkpoint(N_("Изменение зависимости")); })) st.assembly.Touch();
+        JointMotionOptions(app, st, *con, inner);
         switch (con->state) {
             case assembly::ConstraintState::Failed:
                 LabelText(ui, Trf("Не выполняется (ошибка {} мм)", FormatNumber(con->error, 4)), ui.C().danger);
@@ -975,6 +1068,7 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
                 const Component* b = st.assembly.FindComponent(g->component);
                 if (a && b && a->grounded && b->grounded) app.notes.Info(Tr("Оба компонента закреплены — зависимость их не сдвинет"));
                 st.Checkpoint(N_("Зависимость"));
+                if (assembly::IsJoint(creating.constraint.type)) assembly::FitJoint(st.assembly, creating.constraint);
                 const ObjectId id = st.assembly.AddConstraint(creating.constraint).id;
                 st.selected = id;
                 // Ready for the next one of the same kind, as in Inventor.

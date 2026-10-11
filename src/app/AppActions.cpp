@@ -8,6 +8,8 @@
 #include "core/I18n.h"
 #include "document/Origin.h"
 
+#include <array>
+
 namespace bz::app {
 namespace {
 
@@ -60,6 +62,27 @@ void RegisterActions(AppContext& app) {
            asmDoc, [&app] { StartConstraint(app, assembly::ConstraintType::Tangent); }});
     a.Add({"assembly.axisMate", N_("Совпадение осей"), "a-axis", 0, N_("Оси двух цилиндрических граней на одной линии"),
            asmDoc, [&app] { StartConstraint(app, assembly::ConstraintType::AxisMate); }});
+    struct JointCommand { const char* id; const char* title; const char* icon; const char* tip; assembly::ConstraintType type; };
+    static constexpr std::array<JointCommand, 6> kJoints{{
+        {"assembly.jointRotational", N_("Вращение"), "j-rotational",
+         N_("Подвижное соединение: компонент вращается вокруг оси круглой кромки (шарнир, вал в подшипнике)"),
+         assembly::ConstraintType::Rotational},
+        {"assembly.jointSlider", N_("Ползун"), "j-slider",
+         N_("Подвижное соединение: компонент скользит вдоль оси или нормали грани, не поворачиваясь"),
+         assembly::ConstraintType::Slider},
+        {"assembly.jointCylindrical", N_("Цилиндрическое"), "j-cylindrical",
+         N_("Подвижное соединение: вращение вокруг оси и скольжение вдоль неё"), assembly::ConstraintType::Cylindrical},
+        {"assembly.jointPlanar", N_("Плоское"), "j-planar",
+         N_("Подвижное соединение: скольжение по плоскости и поворот в ней"), assembly::ConstraintType::Planar},
+        {"assembly.jointBall", N_("Шаровое"), "j-ball",
+         N_("Подвижное соединение: центры совпадают, поворот в любую сторону"), assembly::ConstraintType::Ball},
+        {"assembly.jointRigid", N_("Жёсткое"), "j-rigid", N_("Соединение без подвижности: компоненты как одно целое"),
+         assembly::ConstraintType::Rigid},
+    }};
+    for (const JointCommand& j : kJoints) {
+        const assembly::ConstraintType type = j.type;
+        a.Add({j.id, j.title, j.icon, 0, j.tip, asmDoc, [&app, type] { StartConstraint(app, type); }});
+    }
     a.Add({"file.open", N_("Открыть…"), "ui-open", Ctrl(ImGuiKey_O), {}, {}, [&app] { OpenDocument(app); }});
     a.Add({"file.save", N_("Сохранить"), "ui-save", Ctrl(ImGuiKey_S), {}, hasDoc, [&app] { SaveDocument(app, false); }});
     a.Add({"file.saveAs", N_("Сохранить как…"), "ui-save", CtrlShift(ImGuiKey_S), {}, hasDoc, [&app] { SaveDocument(app, true); }});

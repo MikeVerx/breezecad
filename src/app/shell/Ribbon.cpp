@@ -224,6 +224,19 @@ void AssemblyRibbon(AppContext& app, RibbonBuilder& r) {
     r.EndColumn();
     r.EndGroup();
 
+    r.BeginGroup(Tr("Соединения"));
+    r.Large("assembly.jointRotational", Tr("Враще-\nние"));
+    r.BeginColumn();
+    r.Small("assembly.jointSlider");
+    r.Small("assembly.jointCylindrical");
+    r.Small("assembly.jointPlanar");
+    r.EndColumn();
+    r.BeginColumn();
+    r.Small("assembly.jointBall");
+    r.Small("assembly.jointRigid");
+    r.EndColumn();
+    r.EndGroup();
+
     r.BeginGroup(Tr("Положение"));
     r.BeginColumn();
     r.Small("assembly.move", nullptr, tool == AssemblyState::Tool::Move);
