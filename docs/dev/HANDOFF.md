@@ -289,6 +289,18 @@ WORKLOG 2026-10-11). Остаток пункта:
 ### Открытые вопросы к автору
 - (закрыто) Тройка осей: выключается в Настройки → Интерфейс → «Оси в углу вида».
 
+## 3б. Сборка для бета-тестеров (2026-10-11)
+- `next-build` содержит два архива: `BreezeCAD-windows.zip` (обычный) и `BreezeCAD-beta-windows.zip`
+  (`BreezeCAD-beta/`: «Запустить BreezeCAD.bat», «ИНСТРУКЦИЯ для тестеров.txt», `program/` + `beta-tester.txt`).
+  Файлы архива — `resources/beta/` (CRLF, см. .gitattributes).
+- Режим включает файл `beta-tester.txt` рядом с exe (`app/BetaTesting.*`): сессии в «Отчёты для разработчика/sessions/<дата>»
+  (output.log, events.jsonl, breezecad.dmp, session.json, system.json; 30 последних), окно после вылета, меню
+  «Сообщить о проблеме…» → zip `BreezeCAD-отчёт-<дата>.zip`.
+- Разбор присланного: `python3 tools/monitor/run.py --tester <zip> --bin <папка распакованного next-build>`
+  (`pip install pefile` — имена функций DLL в стеке Windows) → `tools/monitor/reports/testers/…md`.
+- FaultGuard: на ПК автора (Windows) перехват работает (диагностика bz-fault-diag a/b), на раннере CI —
+  нет (тесты FaultGuard на Windows пропущены). Причина не найдена.
+
 ## 6а. Бета-баги автора 2026-10-11 (вечер)
 - Сделано: ручка поля размера не закрывает поле (2d3f137); тёмная тема — яркие линии эскиза
   с тёмной обводкой, токен `sketchHalo` (218df58); «Проецировать» по телу вращения — ось,
