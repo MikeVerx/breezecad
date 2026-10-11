@@ -15,7 +15,7 @@ void Fault() { *gNowhere = 1; }
 
 TEST_CASE("a fault inside guarded work ends that work, not the program") {
     std::string what;
-    int reached = 0;
+    volatile int reached = 0;   // volatile: the store before the fault must not be optimised away
     CHECK_FALSE(bz::guard::RunGuarded(
         [&] {
             reached = 1;

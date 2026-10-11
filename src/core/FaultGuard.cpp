@@ -25,6 +25,10 @@ struct Landing {
 thread_local Landing* tlLanding = nullptr;
 thread_local unsigned long tlCode = 0;
 
+/// Where a guarded fault resumes: a normal frame, outside the exception
+/// dispatcher, that jumps back into RunGuarded.
+[[noreturn]] __attribute__((noinline)) void JumpHome(Landing* landing) { __builtin_longjmp(landing->buffer, 1); }
+
 LONG CALLBACK OnFault(EXCEPTION_POINTERS* info) {
     if (!tlLanding) return EXCEPTION_CONTINUE_SEARCH;
     const DWORD code = info->ExceptionRecord->ExceptionCode;
@@ -41,7 +45,14 @@ LONG CALLBACK OnFault(EXCEPTION_POINTERS* info) {
     Landing* landing = tlLanding;
     tlLanding = nullptr;
     tlCode = code;
-    __builtin_longjmp(landing->buffer, 1);
+    // Not a jump from inside the handler: the system resumes the thread
+    // (the documented way out of a vectored handler) in JumpHome, on the
+    // faulting stack, below the red zone, aligned as right after a call.
+    CONTEXT* c = info->ContextRecord;
+    c->Rcx = reinterpret_cast<DWORD64>(landing);
+    c->Rsp = ((c->Rsp - 512) & ~static_cast<DWORD64>(15)) - 8;
+    c->Rip = reinterpret_cast<DWORD64>(&JumpHome);
+    return EXCEPTION_CONTINUE_EXECUTION;
 }
 
 void Install() {
