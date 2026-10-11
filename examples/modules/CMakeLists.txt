@@ -9,7 +9,8 @@ function(bz_example_module target folder)
         C_VISIBILITY_PRESET hidden
         OUTPUT_NAME hello
         LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/modules/${folder}
-        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/modules/${folder})
+        RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/modules/${folder}
+        ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/modules/${folder})   # MinGW import lib: one per variant
     if(WIN32)
         set_target_properties(${target} PROPERTIES PREFIX "")   # hello.dll, as module.json expects
     endif()
