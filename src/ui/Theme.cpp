@@ -56,6 +56,7 @@ Theme Theme::Light() {
     c.sketchSelected  = Color::Hex(0xEA7A1E);
     c.sketchPoint     = Color::Hex(0x1680C4);
     c.sketchGrid      = Color::Hex(0x1B1F24, 0.05f);
+    c.sketchHalo      = Color::Hex(0xFFFFFF, 0.0f);
     c.sketchGridMajor = Color::Hex(0x1B1F24, 0.10f);
     c.dimension       = Color::Hex(0x0A4F7E);
     c.constraintGlyph = Color::Hex(0xB45309);
@@ -125,16 +126,19 @@ Theme Theme::Dark() {
     c.hoverHighlight  = Color::Hex(0x5BB6EE);
     c.selection       = Color::Hex(0x6E9BFF);
 
-    c.sketchFree      = Color::Hex(0x6E9BFF);
-    c.sketchDefined   = Color::Hex(0xE6E8EB);
-    c.sketchConstruction = Color::Hex(0x8E95A0);
-    c.sketchProjected    = Color::Hex(0xF0B43C);
-    c.sketchHover     = Color::Hex(0x5BB6EE);
-    c.sketchSelected  = Color::Hex(0xF59E4B);
-    c.sketchPoint     = Color::Hex(0x5BB6EE);
-    c.sketchGrid      = Color::Hex(0xFFFFFF, 0.05f);
-    c.sketchGridMajor = Color::Hex(0xFFFFFF, 0.10f);
-    c.dimension       = Color::Hex(0x8DABFF);
+    // Bright, saturated ink with a dark rim: the sketch must read both over
+    // the dark background and over the light-grey body behind it.
+    c.sketchFree      = Color::Hex(0x8FB4FF);
+    c.sketchDefined   = Color::Hex(0xFFFFFF);
+    c.sketchConstruction = Color::Hex(0xC2C8D1);
+    c.sketchProjected    = Color::Hex(0xFFC24D);
+    c.sketchHover     = Color::Hex(0x6FD0FF);
+    c.sketchSelected  = Color::Hex(0xFFA552);
+    c.sketchPoint     = Color::Hex(0x6FD0FF);
+    c.sketchGrid      = Color::Hex(0xFFFFFF, 0.06f);
+    c.sketchGridMajor = Color::Hex(0xFFFFFF, 0.12f);
+    c.sketchHalo      = Color::Hex(0x0B0D10, 0.80f);
+    c.dimension       = Color::Hex(0xAFC6FF);
     c.constraintGlyph = Color::Hex(0xF5A524);
     c.regionFill      = Color::Hex(0x5BB6EE, 0.30f);
     c.planeFill       = Color::Hex(0xE9B44C, 0.16f);

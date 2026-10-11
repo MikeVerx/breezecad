@@ -62,6 +62,7 @@ struct ThemeColors {
     Color sketchSelected;
     Color sketchPoint;
     Color sketchGrid;
+    Color sketchHalo;        ///< dark rim under sketch curves so they read over a light body (transparent = none)
     Color sketchGridMajor;
     Color dimension;
     Color constraintGlyph;
