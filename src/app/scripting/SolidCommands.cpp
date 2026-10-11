@@ -8,6 +8,9 @@
 #include "document/ExtrudeFeature.h"
 #include "document/RevolveFeature.h"
 #include "document/SketchFeature.h"
+#include "document/ThreadFeature.h"
+
+#include <cmath>
 
 #include <format>
 
@@ -52,8 +55,11 @@ Json Extrude(AppContext& app, const Json& args) {
     static const std::vector<std::string> kExtents = {"distance", "symmetric", "through_all"};
     f->extent   = static_cast<doc::ExtentType>(Choice(args, "extent", kExtents, 0));
     f->reversed = Flag(args, "reversed", false);
-    f->distance.name       = s.doc.NextParameterName();
-    f->distance.expression = Expression(args, "distance", f->extent == doc::ExtentType::ThroughAll ? std::optional<std::string>("10") : std::nullopt);
+    // Through all needs no distance: no named parameter that drives nothing.
+    if (f->extent != doc::ExtentType::ThroughAll) {
+        f->distance.name       = s.doc.NextParameterName();
+        f->distance.expression = Expression(args, "distance");
+    }
     if (Has(args, "taper")) f->taper.expression = Expression(args, "taper");
     return Finish(s, std::move(f), args, "Выдавливание");
 }
@@ -76,9 +82,85 @@ Json Revolve(AppContext& app, const Json& args) {
     static const std::vector<std::string> kExtents = {"full", "angle", "symmetric"};
     f->extent   = static_cast<doc::RevolveExtent>(Choice(args, "extent", kExtents, Has(args, "angle") ? 1 : 0));
     f->reversed = Flag(args, "reversed", false);
-    f->angle.name       = s.doc.NextParameterName();
-    f->angle.expression = Expression(args, "angle", "90");
+    if (f->extent != doc::RevolveExtent::Full) {   // a full turn has no angle to drive
+        f->angle.name       = s.doc.NextParameterName();
+        f->angle.expression = Expression(args, "angle", "90");
+    }
     return Finish(s, std::move(f), args, "Вращение");
+}
+
+Vec3 Point3(const Json& args, const char* key, std::optional<Vec3> fallback) {
+    if (!Has(args, key) && fallback) return *fallback;
+    const Json& v = Required(args, key);
+    if (!v.is_array() || v.size() != 3 || !v[0].is_number() || !v[1].is_number() || !v[2].is_number())
+        Fail(std::format("«{}» — не точка [x, y, z]", key));
+    return {v[0].get<double>(), v[1].get<double>(), v[2].get<double>()};
+}
+
+/// A thread on the cylinder (shaft or hole) whose axis passes through
+/// `axis_point` along `axis_dir`, of about `diameter`: the kernel finds the
+/// face itself (doc::CylinderTouch), the same way a click in the viewport does.
+Json Thread(AppContext& app, const Json& args) {
+    Session& s = ActivePart(app);
+    s.RebuildNow();
+    if (s.model.Bodies().empty()) Fail("В детали нет тела, на котором делать резьбу");
+    const Vec3   point    = Point3(args, "axis_point", std::nullopt);
+    Vec3         dir      = Point3(args, "axis_dir", Vec3{0, 0, 1});
+    const double diameter = Number(args, "diameter");
+    if (dir.Length() < 1e-9) Fail("«axis_dir» — нулевой вектор");
+    if (diameter <= 0) Fail("«diameter» должен быть больше нуля");
+    dir = dir.Normalized();
+    // Any unit vector across the axis (the thread does not use it).
+    const Vec3 helper = std::abs(dir.z) < 0.9 ? Vec3{0, 0, 1} : Vec3{1, 0, 0};
+    const Vec3 radial = dir.Cross(helper).Normalized();
+
+    auto f          = std::make_unique<doc::ThreadFeature>();
+    f->id           = s.doc.Ids().Next();
+    f->name         = Has(args, "name") ? Text(args, "name") : s.doc.UniqueFeatureName(Tr("Резьба"));
+    f->face         = doc::CylinderTouch{point, dir, diameter / 2, radial};
+    f->size         = Has(args, "size") ? Number(args, "size") : 0.0;
+    f->fromOtherEnd = Flag(args, "from_other_end", false);
+    f->leftHanded   = Flag(args, "left_handed", false);
+    f->cosmetic     = Flag(args, "cosmetic", false);
+    f->pitch.name   = s.doc.NextParameterName();
+    const bool autoPitch = !Has(args, "pitch");
+    f->pitch.expression = autoPitch ? "1" : Expression(args, "pitch");   // auto: set below from the size found
+    if (Has(args, "length")) {
+        f->fullLength = false;
+        f->length.name       = "d" + std::to_string(std::stoi(f->pitch.name.substr(1)) + 1);
+        f->length.expression = Expression(args, "length");
+    }
+    const ObjectId id = f->id;
+    s.Execute(doc::AddFeature(std::move(f), s.doc.EndMarker()));
+    s.RebuildNow();
+
+    auto* made = s.doc.FindAs<doc::ThreadFeature>(id);
+    if (!made->site) {   // no cylinder there: take the step back rather than leave a broken feature
+        const std::string why = made->status.message;
+        s.Undo();
+        s.RebuildNow();
+        Fail(std::format("Резьба не построена: {} (ось через [{}, {}, {}], Ø{}). Проверьте ось и диаметр по part.properties / sketch.get",
+                         why.empty() ? "цилиндрическая грань не найдена" : why, point.x, point.y, point.z, diameter));
+    }
+    if (autoPitch) {
+        // The coarse ISO pitch of the size, as the panel does after a click.
+        // Still the same undo step: nothing else happened since it was added.
+        const double nominal = made->size > 0 ? made->size : made->site->nominal;
+        made->pitch.expression = std::format("{}", doc::CoarsePitch(nominal));
+        s.doc.MarkChanged(static_cast<std::size_t>(s.doc.IndexOf(id)));
+    }
+    Json out = AfterChange(s, id);
+    made     = s.doc.FindAs<doc::ThreadFeature>(id);
+    if (made->site)
+        out["thread"] = {{"external", made->site->external},
+                         {"nominal_mm", made->size > 0 ? made->size : made->site->nominal},
+                         {"pitch_mm", made->pitch.value},
+                         {"face_length_mm", made->site->length},
+                         {"designation", std::format("M{}x{}", made->size > 0 ? made->size : made->site->nominal, made->pitch.value)}};
+    for (const Parameter* p : made->Parameters())
+        if (!p->name.empty()) out["parameters"].push_back({{"name", p->name}, {"expression", p->expression}});
+    if (const auto props = s.model.Properties()) out["volume_mm3"] = props->volume;
+    return out;
 }
 
 Json SolidSchema(Json own, std::vector<std::string> required) {
@@ -107,7 +189,7 @@ void AddSolidCommands(Commands& out) {
                    true, &Extrude});
     out.push_back({"feature.revolve",
                    "Вращение контуров эскиза вокруг отрезка того же эскиза (по умолчанию — вокруг осевой). "
-                   "Контур рисуйте по одну сторону от оси.",
+                   "Контур рисуйте по одну сторону от оси; осевая может быть его стороной.",
                    SolidSchema({{"axis", IdArg("id отрезка-оси; не задан — осевая эскиза.")},
                                 {"extent", EnumArg("full — 360° (по умолчанию), angle — на угол, symmetric — угол поровну в обе стороны.",
                                                    {"full", "angle", "symmetric"})},
@@ -115,6 +197,25 @@ void AddSolidCommands(Commands& out) {
                                 {"reversed", BoolArg("В другую сторону.")}},
                                {}),
                    true, &Revolve});
+    out.push_back({"feature.thread",
+                   "Метрическая резьба ISO 60° (винтовая, настоящая) на цилиндрической грани: на валу — наружная, в отверстии — "
+                   "внутренняя (отверстие = диаметр под метчик). Грань задаётся осью и диаметром: точка на оси, направление оси, "
+                   "диаметр цилиндра (вал M8 — 8; отверстие под M8 — 6.8). Шаг по умолчанию — крупный по ISO для найденного размера. "
+                   "Резьба идёт по всей длине грани или на length от её начала.",
+                   Schema({{"axis_point", {{"type", "array"}, {"items", {{"type", "number"}}}, {"minItems", 3}, {"maxItems", 3},
+                                           {"description", "Любая точка на оси цилиндра [x, y, z], мм, в координатах модели."}}},
+                           {"axis_dir", {{"type", "array"}, {"items", {{"type", "number"}}}, {"minItems", 3}, {"maxItems", 3},
+                                         {"description", "Направление оси [x, y, z]; по умолчанию [0, 0, 1]."}}},
+                           {"diameter", NumberArg("Диаметр цилиндрической грани, мм.")},
+                           {"pitch", ExpressionArg("Шаг, мм; не задан — крупный по ISO.")},
+                           {"length", ExpressionArg("Длина резьбы, мм; не задана — по всей грани.")},
+                           {"size", NumberArg("Номинал вручную (8 для M8), если грань другого диаметра; не задан — по грани.")},
+                           {"from_other_end", BoolArg("Начать с другого конца грани.")},
+                           {"left_handed", BoolArg("Левая резьба.")},
+                           {"cosmetic", BoolArg("Условная: только рисуется на грани, модель лёгкая; в экспорт идёт настоящая.")},
+                           {"name", StringArg("Имя операции.")}},
+                          {"axis_point", "diameter"}),
+                   true, &Thread});
 }
 
 } // namespace bz::app::scripting

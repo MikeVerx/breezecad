@@ -55,7 +55,7 @@ claude mcp add --transport http breezecad http://127.0.0.1:47321/mcp --header "A
 | Документы | `app_documents`, `app_new_part`, `app_open`, `app_activate`, `doc_save`, `doc_export`, `doc_undo`, `doc_redo` |
 | Деталь | `part_tree`, `part_feature`, `part_parameters`, `part_properties`, `part_set_parameter`, `part_set_variable`, `part_set_info`, `part_rename`, `part_suppress`, `part_delete` |
 | Эскиз | `sketch_create`, `sketch_add`, `sketch_constrain`, `sketch_remove`, `sketch_get` |
-| Тела | `feature_extrude`, `feature_revolve` |
+| Тела | `feature_extrude`, `feature_revolve`, `feature_thread` (настоящая винтовая ISO-резьба: ось + диаметр) |
 
 Пока пользователь редактирует эскиз или операцию, изменяющие команды
 отказывают (программа не выдёргивает правку из рук).

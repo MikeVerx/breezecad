@@ -112,7 +112,9 @@ Json AddItem(SketchEdit& e, const Json& item) {
         Json lines = Json::array();
         for (std::size_t i = 0; i + 1 < ids.size(); ++i) {
             if (ids[i] == ids[i + 1]) Fail("Отрезок нулевой длины");
-            const ObjectId l = sk.AddLine(e.Ids(), ids[i], ids[i + 1], aux || type == "centerline");
+            // An осевая is not construction: it bounds profiles (a shaft drawn
+            // as a half closes on its axis), as in the program's own tool.
+            const ObjectId l = sk.AddLine(e.Ids(), ids[i], ids[i + 1], aux);
             if (type == "centerline") sk.FindLine(l)->centerline = true;
             const Vec2 a = sk.PositionOf(ids[i]), b = sk.PositionOf(ids[i + 1]);
             if (dims && type != "centerline") dim(e.Dimension(ConstraintType::Length, l, {}, (b - a).Length(), Outward(a, b)));
