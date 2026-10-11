@@ -1,6 +1,7 @@
 // Header row: brand menu, quick access toolbar, document title, command
 // search with its drop-down, and live stats (FPS, memory, objects).
 
+#include "app/BetaTesting.h"
 #include "app/Operations.h"
 #include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
@@ -86,6 +87,7 @@ void MainMenu(AppContext& app) {
     }
     ImGui::Separator();
     MenuAction(app, "file.close");
+    if (beta::Enabled()) MenuAction(app, "app.reportProblem");
     MenuAction(app, "app.about");
     MenuAction(app, "app.quit");
     ImGui::EndPopup();
@@ -323,14 +325,18 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
         ImFont* f2 = ui.fonts.body;
         const float w1 = f1->CalcTextSizeA(ui.S(13), FLT_MAX, 0, name.c_str()).x;
         const float w2 = f2->CalcTextSizeA(ui.S(13), FLT_MAX, 0, suffix).x;
+        // The testers' build says so (screenshots in bug reports show it).
+        const std::string tag = beta::Enabled() ? std::string(" \xC2\xB7 ") + Tr("для бета-тестеров") : std::string();
+        const float w3 = tag.empty() ? 0 : f1->CalcTextSizeA(ui.S(13), FLT_MAX, 0, tag.c_str()).x;
         const float mid = (x + searchX) / 2;
-        float tx = std::max(x + ui.S(8), mid - (w1 + w2) / 2);
-        if (tx + w1 + w2 < searchX - ui.S(8)) {
+        float tx = std::max(x + ui.S(8), mid - (w1 + w2 + w3) / 2);
+        if (tx + w1 + w2 + w3 < searchX - ui.S(8)) {
             const float ty = pos.y + (h - ui.S(13)) / 2 - ui.S(1);
             dl->AddText(f1, ui.S(13), {tx, ty}, ui::ToU32(c.text), name.c_str());
             dl->AddText(f2, ui.S(13), {tx + w1, ty}, ui::ToU32(c.textMuted), suffix);
+            if (!tag.empty()) dl->AddText(f1, ui.S(13), {tx + w1 + w2, ty}, ui::ToU32(c.warning), tag.c_str());
             if (s && s->IsModified() && !app.workspace.ShowsHome())
-                dl->AddCircleFilled({tx + w1 + w2 + ui.S(8), ty + ui.S(8)}, ui.S(3), ui::ToU32(c.accent));
+                dl->AddCircleFilled({tx + w1 + w2 + w3 + ui.S(8), ty + ui.S(8)}, ui.S(3), ui::ToU32(c.accent));
         }
     }
 

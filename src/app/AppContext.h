@@ -46,6 +46,16 @@ struct ShellState {
     std::optional<int> closeRequest;   ///< tab waiting for "save changes?" answer
     bool               quitRequested = false;
     bool               showAbout = false;
+    /// The testers' build: "what happened?" — after a crash (at start) or
+    /// asked from the menu. Packs the session into a zip to send by hand.
+    struct BetaReport {
+        bool                  open = false;
+        bool                  crash = false;
+        std::filesystem::path session;
+        std::string           started;
+        std::string           text;
+        std::filesystem::path packed;   ///< the zip once made
+    } betaReport;
     bool               showSettings = false;
     bool               backgroundMenu = false;   ///< open the "Фон" menu at the cursor
     int                settingsTab = 0;          ///< 0 interface, 1 keys, 2 mouse, 3 general, 4 performance, 5 modules

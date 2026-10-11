@@ -8,6 +8,7 @@ add_executable(breezecad WIN32
     Autosave.cpp
     assembly/AssemblyUi.cpp
     Backgrounds.cpp
+    BetaTesting.cpp
     Format.cpp
     Language.cpp
     Materials.cpp

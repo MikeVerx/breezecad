@@ -1,6 +1,7 @@
 // Windows on top of the work: "save changes?", "МЦХ" and "about". All close
 // with Esc.
 
+#include "app/BetaTesting.h"
 #include "app/Format.h"
 #include "app/Language.h"
 #include "app/Materials.h"
@@ -22,6 +23,7 @@
 #include "ui/Widgets.h"
 
 #include <array>
+#include <imgui_stdlib.h>
 #include <cmath>
 #include <format>
 #include <nlohmann/json.hpp>
@@ -948,6 +950,72 @@ void DrawSettings(AppContext& app) {
     ImGui::EndPopup();
 }
 
+/// The testers' build: what happened, packed into one zip to send.
+void DrawBetaReport(AppContext& app) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    ShellState::BetaReport& r = app.shell.betaReport;
+    if (!BeginDialog(ui, "##beta-report", r.open, ui.S(560))) return;
+    const auto paragraph = [&](const std::string& text, Color colour) {
+        ui::FontScope font(ui.fonts.body);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(colour));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(text.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    };
+    const auto close = [&] {
+        r = {};
+        ImGui::CloseCurrentPopup();
+    };
+    const float width = ImGui::GetContentRegionAvail().x;
+    {
+        ui::FontScope font(ui.fonts.title);
+        ImGui::TextUnformatted(r.crash ? Tr("BreezeCAD закрылся с ошибкой") : Tr("Сообщить о проблеме"));
+    }
+    ImGui::Dummy({0, ui.S(2)});
+    if (!r.packed.empty()) {
+        paragraph(Tr("Спасибо! Отчёт сохранён в файл:"), c.textSecondary);
+        paragraph(ToUtf8(r.packed.filename()), c.text);
+        ImGui::Dummy({0, ui.S(2)});
+        paragraph(Tr("Отправьте этот файл в чат тестеров. Кнопка ниже откроет папку, где он лежит."), c.textSecondary);
+        ImGui::Dummy({0, ui.S(8)});
+        const float bw = (width - ui.S(8)) / 2;
+        if (ui::PrimaryButton(ui, "##beta-show", Tr("Открыть папку с отчётом"), nullptr, {bw, ui.S(36)}))
+            if (!platform::OpenFolder(r.packed.parent_path())) app.notes.Error(Tr("Не удалось открыть папку"));
+        ImGui::SameLine(0, ui.S(8));
+        if (ui::SecondaryButton(ui, "##beta-done", Tr("Закрыть"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape)) close();
+        ImGui::EndPopup();
+        return;
+    }
+    if (r.crash)
+        paragraph(Trf("Это случилось в прошлый раз ({}). Программа записала, что происходило перед этим. Напишите в двух-трёх "
+                      "предложениях, что вы делали — например: «сделал вращение эскиза, потом зеркало, и программа закрылась».",
+                      r.started),
+                  c.textSecondary);
+    else
+        paragraph(Tr("Опишите, что не так: что вы делали, что ожидали и что получилось. В отчёт попадёт всё, что программа "
+                     "записала за этот запуск (действия, ошибки, скорость работы) и описание компьютера."),
+                  c.textSecondary);
+    ImGui::Dummy({0, ui.S(4)});
+    ImGui::SetNextItemWidth(width);
+    if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+    ImGui::InputTextMultiline("##beta-text", &r.text, {width, ui.S(120)});
+    ImGui::Dummy({0, ui.S(8)});
+    const float bw = (width - ui.S(8)) / 2;
+    if (ui::PrimaryButton(ui, "##beta-pack", Tr("Сохранить отчёт"), nullptr, {bw, ui.S(36)})) {
+        if (const auto zip = beta::Pack(r.session, r.text, r.crash)) r.packed = *zip;
+        else app.notes.Error(Tr(zip.GetError().message));
+    }
+    ImGui::SameLine(0, ui.S(8));
+    if (ui::SecondaryButton(ui, "##beta-skip", r.crash ? Tr("Не сейчас") : Tr("Отмена"), "Esc", {bw, ui.S(36)}) ||
+        ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        if (r.crash) beta::Dismiss(r.session);
+        close();
+    }
+    ImGui::EndPopup();
+}
+
 void DrawDialogs(AppContext& app) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
@@ -1008,6 +1076,7 @@ void DrawDialogs(AppContext& app) {
     DrawBackgroundMenu(app);
 
     DrawSettings(app);
+    DrawBetaReport(app);
 
     // --- About ---
     if (BeginDialog(ui, "##about", app.shell.showAbout, ui.S(480))) {

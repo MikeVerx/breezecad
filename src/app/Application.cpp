@@ -1,4 +1,5 @@
 #include "app/Application.h"
+#include "app/BetaTesting.h"
 
 #include "app/Language.h"
 #include "core/Monitor.h"
@@ -84,7 +85,8 @@ Application::~Application() {
 
 bool Application::Init(const std::vector<std::filesystem::path>& files) {
     const std::filesystem::path config = platform::ConfigDir();
-    log::OpenFile(config / "logs" / "breezecad.log");
+    // The testers' build logs into its session folder (packed into reports).
+    log::OpenFile(beta::SessionDir().empty() ? config / "logs" / "breezecad.log" : beta::SessionDir() / "output.log");
     log::Info("BreezeCAD {} starting", VersionLine());
 
     // A lock file left from the last run means it did not exit normally.
@@ -117,6 +119,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     windowConfig.maximized = mySettings.windowMaximized;
     progress(Tr("Создание окна…"));
     if (!myWindow.Create(windowConfig)) return false;
+    beta::WriteSystemInfo(myWindow, mySettings.language.empty() ? std::string("system") : mySettings.language);
 
     glfwSetWindowUserPointer(myWindow.Handle(), &myInput);
     glfwSetCursorPosCallback(myWindow.Handle(), [](GLFWwindow* w, double, double) { OnAnyInput(w); });
@@ -189,6 +192,11 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     progress(Tr("Готово"));
     splash.Close();
     myWindow.Show();
+    // The testers' build: a crash last time — ask what happened (newest first).
+    if (const std::vector<beta::PastSession> crashes = beta::UnreportedCrashes(); !crashes.empty()) {
+        for (std::size_t i = 1; i < crashes.size(); ++i) beta::Dismiss(crashes[i].dir);   // only the last one is asked about
+        myShell.betaReport = {true, true, crashes.front().dir, crashes.front().started, {}, {}};
+    }
     if (myShell.crashedLastTime && !myShell.recoverable.empty())
         myNotes.Info(Tr("Прошлый сеанс завершился неожиданно. Несохранённую работу можно восстановить на главной странице."));
     return true;
@@ -326,9 +334,11 @@ void Application::HandleCloseRequests() {
 }
 
 void Application::UpdateTitle() {
-    std::string title = "BreezeCAD";
+    // The testers' build says so in the title (and in screenshots of it).
+    const std::string program = beta::Enabled() ? std::string("BreezeCAD ") + Version() + " \xE2\x80\x94 " + Tr("для бета-тестеров") : "BreezeCAD";
+    std::string title = program;
     if (Session* s = myWorkspace.Active(); s && !myWorkspace.ShowsHome())
-        title = s->Title() + (s->IsModified() ? " \xE2\x80\xA2" : "") + " \xE2\x80\x94 BreezeCAD";
+        title = s->Title() + (s->IsModified() ? " \xE2\x80\xA2" : "") + " \xE2\x80\x94 " + program;
     if (title != myTitle) {
         myTitle = title;
         myWindow.SetTitle(title);

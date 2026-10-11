@@ -2,6 +2,7 @@
 // keyboard shortcuts all run actions from here.
 
 #include "app/Application.h"
+#include "app/BetaTesting.h"
 #include "app/Operations.h"
 #include "app/assembly/AssemblyUi.h"
 #include "app/features/OperationEditors.h"
@@ -123,6 +124,12 @@ void RegisterActions(AppContext& app) {
     a.Add({"app.settings", N_("Настройки"), "ui-sliders", 0, N_("Масштаб интерфейса, оформление, сочетания клавиш"), {},
            [&app] { app.shell.showSettings = true; }});
     a.Add({"app.about", N_("О программе"), "ui-info", 0, {}, {}, [&app] { app.shell.showAbout = true; }});
+    // The testers' build: a report of this session, with a few words.
+    a.Add({"app.reportProblem", N_("Сообщить о проблеме…"), "ui-info", 0, N_("Собрать отчёт о том, что сейчас не так, для разработчика"),
+           [] { return beta::Enabled(); },
+           [&app] {
+               app.shell.betaReport = {true, false, beta::SessionDir(), {}, {}, {}};
+           }});
 
     // --- edit ---
     a.Add({"edit.undo", N_("Отменить"), "ui-undo", Ctrl(ImGuiKey_Z), {}, [&app] { return CanUndo(app); }, [&app] { Undo(app); }});

@@ -7,6 +7,7 @@
 //   BZ_MONITOR=events.jsonl        monitoring for tools/monitor (core/Monitor.h).
 
 #include "app/Application.h"
+#include "app/BetaTesting.h"
 #include "core/Log.h"
 #include "core/Monitor.h"
 
@@ -166,6 +167,7 @@ std::vector<std::filesystem::path> CommandLineFiles(int argc, char** argv) {
 } // namespace
 
 int main(int argc, char** argv) {
+    bz::app::beta::BeginSession();   // the testers' build: monitoring into its session folder
     bz::mon::StartFromEnvironment();
     std::set_terminate(OnTerminate);
 #if defined(_WIN32)
@@ -176,6 +178,7 @@ int main(int argc, char** argv) {
     bz::app::Application app;
     if (!app.Init(CommandLineFiles(argc, argv))) {
         bz::mon::Stop(1);
+        bz::app::beta::EndSession(1);
         return 1;
     }
     if (const char* shot = std::getenv("BZ_SCREENSHOT")) {
@@ -190,5 +193,6 @@ int main(int argc, char** argv) {
     if (const char* dir = std::getenv("BZ_SHOT_DIR")) app.EnableShotRequests(dir);
     const int code = app.Run();
     bz::mon::Stop(code);
+    bz::app::beta::EndSession(code);
     return code;
 }

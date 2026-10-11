@@ -4,6 +4,10 @@ what hung and what crashed, each tied to the action that caused it.
 
     python tools/monitor/run.py [--bin PATH] [-- program arguments]
     python tools/monitor/run.py --scenario bracket          (Linux, Xvfb)
+    python tools/monitor/run.py --tester BreezeCAD-отчёт-….zip [--bin <папка сборки>]
+                                       (a report sent by a beta tester; with --bin
+                                       and `pip install pefile`, Windows stack
+                                       frames get the names of DLL functions)
 
 Use the program as usual and close it: the report is written to
 tools/monitor/reports/<date-time>.md (+ .json; raw data in <date-time>/).
@@ -26,6 +30,7 @@ import subprocess
 import sys
 import threading
 import time
+import zipfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -567,6 +572,91 @@ def render(r: dict) -> str:
 
 # ---------------------------------------------------------------- main
 
+def name_windows_frames(lines: list[str], folder: Path) -> list[str]:
+    """"libTKBO.dll+0x169c34" → "… = BOPTools_AlgoTools::ComputeState(…) + 0xe4" (nearest exported
+    function of that DLL; optional: needs pefile and the same build's DLLs)."""
+    try:
+        import bisect
+        import pefile  # type: ignore
+    except ImportError:
+        return lines
+    cache: dict[str, tuple[list[int], list[str]] | None] = {}
+
+    def table(module: str):
+        if module not in cache:
+            cache[module] = None
+            f = folder / module
+            if f.exists():
+                pe = pefile.PE(str(f), fast_load=True)
+                pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_EXPORT"]])
+                syms = sorted((e.address, e.name.decode()) for e in getattr(pe, "DIRECTORY_ENTRY_EXPORT", None).symbols
+                              if e.name) if hasattr(pe, "DIRECTORY_ENTRY_EXPORT") else []
+                cache[module] = ([a for a, _ in syms], [n for _, n in syms])
+        return cache[module]
+
+    out = []
+    for line in lines:
+        m = re.search(r"([\w.+-]+\.dll)\+0x([0-9a-f]+)", line, re.I)
+        t = table(m.group(1)) if m else None
+        if m and t and t[0]:
+            addr = int(m.group(2), 16)
+            i = bisect.bisect_right(t[0], addr) - 1
+            if i >= 0:
+                line += f"  = {demangle(t[1][i])} + 0x{addr - t[0][i]:x}"
+        out.append(line)
+    return out
+
+
+def tester_report(path: Path, build: Path | None) -> Path:
+    """A zip (or its unpacked folder) from the testers' build → the usual report, with the tester's
+    words and the computer on top."""
+    if path.suffix.lower() == ".zip":
+        out = HERE / "reports" / "testers" / path.stem
+        shutil.rmtree(out, ignore_errors=True)
+        out.mkdir(parents=True)
+        with zipfile.ZipFile(path) as z:
+            z.extractall(out)
+        dirs = [d for d in out.iterdir() if d.is_dir()]
+        raw = dirs[0] if len(dirs) == 1 else out
+    else:
+        raw = path
+    session = json.loads((raw / "session.json").read_text(encoding="utf-8"))
+    events_file = raw / "events.jsonl"
+    last_t = 0.0
+    if events_file.exists():
+        for line in events_file.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                last_t = max(last_t, float(json.loads(line).get("t", 0)))
+            except ValueError:
+                pass
+    meta = {"binary": session.get("binary", "?"), "args": [], "started": session.get("started", raw.name),
+            "duration_s": round(last_t, 1), "exit_code": session.get("exit_code"),
+            "stopped_by": None if session.get("exit_code") is not None else "сеанс оборвался (вылет или программу закрыли силой)",
+            "scenario": None, "software_gl": False, "hang_ms": session.get("hang_ms", 2000)}
+    log_file = raw / "output.log"
+    lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines() if log_file.exists() else []
+    if build:
+        lines = name_windows_frames(lines, build if build.is_dir() else build.parent)
+    r = analyze(meta, events_file, [(0.0, l) for l in lines], {}, Path(meta["binary"]), raw)
+    head = [f"# Отчёт тестера — {meta['started'].replace('_', ' ')}", ""]
+    words = raw / "описание.txt"
+    if words.exists():
+        head += ["**Что пишет тестер:**", "", "> " + words.read_text(encoding="utf-8", errors="replace").strip().replace("\n", "\n> "), ""]
+    sysf = raw / "system.json"
+    if sysf.exists():
+        info = json.loads(sysf.read_text(encoding="utf-8"))
+        head += ["**Компьютер и программа:**", "", "| | |", "|---|---|"]
+        for group in ("program", "graphics", "computer"):
+            for k, v in (info.get(group) or {}).items():
+                head.append(f"| {group}.{k} | {cell(str(v))} |")
+        head.append("")
+    md = raw.parent / (raw.name + ".md")
+    md.write_text("\n".join(head) + "\n" + render(r), encoding="utf-8")
+    print(md)
+    print(r["verdict"])
+    return md
+
+
 def main():
     p = argparse.ArgumentParser(description="BreezeCAD под наблюдением: отчёт о вылетах, зависаниях и просадках")
     p.add_argument("--bin", help="путь к breezecad(.exe) или к его папке (по умолчанию — свежая сборка в build/)")
@@ -575,8 +665,12 @@ def main():
     p.add_argument("--display", default=":99", help="дисплей Xvfb для сценария")
     p.add_argument("--settle", type=float, default=2.0, help="сколько ждать после сценария, с")
     p.add_argument("--report", help="только пересобрать отчёт из папки сырых данных")
+    p.add_argument("--tester", help="отчёт тестера: zip из «Отчёты для разработчика» (или его распакованная папка)")
     p.add_argument("program_args", nargs="*", help="аргументы программы (после --)")
     args = p.parse_args()
+    if args.tester:
+        tester_report(Path(args.tester), Path(args.bin) if args.bin else None)
+        return
     if args.report:  # re-analysis of an old run (after changing this script)
         raw = Path(args.report)
         meta = json.loads((raw.parent / (raw.name + ".json")).read_text(encoding="utf-8"))["meta"]
