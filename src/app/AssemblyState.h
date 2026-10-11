@@ -46,6 +46,14 @@ public:
         std::string screw, washer, nut;   ///< standard ids; washer/nut empty: none
     } dropping;
 
+    /// After AutoDrop: "the same into all such holes?" for the screw just put.
+    struct Offer {
+        ObjectId component;   ///< the screw; none: no offer
+        int      holes = 0;   ///< such holes in all, with its own
+    } offer;
+    /// A circular pattern waits for a click on a round face for its axis.
+    ObjectId pickingAxis;
+
     /// Freedom left to each component after the last solve (tree badges).
     std::unordered_map<ObjectId, assembly::Freedom> freedom;
     /// Problems found by the last Update (missing part files...), to show once.

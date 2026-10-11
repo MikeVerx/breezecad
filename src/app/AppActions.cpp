@@ -45,6 +45,9 @@ void RegisterActions(AppContext& app) {
     a.Add({"assembly.ground", N_("Закрепить"), "ui-lock", 0, N_("Закрепить или освободить выбранный компонент"),
            [&app] { return InAssembly(app) && app.Doc()->assembly->assembly.FindComponent(app.Doc()->assembly->selected); },
            [&app] { ToggleGrounded(app); }});
+    a.Add({"assembly.pattern", N_("Массив"), "pattern-rect", 0,
+           N_("Повторить выбранный компонент (с шайбами и гайками) во все такие же отверстия, рядами или по кругу"),
+           [&app] { return CanPattern(app); }, [&app] { StartPattern(app); }});
     a.Add({"assembly.mate", N_("Совмещение"), "a-mate", ImGuiKey_C,
            N_("Грань к грани (или заподлицо) с зазором; также две оси на одной линии (C)"), asmDoc,
            [&app] { StartConstraint(app, assembly::ConstraintType::Mate); }});

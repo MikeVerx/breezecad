@@ -12,6 +12,7 @@
 #include "document/BzcFile.h"
 #include "document/DocumentTypes.h"
 #include "kernel/AutoDrop.h"
+#include "kernel/ComponentPattern.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
 #include "ui/Menus.h"
@@ -452,11 +453,249 @@ void DropOnRim(AppContext& app, Session& s, const assembly::GeometryRef& rim) {
     st.assembly.Touch();
     const std::size_t screw = d.washer.empty() ? 0 : 1;   // the plan: [washer,] screw[, nut]
     st.selected = ids[screw];
+    // More holes like this one: offer to fill them all at once.
+    const int holes = int(st.geometry.SameHoles(st.assembly, rim).size());
+    st.offer = holes > 1 ? AssemblyState::Offer{ids[screw], holes} : AssemblyState::Offer{};
     app.notes.Success(Trf("Вставлено: {} (пакет {} мм)", doc::parts::Designation(plan->items[screw].request),
                           FormatNumber(plan->stack, 1)));
 }
 
+/// Parts made by the library ("Стандартные изделия" next to the assembly)
+/// come along with the component a pattern repeats; other parts do not.
+bool IsStandardPart(const Component& c) {
+    return c.path.starts_with("Стандартные изделия/") || c.path.find("/Стандартные изделия/") != std::string::npos;
+}
+
+/// A pattern of `component` with its group: into the holes like the one it
+/// sits in when there are such, otherwise a row. Selected when made.
+bool MakePattern(AppContext& app, Session& s, ObjectId component) {
+    AssemblyState& st = *s.assembly;
+    assembly::ComponentPattern p;
+    p.seed = kernel::PatternGroup(st.assembly, component, IsStandardPart);
+    if (p.seed.empty()) return false;
+    if (auto rim = kernel::SeatHoleOf(st.assembly, p.seed); rim && st.geometry.SameHoles(st.assembly, *rim).size() > 1) {
+        p.kind = assembly::PatternKind::Holes;
+        p.rim = *rim;
+    } else {
+        p.kind = assembly::PatternKind::Rectangular;
+        p.count1 = 3;
+        if (const auto box = st.geometry.ComponentBounds(component))
+            p.spacing1 = std::max(1.0, std::ceil((box->max.x - box->min.x) * 1.5));
+    }
+    const auto spots = kernel::PatternSpots(st.geometry, st.assembly, p);
+    if (!spots) {
+        app.notes.Error(Tr(spots.GetError().message));
+        return false;
+    }
+    st.Checkpoint(N_("Массив компонентов"));
+    const ObjectId id = st.assembly.AddPattern(p).id;
+    const Expected<int> made = kernel::ApplyPattern(st.geometry, st.assembly, id);
+    if (!made) {
+        st.assembly.RemovePattern(id);
+        app.notes.Error(Tr(made.GetError().message));
+        return false;
+    }
+    st.selected = id;
+    st.offer = {};
+    app.notes.Success(Trf("{}: экземпляров {}", st.assembly.FindPattern(id)->name, *made + 1));
+    return true;
+}
+
+/// A number field committing through `apply` (an expression in mm or °).
+void NumberField(AppContext& app, const char* label, const char* id, double value, bool angle, float width,
+                 const std::function<void(double)>& apply) {
+    ui::Ui& ui = app.ui;
+    ui::FieldLabel(ui, label);
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::GetWindowDrawList()->AddRect(p, {p.x + width, p.y + ui.S(28)}, ui::ToU32(ui.C().fieldBorder), ui.S(5));
+    if (ui::CommitInput(ui, id, FormatNumber(angle ? value * 180.0 / kPi : value, 3), app.shell.edit, width, true)) {
+        UnitSystem units;
+        units.angle = AngleUnit::Degree;
+        const Expected<double> v = EvaluateExpression(app.shell.edit.text, angle ? Quantity::Angle : Quantity::Length, units, {});
+        if (v) apply(*v);
+        else app.notes.Error(Tr("Не число"));
+    }
+    ImGui::Dummy({0, ui.S(8)});
+}
+
+/// Changes pattern `id` by `edit` and rebuilds it (one undo step); when the
+/// new pattern has nowhere to go it stays as it was.
+void EditPattern(AppContext& app, AssemblyState& st, ObjectId id, const std::function<void(assembly::ComponentPattern&)>& edit) {
+    const assembly::ComponentPattern* p = st.assembly.FindPattern(id);
+    if (!p) return;
+    assembly::ComponentPattern next = *p;
+    edit(next);
+    if (const auto spots = kernel::PatternSpots(st.geometry, st.assembly, next); !spots) {
+        app.notes.Error(Tr(spots.GetError().message));
+        return;
+    }
+    st.Checkpoint(N_("Изменение массива"));
+    *st.assembly.FindPattern(id) = std::move(next);
+    if (const Expected<int> made = kernel::ApplyPattern(st.geometry, st.assembly, id); !made)
+        app.notes.Error(Tr(made.GetError().message));
+}
+
+constexpr std::array<Vec3, 6> kDirections{Vec3{1, 0, 0}, Vec3{0, 1, 0}, Vec3{0, 0, 1},
+                                          Vec3{-1, 0, 0}, Vec3{0, -1, 0}, Vec3{0, 0, -1}};
+constexpr std::array<const char*, 6> kDirectionNames{"X", "Y", "Z", "−X", "−Y", "−Z"};
+
+int DirectionIndex(Vec3 d) {
+    for (std::size_t i = 0; i < kDirections.size(); ++i)
+        if ((d.Normalized() - kDirections[i]).Length() < 1e-6) return int(i);
+    return -1;
+}
+
+void DrawPatternProperties(AppContext& app, Session& session, const assembly::ComponentPattern& pattern, float width) {
+    ui::Ui& ui = app.ui;
+    AssemblyState& st = *session.assembly;
+    const ObjectId id = pattern.id;
+    std::string seed;
+    for (ObjectId c : pattern.seed)
+        if (const Component* comp = st.assembly.FindComponent(c)) seed += (seed.empty() ? "" : ", ") + comp->name;
+    LabelText(ui, Trf("Образец: {}", seed), ui.C().textSecondary);
+    LabelText(ui, Trf("Экземпляров: {} (с образцом)", pattern.instances.size() + 1), ui.C().textSecondary);
+    ImGui::Dummy({0, ui.S(8)});
+
+    static constexpr std::array<const char*, 3> kinds{N_("Отверстия"), N_("Прямоуг."), N_("Круговой")};
+    ui::FieldLabel(ui, Tr("Вид массива"));
+    const auto rim = kernel::SeatHoleOf(st.assembly, pattern.seed);
+    const int kind = ui::Segmented(ui, "pat-kind", kinds, int(pattern.kind), 3, width, rim ? 0 : 1);
+    if (kind != int(pattern.kind))
+        app.Later([&app, &st, id, kind, rim] {
+            EditPattern(app, st, id, [&](assembly::ComponentPattern& p) {
+                p.kind = assembly::PatternKind(kind);
+                if (p.kind == assembly::PatternKind::Holes && rim) p.rim = *rim;
+            });
+        });
+    ImGui::Dummy({0, ui.S(10)});
+
+    const auto later = [&app, &st, id](std::function<void(assembly::ComponentPattern&)> edit) {
+        app.Later([&app, &st, id, edit = std::move(edit)] { EditPattern(app, st, id, edit); });
+    };
+    const auto count = [&](const char* label, const char* fid, int value, int assembly::ComponentPattern::*member) {
+        NumberField(app, label, fid, value, false, width, [&](double v) {
+            const int n = int(std::lround(v));
+            if (n < 1 || n > 500) {
+                app.notes.Error(Tr("Количество — от 1 до 500"));
+                return;
+            }
+            later([member, n](assembly::ComponentPattern& p) { p.*member = n; });
+        });
+    };
+    switch (pattern.kind) {
+        case assembly::PatternKind::Holes: {
+            const Component* holder = st.assembly.FindComponent(pattern.rim.component);
+            LabelText(ui, Trf("Во все отверстия ⌀{} мм на «{}», как у образца", FormatNumber(2 * pattern.rim.radius, 2),
+                              holder ? holder->name : "?"),
+                      ui.C().textMuted);
+            break;
+        }
+        case assembly::PatternKind::Rectangular:
+            for (int row = 0; row < 2; ++row) {
+                const Vec3 dir = row ? pattern.direction2 : pattern.direction1;
+                ui::FieldLabel(ui, row ? Tr("Направление 2") : Tr("Направление 1"));
+                ImGui::PushID(row);
+                const int was = DirectionIndex(dir);
+                const int now = ui::Segmented(ui, "pat-dir", kDirectionNames, was, 6, width);
+                if (now != was && now >= 0)
+                    later([row, now](assembly::ComponentPattern& p) { (row ? p.direction2 : p.direction1) = kDirections[std::size_t(now)]; });
+                ImGui::Dummy({0, ui.S(6)});
+                count(Tr("Количество"), "##pat-count", row ? pattern.count2 : pattern.count1,
+                      row ? &assembly::ComponentPattern::count2 : &assembly::ComponentPattern::count1);
+                NumberField(app, Tr("Шаг, мм"), "##pat-step", row ? pattern.spacing2 : pattern.spacing1, false, width,
+                            [&](double v) { later([row, v](assembly::ComponentPattern& p) { (row ? p.spacing2 : p.spacing1) = v; }); });
+                ImGui::PopID();
+            }
+            break;
+        case assembly::PatternKind::Circular: {
+            const Component* owner = st.assembly.FindComponent(pattern.axis.component);
+            LabelText(ui, owner ? Trf("Ось: {}", owner->name) : std::string(Tr("Ось: Z сборки через начало координат")),
+                      ui.C().textSecondary);
+            if (ui::SecondaryButton(ui, "##pat-axis", st.pickingAxis == id ? Tr("Щёлкните по круглой грани…") : Tr("Указать ось"),
+                                    nullptr, {width, ui.S(28)}))
+                st.pickingAxis = st.pickingAxis == id ? ObjectId{} : id;
+            ImGui::Dummy({0, ui.S(8)});
+            count(Tr("Количество"), "##pat-count", pattern.count, &assembly::ComponentPattern::count);
+            NumberField(app, Tr("Угол, ° (360 — равномерно по кругу)"), "##pat-angle", pattern.angle, true, width,
+                        [&](double v) { later([v](assembly::ComponentPattern& p) { p.angle = v; }); });
+            break;
+        }
+    }
+    ImGui::Dummy({0, ui.S(6)});
+    if (ui::SecondaryButton(ui, "##pat-delete", Tr("Удалить массив"), nullptr, {width, ui.S(28)}))
+        app.Later([&app, &session] { AssemblyDelete(app, session); });
+}
+
+/// The offer after AutoDrop, over the top of the view.
+void DrawOffer(AppContext& app, Session& session, const ViewportFrame& vf) {
+    AssemblyState& st = *session.assembly;
+    if (!st.offer.component) return;
+    const Component* c = st.assembly.FindComponent(st.offer.component);
+    if (!c || st.assembly.PatternOfInstance(c->id) ||
+        std::any_of(st.assembly.patterns.begin(), st.assembly.patterns.end(), [&](const auto& p) { return p.Contains(c->id); })) {
+        st.offer = {};
+        return;
+    }
+    ui::Ui& ui = app.ui;
+    const std::string text = Trf("Ещё {} таких отверстий", st.offer.holes - 1);
+    const std::string yes = Tr("Во все такие отверстия");
+    const std::string no = Tr("Не нужно");
+    ImFont* font = ui.fonts.medium;
+    const float tw = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, text.c_str()).x;
+    const float bw = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, yes.c_str()).x + ui.S(24);
+    const float nw = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, no.c_str()).x + ui.S(24);
+    const float w = ui.S(14) + tw + ui.S(14) + bw + ui.S(4) + nw + ui.S(8);
+    const float h = ui.S(44);
+    ImGui::SetNextWindowPos({(vf.min.x + vf.max.x - w) / 2, vf.min.y + ui.S(56)});
+    ImGui::SetNextWindowSize({w, h});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ui.S(10));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ui::ToVec4(ui.C().panel.WithAlpha(0.97f)));
+    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                       ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+    if (ImGui::Begin("##assembly-offer", nullptr, flags)) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImVec2 o = ImGui::GetWindowPos();
+        dl->AddText(font, ui.S(13), {o.x + ui.S(14), o.y + (h - ui.S(13)) / 2}, ui::ToU32(ui.C().textSecondary), text.c_str());
+        ImGui::SetCursorPos({ui.S(14) + tw + ui.S(14), ui.S(8)});
+        if (ui::PrimaryButton(ui, "##offer-yes", yes.c_str(), nullptr, {bw, ui.S(28)})) {
+            const ObjectId screw = st.offer.component;
+            st.dropping = {};
+            app.Later([&app, &session, screw] { MakePattern(app, session, screw); });
+        }
+        ImGui::SameLine(0, ui.S(4));
+        if (ui::SecondaryButton(ui, "##offer-no", no.c_str(), nullptr, {nw, ui.S(28)})) st.offer = {};
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
 } // namespace
+
+bool CanPattern(AppContext& app) {
+    Session* s = ActiveAssembly(app);
+    if (!s) return false;
+    const assembly::Assembly& a = s->assembly->assembly;
+    return a.FindComponent(s->assembly->selected) || a.FindPattern(s->assembly->selected);
+}
+
+void StartPattern(AppContext& app) {
+    Session* s = ActiveAssembly(app);
+    if (!s) return;
+    StopEditing(app);
+    AssemblyState& st = *s->assembly;
+    if (st.assembly.FindPattern(st.selected)) return;   // already one: its panel edits it
+    if (const assembly::ComponentPattern* p = st.assembly.PatternOfInstance(st.selected)) {
+        st.selected = p->id;
+        return;
+    }
+    if (!st.assembly.FindComponent(st.selected)) {
+        app.notes.Info(Tr("Выберите компонент, который нужно повторить"));
+        return;
+    }
+    MakePattern(app, *s, st.selected);
+}
 
 bool CanAutoDrop(const doc::parts::StandardInfo& standard) {
     using doc::parts::PartKind;
@@ -547,6 +786,14 @@ void ToggleGrounded(AppContext& app) {
 bool AssemblyEscape(AppContext& app, Session& session) {
     (void)app;
     AssemblyState& st = *session.assembly;
+    if (st.pickingAxis) {
+        st.pickingAxis = {};
+        return true;
+    }
+    if (st.offer.component) {
+        st.offer = {};
+        return true;
+    }
     if (st.dropping.active) {
         st.dropping = {};
         return true;
@@ -576,7 +823,10 @@ bool AssemblyEscape(AppContext& app, Session& session) {
 bool AssemblyDelete(AppContext& app, Session& session) {
     (void)app;
     AssemblyState& st = *session.assembly;
-    if (st.assembly.FindComponent(st.selected)) {
+    if (st.assembly.FindPattern(st.selected)) {
+        st.Checkpoint(N_("Удаление массива"));
+        st.assembly.RemovePattern(st.selected);
+    } else if (st.assembly.FindComponent(st.selected)) {
         st.Checkpoint(N_("Удаление компонента"));
         st.assembly.RemoveComponent(st.selected);
     } else if (st.assembly.FindConstraint(st.selected)) {
@@ -600,8 +850,10 @@ void DrawAssemblyProperties(AppContext& app, Session& session, float width) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         Component* c = st.assembly.FindComponent(st.selected);
         const assembly::Constraint* con = st.assembly.FindConstraint(st.selected);
+        const assembly::ComponentPattern* pat = st.assembly.FindPattern(st.selected);
         const std::string title = c     ? Trf("Компонент {}", c->name)
                                   : con ? Trf("Зависимость {}", con->name)
+                                  : pat ? pat->name
                                         : std::string(Tr("Свойства сборки"));
         dl->AddText(ui.fonts.strong, ui.S(13), {p.x + ui.S(14), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(ui.C().text),
                     title.c_str());
@@ -613,6 +865,8 @@ void DrawAssemblyProperties(AppContext& app, Session& session, float width) {
     ImGui::BeginGroup();
     if (Component* c = st.assembly.FindComponent(st.selected)) {
         DrawComponentProperties(app, session, *c, inner);
+    } else if (const assembly::ComponentPattern* pat = st.assembly.FindPattern(st.selected)) {
+        DrawPatternProperties(app, session, *pat, inner);
     } else if (assembly::Constraint* con = st.assembly.FindConstraint(st.selected)) {
         const Component* a = st.assembly.FindComponent(con->first.component);
         const Component* b = st.assembly.FindComponent(con->second.component);
@@ -663,6 +917,25 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
     if (vf.hovered && !drag.moving) hit = app.viewport.Pick(pixel);
     const ObjectId hovered = hit ? hit->body : ObjectId{};
     app.viewport.SetHoveredBody(drag.moving ? drag.component : hovered ? hovered : st.selected);
+    DrawOffer(app, session, vf);
+
+    if (st.pickingAxis) {
+        if (!st.assembly.FindPattern(st.pickingAxis)) {
+            st.pickingAxis = {};
+        } else {
+            Prompt(ui, vf, Tr("Щёлкните по круглой грани — её ось станет осью массива (Esc — отмена)"));
+            if (vf.hovered && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                const ObjectId id = st.pickingAxis;
+                if (auto axis = st.geometry.GeometryAt(st.assembly, hovered, hit->point, kernel::AssemblyPick::Axis)) {
+                    st.pickingAxis = {};
+                    EditPattern(app, st, id, [&](assembly::ComponentPattern& p) { p.axis = *axis; });
+                } else {
+                    app.notes.Info(Tr("У этой грани нет оси — выберите цилиндр или конус"));
+                }
+            }
+            return;
+        }
+    }
 
     if (st.dropping.active) {
         Prompt(ui, vf, Tr("Щёлкните по кромке отверстия — размер и длина подберутся сами (Esc — отмена)"));

@@ -211,6 +211,7 @@ void AssemblyRibbon(AppContext& app, RibbonBuilder& r) {
     r.BeginGroup(Tr("Компонент"));
     r.Large("assembly.place", Tr("Вставить"));
     r.Large("assembly.placeStandard", Tr("Стандартное\nизделие"));
+    r.Large("assembly.pattern", Tr("Массив"));
     r.EndGroup();
 
     r.BeginGroup(Tr("Зависимости"));

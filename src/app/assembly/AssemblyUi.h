@@ -43,6 +43,11 @@ bool AssemblyDelete(AppContext& app, Session& session);
 
 /// Starts making a constraint of this type: pick on two components.
 void StartConstraint(AppContext& app, assembly::ConstraintType type);
+/// "Массив": repeats the chosen component with the standard parts tied to
+/// it — into the holes like the one it sits in, otherwise in a row.
+void StartPattern(AppContext& app);
+bool CanPattern(AppContext& app);
+
 /// The panel of the constraint being made (replaces the tree meanwhile).
 void DrawConstraintPanel(AppContext& app, Session& session, float width);
 

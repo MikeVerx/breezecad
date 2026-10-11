@@ -431,6 +431,7 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
     // Components, each with the constraints that tie it.
     for (const assembly::Component& comp : a.components) {
         const ObjectId id = comp.id;
+        if (a.PatternOfInstance(id)) continue;   // listed under its pattern
         RowStyle style;
         style.depth = 1;
         style.icon = "tree-component";
@@ -499,6 +500,52 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
             if (Row(app, "##in-comp", con->name, cs, rowW).clicked) st.selected = con->id;
             ImGui::PopID();
         }
+    }
+
+    // Component patterns: one row each, the instances under it.
+    for (const assembly::ComponentPattern& pat : a.patterns) {
+        const ObjectId id = pat.id;
+        RowStyle style;
+        style.depth = 1;
+        style.icon = pat.kind == assembly::PatternKind::Circular ? "tree-pattern-circular" : "tree-pattern-rect";
+        style.selected = st.selected == id;
+        style.meta = Trf("{} шт.", pat.instances.size() + 1);
+        style.caret = !pat.instances.empty();
+        style.open = app.shell.expanded.contains(id);
+        ImGui::PushID(static_cast<int>(id.value));
+        const RowResult r = Row(app, "##pattern", pat.name, style, rowW);
+        if (r.caretClicked) {
+            if (style.open) app.shell.expanded.erase(id);
+            else app.shell.expanded.insert(id);
+        }
+        if (r.clicked) st.selected = id;
+        {
+            ui::MenuStyle menu(ui);
+            if (ImGui::BeginPopupContextItem("##pattern-menu")) {
+                st.selected = id;
+                if (ui::MenuItem(ui, Tr("Удалить массив"), "Del", "ui-trash"))
+                    app.Later([&app, &session] { AssemblyDelete(app, session); });
+                ImGui::EndPopup();
+            }
+        }
+        if (style.open)
+            for (std::size_t i = 0; i < pat.instances.size(); ++i)
+                for (ObjectId cid : pat.instances[i]) {
+                    const assembly::Component* comp = a.FindComponent(cid);
+                    if (!comp) continue;
+                    RowStyle cs;
+                    cs.depth = 2;
+                    cs.icon = "tree-component";
+                    cs.selected = st.selected == cid;
+                    cs.muted = !comp->visible;
+                    cs.meta = Trf("№ {}", i + 2);
+                    ImGui::PushID(static_cast<int>(cid.value));
+                    const RowResult rr = Row(app, "##instance", comp->name, cs, rowW);
+                    if (rr.hovered) app.shell.hoveredTreeItem = cid;
+                    if (rr.clicked) st.selected = cid;
+                    ImGui::PopID();
+                }
+        ImGui::PopID();
     }
 
     // All constraints.
