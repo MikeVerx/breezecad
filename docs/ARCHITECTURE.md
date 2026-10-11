@@ -11,6 +11,8 @@ core      ← математика, единицы, выражения, лог, 
 sketch    ← core            эскиз 2D: сущности, связи, решатель, операции правки
 document  ← core, sketch    дерево операций, параметры, команды undo, файл .bzc
 kernel    ← document, OCCT  перестроение модели (тела, регионы эскизов, экспорт)
+modules   ← kernel          модули: module.json (требования к железу), загрузка/отключение,
+                            защита от падений, C-ABI `modules/bz_module.h`, пример `examples/modules/hello`
 render    ← core, kernel    вьюпорт OCCT/OpenGL, выбор (pick), подсветка
 ui        ← core, ImGui     тема, шрифты, иконки, виджеты, видовой куб
 platform  ← core            окна, пути, файловые диалоги, запуск браузера/папки
