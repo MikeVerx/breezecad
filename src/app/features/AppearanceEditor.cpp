@@ -193,17 +193,34 @@ std::optional<std::string> AppearanceEditor::List(AppContext& app, std::string_v
     std::optional<std::string> picked;
     Section(app, Tr("Стандартные"));
     if (Row(app, nullptr, chosen.empty(), width)) picked = std::string();
-    for (const doc::Appearance& a : doc::StandardAppearances())
+    for (const doc::Appearance& a : doc::StandardAppearances()) {
         if (Row(app, &a, chosen == a.id, width)) picked = a.id;
+        // Right click: a look of one's own starting from this one (the
+        // standard one stays as it is).
+        if (!withOwnMenu) continue;
+        ui::MenuStyle style(ui);   // before BeginPopup: it must outlive EndPopup
+        if (ImGui::BeginPopupContextItem(("##std-" + a.id).c_str())) {
+            if (ui::MenuItem(ui, Tr("Свой вид на его основе…"))) {
+                myDraft = a;
+                myDraft.id.clear();   // a new one in «Мои»
+                myDraft.name = Trf("{} (мой)", NameOf(a));
+                myKind = a.HasPicture() ? 1 : 0;
+                myPictureFile.clear();
+                myCreating = true;
+            }
+            ImGui::EndPopup();
+        }
+    }
     ImGui::Dummy({0, ui.S(8)});
     Section(app, Tr("Мои"));
     std::string removeId;
     for (const doc::Appearance& a : myLibrary.Items()) {
         if (Row(app, &a, chosen == a.id, width)) picked = a.id;
         // Right click: change or delete.
-        if (withOwnMenu && ImGui::BeginPopupContextItem(("##own-" + a.id).c_str())) {
-            ui::MenuStyle style(ui);
-            if (ui::MenuItem(ui, Tr("Изменить…"))) {
+        if (!withOwnMenu) continue;
+        ui::MenuStyle style(ui);   // before BeginPopup: it must outlive EndPopup
+        if (ImGui::BeginPopupContextItem(("##own-" + a.id).c_str())) {
+            if (ui::MenuItem(ui, Tr("Редактировать…"))) {
                 myDraft = a;
                 myKind = a.HasPicture() ? 1 : 0;
                 myPictureFile.clear();
@@ -387,10 +404,34 @@ void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
         ImGui::Dummy({ui.S(96), ui.S(96)});
     }
     ImGui::Dummy({0, ui.S(6)});
-    Section(app, Tr("Цвет рёбер"));
-    float edges[3] = {myDraft.edges.r, myDraft.edges.g, myDraft.edges.b};
-    ImGui::SetNextItemWidth(right);
-    if (ImGui::ColorEdit3("##edge-colour", edges, ImGuiColorEditFlags_DisplayHex)) myDraft.edges = {edges[0], edges[1], edges[2], 1.0f};
+    Section(app, Tr("Цвет рёбер (обводки)"));
+    {
+        // Quick choices, and a swatch that opens a full picker.
+        const Color face = myDraft.face;
+        const Color darker{face.r * 0.45f, face.g * 0.45f, face.b * 0.45f, 1.0f};
+        const Color quick[] = {Color::Hex(0x000000), Color::Hex(0x3D4552), Color::Hex(0x9AA1AB), Color::Hex(0xFFFFFF), darker};
+        const float s = ui.S(22);
+        for (std::size_t i = 0; i < std::size(quick); ++i) {
+            ImGui::PushID(static_cast<int>(i));
+            const ImVec4 v{quick[i].r, quick[i].g, quick[i].b, 1.0f};
+            if (ImGui::ColorButton("##edge-quick", v, ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoAlpha, {s, s})) myDraft.edges = quick[i];
+            if (i + 1 == std::size(quick)) ui::ItemTooltip(ui, Tr("Темнее цвета граней"));
+            ImGui::PopID();
+            ImGui::SameLine(0, ui.S(6));
+        }
+        const ImVec4 now{myDraft.edges.r, myDraft.edges.g, myDraft.edges.b, 1.0f};
+        if (ImGui::ColorButton("##edge-swatch", now, ImGuiColorEditFlags_NoAlpha, {s * 2, s})) ImGui::OpenPopup("##edge-picker");
+        ui::ItemTooltip(ui, Tr("Выбрать любой цвет"));
+        if (ImGui::BeginPopup("##edge-picker")) {
+            float edges[3] = {myDraft.edges.r, myDraft.edges.g, myDraft.edges.b};
+            ImGui::SetNextItemWidth(ui.S(220));
+            if (ImGui::ColorPicker3("##edge-colour", edges,
+                                    ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_PickerHueBar | ImGuiColorEditFlags_DisplayRGB |
+                                        ImGuiColorEditFlags_DisplayHex))
+                myDraft.edges = {edges[0], edges[1], edges[2], 1.0f};
+            ImGui::EndPopup();
+        }
+    }
     ImGui::Dummy({0, ui.S(6)});
     Section(app, Tr("Поверхность"));
     static constexpr std::array<const char*, 3> finishes{N_("Матовая"), N_("Металл"), N_("Стекло")};
