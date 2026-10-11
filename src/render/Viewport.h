@@ -100,6 +100,19 @@ public:
     void SetHoveredBody(ObjectId body);
     /// Both references point at the same face of the shown body `body`.
     bool SameFace(ObjectId body, const doc::FaceReference& a, const doc::FaceReference& b) const;
+    /// Pictures on faces: the largest side a picture may keep on the graphics
+    /// card, in pixels (a bigger one is made smaller first); 0 = as it is.
+    /// The weaker the computer, the smaller: less memory, coarser texture.
+    void SetTextureLimit(int maxSide);
+    /// Faces chosen in the view (not while picking on an original body):
+    /// tinted in the selection colour until changed, also after a rebuild
+    /// when they can be found again. Empty: none. Cheap when unchanged.
+    struct ChosenFace {
+        ObjectId           body;
+        doc::FaceReference face;
+        bool operator==(const ChosenFace&) const = default;
+    };
+    void SetChosenFaces(const std::vector<ChosenFace>& faces);
     /// Colours of bodies and faces of the document `owner` (any pointer that
     /// tells documents apart); applied when it or `revision` changes.
     void SetLook(const doc::Look& look, const void* owner, std::uint64_t revision);

@@ -98,8 +98,22 @@ void AppearanceEditor::Start(AppContext& app, Session& session) {
 }
 
 std::string AppearanceEditor::Hint() const {
-    return myFaces ? Tr("Выберите внешний вид и щёлкните грань модели. Enter — готово, Esc — отмена")
+    return myFaces ? Tr("Щёлкните грани (с Shift/Ctrl — несколько), затем выберите внешний вид в списке. Enter — готово, Esc — отмена")
                    : Tr("Выберите внешний вид и щёлкните тело. Enter — готово, Esc — отмена");
+}
+
+void AppearanceEditor::ClearChoice(AppContext& app) {
+    myChosenFaces.clear();
+    app.viewport.SetChosenFaces({});
+}
+
+void AppearanceEditor::ApplyToChosenFaces(Session& session, const doc::Appearance* a) {
+    doc::Look& look = session.doc.look;
+    for (const render::Viewport::ChosenFace& c : myChosenFaces)
+        look.SetFace(c.body, c.face, a);   // replaces a look already on that face
+    if (a && a->HasPicture() && !look.pictures.contains(a->picture)) look.pictures[a->picture] = myLibrary.PictureBytes(a->picture);
+    look.Prune();
+    session.doc.TouchLook();
 }
 
 const doc::Appearance* AppearanceEditor::Chosen() const {
@@ -109,9 +123,9 @@ const doc::Appearance* AppearanceEditor::Chosen() const {
 }
 
 void AppearanceEditor::Done(AppContext& app, Session& session) {
-    (void)app;
     if (!myOpen) return;
     myOpen = false;
+    ClearChoice(app);
     if (session.doc.look == myBefore) return;
     // One undo step: the look as it was goes back first, the command brings the new one.
     doc::Look now = session.doc.look;
@@ -120,26 +134,40 @@ void AppearanceEditor::Done(AppContext& app, Session& session) {
 }
 
 void AppearanceEditor::Cancel(AppContext& app, Session& session) {
-    (void)app;
     if (!myOpen) return;
     myOpen = false;
+    ClearChoice(app);
     if (session.doc.look == myBefore) return;
     session.doc.look = myBefore;
     session.doc.TouchLook();
 }
 
 void AppearanceEditor::DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) {
+    // The chosen faces stay marked while the panel is open (not only under the cursor).
+    app.viewport.SetChosenFaces(myFaces ? myChosenFaces : std::vector<render::Viewport::ChosenFace>{});
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
     const auto hit = app.viewport.Pick(vf.ToLocal(ImGui::GetMousePos()));
-    if (!hit || !hit->body) return;
     if (myFaces) {
-        if (!hit->face) return;
-        // The same face clicked elsewhere: its earlier colour goes.
-        std::erase_if(session.doc.look.faces, [&](const doc::Look::FaceLook& f) {
-            return f.body == hit->body && app.viewport.SameFace(hit->body, f.face, *hit->face);
+        const ImGuiIO& io = ImGui::GetIO();
+        const bool adding = app.settings.addToSelectionKey == 1 ? io.KeyCtrl : io.KeyShift;
+        if (!hit || !hit->body || !hit->face) {
+            if (!adding) myChosenFaces.clear();   // a click beside the part drops the choice
+            return;
+        }
+        const auto same = std::find_if(myChosenFaces.begin(), myChosenFaces.end(), [&](const render::Viewport::ChosenFace& c) {
+            return c.body == hit->body && app.viewport.SameFace(hit->body, c.face, *hit->face);
         });
-        session.doc.look.SetFace(hit->body, *hit->face, Chosen());
-    } else {
+        if (adding) {   // add, or take out when already chosen
+            if (same != myChosenFaces.end()) myChosenFaces.erase(same);
+            else myChosenFaces.push_back({hit->body, *hit->face});
+        } else {
+            myChosenFaces = {{hit->body, *hit->face}};
+        }
+        app.viewport.SetChosenFaces(myChosenFaces);
+        return;
+    }
+    if (!hit || !hit->body) return;
+    {
         session.doc.look.SetBody(hit->body, Chosen());
     }
     // A picture goes into the part's file with it.
@@ -240,7 +268,12 @@ std::optional<std::string> AppearanceEditor::List(AppContext& app, std::string_v
 
 void AppearanceEditor::DrawLibrary(AppContext& app, float width) {
     ui::Ui& ui = app.ui;
-    if (const auto picked = List(app, myChosen, width, true)) myChosen = *picked;
+    if (const auto picked = List(app, myChosen, width, true)) {
+        myChosen = *picked;
+        // Faces chosen: the appearance goes on them at once (as in Inventor).
+        if (myFaces && !myChosenFaces.empty())
+            if (Session* s = app.Doc()) ApplyToChosenFaces(*s, Chosen());
+    }
     ImGui::Dummy({0, ui.S(4)});
     if (ui::LinkButton(ui, "##new-look", Tr("+ Создать свой…"))) {
         myDraft = {};
@@ -523,6 +556,70 @@ void AppearanceEditor::DrawToolbarPicker(AppContext& app, Session* session, ImVe
     ImGui::EndPopup();
 }
 
+namespace {
+
+// The size slider runs from 1 mm to 2 m, evenly in ratio (log scale): a
+// small and a big picture are equally easy to set.
+constexpr double kMinSize = 1.0, kMaxSize = 2000.0;
+float SizeToSlider(double mm) {
+    return static_cast<float>(std::log(std::clamp(mm, kMinSize, kMaxSize) / kMinSize) / std::log(kMaxSize / kMinSize));
+}
+double SliderToSize(float t) { return kMinSize * std::pow(kMaxSize / kMinSize, static_cast<double>(t)); }
+/// Rounded to what a person would type: 3 significant digits.
+double Tidy(double mm) {
+    const double step = std::pow(10.0, std::floor(std::log10(mm)) - 2);
+    return std::round(mm / step) * step;
+}
+
+} // namespace
+
+void AppearanceEditor::DrawPictureSize(AppContext& app, Session& session, float width) {
+    const doc::Appearance* chosen = Chosen();
+    if (!chosen || !chosen->HasPicture()) return;
+    ui::Ui& ui = app.ui;
+    // The part's copy may be newer than the library's while the slider moves.
+    const doc::Appearance* onPart = session.doc.look.Find(chosen->id);
+    doc::Appearance a = onPart ? *onPart : *chosen;
+    if (mySizeFor != a.id) {   // another appearance chosen: start from its size
+        mySizeFor  = a.id;
+        mySize     = a.pictureSize;
+        mySizeText = std::format("{:g}", mySize);
+    }
+    a.pictureSize = mySize;
+    ImGui::Dummy({0, ui.S(8)});
+    Section(app, Tr("Размер текстуры: одна копия картинки, мм"));
+    bool changed = false, finished = false;
+    float t = SizeToSlider(a.pictureSize);
+    const float fieldW = ui.S(72);
+    if (ui::Slider(ui, "##picture-size-slider", t, width - fieldW - ui.S(8))) {
+        a.pictureSize = Tidy(SliderToSize(t));
+        mySizeText = std::format("{:g}", a.pictureSize);
+        changed = true;
+    }
+    finished = ImGui::IsItemDeactivated();
+    ImGui::SameLine(0, ui.S(8));
+    if (ui::TextField(ui, "##picture-size-field", mySizeText, fieldW)) {
+        double value = 0;
+        if (std::sscanf(mySizeText.c_str(), "%lf", &value) == 1 && value >= 0.01 && value <= 100000) {
+            a.pictureSize = value;
+            changed = true;
+        }
+    }
+    finished = finished || ImGui::IsItemDeactivatedAfterEdit();
+    Caption(app, Tr("Меньше — картинка мельче и повторяется сеткой чаще; крупнее — растягивается. "
+                    "Разрешение файла не меняется: мелкая копия просто занимает меньше точек на экране."),
+            width);
+    mySize = a.pictureSize;
+    if (changed) {   // live on the part
+        doc::Look& look = session.doc.look;
+        if (look.Refresh(a)) session.doc.TouchLook();
+    }
+    // Kept in «Мои» when the slider is let go or the number typed in.
+    if ((changed || finished) && a.id.starts_with("user.") && a.pictureSize != chosen->pictureSize && (finished || !ImGui::IsAnyItemActive())) {
+        if (const auto saved = myLibrary.Save(a); !saved) app.notes.Error(Tr(saved.GetError().message));
+    }
+}
+
 void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
@@ -547,13 +644,36 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     ImGui::BeginGroup();
     const float inner = width - ui.S(28);
 
-    Section(app, Tr("Щелчок красит"));
-    static constexpr std::array<const char*, 2> targets{N_("Тело целиком"), N_("Грань")};
+    Section(app, Tr("Что красим"));
+    static constexpr std::array<const char*, 2> targets{N_("Тело целиком"), N_("Грани")};
     const int target = myFaces ? 1 : 0;
-    if (const int t = ui::Segmented(ui, "look-target", targets, target, 2, inner); t != target) myFaces = t == 1;
-    Caption(app, myFaces ? Tr("Щелчок по грани красит только её; повторный щелчок другим цветом перекрашивает.")
-                         : Tr("Щелчок по телу красит его целиком (свои цвета граней этого тела сбрасываются)."),
-            inner);
+    if (const int t = ui::Segmented(ui, "look-target", targets, target, 2, inner); t != target) {
+        myFaces = t == 1;
+        if (!myFaces) ClearChoice(app);
+    }
+    const char* key = app.settings.addToSelectionKey == 1 ? "Ctrl" : "Shift";
+    if (myFaces)
+        Caption(app, Trf("Щелчок выбирает грань (плоскую или кривую), {} + щелчок — добавляет или убирает. "
+                         "Выбранные подсвечены; щелчок по внешнему виду в списке кладёт его на них.", key).c_str(),
+                inner);
+    else
+        Caption(app, Tr("Щелчок по телу красит его целиком (свои цвета граней этого тела сбрасываются)."), inner);
+    if (myFaces) {
+        ImGui::Dummy({0, ui.S(4)});
+        const std::string count = myChosenFaces.empty() ? std::string(Tr("Грани не выбраны"))
+                                                        : Trf("Выбрано граней: {}", myChosenFaces.size());
+        {
+            ui::FontScope font(ui.fonts.medium);
+            ImGui::TextUnformatted(count.c_str());
+        }
+        if (!myChosenFaces.empty()) {
+            const float bw = (inner - ui.S(8)) / 2;
+            if (ui::PrimaryButton(ui, "##apply-chosen", Tr("Применить"), nullptr, {bw, ui.S(32)}))
+                ApplyToChosenFaces(session, Chosen());
+            ImGui::SameLine(0, ui.S(8));
+            if (ui::SecondaryButton(ui, "##clear-chosen", Tr("Снять выбор"), nullptr, {bw, ui.S(32)})) ClearChoice(app);
+        }
+    }
     ImGui::Dummy({0, ui.S(10)});
 
     // What a click puts on.
@@ -568,6 +688,7 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
         dl->AddText(ui.fonts.medium, ui.S(13), {p.x + h + ui.S(4), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), name.c_str());
         ImGui::Dummy({inner, h});
     }
+    DrawPictureSize(app, session, inner);
     ImGui::Dummy({0, ui.S(10)});
 
     DrawLibrary(app, inner);

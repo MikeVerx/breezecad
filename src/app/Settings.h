@@ -27,6 +27,8 @@ struct Settings {
     bool        orthoMode      = false;   ///< "Орто" (F8): lines only horizontal or vertical
     int         graphics       = 0;       ///< 0 high, 1 balanced, 2 for weak computers (smoothing, round faces)
     bool        backgroundRebuild = true;   ///< long rebuilds on another thread (the window stays responsive)
+    int         textureQuality = 0;   ///< pictures on faces: 0 high, 1 medium, 2 low (TextureLimit)
+    int         addToSelectionKey = 0;   ///< a click with it adds faces to the choice: 0 Shift, 1 Ctrl
     bool        showAllConstraints = false;   ///< sketch: every constraint glyph, or only those of the selection (F8 / F9)
     double      gridStep       = 0.0;     ///< mm; 0 = adaptive to zoom
     double      uiScale        = 0.0;     ///< interface scale; 0 = automatic (screen density and size)
@@ -44,6 +46,9 @@ struct Settings {
     std::vector<std::filesystem::path> recentFiles;   ///< most recent first
 
     static constexpr std::size_t kMaxRecent = 12;
+
+    /// The largest side, in pixels, a picture on a face keeps at `textureQuality`.
+    static int TextureLimit(int textureQuality);
 
     void AddRecent(const std::filesystem::path& file);
     void RemoveRecent(const std::filesystem::path& file);

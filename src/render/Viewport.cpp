@@ -23,6 +23,7 @@
 #include <gp_Cylinder.hxx>
 #include <Aspect_DisplayConnection.hxx>
 #include <Aspect_NeutralWindow.hxx>
+#include <Aspect_PolygonOffsetMode.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepBuilderAPI_MakePolygon.hxx>
@@ -393,12 +394,16 @@ struct Viewport::Impl {
     /// Faces covered with pictures, by the body presentation they belong to.
     std::map<const AIS_ColoredShape*, std::vector<Handle(AIS_InteractiveObject)>> textured;
 
+    int textureLimit = 0;   ///< see Viewport::SetTextureLimit
+
     Handle(Graphic3d_Texture2D) TextureFor(const std::string& picture) {
         if (const auto it = textures.find(picture); it != textures.end()) return it->second;
         Handle(Graphic3d_Texture2D) texture;
         if (const auto bytes = look.pictures.find(picture); bytes != look.pictures.end())
-            if (const auto image = DecodeImage(bytes->second))
-                texture = MakePictureTexture(image->width, image->height, image->rgba);
+            if (const auto image = DecodeImage(bytes->second)) {
+                const Image fitted = FitWithin(*image, textureLimit);
+                texture = MakePictureTexture(fitted.width, fitted.height, fitted.rgba);
+            }
         textures[picture] = texture;
         return texture;
     }
@@ -472,6 +477,37 @@ struct Viewport::Impl {
             lines->SetWidth(1.0);
             context->Display(lines, AIS_WireFrame, -1, false);
             textured[s.shape.get()].push_back(lines);
+        }
+    }
+
+    /// Faces chosen in the view (Viewport::SetChosenFaces), tinted over the shown bodies.
+    std::vector<Viewport::ChosenFace> chosenFaces;
+    std::vector<Handle(AIS_Shape)>    chosenShown;
+
+    void ShowChosen() {
+        for (const auto& h : chosenShown) context->Remove(h, false);
+        chosenShown.clear();
+        dirty = true;
+        for (const Viewport::ChosenFace& c : chosenFaces) {
+            const auto s = std::find_if(shown.begin(), shown.end(), [&](const Shown& x) { return x.body == c.body; });
+            if (s == shown.end()) continue;
+            const std::optional<TopoDS_Face> face = kernel::occt::ResolveAnyFace(s->shape->Shape(), c.face);
+            if (!face) continue;
+            Handle(AIS_Shape) ais = new AIS_Shape(*face);
+            // Its own aspects first, so the colour below is not the shared default's.
+            ais->Attributes()->SetupOwnShadingAspect();
+            ais->SetColor(ToQuantity(colors.selection));
+            ais->SetTransparency(0.8);   // a light tint and a bold outline: the colour or picture under it stays readable
+            ais->Attributes()->SetFaceBoundaryDraw(true);
+            ais->Attributes()->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(colors.selection), Aspect_TOL_SOLID, 3.0));
+            // In front of the face it lies on (also over a picture drawn on that
+            // face), still hidden behind the rest of the body: the Top layer
+            // keeps the depth of the scene.
+            ais->Attributes()->ShadingAspect()->Aspect()->SetPolygonOffsets(Aspect_POM_Fill, -2.0f, -2.0f);
+            ais->SetZLayer(Graphic3d_ZLayerId_Top);
+            SetMeshPrecision(ais->Attributes(), quality);
+            context->Display(ais, AIS_Shaded, -1, false);
+            chosenShown.push_back(ais);
         }
     }
 
@@ -647,6 +683,7 @@ void Viewport::Sync(const kernel::Model& model) {
         m.decorations.push_back(ais);
     }
     m.ActivateShown();
+    if (!m.chosenFaces.empty()) m.ShowChosen();   // on the new shapes
     // Picked entities belonged to the old shapes.
     if (!m.measuring.picked.empty()) ClearMeasure();
     m.bounds = model.BoundingBox();
@@ -727,6 +764,22 @@ void Viewport::SetBackgroundPicture(int width, int height, std::span<const std::
     if (width > 0 && height > 0) texture = MakePictureTexture(width, height, rgba);
     m.view->SetBackgroundImage(texture, Aspect_FM_STRETCH, false);
     m.dirty = true;
+}
+
+void Viewport::SetTextureLimit(int maxSide) {
+    Impl& m = *myImpl;
+    maxSide = std::max(0, maxSide);
+    if (maxSide == m.textureLimit) return;
+    m.textureLimit = maxSide;
+    m.textures.clear();   // made again at the new size
+    m.ApplyStyleAll();
+}
+
+void Viewport::SetChosenFaces(const std::vector<ChosenFace>& faces) {
+    Impl& m = *myImpl;
+    if (faces == m.chosenFaces) return;
+    m.chosenFaces = faces;
+    m.ShowChosen();
 }
 
 void Viewport::SetLook(const doc::Look& look, const void* owner, std::uint64_t revision) {

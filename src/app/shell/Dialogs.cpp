@@ -582,6 +582,14 @@ void DrawOptimizationSettings(AppContext& app, float width) {
         app.settings.graphics = n;
     caption(Tr("Сглаживание краёв и точность сетки круглых граней. Ниже качество — быстрее показ больших деталей."));
 
+    ui::FieldLabel(ui, Tr("Качество текстур"));
+    static constexpr std::array<const char*, 3> textures{N_("Высокое"), N_("Среднее"), N_("Низкое")};
+    if (const int n = ui::Segmented(ui, "textures", textures, app.settings.textureQuality, 3, width); n != app.settings.textureQuality)
+        app.settings.textureQuality = n;
+    caption(Trf("Картинки на гранях хранятся в видеокарте не крупнее {} точек по большей стороне; больше — уменьшаются. "
+                "Ниже качество — меньше памяти и быстрее, но картинка грубее. Файл детали не меняется.",
+                Settings::TextureLimit(app.settings.textureQuality)));
+
     ui::FieldLabel(ui, Tr("Анимации камеры"));
     static constexpr std::array<const char*, 2> anim{N_("Плавные повороты"), N_("Без анимации")};
     const int a = app.settings.animations ? 0 : 1;
@@ -735,6 +743,19 @@ void DrawMouseSettings(AppContext& app, float width) {
         ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
         ImGui::PushTextWrapPos(0);
         ImGui::TextUnformatted(Tr("Короткий щелчок ПКМ открывает меню, короткий щелчок колесом подтверждает операцию — при любом наборе."));
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    }
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Добавить к выбору граней"));
+    static constexpr std::array<const char*, 2> keys{N_("Shift + щелчок"), N_("Ctrl + щелчок")};
+    if (const int n = ui::Segmented(ui, "add-to-selection", keys, s.addToSelectionKey, 2, width); n != s.addToSelectionKey)
+        s.addToSelectionKey = n;
+    {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(Tr("«Внешний вид», режим «Грани»: щелчок выбирает грань, с этой клавишей — добавляет или убирает её из выбора."));
         ImGui::PopTextWrapPos();
         ImGui::PopStyleColor();
     }
