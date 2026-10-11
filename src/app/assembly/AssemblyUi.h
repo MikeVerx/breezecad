@@ -16,10 +16,18 @@ void NewAssembly(AppContext& app);
 void PlaceComponent(AppContext& app);
 /// Places `file` in the assembly of `session`, beside what is there (the
 /// first one at the origin, fixed). Returns the new component's id.
-ObjectId PlaceFile(AppContext& app, Session& session, const std::filesystem::path& file);
+/// `checkpoint`: remember the assembly first (one undo step); off when the
+/// caller made the step for several parts.
+ObjectId PlaceFile(AppContext& app, Session& session, const std::filesystem::path& file, bool checkpoint = true);
 /// Makes a standard part, saves it next to the assembly (in "Стандартные
 /// изделия", reusing a file with the same designation) and places it.
 bool PlaceStandardPart(AppContext& app, const doc::parts::Request& request);
+/// AutoDrop: the screw `request.standard` (size and length are picked) with
+/// a washer and a nut of the matching standards waits for a click on a
+/// hole's rim in the active assembly. False when this screw cannot be dropped.
+bool StartAutoDrop(AppContext& app, const doc::parts::Request& request, bool washer, bool nut);
+/// The screw can be dropped onto a hole (bolts, cap and pan screws).
+bool CanAutoDrop(const doc::parts::StandardInfo& standard);
 
 /// The active document is an assembly.
 bool InAssembly(AppContext& app);

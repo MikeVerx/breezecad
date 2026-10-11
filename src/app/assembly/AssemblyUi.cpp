@@ -11,6 +11,7 @@
 #include "core/PathText.h"
 #include "document/BzcFile.h"
 #include "document/DocumentTypes.h"
+#include "kernel/AutoDrop.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
 #include "ui/Menus.h"
@@ -321,7 +322,7 @@ void NewAssembly(AppContext& app) {
     app.shell.leftTab = LeftTab::Tree;
 }
 
-ObjectId PlaceFile(AppContext& app, Session& session, const std::filesystem::path& file) {
+ObjectId PlaceFile(AppContext& app, Session& session, const std::filesystem::path& file, bool checkpoint) {
     AssemblyState& st = *session.assembly;
     if (!session.path.empty() && std::filesystem::equivalent(session.path, file)) {
         app.notes.Error(Tr("Сборку нельзя вставить в саму себя"));
@@ -332,7 +333,7 @@ ObjectId PlaceFile(AppContext& app, Session& session, const std::filesystem::pat
                             type ? Tr("подсборки появятся позже") : Tr(type.GetError().message)));
         return {};
     }
-    st.Checkpoint(N_("Вставка компонента"));
+    if (checkpoint) st.Checkpoint(N_("Вставка компонента"));
     // Where the rest ends, before the new one is there.
     st.geometry.Update(st.assembly, session.path);
     const std::optional<kernel::Bounds> before = session.model.BoundingBox();
@@ -378,13 +379,15 @@ void PlaceComponent(AppContext& app) {
     if (PlaceFile(app, *s, *file)) app.settings.AddRecent(*file);
 }
 
-bool PlaceStandardPart(AppContext& app, const doc::parts::Request& request) {
-    Session* s = ActiveAssembly(app);
-    if (!s) return false;
+namespace {
+
+/// The file of a standard part next to the assembly, made when missing.
+std::optional<std::filesystem::path> StandardPartFile(AppContext& app, const Session& session,
+                                                      const doc::parts::Request& request) {
     const std::string designation = doc::parts::Designation(request);
     // Standard parts live in a folder next to the assembly (or among the
     // user's documents while it has no file): equal ones share one file.
-    const std::filesystem::path base = s->path.empty() ? platform::DocumentsDir() / "BreezeCAD" : s->path.parent_path();
+    const std::filesystem::path base = session.path.empty() ? platform::DocumentsDir() / "BreezeCAD" : session.path.parent_path();
     const std::filesystem::path folder = base / PathFromUtf8("Стандартные изделия");
     const std::filesystem::path file = folder / PathFromUtf8(SafeFileName(designation) + ".bzc");
     std::error_code ec;
@@ -392,16 +395,95 @@ bool PlaceStandardPart(AppContext& app, const doc::parts::Request& request) {
         Expected<doc::parts::Made> made = doc::parts::MakePart(request);
         if (!made) {
             app.notes.Error(Tr(made.GetError().message));
-            return false;
+            return std::nullopt;
         }
         std::filesystem::create_directories(folder, ec);
         if (const Status saved = doc::SaveBzc(made->doc, file, "BreezeCAD"); !saved) {
             app.notes.Error(Trf("Не удалось сохранить деталь: {}", Tr(saved.GetError().message)));
-            return false;
+            return std::nullopt;
         }
     }
+    return file;
+}
+
+/// Standard of `kind` from the same family as `like` (ГОСТ with ГОСТ...).
+std::string SameFamily(const doc::parts::StandardInfo& like, doc::parts::PartKind kind) {
+    const auto all = doc::parts::StandardsOf(kind);
+    for (const doc::parts::StandardInfo* s : all)
+        if (doc::parts::FamilyOf(*s) == doc::parts::FamilyOf(like)) return std::string(s->id);
+    // DIN screws take ISO washers and nuts.
+    for (const doc::parts::StandardInfo* s : all)
+        if (doc::parts::FamilyOf(*s) == doc::parts::Family::Iso) return std::string(s->id);
+    return all.empty() ? std::string{} : std::string(all.front()->id);
+}
+
+/// AutoDrop onto `rim`: plans, makes the part files, adds the components
+/// and their Вставка constraints as one undo step.
+void DropOnRim(AppContext& app, Session& s, const assembly::GeometryRef& rim) {
+    AssemblyState& st = *s.assembly;
+    const auto& d = st.dropping;
+    Expected<kernel::AutoDropPlan> plan = kernel::PlanAutoDrop(st.geometry, st.assembly, rim, {d.screw, d.washer, d.nut});
+    if (!plan) {
+        app.notes.Error(Tr(plan.GetError().message));
+        return;
+    }
+    std::vector<std::filesystem::path> files;
+    for (const kernel::DropItem& item : plan->items) {
+        auto file = StandardPartFile(app, s, item.request);
+        if (!file) return;
+        files.push_back(std::move(*file));
+    }
+    st.Checkpoint(N_("Вставка стандартного изделия"));
+    std::vector<ObjectId> ids;
+    for (std::size_t i = 0; i < plan->items.size(); ++i) {
+        const kernel::DropItem& item = plan->items[i];
+        const ObjectId id = PlaceFile(app, s, files[i], false);
+        if (!id) return;
+        Component& c = *st.assembly.FindComponent(id);
+        c.placement = item.placement;
+        c.grounded = false;
+        if (c.properties.designation.empty()) c.properties.designation = doc::parts::Designation(item.request);
+        assembly::Constraint k = item.insert;
+        k.first.component = item.seatOn >= 0 ? ids[std::size_t(item.seatOn)] : item.insert.first.component;
+        k.second.component = id;
+        st.assembly.AddConstraint(k);
+        ids.push_back(id);
+    }
+    st.assembly.Touch();
+    const std::size_t screw = d.washer.empty() ? 0 : 1;   // the plan: [washer,] screw[, nut]
+    st.selected = ids[screw];
+    app.notes.Success(Trf("Вставлено: {} (пакет {} мм)", doc::parts::Designation(plan->items[screw].request),
+                          FormatNumber(plan->stack, 1)));
+}
+
+} // namespace
+
+bool CanAutoDrop(const doc::parts::StandardInfo& standard) {
+    using doc::parts::PartKind;
+    return standard.kind == PartKind::HexBolt || standard.kind == PartKind::SocketScrew || standard.kind == PartKind::PanScrew;
+}
+
+bool StartAutoDrop(AppContext& app, const doc::parts::Request& request, bool washer, bool nut) {
+    Session* s = ActiveAssembly(app);
+    const doc::parts::StandardInfo* screw = doc::parts::FindStandard(request.standard);
+    if (!s || !screw || !CanAutoDrop(*screw)) return false;
     StopEditing(app);
-    const ObjectId id = PlaceFile(app, *s, file);
+    AssemblyState& st = *s->assembly;
+    st.creating = {};
+    st.drag = {};
+    st.dropping = {true, request.standard, washer ? SameFamily(*screw, doc::parts::PartKind::FlatWasher) : std::string{},
+                   nut ? SameFamily(*screw, doc::parts::PartKind::HexNut) : std::string{}};
+    return true;
+}
+
+bool PlaceStandardPart(AppContext& app, const doc::parts::Request& request) {
+    Session* s = ActiveAssembly(app);
+    if (!s) return false;
+    const std::string designation = doc::parts::Designation(request);
+    const auto file = StandardPartFile(app, *s, request);
+    if (!file) return false;
+    StopEditing(app);
+    const ObjectId id = PlaceFile(app, *s, *file);
     if (!id) return false;
     // A standard part is listed by its designation.
     if (Component* c = s->assembly->assembly.FindComponent(id)) {
@@ -465,6 +547,10 @@ void ToggleGrounded(AppContext& app) {
 bool AssemblyEscape(AppContext& app, Session& session) {
     (void)app;
     AssemblyState& st = *session.assembly;
+    if (st.dropping.active) {
+        st.dropping = {};
+        return true;
+    }
     if (st.creating.active) {
         // Back one step: the first pick, then the command.
         if (st.creating.picked > 0) st.creating.picked = 0;
@@ -578,6 +664,18 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
     const ObjectId hovered = hit ? hit->body : ObjectId{};
     app.viewport.SetHoveredBody(drag.moving ? drag.component : hovered ? hovered : st.selected);
 
+    if (st.dropping.active) {
+        Prompt(ui, vf, Tr("Щёлкните по кромке отверстия — размер и длина подберутся сами (Esc — отмена)"));
+        if (vf.hovered && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            if (auto rim = st.geometry.GeometryAt(st.assembly, hovered, hit->point, kernel::AssemblyPick::Circle))
+                DropOnRim(app, session, *rim);
+            else
+                app.notes.Info(Tr("Здесь нет круглой кромки"));
+        }
+        for (const std::string& p : st.problems) app.notes.Error(Tr(p));
+        st.problems.clear();
+        return;
+    }
     if (st.creating.active) {
         auto& creating = st.creating;
         Prompt(ui, vf, Tr(PickPrompt(creating.constraint.type, creating.picked)));

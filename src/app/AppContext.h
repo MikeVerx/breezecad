@@ -62,6 +62,7 @@ struct ShellState {
         std::set<int>    openKinds;         ///< expanded varieties (parts::PartKind)
         Pick             chosen;            ///< empty standard: nothing chosen
         bool             realThread = false;
+        bool             dropWasher = true, dropNut = true;   ///< AutoDrop: add them with the screw
         std::string      appearance;        ///< empty: the default of the kind
         std::vector<Pick> recent;           ///< newest first
     } library;

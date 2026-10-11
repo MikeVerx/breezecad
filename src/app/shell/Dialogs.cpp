@@ -489,12 +489,30 @@ void DrawLibrary(AppContext& app) {
     else ImGui::Dummy({0, ui.S(26)});
     ImGui::Dummy({0, ui.S(4)});
     const float bw = ui.S(170);
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 2 * bw - ui.S(8));
+    const bool intoAssembly = InAssembly(app);
+    // AutoDrop: a screw goes onto a hole picked in the view; size and length by it.
+    const bool canDrop = intoAssembly && standard && CanAutoDrop(*standard);
+    const float rowY = ImGui::GetCursorPosY(), rowX = ImGui::GetCursorPosX(), rowW = ImGui::GetContentRegionAvail().x;
+    if (canDrop) {
+        ImGui::SetCursorPosY(rowY + ui.S(8));
+        ImGui::Checkbox(std::format("{}##drop-washer", Tr("С шайбой")).c_str(), &lib.dropWasher);
+        ImGui::SameLine(0, ui.S(12));
+        ImGui::Checkbox(std::format("{}##drop-nut", Tr("С гайкой")).c_str(), &lib.dropNut);
+        ImGui::SameLine(0, ui.S(12));
+        ImGui::SetCursorPosY(rowY);
+        if (ui::SecondaryButton(ui, "##library-drop", Tr("По отверстию…"), nullptr, {bw, ui.S(36)}) &&
+            StartAutoDrop(app, request, lib.dropWasher, lib.dropNut))
+            close();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", Tr("Щёлкните по кромке отверстия в сборке: диаметр — по отверстию, длина — по пакету деталей"));
+        ImGui::SameLine(0, ui.S(8));
+    }
+    ImGui::SetCursorPosY(rowY);
+    ImGui::SetCursorPosX(rowX + rowW - 2 * bw - ui.S(8));
     if (ui::SecondaryButton(ui, "##library-cancel", Tr("Закрыть"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape))
         close();
     ImGui::SameLine(0, ui.S(8));
     // In an assembly the part goes into it (its file next to the assembly).
-    const bool intoAssembly = InAssembly(app);
     if ((ui::PrimaryButton(ui, "##library-create", intoAssembly ? Tr("Вставить в сборку") : Tr("Создать деталь"), "Enter",
                            {bw, ui.S(36)}, standard != nullptr) ||
          (standard && ImGui::IsKeyPressed(ImGuiKey_Enter))) &&

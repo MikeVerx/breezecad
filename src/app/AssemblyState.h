@@ -40,6 +40,12 @@ public:
         int                     picked = 0;     ///< 0, 1 (first chosen)
     } creating;
 
+    /// AutoDrop: a screw from the library waits for a click on a hole's rim.
+    struct Drop {
+        bool        active = false;
+        std::string screw, washer, nut;   ///< standard ids; washer/nut empty: none
+    } dropping;
+
     /// Freedom left to each component after the last solve (tree badges).
     std::unordered_map<ObjectId, assembly::Freedom> freedom;
     /// Problems found by the last Update (missing part files...), to show once.
