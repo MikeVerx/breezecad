@@ -60,6 +60,20 @@ Ctrl через xdotool не доходит — использовать Shift/�
 Тестовые детали: `tests/data/кронштейн.bzc` (плита+бобышка+отверстия+Плоскость1).
 Сценарии: `scripts/ui-test/scenario-{box,hole,revolve,...}.sh`.
 
+## 3а. Мониторинг (tools/monitor) — искать проблемы им, а не скриншотами
+- Автор (Windows): `python tools/monitor/run.py --bin <папка с breezecad.exe>`, работать, закрыть
+  программу → `tools/monitor/reports/<дата-время>.md` (+ `.json`, сырьё в папке того же имени).
+- Сам (Linux, без человека): `python3 tools/monitor/run.py --scenario bracket|assembly`
+  (Xvfb + `scripts/ui-test`; программный GL — кадры медленнее, чем на видеокарте; для цифр
+  собирать `linux-release`, скрипт берёт release-сборку первой). Свой сценарий — путь к .sh.
+- Ловит: вылет (что, последнее действие, стек; Windows — минидамп), зависание ≥ 2 с
+  (`--hang-ms`; Linux — стек главного потока gdb'ом), кадры (p50/p95/p99, по действиям и
+  стадиям `prof::Scope`), перестроения/загрузку деталей, ошибки/предупреждения со счётчиком,
+  память. Программа пишет события только при `BZ_MONITOR=<файл>` (`core/Monitor.h`);
+  действия всегда — строкой `DEBUG Action:` в логе. Новое действие пользователя без
+  ActionRegistry/команды/Checkpoint — отметить `mon::Action(...)`; новая долгая стадия —
+  `prof::Scope`.
+
 ## 4. Карта кода (куда смотреть)
 - `src/sketch/` — ядро эскиза без UI: Sketch.h (Point/Line/Circle/Arc/**Spline**,
   Constraint), Solver/EquationSystem, Shapes, Trim (+Extend), Fillet, Offset,
