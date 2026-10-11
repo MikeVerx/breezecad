@@ -80,11 +80,24 @@ jobs:
           mkdir -p dist/BreezeCAD
           cp -r build/windows-mingw/bin/breezecad.exe build/windows-mingw/bin/assets dist/BreezeCAD/
           bash scripts/deploy-runtime.sh dist/BreezeCAD breezecad.exe /mingw64/bin
+          # The testers' build: the same program in "program/", the flag that turns
+          # on reports, the launcher and the instructions on top.
+          beta=dist/beta/BreezeCAD-beta
+          mkdir -p "$beta/program"
+          cp -r dist/BreezeCAD/. "$beta/program/"
+          cp resources/beta/beta-tester.txt "$beta/program/"
+          cp "resources/beta/Запустить BreezeCAD.bat" "resources/beta/ИНСТРУКЦИЯ для тестеров.txt" "$beta/"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         with:
           name: BreezeCAD-windows
           path: dist/BreezeCAD
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        with:
+          name: BreezeCAD-beta-windows
+          path: dist/beta
           retention-days: 30
       - name: Publish the next-build pre-release
         if: ${{ success() && github.event_name == 'push' && github.ref == 'refs/heads/next' }}
@@ -93,11 +106,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd dist && 7z a -tzip -bso0 BreezeCAD-windows.zip BreezeCAD && cd ..
-          notes="Свежая сборка ветки next: коммит ${GITHUB_SHA::7}, $(date -u '+%Y-%m-%d %H:%M') UTC. Распаковать и запустить BreezeCAD/breezecad.exe."
+          (cd dist/beta && 7z a -tzip -mcu=on -bso0 ../BreezeCAD-beta-windows.zip BreezeCAD-beta)
+          notes="Свежая сборка ветки next: коммит ${GITHUB_SHA::7}, $(date -u '+%Y-%m-%d %H:%M') UTC.
+          BreezeCAD-windows.zip — обычная: распаковать и запустить BreezeCAD/breezecad.exe.
+          BreezeCAD-beta-windows.zip — для бета-тестеров: с отчётами об ошибках, внутри «ИНСТРУКЦИЯ для тестеров.txt»."
           if ! gh release view next-build >/dev/null 2>&1; then
             gh release create next-build --prerelease --target "$GITHUB_SHA" --title "BreezeCAD — свежая сборка (next)" --notes "$notes"
           fi
-          gh release upload next-build dist/BreezeCAD-windows.zip --clobber
+          gh release upload next-build dist/BreezeCAD-windows.zip dist/BreezeCAD-beta-windows.zip --clobber
           gh release edit next-build --notes "$notes"
 
   macos:
