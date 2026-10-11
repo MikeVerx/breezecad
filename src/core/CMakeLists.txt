@@ -10,6 +10,7 @@ add_custom_target(bz_build_info
 add_library(bz_core STATIC
     BuildInfo.cpp
     Expression.cpp
+    FaultGuard.cpp
     I18n.cpp
     Log.cpp
     Monitor.cpp
