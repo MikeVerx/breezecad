@@ -9,7 +9,7 @@
 ```bash
 cd /home/claude/breezecad && git switch next && git pull -q
 # если контейнер новый (пакеты пропали):
-apt-get install -y libocct-*-dev libtbb-dev libglfw3-dev libgl1-mesa-dev xvfb xdotool zenity gdb python3-pil
+apt-get install -y libocct-*-dev libtbb-dev libglfw3-dev libxi-dev libgl1-mesa-dev xvfb xdotool zenity gdb python3-pil
 cmake --preset linux-debug && cmake --build --preset linux-debug -- -k 0 2>&1 | grep -E "error|warning:"
 ./build/linux-debug/bin/bz_tests 2>&1 | tail -1
 ```

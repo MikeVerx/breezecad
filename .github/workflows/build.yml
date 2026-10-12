@@ -217,7 +217,7 @@ jobs:
           sudo apt-get install -y -qq ninja-build libglfw3-dev libgl1-mesa-dev \
             libocct-foundation-dev libocct-modeling-data-dev libocct-modeling-algorithms-dev \
             libocct-visualization-dev libocct-data-exchange-dev libocct-ocaf-dev \
-            libfreetype-dev libfontconfig1-dev libtbb-dev
+            libfreetype-dev libfontconfig1-dev libtbb-dev libxi-dev
       - name: Configure
         run: cmake --preset linux-release
       - name: Build
