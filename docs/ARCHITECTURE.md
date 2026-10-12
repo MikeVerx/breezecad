@@ -15,7 +15,8 @@ modules   ← kernel          модули: module.json (требования к
                             защита от падений, C-ABI `modules/bz_module.h`, пример `examples/modules/hello`
 render    ← core, kernel    вьюпорт OCCT/OpenGL, выбор (pick), подсветка
 ui        ← core, ImGui     тема, шрифты, иконки, виджеты, видовой куб
-platform  ← core            окна, пути, файловые диалоги, запуск браузера/папки
+platform  ← core            окна, пути, файловые диалоги, запуск браузера/папки, жесты тачпада
+                            (Touchpad: Cocoa / Win32 / XInput 2 — одна модель событий)
 app       ← всё выше        оболочка: лента, панели, редакторы операций и эскиза
 ```
 Правило: стрелки только вниз. `sketch` и `document` не знают про OCCT и ImGui —
@@ -82,4 +83,5 @@ Zip: `manifest.json` (версия формата) + `document.json` (дерев
 
 ## Проверки
 `bz_tests` (ядро эскиза, документ, ядро OCCT), UI-сценарии `scripts/ui-test/*.sh`
-на Xvfb (Linux), CI: Windows (выкладывает сборку), Linux; macOS — вручную.
+на Xvfb (Linux), CI: Windows, Linux, macOS (Apple Silicon) — сборка, тесты и по два пакета
+(обычный и для тестеров, `scripts/package-*.sh`); все шесть уходят в выпуск `next-build`.
