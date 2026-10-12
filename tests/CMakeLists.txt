@@ -44,6 +44,7 @@ target_link_libraries(bz_tests PRIVATE bz::miniz bz::core bz::sketch bz::documen
 add_dependencies(bz_tests bz_example_module bz_example_module_fail)
 target_compile_definitions(bz_tests PRIVATE BZ_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
     BZ_EXAMPLE_MODULE="$<TARGET_FILE:bz_example_module>"
-    BZ_EXAMPLE_MODULE_FAIL="$<TARGET_FILE:bz_example_module_fail>")
+    BZ_EXAMPLE_MODULE_FAIL="$<TARGET_FILE:bz_example_module_fail>"
+    BZ_CMAKE="${CMAKE_COMMAND}")
 bz_set_warnings(bz_tests)
 add_test(NAME bz_tests COMMAND bz_tests)

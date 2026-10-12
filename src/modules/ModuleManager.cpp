@@ -218,6 +218,7 @@ Expected<std::string> ModuleManager::Install(const std::filesystem::path& packag
     struct Entry {
         unsigned    index;
         std::string name;
+        bool        executable = false;   ///< a program inside (a module's helper): keep it runnable
     };
     std::vector<Entry>       files;
     std::vector<std::string> manifests;   // the folder prefixes that have one
@@ -232,7 +233,10 @@ Expected<std::string> ModuleManager::Install(const std::filesystem::path& packag
         if (name == "module.json") manifests.emplace_back();
         else if (name.ends_with("/module.json") && std::count(name.begin(), name.end(), '/') == 1)
             manifests.push_back(name.substr(0, name.size() - std::string_view("module.json").size()));
-        files.push_back({i, std::move(name)});
+        // Unix permissions are in the high half of the external attributes
+        // (archives made on Unix, CMake's included).
+        const bool executable = (st.m_external_attr >> 16) & 0111;
+        files.push_back({i, std::move(name), executable});
     }
     std::string prefix;
     if (std::ranges::find(manifests, std::string()) != manifests.end()) prefix.clear();
@@ -262,6 +266,12 @@ Expected<std::string> ModuleManager::Install(const std::filesystem::path& packag
         out.write(static_cast<const char*>(data), static_cast<std::streamsize>(size));
         mz_free(data);
         if (!out) return fail("Не удалось записать файлы модуля (диск заполнен?)");
+        out.close();
+        if (f.executable)
+            std::filesystem::permissions(target,
+                                         std::filesystem::perms::owner_exec | std::filesystem::perms::group_exec |
+                                             std::filesystem::perms::others_exec,
+                                         std::filesystem::perm_options::add, ec);
     }
 
     // Check before anything installed is touched.

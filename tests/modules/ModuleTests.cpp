@@ -7,6 +7,7 @@
 
 #include <doctest.h>
 
+#include <cstdlib>
 #include <cstring>
 #include <format>
 #include <filesystem>
@@ -483,3 +484,29 @@ TEST_CASE("an installed module is removed: unloaded, its folder gone, forgotten"
     f.Start(mm);
     CHECK(mm.Modules().empty());
 }
+
+#if !defined(_WIN32)
+TEST_CASE("a program inside a package stays runnable after installing") {
+    // A module's helper (the MCP bridge is one) must keep its x bit: packed
+    // the way module packages are made (cmake -E tar --format=zip).
+    InstallFixture f;
+    const fs::path src = f.root / "src" / "hello";
+    fs::create_directories(src);
+    WriteFile(src / "module.json", HelloManifest("1.0"));
+    fs::copy_file(BZ_EXAMPLE_MODULE, src / LibraryName());
+    WriteFile(src / "hello-helper", "#!/bin/sh\n");
+    fs::permissions(src / "hello-helper", fs::perms::owner_all | fs::perms::group_read | fs::perms::group_exec);
+    const fs::path package = f.downloads / "hello.bzmod";
+    const std::string command = std::format("cd \"{}\" && \"{}\" -E tar cf \"{}\" --format=zip hello", (f.root / "src").string(),
+                                            BZ_CMAKE, package.string());
+    REQUIRE(std::system(command.c_str()) == 0);
+
+    ModuleManager mm(f.state, HostApi());
+    f.Start(mm);
+    REQUIRE(mm.Install(package));
+    const fs::perms helper = fs::status(f.user / "hello" / "hello-helper").permissions();
+    CHECK((helper & fs::perms::owner_exec) != fs::perms::none);
+    const fs::perms manifest = fs::status(f.user / "hello" / "module.json").permissions();
+    CHECK((manifest & fs::perms::owner_exec) == fs::perms::none);
+}
+#endif
