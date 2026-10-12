@@ -367,10 +367,23 @@ float Application::ChooseScale() const {
 }
 
 void Application::ApplyScaleIfChanged() {
-    if (mySettings.uiScale == myAppliedScaleSetting) return;
+    // The window moved to a screen of another density (a Retina laptop and an
+    // external monitor on macOS): text and icons are rasterised for its pixels.
+    int winW = 0, fbW = 0, h = 0;
+    glfwGetWindowSize(myWindow.Handle(), &winW, &h);
+    glfwGetFramebufferSize(myWindow.Handle(), &fbW, &h);
+    const float density = winW > 0 && fbW > 0 ? static_cast<float>(fbW) / static_cast<float>(winW) : myFramebufferScale;
+    const bool densityChanged = std::abs(density - myFramebufferScale) > 0.01f;
+    if (mySettings.uiScale == myAppliedScaleSetting && !densityChanged) return;
     myAppliedScaleSetting = mySettings.uiScale;
+    if (densityChanged) {
+        log::Info("Screen density {:.2f} -> {:.2f}: text and icons again", myFramebufferScale, density);
+        myFramebufferScale = density;
+        ImGui::GetIO().FontGlobalScale = 1.0f / density;
+        myIcons.SetScale(density);
+    }
     const float scale = ChooseScale();
-    if (std::abs(scale - myScale) < 1e-3f) return;
+    if (!densityChanged && std::abs(scale - myScale) < 1e-3f) return;
     // Fonts are rasterised for one size: build them again, then the texture.
     myScale = scale;
     myFonts.Load(myAssets, myScale * myFramebufferScale);
