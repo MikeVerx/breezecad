@@ -5,9 +5,8 @@
 # "next-build" on the Releases page — a stable link to the freshest build.
 name: build
 
-# Private repository: Actions minutes are counted (Windows x2, macOS x10), so
-# documentation-only pushes build nothing and macOS builds only on request
-# (Actions → build → Run workflow).
+# Documentation-only pushes build nothing. The three platforms run side by
+# side; one failing does not stop the others.
 on:
   push:
     branches: [next, main]
@@ -117,15 +116,21 @@ jobs:
           gh release edit next-build --notes "$notes"
 
   macos:
-    if: github.event_name == 'workflow_dispatch'
+    # Apple Silicon only (arm64); Homebrew's bottles here are built for
+    # macOS 14, which is the oldest system the app supports.
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - name: Dependencies
         run: brew install ninja glfw opencascade
+      - name: Versions
+        run: |
+          clang++ --version | head -1
+          grep -h "define OCC_VERSION_COMPLETE" "$(brew --prefix opencascade)"/include/opencascade/Standard_Version.hxx
       - name: Configure
         run: cmake --preset macos -DCMAKE_PREFIX_PATH="$(brew --prefix)"
       - name: Build
+        id: build
         run: cmake --build --preset macos 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Test
         run: ctest --preset macos --output-on-failure 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
