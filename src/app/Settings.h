@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/MouseNavigation.h"
+#include "app/TouchNavigation.h"
 
 #include <filesystem>
 #include <string>
@@ -41,6 +42,7 @@ struct Settings {
     MouseNavigation mouse;                       ///< view gestures
     std::string mousePreset = "breezecad";
     bool        mouseCustom = false;
+    TouchNavigation touch;                       ///< touchpad gestures
     std::vector<std::filesystem::path> recentFiles;   ///< most recent first
 
     static constexpr std::size_t kMaxRecent = 12;

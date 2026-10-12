@@ -74,6 +74,20 @@ Settings Settings::Load(const std::filesystem::path& file) {
         s.mousePreset = m->value("preset", s.mousePreset);
         s.mouseCustom = m->value("custom", false);
     }
+    if (const auto t = j.find("touchpad"); t != j.end() && t->is_object()) {
+        const auto move = [&](const char* key, TouchMove& m) { m = static_cast<TouchMove>(std::clamp(t->value(key, static_cast<int>(m)), 0, 3)); };
+        move("twoFingers", s.touch.twoFingers);
+        move("withShift", s.touch.withShift);
+        move("withCtrl", s.touch.withCtrl);
+        move("withAlt", s.touch.withAlt);
+        s.touch.pinchZooms = t->value("pinchZooms", s.touch.pinchZooms);
+        s.touch.turn = static_cast<TouchTurn>(std::clamp(t->value("turn", static_cast<int>(s.touch.turn)), 0, 2));
+        s.touch.doubleTap = t->value("doubleTap", s.touch.doubleTap);
+        s.touch.forceClick = t->value("forceClick", s.touch.forceClick);
+        s.touch.speed = std::clamp(t->value("speed", s.touch.speed), 0.25, 4.0);
+        s.touch.invert = t->value("invert", s.touch.invert);
+        s.touch.smoothIsTouchpad = t->value("smoothIsTouchpad", s.touch.smoothIsTouchpad);
+    }
     s.shortcutsCustom = j.value("shortcutsCustom", s.shortcutsCustom);
     for (const auto& [id, chord] : j.value("shortcuts", nlohmann::json::object()).items())
         if (chord.is_string()) s.shortcuts.emplace_back(id, chord.get<std::string>());
@@ -122,6 +136,17 @@ bool Settings::Save(const std::filesystem::path& file) const {
                    {"invertWheel", mouse.invertWheel},
                    {"preset", mousePreset},
                    {"custom", mouseCustom}}},
+        {"touchpad", {{"twoFingers", static_cast<int>(touch.twoFingers)},
+                      {"withShift", static_cast<int>(touch.withShift)},
+                      {"withCtrl", static_cast<int>(touch.withCtrl)},
+                      {"withAlt", static_cast<int>(touch.withAlt)},
+                      {"pinchZooms", touch.pinchZooms},
+                      {"turn", static_cast<int>(touch.turn)},
+                      {"doubleTap", touch.doubleTap},
+                      {"forceClick", touch.forceClick},
+                      {"speed", touch.speed},
+                      {"invert", touch.invert},
+                      {"smoothIsTouchpad", touch.smoothIsTouchpad}}},
         {"shortcutsCustom", shortcutsCustom},
         {"recentFiles", recent},
     };

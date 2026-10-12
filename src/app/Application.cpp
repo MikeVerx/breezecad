@@ -73,6 +73,7 @@ void OnKey(GLFWwindow* window, int key, int scancode, int action, int mods) {
 Application::Application() = default;
 
 Application::~Application() {
+    platform::StopTouchpad();   // before ImGui puts its window procedure back (Windows)
     myModules.reset();   // modules shut down while everything they may touch is still there
     if (myUi) {
         ImGui_ImplOpenGL3_Shutdown();
@@ -148,6 +149,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     io.ConfigWindowsMoveFromTitleBarOnly = true;
     ImGui_ImplGlfw_InitForOpenGL(myWindow.Handle(), true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
+    platform::StartTouchpad(myWindow.Handle());   // after ImGui: it hooks the window too (Windows)
 
     // HiDPI: on macOS the framebuffer is 2x the window; elsewhere the UI scales.
     int winW = 1, fbW = 1, h = 1;
@@ -174,7 +176,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myShell.recoverable = myAutosave->FindRecoverable();
 
     myContext = std::make_unique<AppContext>(AppContext{*myUi, mySettings, myWorkspace, myActions, myNotes, *myAutosave,
-                                                        myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}});
+                                                        myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}, {}});
     RegisterActions(*myContext);
     StartModules();
     for (const auto& [id, chord] : mySettings.shortcuts) myActions.SetChord(id, ActionRegistry::ParseChord(chord));
@@ -246,6 +248,9 @@ int Application::Run() {
             platform::Window::WaitEvents(WaitsForBackground() ? 1.0 / 30.0 : 1.0);
         }
         const double now = glfwGetTime();
+        platform::SetSmoothScrollIsTouchpad(mySettings.touch.smoothIsTouchpad);
+        myContext->touch = platform::TakeTouchEvents();
+        if (!myContext->touch.empty()) myInput.seen = true;
         if (myInput.seen) {
             myInput.seen = false;
             myFramesToDraw = std::max(myFramesToDraw, 3);
@@ -442,11 +447,12 @@ void Application::Frame() {
     const double uiStart = glfwGetTime();
     {
         prof::Scope scope("interface");
+        myShell.animateUi = false;
         DrawRoot();
         DrawDialogs(app);
     }
     const ImVec2 corner = myShell.viewportMax.x > 0 && !myWorkspace.ShowsHome() ? myShell.viewportMax : ImGui::GetIO().DisplaySize;
-    myBusy = myNotes.Draw(*myUi, corner, now) || myBusy;
+    myBusy = myNotes.Draw(*myUi, corner, now) || myBusy || myShell.animateUi;
 
     ImGui::Render();
     smooth(myStats.uiMs, msSince(uiStart));
