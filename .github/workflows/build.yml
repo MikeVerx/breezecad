@@ -155,7 +155,18 @@ jobs:
       # runner out of memory, which killed the build without a message.
       - name: Build
         id: build
-        run: cmake --build --preset linux-release -j 3 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+        run: |
+          set +e
+          cmake --build --preset linux-release -j 3 > build.log 2>&1
+          status=$?
+          if [ $status -ne 0 ]; then
+            # Once more, alone: says what stopped it when the first run did not.
+            echo "::warning title=Build::stopped with $status after: $(tail -2 build.log | tr '\n' ' ' | cut -c1-300)"
+            cmake --build --preset linux-release -j 1 -- -v >> build.log 2>&1
+            status=$?
+            echo "::notice title=Build again::exit $status: $(tail -8 build.log | tr '\n' ' ' | cut -c1-900)"
+          fi
+          exit $status
       - name: Test
         run: ctest --preset linux-release --output-on-failure 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
       - name: Report failures
