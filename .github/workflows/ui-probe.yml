@@ -1,0 +1,40 @@
+# Temporary: drives the app on a virtual screen and keeps the screenshots
+# (face selection check). Not for merging.
+name: UI probe
+on:
+  push:
+    branches: [ci/ui-probe]
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build libglfw3-dev libgl1-mesa-dev \
+            libocct-foundation-dev libocct-modeling-data-dev libocct-modeling-algorithms-dev \
+            libocct-visualization-dev libocct-data-exchange-dev libocct-ocaf-dev \
+            libfreetype-dev libfontconfig1-dev libtbb-dev \
+            xvfb xdotool python3-pil librsvg2-bin zenity mesa-utils
+      - name: Build
+        run: |
+          cmake --preset linux-release
+          cmake --build --preset linux-release --target breezecad 2>&1 | tail -3
+      - name: Logo appearance in the library
+        run: |
+          d="$HOME/.config/breezecad/appearances"; mkdir -p "$d"
+          rsvg-convert -w 512 -h 512 -b white --keep-aspect-ratio assets/brand/breezecad-mark.svg -o "$d/user.logo.png"
+          printf '{"id":"user.logo","name":"Лого BreezeCAD","face":"#FFFFFF","edges":"#3D4552","finish":"matte","picture":"user.logo.png","pictureSize":60}\n' > "$d/user.logo.json"
+      - name: Probe
+        env:
+          BZ_BIN: ${{ github.workspace }}/build/linux-release/bin
+          SHOTS: ${{ github.workspace }}/shots
+        run: bash scripts/ui-test/probe-faces.sh || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots
+          path: |
+            shots/*.png
+            /tmp/breezecad-ui.log
