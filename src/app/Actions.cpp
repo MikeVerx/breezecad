@@ -2,6 +2,8 @@
 
 #include "core/Monitor.h"
 
+#include <imgui_internal.h>
+
 #include <algorithm>
 #include <cctype>
 
@@ -61,7 +63,18 @@ bool ActionRegistry::Run(std::string_view id) const {
 
 void ActionRegistry::HandleShortcuts(const std::vector<ImGuiKeyChord>& pressed) const {
     // Typing in a field, or a menu/dialog on top: keys belong to them.
-    if (ImGui::GetIO().WantTextInput || ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) return;
+    if (ImGui::GetIO().WantTextInput) return;
+    if (ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) {
+        // Esc closes the menu on top (a context menu) and does nothing else.
+        // ImGui closes popups on Esc only with keyboard navigation, which is
+        // off. Dialogs (modal) handle Esc themselves.
+        ImGuiContext& g = *GImGui;
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !g.OpenPopupStack.empty()) {
+            const ImGuiWindow* top = g.OpenPopupStack.back().Window;
+            if (!top || !(top->Flags & ImGuiWindowFlags_Modal)) ImGui::ClosePopupToLevel(g.OpenPopupStack.Size - 1, true);
+        }
+        return;
+    }
     // One action per key press: the first enabled one with that chord, so a
     // key can mean different things in different modes (R: rectangle in a
     // sketch, revolve in the model).
