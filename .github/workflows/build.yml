@@ -177,12 +177,26 @@ jobs:
             BZ_SCREENSHOT="$PWD/shots/linux.ppm:40" /tmp/start/BreezeCAD/breezecad > start.log 2>&1
           status=$?
           if [ -f shots/linux.ppm ]; then
-            python3 scripts/ppm2png.py shots/linux.ppm shots/start-linux.png && rm shots/linux.ppm
-            echo "::notice title=Linux start check::the packaged program started and drew a frame ($(grep -m1 'OpenGL' start.log | cut -c1-120))"
+            python3 scripts/ppm2png.py shots/linux.ppm shots/start-linux.png --half && rm shots/linux.ppm
+            echo "::notice title=Linux start check::the packaged program started and drew a frame ($(grep -m1 'OpenGL' start.log | cut -c1-120)); $(grep -m1 'Touchpad' start.log | cut -c14-200)"
           else
             echo "::warning title=Linux start check::no frame (exit $status): $(tail -5 start.log | tr '\n' ' ' | cut -c1-400)"
             exit 1
           fi
+      # The settings' touchpad tab as a picture in the annotations (artifacts
+      # and logs cannot always be downloaded, annotations can).
+      - name: Picture of the touchpad settings
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" env -u LD_LIBRARY_PATH BZ_SETTINGS_TAB=3 \
+            BZ_SCREENSHOT="$PWD/shots/touchpad.ppm:60" /tmp/start/BreezeCAD/breezecad > settings.log 2>&1
+          size=$(head -c 20 shots/touchpad.ppm | tr '\n' ' ' | awk '{print $2, $3}')
+          read -r w h <<< "$size"
+          python3 scripts/ppm2png.py shots/touchpad.ppm shots/settings-touchpad.png \
+            --crop $(( (w - 780) / 2 )),$(( h > 860 ? (h - 860) / 2 : 0 )),780,860 --annotate "settings touchpad" && rm shots/touchpad.ppm
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         with:

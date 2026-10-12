@@ -4,7 +4,8 @@
 // Test hooks:
 //   BZ_SCREENSHOT=out.ppm[:frame]  saves one frame and exits;
 //   BZ_SHOT_DIR=dir                saves a frame whenever dir/request appears;
-//   BZ_MONITOR=events.jsonl        monitoring for tools/monitor (core/Monitor.h).
+//   BZ_MONITOR=events.jsonl        monitoring for tools/monitor (core/Monitor.h);
+//   BZ_SETTINGS_TAB=n              starts with the settings open on tab n.
 
 #include "app/Application.h"
 #include "app/BetaTesting.h"

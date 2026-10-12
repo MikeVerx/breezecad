@@ -201,6 +201,11 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     }
     if (myShell.crashedLastTime && !myShell.recoverable.empty())
         myNotes.Info(Tr("Прошлый сеанс завершился неожиданно. Несохранённую работу можно восстановить на главной странице."));
+    // Test hook (screenshots of the settings in CI): BZ_SETTINGS_TAB=<tab>.
+    if (const char* tab = std::getenv("BZ_SETTINGS_TAB")) {
+        myShell.showSettings = true;
+        myShell.settingsTab = std::clamp(std::atoi(tab), 0, 6);
+    }
     return true;
 }
 
