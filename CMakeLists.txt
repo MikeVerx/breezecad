@@ -9,6 +9,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 if(APPLE)
+    # OpenGL is deprecated on macOS (still there, and what OCCT draws with):
+    # without this every gl* call is a warning.
+    add_compile_definitions(GL_SILENCE_DEPRECATION)
     # The few Cocoa calls (touchpad gestures) are Objective-C++.
     enable_language(OBJCXX)
     set(CMAKE_OBJCXX_STANDARD 20)
