@@ -1,0 +1,317 @@
+[1/254] Build info
+[2/254] Building C object CMakeFiles/bz_miniz.dir/third_party/miniz/miniz.c.o
+[3/254] Building C object CMakeFiles/bz_miniz.dir/third_party/miniz/miniz_tinfl.c.o
+[4/254] Building C object CMakeFiles/bz_miniz.dir/third_party/miniz/miniz_tdef.c.o
+[5/254] Building C object CMakeFiles/bz_stb.dir/third_party/stb/stb_image.c.o
+[6/254] Building CXX object src/core/CMakeFiles/bz_core.dir/BuildInfo.cpp.o
+[7/254] Building CXX object src/core/CMakeFiles/bz_core.dir/FaultGuard.cpp.o
+[8/254] Building CXX object src/core/CMakeFiles/bz_core.dir/Expression.cpp.o
+[9/254] Linking C static library libbz_stb.a
+[10/254] Building CXX object src/core/CMakeFiles/bz_core.dir/Image.cpp.o
+[11/254] Building CXX object src/core/CMakeFiles/bz_core.dir/Units.cpp.o
+[12/254] Building CXX object src/core/CMakeFiles/bz_core.dir/Log.cpp.o
+[13/254] Building CXX object src/core/CMakeFiles/bz_core.dir/Monitor.cpp.o
+[14/254] Building CXX object src/core/CMakeFiles/bz_core.dir/ViewProjection.cpp.o
+[15/254] Building C object CMakeFiles/bz_miniz.dir/third_party/miniz/miniz_zip.c.o
+[16/254] Building CXX object src/core/CMakeFiles/bz_core.dir/I18n.cpp.o
+[17/254] Building CXX object src/core/CMakeFiles/bz_core.dir/Profile.cpp.o
+[18/254] Linking CXX static library src/core/libbz_core.a
+[19/254] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Mirror.cpp.o
+[20/254] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Shapes.cpp.o
+[21/254] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/EquationSystem.cpp.o
+[22/254] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Fillet.cpp.o
+[23/254] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Move.cpp.o
+[24/254] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Sketch.cpp.o
+[25/254] Linking C static library libbz_miniz.a
+[26/254] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/SplineGeometry.cpp.o
+[27/254] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Offset.cpp.o
+[28/254] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Solver.cpp.o
+[29/254] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Trim.cpp.o
+[30/254] Linking CXX static library src/sketch/libbz_sketch.a
+[31/254] Building CXX object src/document/CMakeFiles/bz_document.dir/DocumentTypes.cpp.o
+[32/254] Building CXX object src/document/CMakeFiles/bz_document.dir/Commands.cpp.o
+[33/254] Building CXX object src/document/CMakeFiles/bz_document.dir/CoilFeature.cpp.o
+[34/254] Building CXX object src/document/CMakeFiles/bz_document.dir/Document.cpp.o
+[35/254] Building CXX object src/document/CMakeFiles/bz_document.dir/Appearance.cpp.o
+/Users/runner/work/breezecad/breezecad/src/document/Appearance.cpp:19:73: warning: missing field 'picture' initializer [-Wmissing-field-initializers]
+    return {id, name, Color::Hex(face, alpha), Color::Hex(edges), finish};
+                                                                        ^
+1 warning generated.
+[36/254] Building CXX object src/document/CMakeFiles/bz_document.dir/SectionFeature.cpp.o
+[37/254] Building CXX object src/document/CMakeFiles/bz_document.dir/ShellFeature.cpp.o
+[38/254] Building CXX object src/document/CMakeFiles/bz_document.dir/BzcFile.cpp.o
+/Users/runner/work/breezecad/breezecad/src/document/BzcFile.cpp:78:26: warning: unused variable 'reserved' [-Wunused-variable]
+        for (const char* reserved : {"id", "type", "name", "suppressed"})
+                         ^
+1 warning generated.
+[39/254] Building CXX object src/document/CMakeFiles/bz_document.dir/FaceReference.cpp.o
+[40/254] Building CXX object src/document/CMakeFiles/bz_document.dir/EdgeFeature.cpp.o
+[41/254] Building CXX object src/document/CMakeFiles/bz_document.dir/ExtrudeFeature.cpp.o
+[42/254] Building CXX object src/document/CMakeFiles/bz_document.dir/FeatureRegistry.cpp.o
+[43/254] Building CXX object src/document/CMakeFiles/bz_document.dir/LoftFeature.cpp.o
+[44/254] Building CXX object src/document/CMakeFiles/bz_document.dir/Recompute.cpp.o
+[45/254] Building CXX object src/document/CMakeFiles/bz_document.dir/HoleFeature.cpp.o
+[46/254] Building CXX object src/document/CMakeFiles/bz_document.dir/JsonIO.cpp.o
+[47/254] Building CXX object src/document/CMakeFiles/bz_document.dir/PatternFeature.cpp.o
+[48/254] Building CXX object src/document/CMakeFiles/bz_document.dir/WorkPlaneFeature.cpp.o
+[49/254] Building CXX object src/document/CMakeFiles/bz_document.dir/RevolveFeature.cpp.o
+[50/254] Building CXX object src/document/CMakeFiles/bz_document.dir/SweepFeature.cpp.o
+[51/254] Building CXX object src/document/CMakeFiles/bz_document.dir/SketchSolidFeature.cpp.o
+[52/254] Building CXX object src/document/CMakeFiles/bz_document.dir/UnknownFeature.cpp.o
+[53/254] Building CXX object src/document/CMakeFiles/bz_document.dir/SketchFeature.cpp.o
+[54/254] Building CXX object src/document/CMakeFiles/bz_document.dir/ThreadFeature.cpp.o
+[55/254] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-canvas.c.o
+[56/254] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-blend.c.o
+[57/254] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-matrix.c.o
+[58/254] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-paint.c.o
+[59/254] Building CXX object src/document/CMakeFiles/bz_document.dir/StandardParts.cpp.o
+[60/254] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-rasterize.c.o
+[61/254] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-path.c.o
+[62/254] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-ft-math.c.o
+[63/254] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-font.c.o
+[64/254] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-ft-raster.c.o
+[65/254] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-ft-stroker.c.o
+[66/254] Building CXX object src/document/CMakeFiles/bz_document.dir/WorkAxisFeature.cpp.o
+[67/254] Building CXX object src/document/CMakeFiles/bz_document.dir/WorkPointFeature.cpp.o
+[68/254] Linking CXX static library src/document/libbz_document.a
+[69/254] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-surface.c.o
+[70/254] Building CXX object src/assembly/CMakeFiles/bz_assembly.dir/Assembly.cpp.o
+[71/254] Building CXX object src/assembly/CMakeFiles/bz_assembly.dir/Solver.cpp.o
+[72/254] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/imgui_tables.cpp.o
+[73/254] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/imgui_demo.cpp.o
+[74/254] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/misc/cpp/imgui_stdlib.cpp.o
+[75/254] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/backends/imgui_impl_glfw.cpp.o
+[76/254] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/backends/imgui_impl_opengl3.cpp.o
+[77/254] Building CXX object src/assembly/CMakeFiles/bz_assembly.dir/AssemblyFile.cpp.o
+[78/254] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/lunasvg.cpp.o
+[79/254] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/imgui_widgets.cpp.o
+[80/254] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/graphics.cpp.o
+[81/254] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/imgui_draw.cpp.o
+[82/254] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/imgui.cpp.o
+[83/254] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svggeometryelement.cpp.o
+[84/254] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svgpaintelement.cpp.o
+[85/254] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svglayoutstate.cpp.o
+[86/254] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svgelement.cpp.o
+[87/254] Linking C static library third_party/lunasvg/plutovg/libplutovg.a
+[88/254] Linking CXX static library src/assembly/libbz_assembly.a
+[89/254] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svgproperty.cpp.o
+[90/254] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svgrenderstate.cpp.o
+[91/254] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svgtextelement.cpp.o
+[92/254] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svgparser.cpp.o
+[93/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/AssemblyReadApi.cpp.o
+[94/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/AutoDrop.cpp.o
+[95/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Coil.cpp.o
+[96/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/ComponentPattern.cpp.o
+[97/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Section.cpp.o
+[98/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/AssemblyModel.cpp.o
+[99/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/EdgeMatch.cpp.o
+[100/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/FaceMatch.cpp.o
+[101/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Export.cpp.o
+/Users/runner/work/breezecad/breezecad/src/kernel/occt/Export.cpp:192:85: warning: implicit conversion changes signedness: '(unnamed enum at /Users/runner/work/breezecad/breezecad/third_party/miniz/miniz.h:265:1)' to 'mz_uint' (aka 'unsigned int') [-Wsign-conversion]
+        mz_zip_writer_add_mem(&zip, "3D/3dmodel.model", model.data(), model.size(), MZ_DEFAULT_COMPRESSION);
+        ~~~~~~~~~~~~~~~~~~~~~                                                       ^~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/breezecad/breezecad/src/kernel/occt/Export.cpp:191:78: warning: implicit conversion changes signedness: '(unnamed enum at /Users/runner/work/breezecad/breezecad/third_party/miniz/miniz.h:265:1)' to 'mz_uint' (aka 'unsigned int') [-Wsign-conversion]
+        mz_zip_writer_add_mem(&zip, "_rels/.rels", rels.data(), rels.size(), MZ_DEFAULT_COMPRESSION) &&
+        ~~~~~~~~~~~~~~~~~~~~~                                                ^~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/breezecad/breezecad/src/kernel/occt/Export.cpp:190:102: warning: implicit conversion changes signedness: '(unnamed enum at /Users/runner/work/breezecad/breezecad/third_party/miniz/miniz.h:265:1)' to 'mz_uint' (aka 'unsigned int') [-Wsign-conversion]
+        mz_zip_writer_add_mem(&zip, "[Content_Types].xml", contentTypes.data(), contentTypes.size(), MZ_DEFAULT_COMPRESSION) &&
+        ~~~~~~~~~~~~~~~~~~~~~                                                                        ^~~~~~~~~~~~~~~~~~~~~~
+3 warnings generated.
+[102/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/Model.cpp.o
+[103/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Fillet.cpp.o
+[104/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Extrude.cpp.o
+[105/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Points.cpp.o
+[106/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Measure.cpp.o
+[107/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Hole.cpp.o
+[108/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Loft.cpp.o
+[109/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Shell.cpp.o
+[110/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Revolve.cpp.o
+[111/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Project.cpp.o
+[112/254] Linking CXX static library libbz_imgui.a
+[113/254] Linking CXX static library third_party/lunasvg/liblunasvg.a
+[114/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Sweep.cpp.o
+[115/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Text.cpp.o
+[116/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/SketchGeometry.cpp.o
+[117/254] Building CXX object src/modules/CMakeFiles/bz_modules.dir/ModuleHost.cpp.o
+[118/254] Building CXX object src/modules/CMakeFiles/bz_modules.dir/DynamicLibrary.cpp.o
+[119/254] Building CXX object src/platform/CMakeFiles/bz_platform.dir/Launch.cpp.o
+[120/254] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Thread.cpp.o
+[121/254] Linking CXX static library src/kernel/libbz_kernel.a
+[122/254] Building CXX object src/platform/CMakeFiles/bz_platform.dir/ProcessInfo.cpp.o
+[123/254] Building CXX object src/platform/CMakeFiles/bz_platform.dir/Paths.cpp.o
+[124/254] Building CXX object src/platform/CMakeFiles/bz_platform.dir/SystemTheme.cpp.o
+[125/254] Building CXX object src/platform/CMakeFiles/bz_platform.dir/FileDialogs.cpp.o
+[126/254] Building CXX object src/platform/CMakeFiles/bz_platform.dir/Touchpad.cpp.o
+[127/254] Building CXX object src/platform/CMakeFiles/bz_platform.dir/SystemInfo.cpp.o
+[128/254] Building CXX object src/modules/CMakeFiles/bz_modules.dir/ModuleManifest.cpp.o
+[129/254] Building CXX object src/modules/CMakeFiles/bz_modules.dir/ModuleManager.cpp.o
+[130/254] Building CXX object src/render/CMakeFiles/bz_render.dir/TexturedFaces.cpp.o
+[131/254] Building CXX object src/platform/CMakeFiles/bz_platform.dir/Window.cpp.o
+[132/254] Building CXX object src/ui/CMakeFiles/bz_ui.dir/GestureArt.cpp.o
+[133/254] Building CXX object src/ui/CMakeFiles/bz_ui.dir/Theme.cpp.o
+[134/254] Building OBJCXX object src/platform/CMakeFiles/bz_platform.dir/Touchpad_mac.mm.o
+[135/254] Building CXX object src/ui/CMakeFiles/bz_ui.dir/Menus.cpp.o
+[136/254] Building CXX object src/ui/CMakeFiles/bz_ui.dir/Fonts.cpp.o
+[137/254] Copying assets
+[138/254] Building C object examples/modules/CMakeFiles/bz_example_module.dir/hello/hello.c.o
+[139/254] Building C object examples/modules/CMakeFiles/bz_example_module_fail.dir/hello/hello.c.o
+[140/254] Building CXX object src/ui/CMakeFiles/bz_ui.dir/ViewCube.cpp.o
+[141/254] Linking CXX static library src/modules/libbz_modules.a
+[142/254] Linking CXX static library src/platform/libbz_platform.a
+[143/254] Building CXX object src/ui/CMakeFiles/bz_ui.dir/Icons.cpp.o
+[144/254] Building CXX object src/ui/CMakeFiles/bz_ui.dir/Widgets.cpp.o
+[145/254] Linking CXX static library src/ui/libbz_ui.a
+[146/254] Building CXX object src/app/CMakeFiles/breezecad.dir/Actions.cpp.o
+[147/254] Building CXX object src/render/CMakeFiles/bz_render.dir/Viewport.cpp.o
+[148/254] Linking CXX static library src/render/libbz_render.a
+[149/254] Building CXX object src/app/CMakeFiles/breezecad.dir/main.cpp.o
+[150/254] Building CXX object src/app/CMakeFiles/breezecad.dir/AssemblyState.cpp.o
+[151/254] Building CXX object src/app/CMakeFiles/breezecad.dir/Application.cpp.o
+/Users/runner/work/breezecad/breezecad/src/app/Application.cpp:228:21: warning: declaration shadows a local variable [-Wshadow]
+    if (const char* bg = std::getenv("BZ_VIEW_BG")) top = bottom = Color::Hex(static_cast<std::uint32_t>(std::strtoul(bg, nullptr, 16)));
+                    ^
+/Users/runner/work/breezecad/breezecad/src/app/Application.cpp:224:29: note: previous declaration is here
+    const BackgroundColours bg = ColoursOf(FindBackground(mySettings.background), c);
+                            ^
+1 warning generated.
+[152/254] Building CXX object src/app/CMakeFiles/breezecad.dir/AppearanceLibrary.cpp.o
+/Users/runner/work/breezecad/breezecad/src/app/AppearanceLibrary.cpp:121:31: warning: declaration shadows a local variable [-Wshadow]
+            const std::string bytes(static_cast<const char*>(data), size);
+                              ^
+/Users/runner/work/breezecad/breezecad/src/app/AppearanceLibrary.cpp:111:27: note: previous declaration is here
+        const std::string bytes = ReadText(file);
+                          ^
+1 warning generated.
+[153/254] Building CXX object src/app/CMakeFiles/breezecad.dir/Backgrounds.cpp.o
+[154/254] Building CXX object src/app/CMakeFiles/breezecad.dir/Autosave.cpp.o
+[155/254] Building CXX object src/app/CMakeFiles/breezecad.dir/Format.cpp.o
+[156/254] Building CXX object src/app/CMakeFiles/breezecad.dir/Materials.cpp.o
+[157/254] Building CXX object src/app/CMakeFiles/breezecad.dir/AppActions.cpp.o
+[158/254] Building CXX object src/app/CMakeFiles/breezecad.dir/Language.cpp.o
+[159/254] Building CXX object src/app/CMakeFiles/breezecad.dir/Notifications.cpp.o
+[160/254] Building CXX object src/app/CMakeFiles/breezecad.dir/assembly/AssemblyUi.cpp.o
+[161/254] Building CXX object src/app/CMakeFiles/breezecad.dir/TouchNavigation.cpp.o
+[162/254] Building CXX object src/app/CMakeFiles/breezecad.dir/BetaTesting.cpp.o
+[163/254] Building CXX object src/app/CMakeFiles/breezecad.dir/Session.cpp.o
+[164/254] Building CXX object src/app/CMakeFiles/breezecad.dir/Operations.cpp.o
+[165/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/CoilEditor.cpp.o
+[166/254] Building CXX object src/app/CMakeFiles/breezecad.dir/Workspace.cpp.o
+[167/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/CopyEditors.cpp.o
+[168/254] Building CXX object src/app/CMakeFiles/breezecad.dir/Settings.cpp.o
+[169/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/SketchAxis.cpp.o
+[170/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/AppearanceEditor.cpp.o
+[171/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/LoftEditor.cpp.o
+[172/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/EdgeOperationEditor.cpp.o
+[173/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/SweepEditor.cpp.o
+[174/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/HoleEditor.cpp.o
+[175/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/PointPick.cpp.o
+[176/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/ThreadEditor.cpp.o
+/Users/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp:129:23: warning: declaration shadows a local variable [-Wshadow]
+        if (const int chosen = ui::Segmented(ui, "extent", labels, current, 2, width); chosen != current) {
+                      ^
+/Users/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp:76:23: note: previous declaration is here
+    const std::string chosen = f.size > 0 ? "M" + mm(f.size) : std::string(Tr("По грани"));
+                      ^
+/Users/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp:140:23: warning: declaration shadows a local variable [-Wshadow]
+        if (const int chosen = ui::Segmented(ui, "end", ends, current, 2, width); chosen != current) {
+                      ^
+/Users/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp:76:23: note: previous declaration is here
+    const std::string chosen = f.size > 0 ? "M" + mm(f.size) : std::string(Tr("По грани"));
+                      ^
+/Users/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp:150:19: warning: declaration shadows a local variable [-Wshadow]
+    if (const int chosen = ui::Segmented(ui, "hand", hands, current, 2, width); chosen != current) {
+                  ^
+/Users/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp:76:23: note: previous declaration is here
+    const std::string chosen = f.size > 0 ? "M" + mm(f.size) : std::string(Tr("По грани"));
+                      ^
+3 warnings generated.
+[177/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/WorkPointEditor.cpp.o
+[178/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/ShellEditor.cpp.o
+[179/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/WorkAxisEditor.cpp.o
+[180/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/DragArrow.cpp.o
+[181/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/ExtrudeEditor.cpp.o
+[182/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/WorkPlaneEditor.cpp.o
+[183/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/RevolveEditor.cpp.o
+[184/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/SectionEditor.cpp.o
+[185/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/SketchOperationEditor.cpp.o
+[186/254] Building CXX object src/app/CMakeFiles/breezecad.dir/features/FeatureOperationEditor.cpp.o
+[187/254] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/Bars.cpp.o
+[188/254] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/Header.cpp.o
+[189/254] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/HomeScreen.cpp.o
+[190/254] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/LeftPanels.cpp.o
+[191/254] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/Ribbon.cpp.o
+[192/254] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/DimensionLayout.cpp.o
+[193/254] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/Splash.cpp.o
+[194/254] Building CXX object src/app/CMakeFiles/breezecad.dir/MouseNavigation.cpp.o
+[195/254] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/Dialogs.cpp.o
+[196/254] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/TouchpadSettings.cpp.o
+[197/254] Building CXX object src/app/CMakeFiles/breezecad.dir/ShortcutPresets.cpp.o
+[198/254] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/SketchText.cpp.o
+[199/254] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/SketchPick.cpp.o
+[200/254] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/SketchOverlay.cpp.o
+[201/254] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/TreePanel.cpp.o
+[202/254] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/SketchEditor.cpp.o
+[203/254] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/MarkingMenu.cpp.o
+[204/254] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/Measure.cpp.o
+[205/254] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/SketchToolPanel.cpp.o
+[206/254] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/Section.cpp.o
+[207/254] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/Planes.cpp.o
+[208/254] Linking C shared library modules/hello/libhello.dylib
+[209/254] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/TouchGestures.cpp.o
+[210/254] Linking C shared library modules/hello-fail/libhello.dylib
+[211/254] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/SketchTools.cpp.o
+[212/254] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/ViewportPanel.cpp.o
+/Users/runner/work/breezecad/breezecad/src/app/viewport/ViewportPanel.cpp:186:35: warning: lambda capture 'session' is not used [-Wunused-lambda-capture]
+                app.Later([&app, &session] { EnterPressed(app); });
+                               ~~~^~~~~~~
+/Users/runner/work/breezecad/breezecad/src/app/viewport/ViewportPanel.cpp:249:21: warning: declaration shadows a local variable [-Wshadow]
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+                    ^
+/Users/runner/work/breezecad/breezecad/src/app/viewport/ViewportPanel.cpp:215:17: note: previous declaration is here
+    ImDrawList* dl = BeginArea("##viewport", pos, size, ui.C().viewportBottom);
+                ^
+2 warnings generated.
+[213/254] Building CXX object tests/CMakeFiles/bz_tests.dir/assembly/AssemblyFileTests.cpp.o
+[214/254] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/FaceSelection.cpp.o
+[215/254] Building CXX object tests/CMakeFiles/bz_tests.dir/core/ExpressionTests.cpp.o
+[216/254] Building CXX object tests/CMakeFiles/bz_tests.dir/core/FaultGuardTests.cpp.o
+[217/254] Building CXX object tests/CMakeFiles/bz_tests.dir/assembly/SolverTests.cpp.o
+[218/254] Building CXX object tests/CMakeFiles/bz_tests.dir/main.cpp.o
+[219/254] Building CXX object tests/CMakeFiles/bz_tests.dir/core/ImageTests.cpp.o
+[220/254] Building CXX object tests/CMakeFiles/bz_tests.dir/core/I18nTests.cpp.o
+[221/254] Building CXX object tests/CMakeFiles/bz_tests.dir/core/SourceRulesTests.cpp.o
+[222/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/AssemblyModelTests.cpp.o
+[223/254] Building CXX object tests/CMakeFiles/bz_tests.dir/document/AppearanceTests.cpp.o
+[224/254] Building CXX object tests/CMakeFiles/bz_tests.dir/document/DocumentTests.cpp.o
+[225/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/AutoDropTests.cpp.o
+[226/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/CoilTests.cpp.o
+[227/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/ComponentPatternTests.cpp.o
+[228/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/FilletTests.cpp.o
+[229/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/BracketTests.cpp.o
+[230/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/HoleTests.cpp.o
+[231/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/MeasureTests.cpp.o
+[232/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/LoftTests.cpp.o
+[233/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/RevolvedProjectionTests.cpp.o
+[234/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/ProjectionTests.cpp.o
+[235/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/ModelTests.cpp.o
+[236/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/PatternTests.cpp.o
+[237/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/RevolveTests.cpp.o
+[238/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/SectionTests.cpp.o
+[239/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/StandardPartsTests.cpp.o
+[240/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/ShellTests.cpp.o
+[241/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/SweepTests.cpp.o
+[242/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/ThreadTests.cpp.o
+[243/254] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/FilletTests.cpp.o
+[244/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/WorkPlaneTests.cpp.o
+[245/254] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/MirrorTests.cpp.o
+[246/254] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/WorkPointTests.cpp.o
+[247/254] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/MoveTests.cpp.o
+[248/254] Building CXX object tests/CMakeFiles/bz_tests.dir/modules/ModuleTests.cpp.o
+[249/254] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/OffsetTests.cpp.o
+[250/254] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/ShapesTests.cpp.o
+[251/254] Linking CXX executable bin/breezecad
+ld: warning: ignoring duplicate libraries: 'libbz_miniz.a', 'src/assembly/libbz_assembly.a', 'src/core/libbz_core.a', 'src/document/libbz_document.a', 'src/kernel/libbz_kernel.a'
+[252/254] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/SolverTests.cpp.o
+[253/254] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/TrimTests.cpp.o
+[254/254] Linking CXX executable bin/bz_tests
+ld: warning: ignoring duplicate libraries: 'libbz_miniz.a', 'src/assembly/libbz_assembly.a', 'src/core/libbz_core.a', 'src/document/libbz_document.a', 'src/kernel/libbz_kernel.a', 'src/sketch/libbz_sketch.a'

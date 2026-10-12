@@ -1,0 +1,4 @@
+20:43:51.493 INFO  BreezeCAD 0.2.0 (7/merge 335705e, 2026-10-12) starting
+20:43:51.494 INFO  Interface language: ru
+20:43:52.182 ERROR GLFW 65545: NSGL: Failed to find a suitable pixel format
+20:43:52.213 ERROR Cannot create a window with OpenGL 3.3. Is the graphics driver installed?
