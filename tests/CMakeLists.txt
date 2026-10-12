@@ -45,16 +45,5 @@ add_dependencies(bz_tests bz_example_module bz_example_module_fail)
 target_compile_definitions(bz_tests PRIVATE BZ_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
     BZ_EXAMPLE_MODULE="$<TARGET_FILE:bz_example_module>"
     BZ_EXAMPLE_MODULE_FAIL="$<TARGET_FILE:bz_example_module_fail>")
-if(BZ_BUILD_MCP)   # the MCP module's protocol layer: plain C++, tested in-process
-    target_sources(bz_tests PRIVATE modules/McpProtocolTests.cpp ${PROJECT_SOURCE_DIR}/modules/mcp/Protocol.cpp
-                                    ${PROJECT_SOURCE_DIR}/modules/mcp/Net.cpp ${PROJECT_SOURCE_DIR}/modules/mcp/Connection.cpp)
-    target_include_directories(bz_tests PRIVATE ${PROJECT_SOURCE_DIR}/modules/mcp)
-    target_link_libraries(bz_tests PRIVATE bz::json)
-    if(WIN32)
-        target_link_libraries(bz_tests PRIVATE ws2_32)
-    endif()
-    add_dependencies(bz_tests bz_mcp_module)
-    target_compile_definitions(bz_tests PRIVATE BZ_MCP_MODULE="$<TARGET_FILE:bz_mcp_module>")
-endif()
 bz_set_warnings(bz_tests)
 add_test(NAME bz_tests COMMAND bz_tests)

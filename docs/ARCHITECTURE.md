@@ -13,7 +13,7 @@ document  ← core, sketch    дерево операций, параметры,
 kernel    ← document, OCCT  перестроение модели (тела, регионы эскизов, экспорт)
 modules   ← kernel          модули: module.json (требования к железу), загрузка/отключение,
                             защита от падений, C-ABI `modules/bz_module.h`, пример `examples/modules/hello`;
-                            команды для модулей — `app/scripting` (JSON, ADR-0002), модуль MCP — `modules/mcp`
+                            команды для модулей — `app/scripting` (JSON, ADR-0002); модули ставятся пакетами `.bzmod` (`ModuleManager::Install`)
 render    ← core, kernel    вьюпорт OCCT/OpenGL, выбор (pick), подсветка
 ui        ← core, ImGui     тема, шрифты, иконки, виджеты, видовой куб
 platform  ← core            окна, пути, файловые диалоги, запуск браузера/папки
@@ -77,8 +77,10 @@ Zip: `manifest.json` (версия формата) + `document.json` (дерев
 рёбра по номерам из `kernel/Topology.h`, `GenericCommands` — любая операция по полям, `FeatureCommands`,
 `WorkCommands`, `ViewCommands` — картинка `Viewport::Snapshot`, внешний вид, библиотека,
 `AssemblyCommands`). Правка — через `Session::Execute` (сборка — `AssemblyState::Checkpoint`), один
-вызов = один шаг отмены; операция, которая не построилась, откатывается (`RollBackIfFailed`). Модуль `modules/mcp` отдаёт команды
-Claude как инструменты MCP (`part.tree` → `part_tree`) по `127.0.0.1` + ключ; `bz-mcp-bridge` — stdio.
+вызов = один шаг отмены; операция, которая не построилась, откатывается (`RollBackIfFailed`). Модули сами по себе —
+пакеты `.bzmod` (ZIP: папка модуля под одну систему), их ставит `ModuleManager::Install` в папку модулей
+настроек («Настройки → Модули» или перетаскиванием в окно), включает сразу, удаляет `Uninstall`. MCP-модуль
+для Claude — такой пакет (отдельный PR, `modules/mcp`).
 
 ## Как добавить…
 - **Инструмент эскиза**: `SketchTool` (SketchEditor.h) → строка в `kTools`
