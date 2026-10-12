@@ -32,7 +32,7 @@ jobs:
         env:
           BZ_BIN: ${{ github.workspace }}/build/linux-release/bin
           SHOTS: ${{ github.workspace }}/shots
-        run: bash scripts/ui-test/probe-faces.sh || true
+        run: bash scripts/ui-test/probe-asm.sh || true
       - name: Keep the screenshots in a branch
         if: always()
         run: |
