@@ -4,6 +4,7 @@
 #include "app/sketch/SketchEditor.h"
 #include "core/PathText.h"
 #include "core/Version.h"
+#include "core/Monitor.h"
 #include "app/AssemblyState.h"
 #include "app/Session.h"
 #include "assembly/AssemblyFile.h"
@@ -155,6 +156,7 @@ void AppearanceEditor::KeepPicture(Session& session) {
 }
 
 void AppearanceEditor::PaintBody(Session& session, ObjectId body) {
+    mon::Action("appearance", "объект");
     LookOf(session).SetBody(body, Chosen());
     KeepPicture(session);
     Touch(session);
@@ -162,6 +164,7 @@ void AppearanceEditor::PaintBody(Session& session, ObjectId body) {
 }
 
 void AppearanceEditor::PaintFace(AppContext& app, Session& session, ObjectId body, const doc::FaceReference& shown) {
+    mon::Action("appearance", "грань");
     doc::Look& look = LookOf(session);
     // The same face set before (picked at another point of it): that look goes.
     std::erase_if(look.faces, [&](const doc::Look::FaceLook& f) {
