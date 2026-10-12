@@ -118,8 +118,6 @@ jobs:
           retention-days: 3
 
   linux:
-    permissions:
-      contents: write   # TEMPORARY: the debug branch
     # The Linux package is built with conda-forge (GCC 13, OCCT, GLFW):
     # their libraries need glibc 2.28 at most, so the package runs on
     # distributions from 2019 on; the system's own packages would tie it to
@@ -221,18 +219,6 @@ jobs:
           read -r w h <<< "$size"
           python3 scripts/ppm2png.py shots/touchpad.ppm shots/settings-touchpad.png \
             --crop $(( (w - 780) / 2 )),$(( h > 860 ? (h - 860) / 2 : 0 )),780,860 --annotate "settings touchpad" && rm shots/touchpad.ppm
-      # TEMPORARY (feat/macos only, removed before merging): logs and pictures
-      # into a branch, since this session cannot download artifacts or logs.
-      - name: Keep logs and pictures in a branch (temporary)
-        if: ${{ always() && github.event_name == 'pull_request' && github.head_ref == 'feat/macos' }}
-        shell: bash
-        run: |
-          mkdir -p /tmp/out && cp -f build.log test.log start.log settings.log /tmp/out/ 2>/dev/null || true
-          cp -f shots/*.png /tmp/out/ 2>/dev/null || true
-          tail -c 3000000 /tmp/out/build.log > /tmp/out/build.tail.log 2>/dev/null && rm -f /tmp/out/build.log
-          cd /tmp/out && git init -q && git checkout -q -b ci-debug-${{ github.job }}
-          git add -A && git -c user.name=ci -c user.email=ci@local commit -qm "debug ${GITHUB_SHA::7}"
-          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-debug-${{ github.job }}
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         with:
@@ -282,8 +268,6 @@ jobs:
     # Apple Silicon only (arm64); Homebrew's bottles here are built for
     # macOS 14, which is the oldest system the app supports.
     runs-on: macos-14
-    permissions:
-      contents: write   # TEMPORARY: the debug branch
     steps:
       - uses: actions/checkout@v4
       - name: Dependencies
@@ -336,18 +320,6 @@ jobs:
             echo "::warning title=macOS start check::no frame (exit $status): $(tail -5 start.log | tr '\n' ' ' | cut -c1-400)"
             exit 1
           fi
-      # TEMPORARY (feat/macos only, removed before merging): logs and pictures
-      # into a branch, since this session cannot download artifacts or logs.
-      - name: Keep logs and pictures in a branch (temporary)
-        if: ${{ always() && github.event_name == 'pull_request' && github.head_ref == 'feat/macos' }}
-        shell: bash
-        run: |
-          mkdir -p /tmp/out && cp -f build.log test.log start.log settings.log /tmp/out/ 2>/dev/null || true
-          cp -f shots/*.png /tmp/out/ 2>/dev/null || true
-          tail -c 3000000 /tmp/out/build.log > /tmp/out/build.tail.log 2>/dev/null && rm -f /tmp/out/build.log
-          cd /tmp/out && git init -q && git checkout -q -b ci-debug-${{ github.job }}
-          git add -A && git -c user.name=ci -c user.email=ci@local commit -qm "debug ${GITHUB_SHA::7}"
-          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-debug-${{ github.job }}
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         with:
