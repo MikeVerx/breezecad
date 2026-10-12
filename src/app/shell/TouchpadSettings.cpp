@@ -44,7 +44,7 @@ void DrawTouchpadSettings(AppContext& app, float width) {
     const float artW = ui.S(124), artH = ui.S(52), gap = ui.S(14), rowGap = ui.S(10);
     // The rest of the dialog takes about 480 px: the list scrolls on small
     // screens, cut between rows rather than through one.
-    const float rowStep = artH + rowGap;
+    const float rowStep = artH + rowGap + ImGui::GetStyle().ItemSpacing.y;   // the Dummy closing a row adds the spacing
     const float fits = std::clamp(ImGui::GetIO().DisplaySize.y - ui.S(480), 3 * rowStep, rows * rowStep);
     const float listH = std::floor(fits / rowStep) * rowStep;
     ImGui::BeginChild("##touchpad-gestures", {width, listH}, ImGuiChildFlags_None);
