@@ -29,6 +29,7 @@ const Commands& Table() {
         AddGenericCommands(all);
         AddFeatureCommands(all);
         AddWorkCommands(all);
+        AddViewCommands(all);
         return all;
     }();
     return table;

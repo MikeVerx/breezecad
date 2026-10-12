@@ -7,6 +7,7 @@
 #include "core/Id.h"
 #include "core/Math.h"
 #include "core/NativeSurface.h"
+#include "core/Image.h"
 #include "core/ViewProjection.h"
 #include "document/EdgeReference.h"
 #include "document/Appearance.h"
@@ -115,6 +116,10 @@ public:
     ViewProjection Projection() const;
     CameraState    Camera() const;
     void           SetCamera(const CameraState& camera);
+    /// The model drawn with `camera` into a width x height picture, off
+    /// screen (the window's view is not touched). nullopt when the graphics
+    /// cannot (no OpenGL context yet).
+    std::optional<Image> Snapshot(const CameraState& camera, int width, int height);
 
     /// Turntable orbit: `yaw` around world Z, `pitch` around the screen's
     /// horizontal axis, both in radians, about `pivot`.

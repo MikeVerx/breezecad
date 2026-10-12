@@ -16,14 +16,21 @@ constexpr const char* kInstructions =
     "BreezeCAD — параметрическая САПР деталей (как Inventor/КОМПАС). Инструменты работают с документом, "
     "открытым у пользователя: он видит каждое изменение, любое можно отменить (doc_undo или Ctrl+Z).\n"
     "Порядок работы: part_tree — что в детали; app_new_part — новая деталь. Тело строится так: "
-    "sketch_create (плоскость XY/XZ/YZ, модель — Z вверх) → sketch_add (фигуры в мм; размеры проставляются "
-    "сами и становятся параметрами d1, d2…) → feature_extrude или feature_revolve (для вращения нужна "
-    "осевая, type centerline). Отверстия и пазы — эскиз на той же или другой плоскости + feature_extrude "
-    "с operation cut. Размеры потом меняются part_set_parameter; общие размеры удобно завести переменными "
-    "(part_set_variable) и ссылаться на них в выражениях. Проверка — состояние операций в ответах "
-    "(state error + message), part_properties (габариты, объём, масса). Сохранение — doc_save, "
-    "экспорт — doc_export (STEP/STL/3MF). Если команда отказала, потому что пользователь сейчас "
-    "редактирует эскиз или операцию, попросите его закончить.";
+    "sketch_create (плоскость XY/XZ/YZ, рабочая плоскость или плоская грань; модель — Z вверх) → sketch_add "
+    "(фигуры в мм; размеры проставляются сами и становятся параметрами d1, d2…) → feature_extrude, "
+    "feature_revolve (нужна осевая, type centerline), feature_sweep, feature_loft, feature_coil. "
+    "Дальше — по граням и рёбрам: part_faces / part_edges дают их номера (с фильтрами: normal, kind, "
+    "radius, near…), их принимают feature_hole, feature_fillet, feature_chamfer, feature_shell, "
+    "feature_thread, sketch_create face, work_plane / work_axis / work_point. Номера действуют до "
+    "следующего изменения детали — после правки запросите заново. Массивы и зеркало — feature_pattern, "
+    "feature_mirror; любая другая операция — part_feature_types + part_create_feature. "
+    "Операция, которая не построилась, сразу отменяется, а в ответе — причина. Размеры меняются "
+    "part_set_parameter / part_edit_feature; общие размеры удобно завести переменными (part_set_variable). "
+    "Проверка: part_properties (габариты, объём, масса), part_measure, view_snapshot — картинка модели. "
+    "Стандартные изделия (болты, гайки, подшипники) — library_list / library_sizes / library_make_part; "
+    "цвет и материал — appearance_list, part_set_appearance. Сохранение — doc_save, экспорт — doc_export "
+    "(STEP/STL/3MF). Если команда отказала, потому что пользователь сейчас редактирует эскиз или "
+    "операцию, попросите его закончить.";
 
 Json RpcError(const Json& id, int code, const std::string& message) {
     return {{"jsonrpc", "2.0"}, {"id", id}, {"error", {{"code", code}, {"message", message}}}};
@@ -135,7 +142,14 @@ Json Protocol::CallTool(const Json& params) {
     const Json args  = params.contains("arguments") && params["arguments"].is_object() ? params["arguments"] : Json::object();
     const Json reply = Host(it->second, args);
     if (!reply.value("ok", false)) return Text(reply.value("error", "Ошибка"), true);
-    const Json& result = reply["result"];
+    Json result = reply["result"];
+    // A picture (view.snapshot) goes as an image the model can see, the rest as text.
+    if (result.is_object() && result.contains("image_png_base64")) {
+        Json image = {{"type", "image"}, {"data", result["image_png_base64"]}, {"mimeType", "image/png"}};
+        result.erase("image_png_base64");
+        return {{"content", Json::array({std::move(image), {{"type", "text"}, {"text", result.dump(1, ' ', false, Json::error_handler_t::replace)}}})},
+                {"isError", false}};
+    }
     return Text(result.is_string() ? result.get<std::string>() : result.dump(1, ' ', false, Json::error_handler_t::replace), false);
 }
 

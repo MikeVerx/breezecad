@@ -30,6 +30,8 @@
 #include <Bnd_Box.hxx>
 #include <GeomAbs_Shape.hxx>
 #include <Graphic3d_Camera.hxx>
+#include <Image_AlienPixMap.hxx>
+#include <V3d_ImageDumpOptions.hxx>
 #include <Graphic3d_ClipPlane.hxx>
 #include <Graphic3d_Mat4d.hxx>
 #include <Graphic3d_Vec2.hxx>
@@ -807,6 +809,47 @@ void Viewport::SetCamera(const CameraState& state) {
     cam->OrthogonalizeUp();   // an up leaning toward the line of sight would tilt the next turns
     cam->SetScale(std::max(state.scale, 1e-3));
     myImpl->dirty = true;
+}
+
+std::optional<Image> Viewport::Snapshot(const CameraState& camera, int width, int height) {
+    Impl& m = *myImpl;
+    if (m.GlContext().IsNull()) m.view->Redraw();   // the context comes with the first redraw
+    if (m.GlContext().IsNull() || width < 16 || height < 16) return std::nullopt;
+    const CameraState before = Camera();
+    SetCamera(camera);
+    Image_AlienPixMap pixels;
+    V3d_ImageDumpOptions options;
+    options.Width      = width;
+    options.Height     = height;
+    options.BufferType = Graphic3d_BT_RGBA;
+    bool done = false;
+    try {
+        done = m.view->ToPixMap(pixels, options);
+    } catch (const Standard_Failure& e) {
+        log::Error("Viewport: snapshot failed: {}", e.GetMessageString());
+    }
+    SetCamera(before);
+    if (!done || pixels.IsEmpty()) return std::nullopt;
+    Image out;
+    out.width  = static_cast<int>(pixels.SizeX());
+    out.height = static_cast<int>(pixels.SizeY());
+    out.rgba.resize(static_cast<std::size_t>(out.width) * static_cast<std::size_t>(out.height) * 4);
+    // The bytes as drawn (the window shows the same), rows top to bottom.
+    const bool rgba = pixels.Format() == Image_Format_RGBA;
+    const bool bgra = pixels.Format() == Image_Format_BGRA;
+    if (!rgba && !bgra) return std::nullopt;
+    for (int y = 0; y < out.height; ++y) {
+        const auto row = static_cast<std::size_t>(pixels.IsTopDown() ? y : out.height - 1 - y);
+        const std::uint8_t* from = pixels.Row(row);
+        std::uint8_t* to = &out.rgba[static_cast<std::size_t>(y) * static_cast<std::size_t>(out.width) * 4];
+        for (int x = 0; x < out.width; ++x, from += 4, to += 4) {
+            to[0] = bgra ? from[2] : from[0];
+            to[1] = from[1];
+            to[2] = bgra ? from[0] : from[2];
+            to[3] = 255;
+        }
+    }
+    return out;
 }
 
 void Viewport::Orbit(double yaw, double pitch, Vec3 pivot) {

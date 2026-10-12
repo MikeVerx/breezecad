@@ -55,6 +55,7 @@ void AddTopologyCommands(Commands& out);   // TopologyCommands.cpp: faces, edges
 void AddGenericCommands(Commands& out);    // GenericCommands.cpp: any feature by its fields, the tree
 void AddFeatureCommands(Commands& out);    // FeatureCommands.cpp: hole, fillet, shell, patterns, mirror, loft
 void AddWorkCommands(Commands& out);       // WorkCommands.cpp: work planes, axes, points
+void AddViewCommands(Commands& out);       // ViewCommands.cpp: picture, camera, appearance, standard parts
 
 // --- schemas ----------------------------------------------------------------
 
