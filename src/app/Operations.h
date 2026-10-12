@@ -15,6 +15,12 @@ void NewDocument(AppContext& app);
 /// Opens `file`, or shows the open dialog when none is given.
 void OpenDocument(AppContext& app, std::optional<std::filesystem::path> file = {});
 void SaveDocument(AppContext& app, bool saveAs);
+/// Installs a module package (.bzmod), or asks for one when none is given;
+/// says how it went and shows it in "Настройки → Модули".
+void InstallModule(AppContext& app, std::optional<std::filesystem::path> package = {});
+/// A file dropped on the window: a module package is installed, anything
+/// else is opened as a document.
+void OpenDropped(AppContext& app, const std::filesystem::path& file);
 void ExportDocument(AppContext& app, ExportFormat format);
 /// Closes a tab; asks about unsaved changes first.
 void RequestClose(AppContext& app, int index);

@@ -309,3 +309,177 @@ TEST_CASE("modules run commands on the main thread when they ask") {
     SetCommandHandler({});
     SetWakeHandler({});
 }
+
+// --- installing packages (.bzmod) --------------------------------------------------
+
+#include <miniz.h>
+
+namespace {
+
+/// A ZIP at `file` with these files (name in the archive, contents).
+void WriteZip(const fs::path& file, const std::vector<std::pair<std::string, std::string>>& entries) {
+    mz_zip_archive zip{};
+    REQUIRE(mz_zip_writer_init_heap(&zip, 0, 0));
+    for (const auto& [name, data] : entries)
+        REQUIRE(mz_zip_writer_add_mem(&zip, name.c_str(), data.data(), data.size(), MZ_DEFAULT_COMPRESSION));
+    void* buffer = nullptr;
+    std::size_t size = 0;
+    REQUIRE(mz_zip_writer_finalize_heap_archive(&zip, &buffer, &size));
+    {
+        std::ofstream out(file, std::ios::binary);
+        out.write(static_cast<const char*>(buffer), static_cast<std::streamsize>(size));
+    }
+    mz_free(buffer);
+    mz_zip_writer_end(&zip);
+}
+
+std::string LibraryName() {
+    const std::u8string n = fs::path(BZ_EXAMPLE_MODULE).filename().u8string();
+    return {n.begin(), n.end()};
+}
+
+std::string HelloManifest(const std::string& version, const std::string& extra = "") {
+    return std::format(R"({{"id": "hello", "name": "Пример", "version": "{}", "abiVersion": 1, "library": "{}"{}}})", version,
+                       LibraryName(), extra);
+}
+
+/// The example module packaged as a user would download it: in one folder.
+fs::path HelloPackage(const fs::path& dir, const std::string& version, const std::string& extra = "", const std::string& top = "hello/") {
+    const fs::path file = dir / std::format("hello-{}.bzmod", version);
+    WriteZip(file, {{top + "module.json", HelloManifest(version, extra)},
+                    {top + LibraryName(), ReadFile(BZ_EXAMPLE_MODULE)},
+                    {top + "README.md", "Пример"}});
+    return file;
+}
+
+/// <tmp>/bz_modules/{shipped, user, downloads, config/modules.json}.
+struct InstallFixture {
+    fs::path root      = fs::temp_directory_path() / "bz_modules_install";
+    fs::path shipped   = root / "shipped";
+    fs::path user      = root / "user";
+    fs::path downloads = root / "Загрузки";   // a Cyrillic folder, as on a Russian Windows
+    fs::path state     = root / "config" / "modules.json";
+    InstallFixture() {
+        fs::remove_all(root);
+        fs::create_directories(shipped);
+        fs::create_directories(downloads);
+    }
+    ~InstallFixture() { fs::remove_all(root); }
+    void Start(ModuleManager& mm) const {
+        mm.Discover(shipped, Roomy());
+        mm.SetInstallDir(user);
+        mm.Discover(user, Roomy());
+        mm.LoadAll();
+    }
+};
+
+} // namespace
+
+TEST_CASE("a module package installs, runs at once and stays after a restart") {
+    InstallFixture f;
+    {
+        ModuleManager mm(f.state, HostApi());
+        f.Start(mm);
+        CHECK(mm.Modules().empty());
+        const Expected<std::string> id = mm.Install(HelloPackage(f.downloads, "1.0"));
+        REQUIRE_MESSAGE(id, (id ? "" : id.GetError().message));
+        CHECK(*id == "hello");
+        const ModuleEntry* m = mm.Find("hello");
+        REQUIRE(m);
+        CHECK(m->state == ModuleState::Loaded);
+        CHECK(mm.Removable(*m));
+        CHECK(fs::exists(f.user / "hello" / "module.json"));
+        CHECK(fs::exists(f.user / "hello" / "README.md"));
+        CHECK_FALSE(fs::exists(f.user / ".installing"));
+    }
+    {
+        ModuleManager mm(f.state, HostApi());   // the next start
+        f.Start(mm);
+        REQUIRE(mm.Find("hello"));
+        CHECK(mm.Find("hello")->state == ModuleState::Loaded);
+    }
+}
+
+TEST_CASE("a module off by default is on once the user installs it") {
+    InstallFixture f;
+    ModuleManager mm(f.state, HostApi());
+    f.Start(mm);
+    REQUIRE(mm.Install(HelloPackage(f.downloads, "1.0", R"(, "enabledByDefault": false)")));
+    CHECK(mm.Find("hello")->state == ModuleState::Loaded);
+}
+
+TEST_CASE("installing a newer version replaces the installed one") {
+    InstallFixture f;
+    ModuleManager mm(f.state, HostApi());
+    f.Start(mm);
+    REQUIRE(mm.Install(HelloPackage(f.downloads, "1.0")));
+    REQUIRE(mm.Install(HelloPackage(f.downloads, "2.0", "", "")));   // module.json at the top this time
+    CHECK(mm.Modules().size() == 1);
+    CHECK(mm.Find("hello")->manifest.version == "2.0");
+    CHECK(mm.Find("hello")->state == ModuleState::Loaded);
+    CHECK(ReadFile(f.user / "hello" / "module.json").find("2.0") != std::string::npos);
+}
+
+TEST_CASE("a package that does not fit is refused and leaves nothing behind") {
+    InstallFixture f;
+    ModuleManager mm(f.state, HostApi());
+    f.Start(mm);
+    const auto refused = [&](const fs::path& package, std::string_view words) {
+        const Expected<std::string> r = mm.Install(package);
+        REQUIRE_FALSE(r);
+        INFO(r.GetError().message);
+        CHECK(r.GetError().message.find(words) != std::string::npos);
+        CHECK(mm.Modules().empty());
+        CHECK_FALSE(fs::exists(f.user / ".installing"));
+        CHECK_FALSE(fs::exists(f.user / "hello"));
+    };
+    WriteFile(f.downloads / "text.bzmod", "не архив");
+    refused(f.downloads / "text.bzmod", "не ZIP");
+    WriteZip(f.downloads / "empty.bzmod", {{"readme.txt", "x"}});
+    refused(f.downloads / "empty.bzmod", "нет module.json");
+    refused(HelloPackage(f.downloads, "os", R"(, "requirements": {"os": ["macos"]})"), "не подходит");
+    WriteZip(f.downloads / "nolib.bzmod", {{"hello/module.json", HelloManifest("1.0")}});
+    refused(f.downloads / "nolib.bzmod", "другой системы");
+    WriteZip(f.downloads / "escape.bzmod", {{"hello/module.json", HelloManifest("1.0")}, {"../evil.txt", "x"}});
+    refused(f.downloads / "escape.bzmod", "небезопасен");
+    CHECK_FALSE(fs::exists(f.root / "evil.txt"));
+    WriteZip(f.downloads / "dots.bzmod", {{"module.json", R"({"id": "..", "abiVersion": 1, "library": "x"})"}});
+    refused(f.downloads / "dots.bzmod", "id");
+    WriteZip(f.downloads / "two.bzmod", {{"a/module.json", HelloManifest("1.0")}, {"b/module.json", HelloManifest("1.0")}});
+    refused(f.downloads / "two.bzmod", "несколько");
+}
+
+TEST_CASE("a module shipped with the program is neither replaced nor removed") {
+    InstallFixture f;
+    fs::create_directories(f.shipped / "hello");
+    WriteFile(f.shipped / "hello" / "module.json", HelloManifest("1.0"));
+    fs::copy_file(BZ_EXAMPLE_MODULE, f.shipped / "hello" / LibraryName());
+    ModuleManager mm(f.state, HostApi());
+    f.Start(mm);
+    REQUIRE(mm.Find("hello"));
+    CHECK_FALSE(mm.Removable(*mm.Find("hello")));
+    const Expected<std::string> r = mm.Install(HelloPackage(f.downloads, "2.0"));
+    REQUIRE_FALSE(r);
+    CHECK(r.GetError().message.find("встроен") != std::string::npos);
+    CHECK_FALSE(mm.Uninstall("hello"));
+    CHECK(mm.Find("hello")->state == ModuleState::Loaded);   // untouched
+}
+
+TEST_CASE("an installed module is removed: unloaded, its folder gone, forgotten") {
+    InstallFixture f;
+    {
+        ModuleManager mm(f.state, HostApi());
+        f.Start(mm);
+        REQUIRE(mm.Install(HelloPackage(f.downloads, "1.0")));
+        REQUIRE(mm.TurnOff("hello"));
+        REQUIRE(mm.TurnOn("hello"));
+        const Status removed = mm.Uninstall("hello");
+        REQUIRE_MESSAGE(removed, (removed ? "" : removed.GetError().message));
+        CHECK_FALSE(mm.Find("hello"));
+        CHECK_FALSE(fs::exists(f.user / "hello"));
+        CHECK(ReadFile(f.state).find("hello") == std::string::npos);
+    }
+    ModuleManager mm(f.state, HostApi());
+    f.Start(mm);
+    CHECK(mm.Modules().empty());
+}

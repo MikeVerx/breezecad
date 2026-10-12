@@ -132,6 +132,15 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     glfwSetWindowSizeCallback(myWindow.Handle(), [](GLFWwindow* w, int, int) { OnAnyInput(w); });
     glfwSetWindowFocusCallback(myWindow.Handle(), [](GLFWwindow* w, int) { OnAnyInput(w); });
     glfwSetWindowRefreshCallback(myWindow.Handle(), [](GLFWwindow* w) { OnAnyInput(w); });
+    glfwSetDropCallback(myWindow.Handle(), [](GLFWwindow* w, int count, const char** paths) {   // UTF-8 paths
+        auto* tap = TapOf(w);
+        if (!tap) return;
+        for (int i = 0; i < count; ++i) {
+            const std::string_view p(paths[i]);
+            tap->dropped.emplace_back(std::u8string(p.begin(), p.end()));
+        }
+        tap->seen = true;
+    });
 
     kernel::SetTextFont(assets / "fonts" / "IBMPlexSans-Medium.ttf", assets / "fonts" / "IBMPlexSans-SemiBold.ttf");   // sketch text
     log::Info("Assets: {}", ToUtf8(assets));
@@ -261,6 +270,11 @@ int Application::Run() {
             myFramesToDraw = std::max(myFramesToDraw, 3);
         }
         PollShotRequest();
+        if (!myInput.dropped.empty()) {   // a module package or documents dragged in
+            const std::vector<std::filesystem::path> files = std::move(myInput.dropped);
+            myInput.dropped.clear();
+            for (const std::filesystem::path& f : files) OpenDropped(*myContext, f);
+        }
         if (myModules && myModules->Tick()) myFramesToDraw = std::max(myFramesToDraw, 3);   // show what they changed
         HandleCloseRequests();
         if (myShell.quitRequested && myWorkspace.sessions.empty()) break;
@@ -298,6 +312,7 @@ void Application::StartModules() {
     modules::HostInfo host = modules::HostInfo::Detect();
     host.openGL            = myWindow.OpenGLVersion();
     myModules->Discover(platform::AssetsDir().parent_path() / "modules", host);
+    myModules->SetInstallDir(config / "modules");
     myModules->Discover(config / "modules", host);
     myModules->LoadAll();
     myContext->modules = myModules.get();
