@@ -127,6 +127,9 @@ public:
     /// Turntable orbit: `yaw` around world Z, `pitch` around the screen's
     /// horizontal axis, both in radians, about `pivot`.
     void Orbit(double yaw, double pitch, Vec3 pivot);
+    /// Turns the view in the screen's plane about `pivot` (radians; the
+    /// model turns counter-clockwise for a positive angle).
+    void Roll(double angle, Vec3 pivot);
     void Pan(double dxPixels, double dyPixels);
     /// Zooms by `factor` (>1 closer) keeping the point under the cursor still.
     void ZoomAt(double factor, Vec2 pixel);
