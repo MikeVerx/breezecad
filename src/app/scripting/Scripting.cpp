@@ -23,6 +23,7 @@ const Commands& Table() {
         AddSketchCommands(all);
         AddSolidCommands(all);
         AddTopologyCommands(all);
+        AddGenericCommands(all);
         return all;
     }();
     return table;

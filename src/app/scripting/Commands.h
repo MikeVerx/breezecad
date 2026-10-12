@@ -52,6 +52,7 @@ void AddPartCommands(Commands& out);       // PartCommands.cpp: tree, parameters
 void AddSketchCommands(Commands& out);     // SketchCommands.cpp: sketches and their geometry
 void AddSolidCommands(Commands& out);      // SolidCommands.cpp: extrude, revolve, thread
 void AddTopologyCommands(Commands& out);   // TopologyCommands.cpp: faces, edges, measure
+void AddGenericCommands(Commands& out);    // GenericCommands.cpp: any feature by its fields, the tree
 
 // --- schemas ----------------------------------------------------------------
 

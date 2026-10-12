@@ -5,6 +5,7 @@
 #include "app/AppContext.h"
 #include "app/Session.h"
 #include "app/scripting/Commands.h"
+#include "document/JsonIO.h"
 
 #include <cmath>
 #include <format>
@@ -50,6 +51,7 @@ Json FaceJson(const kernel::FaceInfo& f, const doc::Document& d) {
         if (f.kind == doc::SurfaceKind::Cylinder) j["hole"] = f.hole;
     }
     if (const doc::Feature* by = d.Find(f.body)) j["body_name"] = by->name;
+    j["ref"] = doc::json_io::ToJson(f.ref);   // as features keep it (part.create_feature)
     return j;
 }
 
@@ -69,6 +71,7 @@ Json EdgeJson(const kernel::EdgeInfo& e) {
         j["radius"] = Round(e.radius);
         j["closed"] = e.closed;
     }
+    j["ref"] = doc::json_io::ToJson(e.ref);   // as features keep it (part.create_feature)
     return j;
 }
 
