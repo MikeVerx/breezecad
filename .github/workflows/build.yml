@@ -151,14 +151,18 @@ jobs:
           echo "::notice title=Linux toolchain::$($CXX -dumpfullversion), OCCT $occt, GLFW $(grep -h 'define GLFW_VERSION_M' "$CONDA_PREFIX"/include/GLFW/glfw3.h | awk '{printf "%s.", $3}')"
       - name: Configure
         run: cmake --preset linux-release -DCMAKE_PREFIX_PATH="$CONDA_PREFIX"
+      # Three at a time: with OCCT 8 headers four compilers at once ran the
+      # runner out of memory, which killed the build without a message.
       - name: Build
         id: build
-        run: cmake --build --preset linux-release 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+        run: cmake --build --preset linux-release -j 3 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Test
         run: ctest --preset linux-release --output-on-failure 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
       - name: Report failures
         if: failure()
-        run: bash scripts/ci-annotate.sh build.log test.log
+        run: |
+          bash scripts/ci-annotate.sh build.log test.log
+          echo "::notice title=Memory::$(free -m | awk 'NR==2 {print $2 " MB, used " $3}'); $(dmesg 2>/dev/null | grep -ci 'killed process') kills"
       - name: Package
         id: package
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
