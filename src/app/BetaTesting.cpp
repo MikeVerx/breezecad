@@ -45,6 +45,7 @@ std::string Stamp() {
     return text;
 }
 
+#if !defined(__APPLE__)
 bool Writable(const std::filesystem::path& dir) {
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
@@ -54,6 +55,7 @@ bool Writable(const std::filesystem::path& dir) {
     std::filesystem::remove(probe, ec);
     return ok;
 }
+#endif
 
 std::filesystem::path SessionsDir() { return ReportsDir() / "sessions"; }
 
@@ -84,23 +86,53 @@ void Prune() {
     for (std::size_t i = 0; i + kKeepSessions < all.size(); ++i) std::filesystem::remove_all(all[i], ec);
 }
 
+/// Where the flag is, if anywhere. In a macOS bundle anything but code in
+/// Contents/MacOS breaks the signature, so there it sits in Resources.
+std::filesystem::path FlagFile() {
+    std::error_code ec;
+#if defined(__APPLE__)
+    const std::filesystem::path bundled = platform::ExecutableDir() / ".." / "Resources" / kFlag;
+    if (std::filesystem::exists(bundled, ec)) return bundled;
+#endif
+    const std::filesystem::path beside = platform::ExecutableDir() / kFlag;
+    return std::filesystem::exists(beside, ec) ? beside : std::filesystem::path{};
+}
+
+#if defined(__APPLE__)
+/// macOS writes its own crash report (.ips, with the stack of every thread)
+/// to ~/Library/Logs/DiagnosticReports; the ones of this program written
+/// since the session started go into the zip.
+void CopySystemCrashReports(const std::filesystem::path& sessionDir) {
+    std::error_code ec;
+    const auto started = std::filesystem::last_write_time(sessionDir / "session.json", ec);
+    if (ec) return;
+    const char* home = std::getenv("HOME");
+    if (!home) return;
+    for (const auto& e : std::filesystem::directory_iterator(std::filesystem::path(home) / "Library" / "Logs" / "DiagnosticReports", ec)) {
+        const std::string name = ToUtf8(e.path().filename());
+        if (!e.is_regular_file() || !name.starts_with("breezecad") || e.last_write_time(ec) < started) continue;
+        std::filesystem::copy_file(e.path(), sessionDir / name, std::filesystem::copy_options::skip_existing, ec);
+    }
+}
+#endif
+
 } // namespace
 
 bool Enabled() {
-    static const bool enabled = [] {
-        std::error_code ec;
-        return std::filesystem::exists(platform::ExecutableDir() / kFlag, ec);
-    }();
+    static const bool enabled = !FlagFile().empty();
     return enabled;
 }
 
 std::filesystem::path ReportsDir() {
     static const std::filesystem::path dir = [] {
+#if defined(__APPLE__)
+        return platform::ConfigDir() / u8"Отчёты для разработчика";
+#else
         // The flag file may name the folder ("reports=..\\Отчёты для разработчика"),
         // relative to the program: the testers' archive keeps it next to the
         // instructions, above the folder with the program.
         std::filesystem::path chosen = platform::ExecutableDir() / u8"Отчёты для разработчика";
-        std::ifstream in(platform::ExecutableDir() / kFlag, std::ios::binary);
+        std::ifstream in(FlagFile(), std::ios::binary);
         for (std::string line; std::getline(in, line);) {
             if (!line.starts_with("reports=")) continue;
             std::string value = line.substr(8);
@@ -110,6 +142,7 @@ std::filesystem::path ReportsDir() {
                 chosen = (platform::ExecutableDir() / std::filesystem::path(std::u8string(value.begin(), value.end()))).lexically_normal();
         }
         return Writable(chosen) ? chosen : platform::DocumentsDir() / u8"BreezeCAD — отчёты тестера";
+#endif
     }();
     return dir;
 }
@@ -187,6 +220,9 @@ void Dismiss(const std::filesystem::path& sessionDir) { std::ofstream(sessionDir
 
 Expected<std::filesystem::path> Pack(const std::filesystem::path& sessionDir, const std::string& description, bool crash) {
     std::error_code ec;
+#if defined(__APPLE__)
+    if (crash) CopySystemCrashReports(sessionDir);
+#endif
     {
         std::ofstream out(sessionDir / "описание.txt", std::ios::binary);
         out << (crash ? "Программа закрылась с ошибкой.\n\n" : "Отчёт по просьбе тестера (без вылета).\n\n") << description << "\n";

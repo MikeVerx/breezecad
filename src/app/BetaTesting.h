@@ -18,10 +18,13 @@ class Window;
 
 namespace bz::app::beta {
 
-/// The testers' build (beta-tester.txt next to the program).
+/// The testers' build (beta-tester.txt next to the program; in a macOS app
+/// bundle, in Contents/Resources).
 bool Enabled();
 /// "Отчёты для разработчика" next to the program, or in Documents when the
-/// program's folder is read-only.
+/// program's folder is read-only. On macOS always in the settings folder
+/// (~/Library/Application Support/BreezeCAD): a downloaded app runs from a
+/// read-only copy, and writing into the bundle would break its signature.
 std::filesystem::path ReportsDir();
 
 /// Starts this run's session folder and points the monitoring at it (sets
