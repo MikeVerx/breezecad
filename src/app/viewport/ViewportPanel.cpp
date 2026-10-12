@@ -35,13 +35,33 @@ void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDra
     std::vector<ShownPlane> planes = OriginPlanes(session);
     const std::vector<ShownPlane> work = WorkPlanes(session);
     planes.insert(planes.end(), work.begin(), work.end());
+
+    // A plane chosen in the tree meanwhile: the sketch goes on it.
+    for (const ShownPlane& p : planes)
+        if (p.id == session.selectedFeature) {
+            const doc::SketchPlacement placement{p.id, p.frame, false, {}};
+            app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
+            return;
+        }
+
     const ShownPlane* hot = vf.hovered ? PlaneUnderCursor(vf, mouse, planes) : nullptr;
     // A flat face of the model under the cursor wins over the planes, even
     // where a plane sticks out in front of it: pointing at the body means
     // the body (as in Inventor).
     std::optional<render::PickResult> face;
     if (vf.hovered) face = app.viewport.Pick(vf.ToLocal(mouse));
-    if (face && face->plane) hot = nullptr;
+    // A work plane the user made stands in front of that face, though,
+    // wins: it overlaps the body, so otherwise it could hardly be clicked.
+    if (face && face->plane && hot) {
+        const bool workPlane = !doc::origin::IsOriginElement(hot->id);
+        Vec3 eye, dir;
+        vf.projection.Unproject(vf.ToLocal(mouse), eye, dir);
+        const std::optional<double> planeAt = HitPlane(vf, mouse, *hot);
+        const double faceAt = (face->point - eye).Dot(dir) / dir.Dot(dir);
+        if (!workPlane || !planeAt || *planeAt > faceAt - 1e-6) hot = nullptr;
+    } else if (face && face->plane) {
+        hot = nullptr;
+    }
     // With a body in the part the planes step back, so the body stays readable.
     const bool faint = !session.model.Bodies().empty();
     for (const ShownPlane& p : planes) DrawPlane(app, dl, vf, p, &p == hot, faint && &p != hot);
