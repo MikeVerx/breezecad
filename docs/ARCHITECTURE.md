@@ -73,8 +73,11 @@ Zip: `manifest.json` (версия формата) + `document.json` (дерев
 Модуль меняет документ только командами: `host->execute("{\"command\": …}")` в главном
 потоке (из своего потока — `request_main()` → `main_tick()`). Команды — `app/scripting/`:
 таблица `Command` (имя, описание, JSON-схема, `changes`, функция), группы по файлам
-(`DocumentCommands`, `PartCommands`, `SketchCommands`, `SolidCommands`). Правка — через
-`Session::Execute`, один вызов = один шаг отмены. Модуль `modules/mcp` отдаёт команды
+(`DocumentCommands`, `PartCommands`, `SketchCommands`, `SolidCommands`, `TopologyCommands` — грани и
+рёбра по номерам из `kernel/Topology.h`, `GenericCommands` — любая операция по полям, `FeatureCommands`,
+`WorkCommands`, `ViewCommands` — картинка `Viewport::Snapshot`, внешний вид, библиотека,
+`AssemblyCommands`). Правка — через `Session::Execute` (сборка — `AssemblyState::Checkpoint`), один
+вызов = один шаг отмены; операция, которая не построилась, откатывается (`RollBackIfFailed`). Модуль `modules/mcp` отдаёт команды
 Claude как инструменты MCP (`part.tree` → `part_tree`) по `127.0.0.1` + ключ; `bz-mcp-bridge` — stdio.
 
 ## Как добавить…
