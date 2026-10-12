@@ -1,7 +1,10 @@
 #!/bin/bash
 # Face selection probe at 1440x900 (temporary).
 UI="$(dirname "$0")/ui.sh"
-"$UI" start; sleep 4
+"$UI" start; sleep 2
+export DISPLAY=:99
+for _ in $(seq 120); do xdotool search --name BreezeCAD >/dev/null 2>&1 && break; sleep 0.5; done
+sleep 2; W=$(xdotool search --name BreezeCAD | head -1); xdotool windowmove "$W" 0 0; sleep 1
 # "Новая деталь" until a part is open (the home page has no ribbon tabs)
 for try in 1 2 3 4 5; do
   "$UI" clk 460 224; sleep 2; "$UI" shot start-$try 0.3
