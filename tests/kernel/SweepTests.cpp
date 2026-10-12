@@ -72,3 +72,42 @@ TEST_CASE("sweep path must be one chain") {
     model.Rebuild(p.d);
     CHECK(p.sweep->status.state == FeatureState::Error);
 }
+
+// The path turns 90° without a rounding: the pipe goes on past the corner
+// (it used to stop there and keep only the first segment).
+TEST_CASE("sweep around a sharp corner keeps both segments") {
+    Pipe p;
+    p.Line({0, 0}, {0, 50});
+    p.Line({0, 50}, {40, 50});
+    kernel::Model model;
+    model.Rebuild(p.d);
+    REQUIRE(p.sweep->status.state == FeatureState::Ok);
+    // A mitred bend of a round pipe: area times the length of the centre line.
+    CHECK(model.Volume() == doctest::Approx(kPi * 4 * 90).epsilon(1e-3));
+}
+
+TEST_CASE("sweep along lines joined by an arc") {
+    Pipe p;
+    p.Line({0, 0}, {0, 40});
+    auto& sk = p.path->sketch;
+    const ObjectId c = sk.AddPoint(p.d.Ids(), {10, 40});
+    sk.AddArc(p.d.Ids(), c, sk.AddPoint(p.d.Ids(), {10, 50}), sk.AddPoint(p.d.Ids(), {0, 40}));   // counter-clockwise: a quarter
+    p.Line({10, 50}, {50, 50});
+    kernel::Model model;
+    model.Rebuild(p.d);
+    INFO(p.sweep->status.message);
+    REQUIRE(p.sweep->status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(kPi * 4 * (80 + kPi * 10 / 2)).epsilon(1e-3));
+}
+
+TEST_CASE("sweep of a ring makes a tube") {
+    Pipe p;
+    AddCircle(p.d, *p.d.FindAs<doc::SketchFeature>(p.sweep->sketch), {0, 0}, 1);   // a hole in the Ø4 circle
+    p.Line({0, 0}, {0, 50});
+    p.Line({0, 50}, {40, 50});
+    kernel::Model model;
+    model.Rebuild(p.d);
+    INFO(p.sweep->status.message);
+    REQUIRE(p.sweep->status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(kPi * (4 - 1) * 90).epsilon(1e-3));
+}

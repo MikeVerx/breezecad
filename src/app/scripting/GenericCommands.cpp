@@ -91,6 +91,7 @@ Json Create(AppContext& app, const Json& args) {
     const ObjectId id = f->id;
     s.Execute(doc::AddFeature(std::move(f), index));
     Json out = AfterChange(s, id);
+    RollBackIfFailed(s, id);
     for (const Parameter* p : s.doc.Find(id)->Parameters())
         if (!p->name.empty()) out["parameters"].push_back({{"name", p->name}, {"expression", p->expression}});
     return out;
@@ -111,7 +112,9 @@ Json Edit(AppContext& app, const Json& args) {
     edited->ReserveIds(s.doc.Ids());
     const ObjectId id = current.id;
     s.Execute(doc::ReplaceFeature(std::move(edited), Trf("Изменить {}", current.name)));
-    return AfterChange(s, id);
+    Json out = AfterChange(s, id);
+    RollBackIfFailed(s, id);
+    return out;
 }
 
 Json Move(AppContext& app, const Json& args) {

@@ -53,6 +53,7 @@ void AddSketchCommands(Commands& out);     // SketchCommands.cpp: sketches and t
 void AddSolidCommands(Commands& out);      // SolidCommands.cpp: extrude, revolve, thread
 void AddTopologyCommands(Commands& out);   // TopologyCommands.cpp: faces, edges, measure
 void AddGenericCommands(Commands& out);    // GenericCommands.cpp: any feature by its fields, the tree
+void AddFeatureCommands(Commands& out);    // FeatureCommands.cpp: hole, fillet, shell, patterns, mirror, loft
 
 // --- schemas ----------------------------------------------------------------
 
@@ -115,6 +116,10 @@ Json Describe(const doc::Feature& feature);
 /// Brings the geometry up to date (the user sees it at once) and describes
 /// `feature` after it: what the caller just made or changed.
 Json AfterChange(Session& part, ObjectId feature);
+/// A feature just added or edited that failed to build: the step is taken
+/// back (undo) and the caller gets the reason as an error — no broken item
+/// is left in the tree. Nothing happens for one that built (or warned).
+void RollBackIfFailed(Session& part, ObjectId feature);
 
 } // namespace scripting
 } // namespace bz::app

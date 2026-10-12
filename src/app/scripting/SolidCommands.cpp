@@ -1,13 +1,16 @@
-// Operations that make solids from sketch profiles: extrude, revolve.
+// Operations that make solids from sketch profiles: extrude, revolve,
+// sweep, coil; and a thread on a cylinder.
 
 #include "app/AppContext.h"
 #include "app/Session.h"
 #include "app/scripting/Commands.h"
 #include "core/I18n.h"
 #include "document/Commands.h"
+#include "document/CoilFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/RevolveFeature.h"
 #include "document/SketchFeature.h"
+#include "document/SweepFeature.h"
 #include "document/ThreadFeature.h"
 
 #include <cmath>
@@ -41,6 +44,7 @@ Json Finish(Session& s, std::unique_ptr<doc::SketchSolidFeature> f, const Json& 
     const ObjectId id = f->id;
     s.Execute(doc::AddFeature(std::move(f), s.doc.EndMarker()));
     Json out = AfterChange(s, id);
+    RollBackIfFailed(s, id);
     for (const Parameter* p : s.doc.Find(id)->Parameters())
         if (!p->name.empty()) out["parameters"].push_back({{"name", p->name}, {"expression", p->expression}});
     if (const auto props = s.model.Properties()) out["volume_mm3"] = props->volume;
@@ -87,6 +91,39 @@ Json Revolve(AppContext& app, const Json& args) {
         f->angle.expression = Expression(args, "angle", "90");
     }
     return Finish(s, std::move(f), args, "Вращение");
+}
+
+Json Sweep(AppContext& app, const Json& args) {
+    Session& s = ActivePart(app);
+    s.RebuildNow();
+    auto f = std::make_unique<doc::SweepFeature>();
+    FillSolid(s, args, *f);
+    f->path = Id(args, "path");
+    if (!s.doc.FindAs<doc::SketchFeature>(f->path)) Fail("«path» — не эскиз");
+    if (f->path == f->sketch) Fail("Траектория рисуется в другом эскизе, не в эскизе профиля");
+    return Finish(s, std::move(f), args, "Сдвиг");
+}
+
+Json Coil(AppContext& app, const Json& args) {
+    Session& s = ActivePart(app);
+    s.RebuildNow();
+    auto f = std::make_unique<doc::CoilFeature>();
+    FillSolid(s, args, *f);
+    const auto& sk = s.doc.FindAs<doc::SketchFeature>(f->sketch)->sketch;
+    if (Has(args, "axis")) {
+        f->axisLine = Id(args, "axis");
+        if (!sk.FindLine(f->axisLine)) Fail("«axis» — не отрезок этого эскиза");
+    } else {
+        for (const auto& l : sk.lines)
+            if (l.centerline) f->axisLine = l.id;
+        if (!f->axisLine) Fail("В эскизе нет осевой: нарисуйте её (sketch.add, type centerline) или укажите «axis»");
+    }
+    f->leftHanded = Flag(args, "left_handed", false);
+    f->pitch.name       = s.doc.NextParameterName();
+    f->pitch.expression = Expression(args, "pitch");
+    f->turns.name       = "d" + std::to_string(std::stoi(f->pitch.name.substr(1)) + 1);
+    f->turns.expression = Expression(args, "turns");
+    return Finish(s, std::move(f), args, "Пружина");
 }
 
 Vec3 Point3(const Json& args, const char* key, std::optional<Vec3> fallback) {
@@ -197,6 +234,20 @@ void AddSolidCommands(Commands& out) {
                                 {"reversed", BoolArg("В другую сторону.")}},
                                {}),
                    true, &Revolve});
+    out.push_back({"feature.sweep",
+                   "Сдвиг: замкнутые контуры эскиза sketch протягиваются вдоль траектории — цепочки отрезков и дуг в другом "
+                   "эскизе path (обычно на перпендикулярной плоскости; профиль ставьте в начало траектории).",
+                   SolidSchema({{"path", IdArg("id эскиза с траекторией.")}}, {"path"}),
+                   true, &Sweep});
+    out.push_back({"feature.coil",
+                   "Пружина (спираль): контур эскиза навивается вокруг осевой того же эскиза с шагом pitch, turns витков. "
+                   "Контур — по одну сторону от оси, не касаясь её; шаг больше высоты контура.",
+                   SolidSchema({{"axis", IdArg("id отрезка-оси; не задан — осевая эскиза.")},
+                                {"pitch", ExpressionArg("Шаг, мм.")},
+                                {"turns", ExpressionArg("Число витков.")},
+                                {"left_handed", BoolArg("Левая навивка.")}},
+                               {"pitch", "turns"}),
+                   true, &Coil});
     out.push_back({"feature.thread",
                    "Метрическая резьба ISO 60° (винтовая, настоящая) на цилиндрической грани: на валу — наружная, в отверстии — "
                    "внутренняя (отверстие = диаметр под метчик). Грань задаётся осью и диаметром: точка на оси, направление оси, "

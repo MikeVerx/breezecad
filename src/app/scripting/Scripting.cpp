@@ -24,6 +24,7 @@ const Commands& Table() {
         AddSolidCommands(all);
         AddTopologyCommands(all);
         AddGenericCommands(all);
+        AddFeatureCommands(all);
         return all;
     }();
     return table;
@@ -278,6 +279,15 @@ Json AfterChange(Session& part, ObjectId feature) {
     part.selectedFeature = feature;
     if (const doc::Feature* f = part.doc.Find(feature)) return Describe(*f);
     return Json::object();
+}
+
+void RollBackIfFailed(Session& part, ObjectId feature) {
+    const doc::Feature* f = part.doc.Find(feature);
+    if (!f || f->status.state != doc::FeatureState::Error) return;
+    const std::string why = f->status.message, name = f->name;
+    part.Undo();
+    part.RebuildNow();
+    Fail(std::format("«{}» не построена, шаг отменён: {}", name, why));
 }
 
 } // namespace bz::app::scripting
