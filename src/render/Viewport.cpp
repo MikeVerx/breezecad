@@ -281,6 +281,13 @@ struct Viewport::Impl {
     void ActivateShown() {
         for (const auto& s : shown) {
             context->Deactivate(s.shape);
+            // Faces covered with a picture are picked on their skin.
+            if (const auto it = textured.find(s.shape.get()); it != textured.end())
+                for (const auto& obj : it->second)
+                    if (!Handle(TexturedFaces)::DownCast(obj).IsNull()) {
+                        context->Deactivate(obj);
+                        if (!original.active) context->Activate(obj, AIS_Shape::SelectionMode(TopAbs_FACE));
+                    }
             if (original.active) continue;
             context->Activate(s.shape, AIS_Shape::SelectionMode(TopAbs_FACE));
             if (measuring.on) {
@@ -303,8 +310,11 @@ struct Viewport::Impl {
                 if (s.body != f.body) continue;
                 const std::optional<TopoDS_Face> face = kernel::occt::ResolveAnyFace(s.shape->Shape(), f.face);
                 if (!face) break;
-                if (const Handle(SelectMgr_EntityOwner) owner = FaceOwner(s.shape, *face); !owner.IsNull() && !owner->IsSelected())
-                    context->AddOrRemoveSelected(owner, false);
+                Handle(SelectMgr_EntityOwner) owner = FaceOwner(s.shape, *face);
+                if (const auto it = textured.find(s.shape.get()); owner.IsNull() && it != textured.end())
+                    for (const auto& obj : it->second)   // a face with a picture: on its skin
+                        if (owner.IsNull()) owner = FaceOwner(obj, *face);
+                if (!owner.IsNull() && !owner->IsSelected()) context->AddOrRemoveSelected(owner, false);
                 break;
             }
     }
@@ -463,6 +473,18 @@ struct Viewport::Impl {
         textured.erase(it);
     }
 
+    /// The shown body a picked object belongs to: the body itself or the
+    /// skin over its faces with a picture. None for anything else.
+    ObjectId BodyOf(const Handle(SelectMgr_SelectableObject)& picked) const {
+        for (const auto& s : shown) {
+            if (picked.get() == s.shape.get()) return s.body;
+            if (const auto it = textured.find(s.shape.get()); it != textured.end())
+                for (const auto& obj : it->second)
+                    if (picked.get() == obj.get()) return s.body;
+        }
+        return {};
+    }
+
     /// A body's style with its look: the body's appearance, then the faces
     /// that have their own; faces with a picture are hidden on the body and
     /// drawn textured over it (TexturedFaces), with their edges.
@@ -504,7 +526,9 @@ struct Viewport::Impl {
             for (const TopoDS_Face& face : faces) s.shape->CustomAspects(face)->SetHidden(true);
             const double transparency = style == DisplayStyle::Transparent ? 0.55 : 1.0 - a->face.a;
             Handle(TexturedFaces) skin = new TexturedFaces(faces, texture, a->pictureSize, MaterialOf(Color::Hex(0xFFFFFF), a->finish), transparency);
-            context->Display(skin, 0, -1, false);
+            // Picked as the faces it covers (hidden on the body), unless the
+            // original body before an operation is what is picked now.
+            context->Display(skin, 0, original.active ? -1 : AIS_Shape::SelectionMode(TopAbs_FACE), false);
             textured[s.shape.get()].push_back(skin);
             // Their edges: the sharp ones (not seams, not between tangent faces).
             if (style != DisplayStyle::ShadedWithEdges && style != DisplayStyle::Transparent) continue;
@@ -994,8 +1018,7 @@ std::optional<PickResult> Viewport::Pick(Vec2 pixel) {
     PickResult result;
     result.point = ToVec(selector->PickedPoint(1).XYZ());
     const Handle(SelectMgr_EntityOwner) owner = selector->Picked(1);
-    for (const auto& s : m.shown)
-        if (owner->Selectable() == s.shape) result.body = s.body;
+    result.body = m.BodyOf(owner->Selectable());
 
     if (const Handle(StdSelect_BRepOwner) brep = Handle(StdSelect_BRepOwner)::DownCast(owner);
         !brep.IsNull() && brep->Shape().ShapeType() == TopAbs_FACE) {
@@ -1035,9 +1058,7 @@ std::vector<SelectedFace> Viewport::FacesInRect(Vec2 a, Vec2 b, bool crossing) {
     for (int i = 1; i <= selector->NbPicked(); ++i) {
         const Handle(StdSelect_BRepOwner) brep = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
         if (brep.IsNull() || brep->Shape().ShapeType() != TopAbs_FACE) continue;
-        ObjectId body;
-        for (const auto& s : m.shown)
-            if (brep->Selectable() == s.shape) body = s.body;
+        const ObjectId body = m.BodyOf(brep->Selectable());
         if (!body) continue;
         if (const auto ref = FaceReferenceOf(TopoDS::Face(brep->Shape()))) found.push_back({body, *ref});
     }

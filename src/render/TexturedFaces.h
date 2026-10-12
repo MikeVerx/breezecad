@@ -29,7 +29,10 @@ public:
 private:
     void Compute(const Handle(PrsMgr_PresentationManager)& manager, const Handle(Prs3d_Presentation)& presentation,
                  const Standard_Integer mode) override;
-    void ComputeSelection(const Handle(SelectMgr_Selection)&, const Standard_Integer) override {}   // the body is picked, not this
+    /// The faces are hidden on the body (this draws them instead), and a
+    /// hidden face is not picked there: they are picked here, as the same
+    /// faces, in the face selection mode.
+    void ComputeSelection(const Handle(SelectMgr_Selection)& selection, const Standard_Integer mode) override;
 
     std::vector<TopoDS_Face>    myFaces;
     Handle(Graphic3d_Texture2D) myTexture;
