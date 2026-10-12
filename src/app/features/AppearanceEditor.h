@@ -10,6 +10,7 @@
 #include "app/features/OperationEditor.h"
 #include "core/I18n.h"
 #include "document/Appearance.h"
+#include "render/Viewport.h"
 
 #include <imgui.h>
 
@@ -17,6 +18,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace bz::app {
 
@@ -25,6 +27,14 @@ public:
     AppearanceEditor();
 
     void Start(AppContext& app, Session& session);
+    /// Opens on faces chosen in the view: the appearance picked in the
+    /// library goes on all of them at once (and can still be clicked onto
+    /// other faces). One undo step on Готово, as usual.
+    void StartOnFaces(AppContext& app, Session& session, std::vector<render::SelectedFace> faces);
+    /// Assembly: where Готово puts the looks — this assembly only (false) or the parts' files.
+    bool ToPart() const { return myToPart; }
+    /// Removes the own looks of `faces` (they take the body's look again), one undo step.
+    static void ResetFaces(AppContext& app, Session& session, const std::vector<render::SelectedFace>& faces);
 
     bool        IsOpen() const override { return myOpen; }
     ObjectId    EditedFeature() const override { return {}; }
@@ -55,14 +65,42 @@ private:
     /// Standard and own appearances as rows; returns the clicked id ("" default), or nullopt.
     std::optional<std::string> List(AppContext& app, std::string_view chosen, float width, bool withOwnMenu);
     void DrawCreateDialog(AppContext& app, Session& session);
+    /// Puts the chosen appearance on what it was opened on: the faces
+    /// (Поверхность) or their objects and the chosen component (Объект).
+    void ApplyToTargets(AppContext& app, Session& session);
+    std::size_t TargetCount() const;
+    /// The look being edited: the part's, or the assembly's overrides.
+    static doc::Look& LookOf(Session& session);
+    static void       Touch(Session& session);
+    /// A face as the view shows it, as stored (an assembly keeps faces in
+    /// its part's coordinates), and back.
+    static doc::FaceReference Stored(Session& session, ObjectId body, doc::FaceReference shown);
+    static doc::FaceReference Shown(Session& session, ObjectId body, doc::FaceReference stored);
+    void KeepPicture(Session& session);
+    void PaintBody(Session& session, ObjectId body);
+    void PaintFace(AppContext& app, Session& session, ObjectId body, const doc::FaceReference& shown);
+    void Close(AppContext& app);
+    /// An assembly's change made while open, for writing it into a part.
+    struct Edit {
+        ObjectId                          component;
+        std::optional<doc::FaceReference> face;         ///< in the part's coordinates; none: the whole object
+        std::string                       appearance;   ///< empty: back to the default
+    };
+    /// "В детали": the edits go into the parts' files (or their open tabs).
+    void WriteIntoParts(AppContext& app, Session& session, const doc::Look& painted, const std::vector<Edit>& edits);
     /// A small texture of a library picture (or of the file being chosen), for swatches.
     unsigned Thumbnail(const std::string& key, const std::vector<std::uint8_t>& bytes);
     unsigned ThumbnailOf(const doc::Appearance* a);
 
     bool        myOpen = false;
-    bool        myFaces = false;          ///< a click colours one face, not the whole body
+    bool        myFaces = false;          ///< Поверхность: a click colours one face (default: the whole object)
+    bool        myToPart = false;         ///< assembly: Готово writes into the parts' files
+    std::vector<ObjectId> myTargetBodies;   ///< objects it was opened on (the assembly's chosen component)
+    std::vector<Edit>     myEdits;          ///< assembly: what was painted, in order
     std::string myChosen = "std.steel";   ///< id; empty = the default look
     doc::Look   myBefore;                 ///< as it was when the panel opened
+    std::vector<render::SelectedFace> myTargets;   ///< faces it was opened on (StartOnFaces)
+    std::string myTargetsChosen;          ///< what the targets got last (a new choice goes on them)
 
     AppearanceLibrary myLibrary;
 

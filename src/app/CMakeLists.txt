@@ -58,7 +58,8 @@ add_executable(breezecad WIN32
     viewport/Measure.cpp
     viewport/Planes.cpp
     viewport/Section.cpp
-    viewport/ViewportPanel.cpp)
+    viewport/ViewportPanel.cpp
+    viewport/FaceSelection.cpp)
 if(WIN32)
     # The icon in the exe (Explorer, a pinned taskbar button). Without the
     # RC language the .rc file was silently left out.

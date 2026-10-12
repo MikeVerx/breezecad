@@ -10,6 +10,7 @@
 #include "assembly/Placement.h"
 #include "core/Id.h"
 #include "core/Math.h"
+#include "document/Appearance.h"
 
 #include <string>
 #include <string_view>
@@ -183,6 +184,11 @@ public:
     std::vector<Component>  components;
     std::vector<Constraint> constraints;
     std::vector<ComponentPattern> patterns;
+    /// Appearances set in this assembly over its parts' own (as Inventor's
+    /// appearance overrides): body = component id; faces in the part's own
+    /// coordinates, so a look follows its component. The parts' files are
+    /// never changed by them. Pictures come with it (saved inside the file).
+    doc::Look look;
 
     IdGenerator&       Ids() { return myIds; }
     const IdGenerator& Ids() const { return myIds; }
@@ -220,10 +226,14 @@ public:
     /// Bumped on every change (redraw, autosave).
     std::uint64_t Revision() const { return myRevision; }
     void          Touch() { ++myRevision; }
+    /// Bumped when `look` changes: a new look needs no solve or rebuild.
+    std::uint64_t LookRevision() const { return myLookRevision; }
+    void          TouchLook() { ++myLookRevision; }
 
 private:
     IdGenerator   myIds;
     std::uint64_t myRevision = 0;
+    std::uint64_t myLookRevision = 0;
 };
 
 /// "Совмещение", "Вставка"... (Russian; the UI translates).

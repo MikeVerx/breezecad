@@ -178,3 +178,45 @@ TEST_CASE("joint: lock, position, limits and frame X survive a round trip") {
     CHECK(b->constraints[0].second.reference.Length() == 0);   // not written for plain constraints
     CHECK(AssemblyToJson(*b) == text);
 }
+
+TEST_CASE("an assembly keeps its own appearances and their pictures") {
+    Assembly a = SampleAssembly();
+    const ObjectId base = a.components.front().id, bolt = a.components.back().id;
+    doc::Appearance red;
+    red.id = "user.red";
+    red.name = "Красный";
+    red.face = Color::Hex(0xE5484D);
+    doc::Appearance logo;
+    logo.id = "user.logo";
+    logo.name = "Лого";
+    logo.picture = "user.logo.png";
+    a.look.SetBody(base, &red);
+    a.look.SetFace(bolt, doc::FaceReference{{0, 0, 1}, {1, 2, 3}, true}, &logo);
+    a.look.pictures["user.logo.png"] = {1, 2, 3, 4};
+    a.look.pictures["unused.png"] = {9};   // not used by any look: not saved
+
+    // JSON (undo steps): the looks without the bytes.
+    auto copy = AssemblyFromJson(AssemblyToJson(a));
+    REQUIRE(copy);
+    CHECK(copy->look.OfBody(base) != nullptr);
+    REQUIRE(copy->look.faces.size() == 1);
+    CHECK(copy->look.faces.front().body == bolt);
+    CHECK(copy->look.faces.front().face.point == Vec3{1, 2, 3});
+    CHECK(copy->look.pictures.empty());
+
+    // The file: the pictures in use come with it.
+    const auto dir = std::filesystem::temp_directory_path() / PathFromUtf8("bz_сборка_вид_tests");
+    std::filesystem::create_directories(dir);
+    const auto file = dir / PathFromUtf8("Узел.bza");
+    REQUIRE(SaveAssembly(a, file, "tests"));
+    auto loaded = LoadAssembly(file);
+    REQUIRE(loaded);
+    CHECK(loaded->look.OfBody(base)->id == "user.red");
+    REQUIRE(loaded->look.pictures.contains("user.logo.png"));
+    CHECK(loaded->look.pictures.at("user.logo.png") == std::vector<std::uint8_t>{1, 2, 3, 4});
+    CHECK_FALSE(loaded->look.pictures.contains("unused.png"));
+
+    // An assembly without looks writes none (older versions read it as before).
+    CHECK(AssemblyToJson(SampleAssembly()).find("\"look\"") == std::string::npos);
+    std::filesystem::remove_all(dir);
+}

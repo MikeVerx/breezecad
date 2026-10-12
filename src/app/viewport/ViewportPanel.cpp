@@ -7,6 +7,7 @@
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
 #include "app/assembly/AssemblyUi.h"
+#include "app/viewport/FaceSelection.h"
 #include "app/viewport/MarkingMenu.h"
 #include "app/viewport/Measure.h"
 #include "app/viewport/Planes.h"
@@ -89,6 +90,7 @@ void ContextMenu(AppContext& app, Session& session) {
         item("sketch.centerline");
         item("edit.delete");
     } else {
+        FaceSelectionMenu(app, session);
         if (app.shell.nav.facePlane && ui::MenuItem(ui, Tr("Эскиз на этой грани"), nullptr, "sketch")) {
             const doc::SketchPlacement placement{app.shell.nav.faceBody, *app.shell.nav.facePlane, true,
                                                  {app.shell.nav.facePlane->normal, app.shell.nav.pivot}};
@@ -276,6 +278,8 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
         app.viewport.Hover(vf.hovered && hoverMatters ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);
         app.stats.hoverMs = app.stats.hoverMs * 0.9 + (glfwGetTime() - start) * 100.0;   // ms, smoothed
     }
+    // Faces chosen with the left button (a click, Shift/Ctrl, a frame).
+    UpdateFaceSelection(app, session, vf);
 
     // Mode overlays.
     switch (session.mode) {
@@ -287,7 +291,9 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             break;
         case EditMode::Model: {
             if (session.assembly) {
-                DrawAssemblyViewport(app, session, vf);
+                // An operation open on an assembly (Внешний вид) takes the clicks.
+                if (operation) operation->DrawInViewport(app, session, vf);
+                else DrawAssemblyViewport(app, session, vf);
                 break;
             }
             // Origin planes only when pointed at in the tree (or in an empty

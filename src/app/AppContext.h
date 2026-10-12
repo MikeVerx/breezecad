@@ -93,6 +93,13 @@ struct ShellState {
     bool measuring = false;   ///< "Измерить" is on
     bool interference = false;   ///< "Коллизии": overlaps of the bodies shown
 
+    /// Choosing faces with the left button (see viewport/FaceSelection).
+    struct FaceSelecting {
+        bool   pressed = false;    ///< the left button went down over the scene
+        bool   framing = false;    ///< it is dragged: a selection frame
+        ImVec2 from{0, 0};         ///< where it went down
+    } faceSelecting;
+
     /// The radial menu (see viewport/MarkingMenu).
     struct MarkingMenu {
         bool   armed = false;   ///< left button pressed over the model, waiting to see if it is held
