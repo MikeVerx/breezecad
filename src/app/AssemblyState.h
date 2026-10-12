@@ -5,6 +5,7 @@
 #include "assembly/Assembly.h"
 #include "kernel/AssemblyModel.h"
 
+#include <array>
 #include <filesystem>
 #include <string>
 #include <unordered_map>
@@ -69,9 +70,16 @@ public:
     std::string RedoLabel() const { return myRedo.empty() ? std::string{} : myRedo.back().label; }
 
     /// Saved-state marker, like doc::History.
-    void MarkSaved() { mySaved = assembly.Revision(); myUnsaved = false; }
+    void MarkSaved() { mySaved = assembly.Revision(); mySavedLook = assembly.LookRevision(); myUnsaved = false; }
     void MarkUnsaved() { myUnsaved = true; }
-    bool IsModified() const { return myUnsaved || assembly.Revision() != mySaved; }
+    bool IsModified() const { return myUnsaved || assembly.Revision() != mySaved || assembly.LookRevision() != mySavedLook; }
+
+    /// What the view shows: each component in its part's own appearances
+    /// (bodies and faces, placed), with this assembly's overrides on top
+    /// (Assembly::look). Made again when any of them changes.
+    const doc::Look& ShownLook();
+    /// Bumped whenever ShownLook gives something new.
+    std::uint64_t ShownLookRevision() const { return myShownLookRevision; }
 
     /// Loads changed parts, solves constraints when the assembly changed and
     /// refreshes what is shown. True when the shown geometry changed.
@@ -83,6 +91,10 @@ private:
     };
     std::vector<Step> myUndo, myRedo;
     std::uint64_t     mySaved = 0;
+    std::uint64_t     mySavedLook = 0;
+    doc::Look         myShownLook;
+    std::uint64_t     myShownLookRevision = 0;
+    std::array<std::uint64_t, 3> myShownLookKey{~std::uint64_t{0}, 0, 0};
     bool              myUnsaved = false;
     std::uint64_t     mySolvedRevision = ~std::uint64_t{0};
 

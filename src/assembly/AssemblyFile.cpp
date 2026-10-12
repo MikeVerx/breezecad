@@ -6,6 +6,7 @@
 #include "document/JsonIO.h"
 
 #include <array>
+#include <map>
 #include <format>
 #include <utility>
 
@@ -142,6 +143,7 @@ std::string AssemblyToJson(const Assembly& a) {
         {"components", std::move(components)},
         {"constraints", std::move(constraints)},
     };
+    if (!a.look.Empty()) root["look"] = doc::ToJson(a.look);   // pictures go into the archive
     if (!a.patterns.empty()) {
         Json patterns = Json::array();
         for (const ComponentPattern& p : a.patterns) {
@@ -264,6 +266,8 @@ Expected<Assembly> AssemblyFromJson(std::string_view text, std::vector<std::stri
         a.patterns.push_back(std::move(p));
     }
 
+    if (const auto look = root.find("look"); look != root.end()) a.look = doc::LookFromJson(*look);   // absent in older files
+
     if (std::uint64_t next = root.value("nextId", std::uint64_t{0}); next > 0) a.Ids().Reserve(ObjectId{next - 1});
     if (root.value("formatVersion", 0) > kAssemblyFormatVersion && warnings)
         warnings->push_back("Сборка создана более новой версией BreezeCAD. Новые возможности могут не открыться.");
@@ -271,7 +275,12 @@ Expected<Assembly> AssemblyFromJson(std::string_view text, std::vector<std::stri
 }
 
 Status SaveAssembly(const Assembly& assembly, const std::filesystem::path& path, std::string_view generator) {
-    return doc::WriteBzcArchive(path, doc::kAssemblyType, generator, AssemblyToJson(assembly));
+    // Only the pictures its looks still use.
+    std::map<std::string, std::vector<std::uint8_t>> pictures;
+    for (const doc::Appearance& a : assembly.look.used)
+        if (const auto it = assembly.look.pictures.find(a.picture); a.HasPicture() && it != assembly.look.pictures.end())
+            pictures.insert(*it);
+    return doc::WriteBzcArchive(path, doc::kAssemblyType, generator, AssemblyToJson(assembly), pictures);
 }
 
 Expected<Assembly> LoadAssembly(const std::filesystem::path& path, std::vector<std::string>* warnings) {
@@ -281,7 +290,9 @@ Expected<Assembly> LoadAssembly(const std::filesystem::path& path, std::vector<s
         const doc::DocumentTypeInfo* type = doc::DocumentTypeRegistry::Default().Find(archive->documentType);
         return Error{std::format("Это не сборка, а документ «{}»", type ? type->title : archive->documentType)};
     }
-    return AssemblyFromJson(archive->documentJson, warnings);
+    Expected<Assembly> assembly = AssemblyFromJson(archive->documentJson, warnings);
+    if (assembly) assembly->look.pictures = std::move(archive->pictures);
+    return assembly;
 }
 
 /// '/' separators on every system, so a file saved on Windows opens elsewhere.

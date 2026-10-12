@@ -291,7 +291,9 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             break;
         case EditMode::Model: {
             if (session.assembly) {
-                DrawAssemblyViewport(app, session, vf);
+                // An operation open on an assembly (Внешний вид) takes the clicks.
+                if (operation) operation->DrawInViewport(app, session, vf);
+                else DrawAssemblyViewport(app, session, vf);
                 break;
             }
             // Origin planes only when pointed at in the tree (or in an empty

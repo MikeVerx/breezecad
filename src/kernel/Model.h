@@ -108,6 +108,9 @@ public:
     std::uint64_t Revision() const;
 
     const std::vector<BodyInfo>& Bodies() const;
+    /// The body nearest `point` (a point picked on one of its faces); none
+    /// when there are no bodies.
+    ObjectId BodyNearest(Vec3 point) const;
     std::optional<Bounds>        BoundingBox() const;
 
     /// Regions of a sketch feature, or nullptr when it has none yet.

@@ -422,7 +422,12 @@ void Application::Frame() {
             prof::Scope scope("sync");
             myViewport.Sync(s->model);
         }
-        myViewport.SetLook(s->doc.look, s, s->doc.LookRevision());
+        if (s->assembly) {
+            const doc::Look& look = s->assembly->ShownLook();
+            myViewport.SetLook(look, s, s->assembly->ShownLookRevision());
+        } else {
+            myViewport.SetLook(s->doc.look, s, s->doc.LookRevision());
+        }
         myViewport.SetDisplayStyle(myShell.displayStyle);
         myViewport.SetQuality(mySettings.graphics);
         if (myShell.keepModelInView) {   // the model was rebuilt and synced above
