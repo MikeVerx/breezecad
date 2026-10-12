@@ -169,8 +169,15 @@ jobs:
             echo "::notice title=Build again::exit $status: $(tail -8 build.log | tr '\n' ' ' | cut -c1-900)"
           fi
           exit $status
+      # No pipes here: in this login shell a pipe's status came out as 1 for a
+      # clean run (ctest passed, the step failed).
       - name: Test
-        run: ctest --preset linux-release --output-on-failure 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+        run: |
+          set +e
+          ctest --preset linux-release --output-on-failure > test.log 2>&1
+          status=$?
+          tail -5 test.log
+          exit $status
       - name: Report failures
         if: failure()
         run: |
