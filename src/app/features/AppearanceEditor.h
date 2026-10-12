@@ -1,7 +1,8 @@
 #pragma once
 // "Внешний вид": colours of bodies and faces. Pick an appearance in the
 // library (standard or the user's own), then click a body (or a face) in
-// the view. The look changes live; Готово makes it one undo step, Отмена
+// the view. A picture's size on the part (one copy, mm) has a slider.
+// The look changes live; Готово makes it one undo step, Отмена
 // puts it back. The user's own appearances are made in a small dialog
 // (colour with transparency, edge colour, finish) and can be imported or
 // exported as a pack.
@@ -57,6 +58,8 @@ public:
 private:
     /// The appearance chosen in the library (nullptr: back to the default look).
     const doc::Appearance* Chosen() const;
+    /// "Размер текстуры": the chosen picture appearance, one copy in mm.
+    void DrawPictureSize(AppContext& app, Session& session, float width);
     void DrawLibrary(AppContext& app, float width);
     /// A row of a list: sample and name. True when clicked.
     bool Row(AppContext& app, const doc::Appearance* a, bool chosen, float width);
@@ -101,6 +104,9 @@ private:
     doc::Look   myBefore;                 ///< as it was when the panel opened
     std::vector<render::SelectedFace> myTargets;   ///< faces it was opened on (StartOnFaces)
     std::string myTargetsChosen;          ///< what the targets got last (a new choice goes on them)
+    std::string mySizeText;               ///< the size field while it is typed in
+    std::string mySizeFor;                ///< the appearance mySizeText belongs to
+    double      mySize = 100.0;           ///< its size as the slider has it now, mm
 
     AppearanceLibrary myLibrary;
 

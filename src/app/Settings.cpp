@@ -19,6 +19,12 @@ void Settings::RemoveRecent(const std::filesystem::path& file) {
     std::erase_if(recentFiles, [&](const auto& p) { return p == file; });
 }
 
+int Settings::TextureLimit(int textureQuality) {
+    // High keeps what a usual photo has; low is plenty for a small preview.
+    static constexpr int kLimits[] = {4096, 1024, 256};
+    return kLimits[std::clamp(textureQuality, 0, 2)];
+}
+
 Settings Settings::Load(const std::filesystem::path& file) {
     Settings s;
     std::ifstream in(file);
@@ -47,6 +53,7 @@ Settings Settings::Load(const std::filesystem::path& file) {
     s.pointSnap       = j.value("pointSnap", s.pointSnap);
     s.orthoMode       = j.value("orthoMode", s.orthoMode);
     s.graphics        = std::clamp(j.value("graphics", s.graphics), 0, 2);
+    s.textureQuality  = std::clamp(j.value("textureQuality", s.textureQuality), 0, 2);
     s.showAllConstraints = j.value("showAllConstraints", s.showAllConstraints);
     s.gridStep        = std::max(0.0, j.value("gridStep", s.gridStep));
     s.uiScale         = j.value("uiScale", s.uiScale);
@@ -101,6 +108,7 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"pointSnap", pointSnap},
         {"orthoMode", orthoMode},
         {"graphics", graphics},
+        {"textureQuality", textureQuality},
         {"backgroundRebuild", backgroundRebuild},
         {"showAllConstraints", showAllConstraints},
         {"gridStep", gridStep},

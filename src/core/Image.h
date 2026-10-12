@@ -18,4 +18,10 @@ struct Image {
 Expected<Image> DecodeImage(std::span<const std::uint8_t> bytes);
 Expected<Image> ReadImageFile(const std::filesystem::path& file);
 
+/// The picture made smaller so that neither side exceeds `maxSide` (the
+/// proportions kept; each new pixel is the average of the ones it covers, so
+/// fine detail blurs instead of shimmering). A picture that fits comes back
+/// as it is; `maxSide` < 1 means no limit.
+Image FitWithin(const Image& image, int maxSide);
+
 } // namespace bz

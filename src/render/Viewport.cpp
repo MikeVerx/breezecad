@@ -456,12 +456,16 @@ struct Viewport::Impl {
     /// Faces covered with pictures, by the body presentation they belong to.
     std::map<const AIS_ColoredShape*, std::vector<Handle(AIS_InteractiveObject)>> textured;
 
+    int textureLimit = 0;   ///< see Viewport::SetTextureLimit
+
     Handle(Graphic3d_Texture2D) TextureFor(const std::string& picture) {
         if (const auto it = textures.find(picture); it != textures.end()) return it->second;
         Handle(Graphic3d_Texture2D) texture;
         if (const auto bytes = look.pictures.find(picture); bytes != look.pictures.end())
-            if (const auto image = DecodeImage(bytes->second))
-                texture = MakePictureTexture(image->width, image->height, image->rgba);
+            if (const auto image = DecodeImage(bytes->second)) {
+                const Image fitted = FitWithin(*image, textureLimit);
+                texture = MakePictureTexture(fitted.width, fitted.height, fitted.rgba);
+            }
         textures[picture] = texture;
         return texture;
     }
@@ -805,6 +809,15 @@ void Viewport::SetBackgroundPicture(int width, int height, std::span<const std::
     if (width > 0 && height > 0) texture = MakePictureTexture(width, height, rgba);
     m.view->SetBackgroundImage(texture, Aspect_FM_STRETCH, false);
     m.dirty = true;
+}
+
+void Viewport::SetTextureLimit(int maxSide) {
+    Impl& m = *myImpl;
+    maxSide = std::max(0, maxSide);
+    if (maxSide == m.textureLimit) return;
+    m.textureLimit = maxSide;
+    m.textures.clear();   // made again at the new size
+    m.ApplyStyleAll();
 }
 
 void Viewport::SetLook(const doc::Look& look, const void* owner, std::uint64_t revision) {

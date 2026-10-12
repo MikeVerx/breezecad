@@ -582,6 +582,14 @@ void DrawOptimizationSettings(AppContext& app, float width) {
         app.settings.graphics = n;
     caption(Tr("Сглаживание краёв и точность сетки круглых граней. Ниже качество — быстрее показ больших деталей."));
 
+    ui::FieldLabel(ui, Tr("Качество текстур"));
+    static constexpr std::array<const char*, 3> textures{N_("Высокое"), N_("Среднее"), N_("Низкое")};
+    if (const int n = ui::Segmented(ui, "textures", textures, app.settings.textureQuality, 3, width); n != app.settings.textureQuality)
+        app.settings.textureQuality = n;
+    caption(Trf("Картинки на гранях хранятся в видеокарте не крупнее {} точек по большей стороне; больше — уменьшаются. "
+                "Ниже качество — меньше памяти и быстрее, но картинка грубее. Файл детали не меняется.",
+                Settings::TextureLimit(app.settings.textureQuality)));
+
     ui::FieldLabel(ui, Tr("Анимации камеры"));
     static constexpr std::array<const char*, 2> anim{N_("Плавные повороты"), N_("Без анимации")};
     const int a = app.settings.animations ? 0 : 1;
