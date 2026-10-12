@@ -41,6 +41,7 @@
 #include <TopoDS.hxx>
 #include <BRepBuilderAPI_Copy.hxx>
 #include <BRepAlgoAPI_Common.hxx>
+#include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS_Vertex.hxx>
@@ -111,8 +112,16 @@ bool Meets(const TopoDS_Shape& body, const TopoDS_Shape& tool, bool touching) {
             if (props.Mass() > 1e-6) return true;
         }
         if (!touching) return false;
-        BRepExtrema_DistShapeShape distance(body, tool);
-        return distance.IsDone() && distance.NbSolution() > 0 && distance.Value() < 1e-4;
+        // Touching: fused, they make fewer pieces than apart. (Not by the
+        // distance between them: BRepExtrema_DistShapeShape between solids
+        // crashes in OCCT 8, see FaceMatch.cpp.)
+        const auto pieces = [](const TopoDS_Shape& s) {
+            int n = 0;
+            for (TopExp_Explorer e(s, TopAbs_SOLID); e.More(); e.Next()) ++n;
+            return n;
+        };
+        BRepAlgoAPI_Fuse fuse(body, tool);
+        return fuse.IsDone() && !fuse.Shape().IsNull() && pieces(fuse.Shape()) < pieces(body) + pieces(tool);
     } catch (const Standard_Failure&) {
         return false;
     }
