@@ -5,6 +5,7 @@
 #include "core/PathText.h"
 #include "core/Image.h"
 #include "core/Version.h"
+#include "platform/Window.h"
 #include "ui/Theme.h"
 #include "ui/Ui.h"
 
@@ -66,7 +67,7 @@ Splash::~Splash() { Close(); }
 
 bool Splash::Open(const std::filesystem::path& assets, bool dark) {
     if (std::getenv("BZ_NO_SPLASH") || std::getenv("BZ_SCREENSHOT")) return false;   // test runs
-    if (!glfwInit()) return false;
+    if (!platform::InitGlfw()) return false;
     Keep keep;
     myDark = dark;
     float sx = 1.0f, sy = 1.0f;
