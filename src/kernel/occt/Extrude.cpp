@@ -60,7 +60,9 @@ TopoDS_Shape Sweep(const TopoDS_Face& face, const gp_Vec& dir, double length, do
     gp_Vec normal;
     props.Normal((u1 + u2) / 2, (v1 + v2) / 2, p, normal);
     if (normal.Dot(dir) < 0) oriented.Reverse();
-    LocOpe_DPrism prism(oriented, length, taper);
+    // LocOpe_DPrism measures its height along the slanted side, not along
+    // the normal: ask for the slant that ends `length` above the face.
+    LocOpe_DPrism prism(oriented, length / std::cos(taper), taper);
     return prism.Shape();
 }
 

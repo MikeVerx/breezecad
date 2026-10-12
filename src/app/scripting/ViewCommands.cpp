@@ -82,7 +82,9 @@ Json Snapshot(AppContext& app, const Json& args) {
     render::CameraState camera = app.viewport.Camera();
     if (Has(args, "view") || Has(args, "direction") || !Flag(args, "current_camera", false)) {
         const auto [from, up] = ViewDirection(args);
-        camera = app.viewport.FitCamera(-from, up);
+        // Framed for the picture asked for, not for the window: a wide window
+        // and a squarer picture would crop the model at the sides.
+        camera = app.viewport.FitCamera(-from, up, {}, 1.15, static_cast<double>(width) / height);
     }
     const auto image = app.viewport.Snapshot(camera, width, height);
     if (!image) Fail("Не удалось получить изображение: графика ещё не готова (окно программы свёрнуто?)");
@@ -235,18 +237,9 @@ const doc::parts::StandardInfo& StandardArg(const Json& args) {
     return *st;
 }
 
-/// The size as the tables write it: «М10» with a Cyrillic М; a Latin M
-/// (as people and models type it) is taken too.
-std::string SizeArg(const doc::parts::StandardInfo& st, const Json& args) {
-    std::string size = Text(args, "size");
-    const std::vector<std::string> sizes = doc::parts::Sizes(st);
-    if (std::find(sizes.begin(), sizes.end(), size) != sizes.end()) return size;
-    if (!size.empty() && (size[0] == 'M' || size[0] == 'm')) {
-        const std::string cyrillic = "\xD0\x9C" + size.substr(1);   // «М»
-        if (std::find(sizes.begin(), sizes.end(), cyrillic) != sizes.end()) return cyrillic;
-    }
-    return size;   // MakePart names the error
-}
+/// The size as the tables write it (doc::parts::MatchSize: «М10» typed as
+/// M10, a washer «6» typed as M6).
+std::string SizeArg(const doc::parts::StandardInfo& st, const Json& args) { return doc::parts::MatchSize(st, Text(args, "size")); }
 
 Json LibrarySizes(AppContext&, const Json& args) {
     const doc::parts::StandardInfo& st = StandardArg(args);

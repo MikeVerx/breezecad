@@ -93,9 +93,46 @@ std::string NextBodyName(const std::vector<Body>& bodies) {
     return std::format("Тело{}", largest + 1);
 }
 
+/// Whether `tool` shares material with `body` — or, with `touching`, also
+/// just meets it (a boss standing on a face). Boxes first: most bodies of a
+/// part are far from the tool and need no boolean.
+bool Meets(const TopoDS_Shape& body, const TopoDS_Shape& tool, bool touching) {
+    Bnd_Box a, b;
+    BRepBndLib::Add(body, a);
+    BRepBndLib::Add(tool, b);
+    if (a.IsVoid() || b.IsVoid()) return false;
+    a.Enlarge(1e-4);
+    if (a.IsOut(b)) return false;
+    try {
+        BRepAlgoAPI_Common common(body, tool);
+        if (common.IsDone()) {
+            GProp_GProps props;
+            BRepGProp::VolumeProperties(common.Shape(), props);
+            if (props.Mass() > 1e-6) return true;
+        }
+        if (!touching) return false;
+        BRepExtrema_DistShapeShape distance(body, tool);
+        return distance.IsDone() && distance.NbSolution() > 0 && distance.Value() < 1e-4;
+    } catch (const Standard_Failure&) {
+        return false;
+    }
+}
+
+/// Indices of the bodies `tool` acts on (see Meets), in body order.
+std::vector<std::size_t> BodiesMet(const std::vector<Body>& bodies, const TopoDS_Shape& tool, bool touching) {
+    std::vector<std::size_t> out;
+    for (std::size_t i = 0; i < bodies.size(); ++i)
+        if (Meets(bodies[i].shape, tool, touching)) out.push_back(i);
+    return out;
+}
+
 /// The last step of every operation that makes a solid: keep it as a new
-/// body, or join, cut or intersect the most recent body with it. The solid
-/// is also kept as the operation's tool for patterns and mirrors.
+/// body, or join, cut or intersect it with the bodies it reaches. A join
+/// merges every body it touches into the first of them; a cut and an
+/// intersection change every body they cross. A tool that reaches no body
+/// is reported: a cut that misses is a warning (nothing changed), a join
+/// goes to the most recent body as a separate piece. The solid is also kept
+/// as the operation's tool for patterns and mirrors.
 void CombineSolid(ObjectId id, doc::BooleanOp op, const TopoDS_Shape& tool, Model::Impl& impl, std::vector<Body>& bodies,
                   doc::FeatureStatus& status) {
     // A new body copied by a pattern joins the body it started.
@@ -110,14 +147,48 @@ void CombineSolid(ObjectId id, doc::BooleanOp op, const TopoDS_Shape& tool, Mode
         status = {FeatureState::Ok, {}};
         return;
     }
-    // Join, Cut and Intersect act on the most recent body.
-    Body& target = bodies.back();
-    Expected<TopoDS_Shape> result = occt::ApplyBoolean(target.shape, tool, op);
-    if (!result) {
-        status = {FeatureState::Error, result.GetError().message};
+    const std::vector<std::size_t> met = BodiesMet(bodies, tool, op == doc::BooleanOp::Join);
+    if (met.empty()) {
+        if (op == doc::BooleanOp::Cut) {
+            status = {FeatureState::Warning, "Вырез не задел ни одного тела — ничего не изменилось"};
+            return;
+        }
+        if (op == doc::BooleanOp::Intersect) {
+            status = {FeatureState::Error, "Пересечение пустое: ни одно тело не перекрывается с операцией"};
+            return;
+        }
+        Expected<TopoDS_Shape> result = occt::ApplyBoolean(bodies.back().shape, tool, op);
+        if (!result) {
+            status = {FeatureState::Error, result.GetError().message};
+            return;
+        }
+        bodies.back().shape = *result;
+        status = {FeatureState::Warning,
+                  std::format("Не касается ни одного тела: добавлено к «{}» отдельным куском", bodies.back().name)};
         return;
     }
-    target.shape = *result;
+    if (op == doc::BooleanOp::Join) {
+        // Every touched body and the tool become the first touched body.
+        std::vector<TopoDS_Shape> tools{tool};
+        for (std::size_t k = 1; k < met.size(); ++k) tools.push_back(bodies[met[k]].shape);
+        Expected<TopoDS_Shape> result = occt::ApplyBoolean(bodies[met.front()].shape, tools, op);
+        if (!result) {
+            status = {FeatureState::Error, result.GetError().message};
+            return;
+        }
+        bodies[met.front()].shape = *result;
+        for (std::size_t k = met.size(); k-- > 1;) bodies.erase(bodies.begin() + static_cast<std::ptrdiff_t>(met[k]));
+        status = {FeatureState::Ok, {}};
+        return;
+    }
+    for (std::size_t i : met) {
+        Expected<TopoDS_Shape> result = occt::ApplyBoolean(bodies[i].shape, tool, op);
+        if (!result) {
+            status = {FeatureState::Error, std::format("«{}»: {}", bodies[i].name, result.GetError().message)};
+            return;
+        }
+        bodies[i].shape = *result;
+    }
     status = {FeatureState::Ok, {}};
 }
 
@@ -185,7 +256,22 @@ void ApplySketchSolid(const doc::SketchSolidFeature& f, Model::Impl& impl, std::
     CombineSolid(f.id, f.operation, *tool, impl, bodies, status);
 }
 
-/// Fillet and chamfer: find the referenced edges on the most recent body
+/// Distance from `p` to `shape`, mm (1e300 when it cannot be measured).
+double DistanceTo(const TopoDS_Shape& shape, const Vec3& p) {
+    const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(gp_Pnt(p.x, p.y, p.z));
+    BRepExtrema_DistShapeShape distance(probe, shape);
+    return distance.IsDone() && distance.NbSolution() > 0 ? distance.Value() : 1e300;
+}
+
+/// How far the face `ref` found on `body` is from where it was picked: the
+/// body that has the face is the one where it is nearest (a face with the
+/// same normal is found on any body — the matching follows model changes).
+double FaceMiss(const TopoDS_Shape& body, const doc::FaceReference& ref) {
+    const auto face = ref.curved ? occt::ResolveAnyFace(body, ref) : occt::ResolveFace(body, ref);
+    return face ? DistanceTo(*face, ref.point) : 1e300;
+}
+
+/// Fillet and chamfer: find the referenced edges on the body that has them
 /// and modify it. Edges that no longer exist are reported, not fatal while
 /// at least one is still there.
 template <class MakeShape>
@@ -199,42 +285,71 @@ void ApplyEdgeFeature(const doc::EdgeFeature& f, std::vector<Body>& bodies, doc:
             status = {FeatureState::Error, p->error};
             return;
         }
-    Body& target = bodies.back();
+    // The body that has the most of the edges, and of those the one where
+    // they are nearest where they were picked (the most recent on a tie).
+    Body* target = &bodies.back();
     std::vector<TopoDS_Edge> edges;
-    std::size_t lost = 0;
-    for (const auto& edge : occt::ResolveEdges(f.edges, target.shape)) {
-        if (edge) edges.push_back(*edge);
-        else ++lost;
+    double bestMiss = 1e300;
+    for (auto it = bodies.rbegin(); it != bodies.rend(); ++it) {
+        std::vector<TopoDS_Edge> found;
+        double miss = 0;
+        const auto resolved = occt::ResolveEdges(f.edges, it->shape);
+        for (std::size_t k = 0; k < resolved.size(); ++k)
+            if (resolved[k]) {
+                found.push_back(*resolved[k]);
+                miss += DistanceTo(*resolved[k], f.edges[k].middle);
+            }
+        if (found.empty()) continue;
+        if (found.size() > edges.size() || (found.size() == edges.size() && miss < bestMiss - 1e-6)) {
+            edges = std::move(found);
+            bestMiss = miss;
+            target = &*it;
+        }
     }
+    const std::size_t lost = f.edges.size() - edges.size();
     if (edges.empty() && !f.edges.empty()) {
         status = {FeatureState::Error, "Рёбра операции не найдены: модель изменилась слишком сильно"};
         return;
     }
-    Expected<TopoDS_Shape> result = make(target.shape, edges);
+    Expected<TopoDS_Shape> result = make(target->shape, edges);
     if (!result) {
         status = {FeatureState::Error, result.GetError().message};
         return;
     }
-    target.shape = *result;
+    target->shape = *result;
     status = lost == 0 ? doc::FeatureStatus{FeatureState::Ok, {}}
                        : doc::FeatureStatus{FeatureState::Warning, std::format("Не найдено рёбер: {}", lost)};
 }
 
-/// Operations that change the most recent body (hole, shell): `make` turns
+/// Operations that change one body (hole, shell): `miss` says how far the
+/// operation's face is from a body (FaceMiss); the nearest body is changed,
+/// the most recent one on a tie or when `miss` is not given. `make` turns
 /// its shape into the new one.
-template <class Make>
-void ApplyToLastBody(std::vector<Body>& bodies, doc::FeatureStatus& status, const char* noBody, Make&& make) {
+template <class Miss, class Make>
+void ApplyToBody(std::vector<Body>& bodies, doc::FeatureStatus& status, const char* noBody, Miss&& miss, Make&& make) {
     if (bodies.empty()) {
         status = {FeatureState::Error, noBody};
         return;
     }
-    Expected<TopoDS_Shape> result = make(bodies.back().shape);
+    Body* target = &bodies.back();
+    double best = 1e300;
+    for (auto it = bodies.rbegin(); it != bodies.rend(); ++it)
+        if (const double m = miss(it->shape); m < best - 1e-6) {
+            best = m;
+            target = &*it;
+        }
+    Expected<TopoDS_Shape> result = make(target->shape);
     if (!result) {
         status = {FeatureState::Error, result.GetError().message};
         return;
     }
-    bodies.back().shape = *result;
+    target->shape = *result;
     status = {FeatureState::Ok, {}};
+}
+
+template <class Make>
+void ApplyToLastBody(std::vector<Body>& bodies, doc::FeatureStatus& status, const char* noBody, Make&& make) {
+    ApplyToBody(bodies, status, noBody, [](const TopoDS_Shape&) { return 0.0; }, std::forward<Make>(make));
 }
 
 /// A thread is cut from the body that has its face (the most recent one first).
@@ -274,7 +389,7 @@ void ApplyThread(doc::ThreadFeature& thread, Model::Impl& impl, std::vector<Body
 }
 
 /// Patterns and mirrors: the tools of the source operations, moved by each
-/// of `placements`, joined to or cut from the most recent body.
+/// of `placements`, joined to or cut from the bodies they reach.
 void ApplyCopies(const doc::CopyFeature& f, const std::vector<gp_Trsf>& placements, Model::Impl& impl,
                  std::vector<Body>& bodies, doc::FeatureStatus& status, const doc::Document& doc) {
     if (bodies.empty()) {
@@ -292,7 +407,9 @@ void ApplyCopies(const doc::CopyFeature& f, const std::vector<gp_Trsf>& placemen
         const auto tool = impl.tools.find(source);
         if (tool == impl.tools.end()) {
             const doc::Feature* sf = doc.Find(source);
-            status = {FeatureState::Error, std::format("«{}» нельзя скопировать: копируются только выдавливание, вращение и отверстия без ошибок",
+            status = {FeatureState::Error, std::format("«{}» нельзя скопировать: копируются операции без ошибок, которые добавляют или вырезают материал "
+                                                       "(выдавливание, вращение, сдвиг, лофт, пружина, отверстие, резьба, массив, зеркало); "
+                                                       "скругление, фаска и оболочка — нет",
                                                        sf ? sf->name : std::string("?"))};
             return;
         }
@@ -324,16 +441,37 @@ void ApplyCopies(const doc::CopyFeature& f, const std::vector<gp_Trsf>& placemen
     };
     if (!joins.empty()) impl.tools[f.id] = {compound(joins), doc::BooleanOp::Join, cuts.empty() ? TopoDS_Shape() : compound(cuts)};
     else if (!cuts.empty()) impl.tools[f.id] = {compound(cuts), doc::BooleanOp::Cut, {}};
-    Body& target = bodies.back();
-    for (auto [tools, op] : {std::pair{&joins, doc::BooleanOp::Join}, {&cuts, doc::BooleanOp::Cut}}) {
-        Expected<TopoDS_Shape> result = occt::ApplyBoolean(target.shape, *tools, op);
-        if (!result) {
-            status = {FeatureState::Error, result.GetError().message};
-            return;
-        }
-        target.shape = *result;
+    // Each copy goes to the bodies it reaches: added ones to the body they
+    // touch, cut ones from every body they cross. Added copies that touch
+    // nothing go to the most recent body (as separate pieces, reported).
+    std::vector<std::vector<TopoDS_Shape>> joinsOf(bodies.size()), cutsOf(bodies.size());
+    std::size_t loose = 0, missed = 0;
+    for (const TopoDS_Shape& t : joins) {
+        const std::vector<std::size_t> met = BodiesMet(bodies, t, true);
+        if (met.empty()) ++loose;
+        joinsOf[met.empty() ? bodies.size() - 1 : met.front()].push_back(t);
     }
-    status = {FeatureState::Ok, {}};
+    for (const TopoDS_Shape& t : cuts) {
+        const std::vector<std::size_t> met = BodiesMet(bodies, t, false);
+        if (met.empty()) ++missed;
+        for (std::size_t i : met) cutsOf[i].push_back(t);
+    }
+    for (std::size_t i = 0; i < bodies.size(); ++i)
+        for (auto [tools, op] : {std::pair{&joinsOf[i], doc::BooleanOp::Join}, {&cutsOf[i], doc::BooleanOp::Cut}}) {
+            Expected<TopoDS_Shape> result = occt::ApplyBoolean(bodies[i].shape, *tools, op);
+            if (!result) {
+                status = {FeatureState::Error, result.GetError().message};
+                return;
+            }
+            bodies[i].shape = *result;
+        }
+    if (loose > 0)
+        status = {FeatureState::Warning, std::format("Копий не касается тела: {} — добавлены к «{}» отдельными кусками", loose,
+                                                     bodies.back().name)};
+    else if (missed > 0 && missed == cuts.size())
+        status = {FeatureState::Warning, "Ни одна копия выреза не задела тело — ничего не изменилось"};
+    else
+        status = {FeatureState::Ok, {}};
 }
 
 /// Placements of a pattern's copies.
@@ -384,11 +522,14 @@ bool ResolvePointPicks(std::vector<Vec3>& points, std::vector<std::optional<doc:
             continue;
         }
         if (!edges[i]) continue;
-        for (auto it = bodies.rbegin(); it != bodies.rend(); ++it)
-            if (const auto at = occt::ResolveVertex(*edges[i], points[i], it->shape)) {
+        for (auto it = bodies.rbegin(); it != bodies.rend(); ++it) {
+            doc::EdgeReference ref = *edges[i];
+            if (const auto at = occt::ResolveVertex(ref, points[i], it->shape)) {
                 points[i] = *at;
+                edges[i] = ref;
                 break;
             }
+        }
     }
     return true;
 }
@@ -411,7 +552,10 @@ void PlaceWorkPoint(doc::WorkPointFeature& wp, const doc::Document& doc, const s
         case WorkPointMethod::Vertex: {
             if (!wp.edge) return fail("Щёлкните вершину тела");
             std::optional<Vec3> at;
-            for (auto it = bodies.rbegin(); it != bodies.rend() && !at; ++it) at = occt::ResolveVertex(*wp.edge, wp.vertex, it->shape);
+            for (auto it = bodies.rbegin(); it != bodies.rend() && !at; ++it) {
+                doc::EdgeReference ref = *wp.edge;   // updated only where the vertex is found
+                if ((at = occt::ResolveVertex(ref, wp.vertex, it->shape))) wp.edge = ref;
+            }
             if (!at) return fail("Вершина не найдена: модель изменилась слишком сильно");
             wp.vertex = *at;
             wp.position = *at;
@@ -852,7 +996,8 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                     return occt::MakeChamfer(body, edges, chamfer->distance.value);
                 });
             } else if (auto* hole = dynamic_cast<doc::HoleFeature*>(&f)) {
-                ApplyToLastBody(bodies, hole->status, "Нет тела, в котором делать отверстие",
+                ApplyToBody(bodies, hole->status, "Нет тела, в котором делать отверстие",
+                                [&](const TopoDS_Shape& body) { return FaceMiss(body, hole->face); },
                                 [&](const TopoDS_Shape& body) -> Expected<TopoDS_Shape> {
                                     // Keep the reference on the face as it is now, so the
                                     // panel draws the centres where the holes are.
@@ -870,7 +1015,12 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                     shell->status = {FeatureState::Error, shell->thickness.error};
                 } else {
                     std::size_t lost = 0;
-                    ApplyToLastBody(bodies, shell->status, "Нет тела, из которого делать оболочку",
+                    const auto openFaceMiss = [&](const TopoDS_Shape& body) {
+                        double miss = 0;   // a closed shell (no faces): the most recent body
+                        for (const doc::FaceReference& r : shell->faces) miss += std::min(FaceMiss(body, r), 1e6);
+                        return miss;
+                    };
+                    ApplyToBody(bodies, shell->status, "Нет тела, из которого делать оболочку", openFaceMiss,
                                     [&](const TopoDS_Shape& body) -> Expected<TopoDS_Shape> {
                                         std::vector<TopoDS_Face> open;
                                         for (const doc::FaceReference& r : shell->faces) {

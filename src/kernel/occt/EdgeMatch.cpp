@@ -192,7 +192,7 @@ std::optional<std::pair<Vec3, Vec3>> ResolveLine(const doc::EdgeReference& ref, 
     return std::make_pair(Vec3{mid.X(), mid.Y(), mid.Z()}, Vec3{d.X(), d.Y(), d.Z()});
 }
 
-std::optional<Vec3> ResolveVertex(const doc::EdgeReference& ref, const Vec3& was, const TopoDS_Shape& body) {
+std::optional<Vec3> ResolveVertex(doc::EdgeReference& ref, const Vec3& was, const TopoDS_Shape& body) {
     const std::optional<TopoDS_Edge> edge = ResolveEdges({ref}, body).front();
     if (!edge) return std::nullopt;
     TopoDS_Vertex a, b;
@@ -200,7 +200,11 @@ std::optional<Vec3> ResolveVertex(const doc::EdgeReference& ref, const Vec3& was
     if (a.IsNull() || b.IsNull()) return std::nullopt;
     const gp_Pnt pa = BRep_Tool::Pnt(a), pb = BRep_Tool::Pnt(b);
     const Vec3 va{pa.X(), pa.Y(), pa.Z()}, vb{pb.X(), pb.Y(), pb.Z()};
-    return (va - was).Length() <= (vb - was).Length() ? va : vb;
+    const doc::EdgeReference now = DescribeEdge(*edge, body);
+    const Vec3 offset = was - ref.middle;   // where the vertex was from the old middle
+    const double missA = (va - now.middle - offset).Length(), missB = (vb - now.middle - offset).Length();
+    ref = now;
+    return missA <= missB ? va : vb;
 }
 
 std::optional<doc::EdgeReference> DescribeVertexEdge(const TopoDS_Vertex& vertex, const TopoDS_Shape& body) {

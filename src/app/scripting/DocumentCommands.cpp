@@ -72,6 +72,8 @@ Json Save(AppContext& app, const Json& args) {
         if (!target.has_extension()) target += ".bzc";
     }
     if (target.empty()) Fail("Документ ещё ни разу не сохранялся — укажите «path»");
+    std::error_code ec;   // as doc.export: a new folder is made
+    if (target.has_parent_path()) std::filesystem::create_directories(target.parent_path(), ec);
     std::string error;
     if (!app.workspace.SaveTo(s, target, app.notes, app.settings, &error)) Fail(std::format("Не удалось сохранить: {}", error));
     return DescribeSession(s, app.workspace.ActiveIndex(), true);
@@ -96,10 +98,14 @@ Json Export(AppContext& app, const Json& args) {
 Json UndoRedo(AppContext& app, bool undo) {
     Session& s = Active(app);
     if (undo ? !s.CanUndo() : !s.CanRedo()) Fail(undo ? "Отменять нечего" : "Повторять нечего");
+    // The step this call undid (or redid): the top of the stack before it.
+    const std::string step = undo ? s.UndoLabel() : s.RedoLabel();
     if (undo) Undo(app);
     else Redo(app);
     s.RebuildNow();
-    return {{"undo", s.CanUndo() ? s.UndoLabel() : ""}, {"can_redo", s.CanRedo()}};
+    return {{undo ? "undone" : "redone", step},
+            {"next_undo", s.CanUndo() ? s.UndoLabel() : ""},
+            {"can_redo", s.CanRedo()}};
 }
 
 } // namespace
@@ -115,15 +121,15 @@ void AddDocumentCommands(Commands& out) {
                    Schema({{"index", IntegerArg("Номер документа.")}}, {"index"}), true, &Activate});
     out.push_back({"doc.save",
                    "Сохраняет активный документ: в его файл или, если задан path, в новый файл (дальше документ связан с ним).",
-                   Schema({{"path", StringArg("Полный путь .bzc; не задан — сохранить в текущий файл.")}}), true, &Save});
+                   Schema({{"path", StringArg("Полный путь .bzc (папка создаётся при нужде); не задан — сохранить в текущий файл.")}}), true, &Save});
     out.push_back({"doc.export", "Экспортирует тела активного документа в STEP, STL или 3MF.",
                    Schema({{"path", StringArg("Полный путь файла; папка создаётся при нужде.")},
                            {"format", EnumArg("Формат; не задан — по расширению path.", {"step", "stl", "3mf"})}},
                           {"path"}),
                    true, &Export});   // "changes": it brings the geometry up to date, not while the user edits
-    out.push_back({"doc.undo", "Отменяет последний шаг активного документа (как Ctrl+Z).", Schema(), true,
+    out.push_back({"doc.undo", "Отменяет последний шаг активного документа (как Ctrl+Z). Ответ: undone — что отменено, next_undo — что отменится следующим.", Schema(), true,
                    [](AppContext& app, const Json&) { return UndoRedo(app, true); }});
-    out.push_back({"doc.redo", "Повторяет отменённый шаг (как Ctrl+Y).", Schema(), true,
+    out.push_back({"doc.redo", "Повторяет отменённый шаг (как Ctrl+Y). Ответ: redone — что повторено.", Schema(), true,
                    [](AppContext& app, const Json&) { return UndoRedo(app, false); }});
 }
 

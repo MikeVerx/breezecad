@@ -122,7 +122,16 @@ FaceInfo DescribeFace(const Body& body, const TopoDS_Face& face) {
         f.hole = radial.Length() > 0.5 && f.normal.Dot(radial) < 0;
     };
     switch (surface.GetType()) {
-        case GeomAbs_Cylinder: axisOf(surface.Cylinder().Axis(), surface.Cylinder().Radius()); break;
+        case GeomAbs_Cylinder: {
+            // The axis from where the face begins along it (not from the
+            // surface's own origin, which a hole tool puts a little above the face).
+            gp_Ax1 ax = surface.Cylinder().Axis();
+            double u0 = 0, u1 = 0, v0 = 0, v1 = 0;
+            BRepTools::UVBounds(face, u0, u1, v0, v1);
+            if (std::isfinite(v0) && std::abs(v0) < 1e7) ax.SetLocation(ax.Location().Translated(gp_Vec(ax.Direction()) * v0));
+            axisOf(ax, surface.Cylinder().Radius());
+            break;
+        }
         case GeomAbs_Cone: {
             const gp_Ax1 ax = surface.Cone().Axis();
             const Vec3 o = ToVec(ax.Location().XYZ()), d = ToVec(ax.Direction().XYZ()).Normalized();
@@ -168,6 +177,36 @@ EdgeInfo DescribeEdge(const Body& body, const TopoDS_Edge& edge) {
 
 } // namespace
 
+double BoxDistance(const Vec3& lo, const Vec3& hi, const Vec3& p) {
+    const auto out = [](double v, double a, double b) { return v < a ? a - v : v > b ? v - b : 0.0; };
+    return Vec3{out(p.x, lo.x, hi.x), out(p.y, lo.y, hi.y), out(p.z, lo.z, hi.z)}.Length();
+}
+
+double EdgeDistance(const EdgeInfo& e, const Vec3& p) {
+    double best = std::min({(e.start - p).Length(), (e.end - p).Length(), (e.middle - p).Length()});
+    if (e.kind == doc::CurveKind::Line) {
+        const Vec3 d = e.end - e.start;
+        const double len2 = d.Dot(d);
+        if (len2 > 1e-18) {
+            const double t = std::clamp((p - e.start).Dot(d) / len2, 0.0, 1.0);
+            best = std::min(best, (e.start + d * t - p).Length());
+        }
+    } else if (e.centre && e.radius > 0) {
+        const Vec3 n = e.direction.Normalized();
+        const Vec3 off = p - *e.centre;
+        const double along = off.Dot(n);
+        const Vec3 radial = off - n * along;
+        if (radial.Length() > 1e-12) {
+            // The nearest point of the whole circle; for an arc it counts
+            // only when it lies on the arc's side (nearer the middle than the ends are).
+            const Vec3 q = *e.centre + radial.Normalized() * e.radius;
+            const double reach = std::max((e.start - e.middle).Length(), (e.end - e.middle).Length());
+            if (e.closed || (q - e.middle).Length() <= reach + 1e-9) best = std::min(best, (q - p).Length());
+        }
+    }
+    return best;
+}
+
 Topology DescribeTopology(const Model& model) {
     Topology t;
     try {
@@ -199,6 +238,18 @@ Topology DescribeTopology(const Model& model) {
                     if (std::find(faces.begin(), faces.end(), fi - 1) == faces.end()) faces.push_back(fi - 1);
                     std::vector<int>& edges = t.faces[static_cast<std::size_t>(fi - 1)].edges;
                     if (std::find(edges.begin(), edges.end(), ei - 1) == edges.end()) edges.push_back(ei - 1);
+                }
+            }
+        }
+        // A circle's axis points out of the flat face it bounds, as "Вставка"
+        // takes it: a hole's rim up out of the top, a head's underside down.
+        for (EdgeInfo& e : t.edges) {
+            if (e.kind != doc::CurveKind::Circle) continue;
+            for (int fi : e.faces) {
+                const FaceInfo& f = t.faces[static_cast<std::size_t>(fi)];
+                if (f.kind == doc::SurfaceKind::Plane && std::abs(f.normal.Dot(e.direction)) > 0.999) {
+                    e.direction = f.normal;
+                    break;
                 }
             }
         }

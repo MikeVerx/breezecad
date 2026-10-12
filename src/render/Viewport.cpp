@@ -182,6 +182,7 @@ std::optional<Frame> PlanarFaceFrame(const TopoDS_Face& face) {
     if (surface.GetType() != GeomAbs_Plane) return std::nullopt;
     const gp_Pln pln = surface.Plane();
     Vec3 normal = ToVec(pln.Axis().Direction().XYZ());
+    if (!pln.Position().Direct()) normal = -normal;   // a left-handed (mirrored) frame: X × Y is opposite its axis
     if (face.Orientation() == TopAbs_REVERSED) normal = -normal;
 
     const Vec3 location = ToVec(pln.Location().XYZ());
@@ -889,7 +890,7 @@ void Viewport::ZoomAt(double factor, Vec2 pixel) {
     SetCamera({c.eye + shift, c.center + shift, c.up, c.scale});
 }
 
-CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, double margin) const {
+CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, double margin, double aspect) const {
     const Impl& m = *myImpl;
     Box3 box = extra;
     if (m.bounds) {
@@ -912,7 +913,7 @@ CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, doub
         w = std::max(w, std::abs(d.Dot(right)) * 2);
         h = std::max(h, std::abs(d.Dot(trueUp)) * 2);
     }
-    const double aspect = m.width / m.height;
+    if (aspect <= 0) aspect = m.width / m.height;
     const double scale = std::max({h, w / aspect, 1.0}) * margin;
     const double distance = (hi - lo).Length() * 2 + 100;
     return {center - dir * distance, center, trueUp, scale};

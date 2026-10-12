@@ -58,6 +58,12 @@ struct Topology {
     std::vector<EdgeInfo> edges;
 };
 
+/// Distance from `p` to the box [lo, hi]; 0 inside it.
+double BoxDistance(const Vec3& lo, const Vec3& hi, const Vec3& p);
+/// Distance from `p` to an edge: exact for lines and circles (arcs: to the
+/// nearer of the arc and its ends), to its three points otherwise.
+double EdgeDistance(const EdgeInfo& e, const Vec3& p);
+
 /// Every face and edge of the model's bodies, in a stable order for an
 /// unchanged model (body by body, as OCCT lists them).
 Topology DescribeTopology(const Model& model);

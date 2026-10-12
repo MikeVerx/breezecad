@@ -64,7 +64,10 @@ Json Extrude(AppContext& app, const Json& args) {
         f->distance.name       = s.doc.NextParameterName();
         f->distance.expression = Expression(args, "distance");
     }
-    if (Has(args, "taper")) f->taper.expression = Expression(args, "taper");
+    if (Has(args, "taper")) {   // named like the distance: part.set_parameter can change it
+        f->taper.name       = s.doc.NextParameterName();
+        f->taper.expression = Expression(args, "taper");
+    }
     return Finish(s, std::move(f), args, "Выдавливание");
 }
 

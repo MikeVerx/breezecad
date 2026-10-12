@@ -26,7 +26,11 @@ Vec3 ToVec(const gp_XYZ& v) { return {v.X(), v.Y(), v.Z()}; }
 std::optional<Vec3> PlanarNormal(const TopoDS_Face& face) {
     const BRepAdaptor_Surface surface(face);
     if (surface.GetType() != GeomAbs_Plane) return std::nullopt;
-    Vec3 normal = ToVec(surface.Plane().Axis().Direction().XYZ()).Normalized();
+    // The surface normal is X × Y of the plane's frame: opposite the frame's
+    // axis when the frame is left-handed (a mirrored plane).
+    const gp_Pln plane = surface.Plane();
+    Vec3 normal = ToVec(plane.Axis().Direction().XYZ()).Normalized();
+    if (!plane.Position().Direct()) normal = -normal;
     if (face.Orientation() == TopAbs_REVERSED) normal = -normal;
     return normal;
 }

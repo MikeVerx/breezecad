@@ -79,11 +79,12 @@ Json EdgeJson(const kernel::EdgeInfo& e) {
 bool Parallel(Vec3 a, Vec3 dir) { return a.Normalized().Cross(dir.Normalized()).Length() < 0.02; }
 
 /// The `limit` entries nearest `near` (when given), else the first `limit`.
+/// `distance` — how far an entry is from a point.
 template <class T>
-std::vector<const T*> Pick(std::vector<const T*> list, const Json& args, Vec3 (*where)(const T&)) {
+std::vector<const T*> Pick(std::vector<const T*> list, const Json& args, double (*distance)(const T&, const Vec3&)) {
     if (Has(args, "near")) {
         const Vec3 p = Point3(args["near"], "near");
-        std::stable_sort(list.begin(), list.end(), [&](const T* a, const T* b) { return (where(*a) - p).Length() < (where(*b) - p).Length(); });
+        std::stable_sort(list.begin(), list.end(), [&](const T* a, const T* b) { return distance(*a, p) < distance(*b, p); });
     }
     const int limit = Integer(args, "limit", 60);
     if (limit > 0 && static_cast<int>(list.size()) > limit) list.resize(static_cast<std::size_t>(limit));
@@ -105,7 +106,11 @@ Json Faces(AppContext& app, const Json& args) {
         list.push_back(&f);
     }
     const std::size_t found = list.size();
-    list = Pick<kernel::FaceInfo>(list, args, [](const kernel::FaceInfo& f) { return f.point; });
+    // Nearest by the face's box (a big face is near a point anywhere over
+    // it), then by its point among faces whose boxes all hold the point.
+    list = Pick<kernel::FaceInfo>(list, args, [](const kernel::FaceInfo& f, const Vec3& p) {
+        return kernel::BoxDistance(f.boxMin, f.boxMax, p) * 1e6 + (f.point - p).Length();
+    });
     Json out = Json::array();
     for (const auto* f : list) out.push_back(FaceJson(*f, s.doc));
     return {{"total_faces", t.faces.size()}, {"matching", found}, {"faces", std::move(out)},
@@ -129,7 +134,7 @@ Json Edges(AppContext& app, const Json& args) {
         list.push_back(&e);
     }
     const std::size_t found = list.size();
-    list = Pick<kernel::EdgeInfo>(list, args, [](const kernel::EdgeInfo& e) { return e.middle; });
+    list = Pick<kernel::EdgeInfo>(list, args, [](const kernel::EdgeInfo& e, const Vec3& p) { return kernel::EdgeDistance(e, p); });
     Json out = Json::array();
     for (const auto* e : list) out.push_back(EdgeJson(*e));
     return {{"total_edges", t.edges.size()}, {"matching", found}, {"edges", std::move(out)},

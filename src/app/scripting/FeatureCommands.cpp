@@ -237,7 +237,7 @@ void AddFeatureCommands(Commands& out) {
                    "Зеркальная копия операций (sources) или всего тела (whole_body) относительно плоскости XY/XZ/YZ, "
                    "рабочей плоскости или плоской грани.",
                    OpSchema({{"sources", IndexListArg("id операций.")},
-                             {"whole_body", BoolArg("Отразить всё тело.")},
+                             {"whole_body", BoolArg("Отразить всё тело — последнее созданное (Тело N с наибольшим номером); остальные тела не отражаются.")},
                              {"plane", StringArg("XY, XZ, YZ или имя/id рабочей плоскости.")},
                              {"face", IntegerArg("Или плоская грань (part.faces).")}}),
                    true, &Mirror});

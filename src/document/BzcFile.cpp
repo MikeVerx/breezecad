@@ -168,7 +168,12 @@ Status WriteBzcArchive(const std::filesystem::path& path, std::string_view docum
     temp += ".saving";
     {
         std::ofstream out(temp, std::ios::binary | std::ios::trunc);
-        if (!out) return Error{std::format("Нет доступа к папке: {}", ToUtf8(path.parent_path()))};
+        if (!out) {
+            std::error_code missing;
+            const bool exists = path.parent_path().empty() || std::filesystem::is_directory(path.parent_path(), missing);
+            const std::string folder = ToUtf8(path.parent_path());
+            return Error{exists ? std::format("Нет доступа к папке: {}", folder) : std::format("Папки нет: {}", folder)};
+        }
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
         out.flush();
         if (!out) return Error{"Не удалось записать файл (диск заполнен?)"};

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <vector>
 
 namespace bz::assembly {
@@ -289,6 +290,55 @@ double Norm(const std::vector<double>& v) {
     return std::sqrt(s);
 }
 
+/// Whether `c` wants the directions of its two sides opposed (true) or the
+/// same way (false); nullopt when it has no such rows.
+std::optional<bool> WantsOpposed(const Constraint& c, const WorldGeometry& a, const WorldGeometry& b) {
+    switch (c.type) {
+        case ConstraintType::Mate:
+            if (IsPlane(a) && IsPlane(b)) return !c.flipped;
+            return std::nullopt;
+        case ConstraintType::Insert:
+        case ConstraintType::Rotational:
+        case ConstraintType::Slider:
+        case ConstraintType::Cylindrical:
+        case ConstraintType::Planar:
+        case ConstraintType::Rigid: return !c.flipped;
+        default: return std::nullopt;
+    }
+}
+
+/// A part that stands exactly the wrong way round for a constraint (its
+/// direction opposed where the constraint wants the same, or the other way)
+/// is a dead point for the solver: no small turn makes it better, it cannot
+/// start. Such a part is turned over first — half a turn about an axis
+/// square to its direction, through its point. True when a part was turned.
+bool TurnOverBackwards(Assembly& assembly) {
+    bool turned = false;
+    for (const Constraint& c : assembly.constraints) {
+        if (c.suppressed) continue;
+        Component* first = assembly.FindComponent(c.first.component);
+        Component* second = assembly.FindComponent(c.second.component);
+        if (!first || !second || first == second) continue;
+        const WorldGeometry wa = ToWorld(first->placement, c.first), wb = ToWorld(second->placement, c.second);
+        const std::optional<bool> opposed = WantsOpposed(c, wa, wb);
+        if (!opposed) continue;
+        const double along = wa.d.Dot(wb.d);
+        if (!(*opposed ? along > 1 - 1e-6 : along < -1 + 1e-6)) continue;
+        Component* part = !first->grounded ? first : !second->grounded ? second : nullptr;
+        if (!part) continue;
+        const WorldGeometry& g = part == first ? wa : wb;
+        Vec3 axis = g.x - g.d * g.x.Dot(g.d);
+        if (axis.Length() < 1e-6) {
+            const Vec3 e = std::abs(g.d.x) < 0.9 ? Vec3{1, 0, 0} : Vec3{0, 1, 0};
+            axis = e - g.d * e.Dot(g.d);
+        }
+        const Rotation half = Rotation::AxisAngle(axis.Normalized(), kPi);
+        part->placement = {(half * part->placement.rotation).Orthonormalized(), half * (part->placement.translation - g.p) + g.p};
+        turned = true;
+    }
+    return turned;
+}
+
 System MakeSystem(Assembly& a, ObjectId keep) {
     System s{a, {}, {}, {}, {}, {}};
     for (const Constraint& c : a.constraints) {
@@ -381,6 +431,7 @@ SolveResult Solve(Assembly& a, const SolveOptions& options) {
         c.state = c.suppressed ? ConstraintState::Unknown : ConstraintState::Satisfied;
         c.error = 0.0;
     }
+    result.moved = TurnOverBackwards(a);
     System s = MakeSystem(a, options.keep);
     if (s.active.empty()) {
         result.converged = true;

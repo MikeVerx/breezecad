@@ -130,7 +130,8 @@ public:
 
     /// Camera looking along `direction` with `up`, fitted to the model and
     /// to `extra` (things the UI draws itself, e.g. the sketch being edited).
-    CameraState FitCamera(Vec3 direction, Vec3 up, const Box3& extra = {}, double margin = 1.15) const;
+    /// `aspect` — width/height of the picture the camera is for; 0: the window's.
+    CameraState FitCamera(Vec3 direction, Vec3 up, const Box3& extra = {}, double margin = 1.15, double aspect = 0) const;
     /// Centre of the model's bounding box (origin when empty).
     Vec3 ModelCenter() const;
     /// Bounding box of the shown model (empty when there are no bodies).

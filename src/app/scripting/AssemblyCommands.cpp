@@ -135,22 +135,22 @@ Json Place(AppContext& app, const Json& args) {
         request.standard = Text(args, "standard");
         const doc::parts::StandardInfo* info = doc::parts::FindStandard(request.standard);
         if (!info) Fail(std::format("Нет стандарта «{}» (список — library.list)", request.standard));
-        request.size = Text(args, "size");
-        if (!request.size.empty() && (request.size[0] == 'M' || request.size[0] == 'm')) {   // a Latin M typed for «М»
-            const auto sizes = doc::parts::Sizes(*info);
-            const std::string cyr = "\xD0\x9C" + request.size.substr(1);
-            if (std::find(sizes.begin(), sizes.end(), cyr) != sizes.end()) request.size = cyr;
-        }
+        request.size = doc::parts::MatchSize(*info, Text(args, "size"));
         request.length = Number(args, "length", 0.0);
         if (const Expected<doc::parts::Made> check = doc::parts::MakePart(request); !check) Fail(Tr(check.GetError().message));
         const auto made = StandardPartFileOf(app, s, request);
         if (!made) Fail("Не удалось сохранить файл стандартного изделия");
         file = *made;
         designation = doc::parts::Designation(request);
-    } else if (Has(args, "document")) {   // an open part, by its title
+    } else if (Has(args, "document")) {   // an open part, by its title or its file's name
         const std::string title = Text(args, "document");
+        const auto named = [&](const Session& other) {
+            if (other.Title() == title) return true;
+            const std::u8string stem = other.path.stem().u8string();
+            return !other.path.empty() && std::string(stem.begin(), stem.end()) == title;
+        };
         for (const auto& other : app.workspace.sessions)
-            if (other->Title() == title && !other->IsAssembly()) {
+            if (named(*other) && !other->IsAssembly()) {
                 if (other->path.empty()) Fail(std::format("«{}» не сохранена — сначала doc.save в файл (активируйте её app.activate)", title));
                 if (other->IsModified()) Fail(std::format("В «{}» несохранённые изменения — сначала doc.save", title));
                 file = other->path;
@@ -201,7 +201,10 @@ Json Faces(AppContext& app, const Json& args) {
         if (Has(args, "normal") && (f.kind != doc::SurfaceKind::Plane || f.normal.Dot(Point3(args["normal"], "normal").Normalized()) < 0.9998)) continue;
         faces.push_back(&f);
     }
-    if (closeTo) std::stable_sort(faces.begin(), faces.end(), [&](auto* a, auto* b) { return (a->point - *closeTo).Length() < (b->point - *closeTo).Length(); });
+    const auto faceMiss = [&](const kernel::FaceInfo* f) {
+        return kernel::BoxDistance(f->boxMin, f->boxMax, *closeTo) * 1e6 + (f->point - *closeTo).Length();
+    };
+    if (closeTo) std::stable_sort(faces.begin(), faces.end(), [&](auto* a, auto* b) { return faceMiss(a) < faceMiss(b); });
     if (limit > 0 && static_cast<int>(faces.size()) > limit) faces.resize(static_cast<std::size_t>(limit));
     Json fj = Json::array(), cj = Json::array();
     for (const kernel::FaceInfo* f : faces) {
@@ -215,9 +218,22 @@ Json Faces(AppContext& app, const Json& args) {
         }
         fj.push_back(std::move(j));
     }
-    for (const kernel::EdgeInfo& e : t.edges)
-        if (e.centre && e.closed) cj.push_back({{"edge", e.index}, {"point", ToJson3(e.middle)}, {"centre", ToJson3(*e.centre)},
-                                                {"axis", ToJson3(e.direction)}, {"radius", e.radius}});
+    // Round edges go by the same filters: with kind/normal, only the rims of
+    // the faces listed; nearest first with near; no more than limit.
+    const bool filtered = !kind.empty() || Has(args, "normal");
+    std::vector<int> listed;
+    for (const kernel::FaceInfo* f : faces) listed.push_back(f->index);
+    std::vector<const kernel::EdgeInfo*> rims;
+    for (const kernel::EdgeInfo& e : t.edges) {
+        if (!e.centre || !e.closed) continue;
+        if (filtered && std::ranges::none_of(e.faces, [&](int fi) { return std::ranges::find(listed, fi) != listed.end(); })) continue;
+        rims.push_back(&e);
+    }
+    if (closeTo) std::stable_sort(rims.begin(), rims.end(), [&](auto* a, auto* b) { return kernel::EdgeDistance(*a, *closeTo) < kernel::EdgeDistance(*b, *closeTo); });
+    if (limit > 0 && static_cast<int>(rims.size()) > limit) rims.resize(static_cast<std::size_t>(limit));
+    for (const kernel::EdgeInfo* e : rims)
+        cj.push_back({{"edge", e->index}, {"point", ToJson3(e->middle)}, {"centre", ToJson3(*e->centre)},
+                      {"axis", ToJson3(e->direction)}, {"radius", e->radius}});
     return {{"component", c.id.value}, {"faces", std::move(fj)}, {"round_edges", std::move(cj)},
             {"note", "Точки — в координатах сборки. Для assembly.constrain: {component, face: N} (грань, ось цилиндра) или {component, edge: N} (круглая кромка для insert/rotational), или {component, point: [x,y,z]}."}};
 }
