@@ -17,6 +17,11 @@
 #include "kernel/occt/ModelImpl.h"
 
 #include <BRepClass3d_SolidClassifier.hxx>
+#include <BRepGProp_Face.hxx>
+#include <BRepTools.hxx>
+#include <TopExp_Explorer.hxx>
+#include <TopoDS.hxx>
+#include "kernel/occt/FaceMatch.h"
 #include <BRepGProp.hxx>
 #include <GProp_GProps.hxx>
 
@@ -253,9 +258,30 @@ TEST_CASE("every flat face of a counterbored plate points out of the material") 
 
 namespace {
 
-/// Every flat face of every body points out of the material: a step along
-/// its normal leaves the solid, a step against it enters.
+/// Every flat face of every body points out of the material. Checked
+/// against the normal OCCT works out itself from the surface's derivatives
+/// and the face's orientation (BRepGProp_Face — right for mirrored frames
+/// too) and, off Windows, by stepping off the face: the point along the
+/// normal is outside, against it inside. (The point classifier crashes in
+/// Extrema_ExtCC on some parts with the OCCT 8 of the Windows build.)
 void CheckOutward(const kernel::Model& model, const char* what) {
+    for (const kernel::Body& b : model.GetImpl().bodies)
+        for (TopExp_Explorer e(b.shape, TopAbs_FACE); e.More(); e.Next()) {
+            const TopoDS_Face& face = TopoDS::Face(e.Current());
+            const auto normal = kernel::occt::PlanarNormal(face);
+            if (!normal) continue;
+            double u0 = 0, u1 = 0, v0 = 0, v1 = 0;
+            BRepTools::UVBounds(face, u0, u1, v0, v1);
+            BRepGProp_Face props(face);
+            gp_Pnt at;
+            gp_Vec n;
+            props.Normal((u0 + u1) / 2, (v0 + v1) / 2, at, n);
+            REQUIRE(n.Magnitude() > 1e-12);
+            n.Normalize();
+            INFO(std::string(what) << ": face at " << at.X() << " " << at.Y() << " " << at.Z());
+            CHECK(normal->Dot(Vec3{n.X(), n.Y(), n.Z()}) == doctest::Approx(1.0));
+        }
+#if !defined(_WIN32)
     const kernel::Topology t = kernel::DescribeTopology(model);
     for (const kernel::FaceInfo& f : t.faces) {
         if (f.kind != doc::SurfaceKind::Plane) continue;
@@ -270,6 +296,7 @@ void CheckOutward(const kernel::Model& model, const char* what) {
             CHECK(state(f.point - f.normal * 0.01) == TopAbs_IN);
         }
     }
+#endif
 }
 
 } // namespace
