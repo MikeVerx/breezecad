@@ -1,12 +1,17 @@
-# Builds and tests BreezeCAD on Windows, macOS and Linux.
-# The Windows job also publishes a ready-to-run archive (exe + DLLs + assets):
-# as a workflow artifact (Actions → the run → Artifacts → BreezeCAD-windows)
-# and, for pushes to `next` that pass the tests, as the pre-release
-# "next-build" on the Releases page — a stable link to the freshest build.
+# Builds and tests BreezeCAD on Windows, Linux and macOS, and packs six
+# ready-to-run builds — for each system a plain one and one for beta testers:
+#
+#   BreezeCAD-windows.zip        BreezeCAD-beta-windows.zip
+#   BreezeCAD-linux.tar.gz       BreezeCAD-beta-linux.tar.gz
+#   BreezeCAD-macos.zip          BreezeCAD-beta-macos.zip      (Apple Silicon)
+#
+# Every run keeps them as workflow artifacts (Actions → the run → Artifacts);
+# pushes to `next` where every job is green also put all six into the
+# pre-release "next-build" — a stable link to the freshest build.
 name: build
 
-# Documentation-only pushes build nothing. The three platforms run side by
-# side; one failing does not stop the others.
+# Documentation-only pushes build nothing. The platforms run side by side;
+# one failing does not stop the others (only the publishing waits for all).
 on:
   push:
     branches: [next, main]
@@ -22,8 +27,6 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
-    permissions:
-      contents: write   # to update the next-build pre-release
     defaults:
       run:
         shell: msys2 {0}
@@ -86,6 +89,13 @@ jobs:
           cp -r dist/BreezeCAD/. "$beta/program/"
           cp resources/beta/beta-tester.txt "$beta/program/"
           cp "resources/beta/Запустить BreezeCAD.bat" "resources/beta/ИНСТРУКЦИЯ для тестеров.txt" "$beta/"
+      - name: Zip for the release
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          mkdir -p release
+          (cd dist && 7z a -tzip -bso0 ../release/BreezeCAD-windows.zip BreezeCAD)
+          (cd dist/beta && 7z a -tzip -mcu=on -bso0 ../../release/BreezeCAD-beta-windows.zip BreezeCAD-beta)
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         with:
@@ -98,47 +108,106 @@ jobs:
           name: BreezeCAD-beta-windows
           path: dist/beta
           retention-days: 30
-      - name: Publish the next-build pre-release
-        if: ${{ success() && github.event_name == 'push' && github.ref == 'refs/heads/next' }}
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cd dist && 7z a -tzip -bso0 BreezeCAD-windows.zip BreezeCAD && cd ..
-          (cd dist/beta && 7z a -tzip -mcu=on -bso0 ../BreezeCAD-beta-windows.zip BreezeCAD-beta)
-          notes="Свежая сборка ветки next: коммит ${GITHUB_SHA::7}, $(date -u '+%Y-%m-%d %H:%M') UTC.
-          BreezeCAD-windows.zip — обычная: распаковать и запустить BreezeCAD/breezecad.exe.
-          BreezeCAD-beta-windows.zip — для бета-тестеров: с отчётами об ошибках, внутри «ИНСТРУКЦИЯ для тестеров.txt»."
-          if ! gh release view next-build >/dev/null 2>&1; then
-            gh release create next-build --prerelease --target "$GITHUB_SHA" --title "BreezeCAD — свежая сборка (next)" --notes "$notes"
-          fi
-          gh release upload next-build dist/BreezeCAD-windows.zip dist/BreezeCAD-beta-windows.zip --clobber
-          gh release edit next-build --notes "$notes"
+      # The two zips as they go to the release, for the publish job.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        with:
+          name: release-windows
+          path: release
+          compression-level: 0
+          retention-days: 3
 
-  macos:
-    # Apple Silicon only (arm64); Homebrew's bottles here are built for
-    # macOS 14, which is the oldest system the app supports.
-    runs-on: macos-14
+  linux:
+    # The Linux package is built with conda-forge (GCC 13, OCCT, GLFW):
+    # their libraries need glibc 2.28 at most, so the package runs on
+    # distributions from 2019 on; the system's own packages would tie it to
+    # the build machine's glibc.
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash -el {0}
     steps:
       - uses: actions/checkout@v4
-      - name: Dependencies
-        run: brew install ninja glfw opencascade
+      - name: System packages (OpenGL, X11, Xvfb for the start check)
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq patchelf xvfb libgl1 libglx-mesa0 libgl1-mesa-dri libx11-6 libxrandr2 \
+            libxinerama1 libxcursor1 libxi6 libxxf86vm1 libfontconfig1
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: bz
+          condarc: |
+            channels:
+              - conda-forge
+          create-args: >-
+            cmake ninja gxx_linux-64=13 sysroot_linux-64=2.28
+            occt=*=novtk* glfw libgl-devel xorg-libx11 xorg-libxi
+          cache-environment: true
       - name: Versions
         run: |
-          clang++ --version | head -1
-          grep -h "define OCC_VERSION_COMPLETE" "$(brew --prefix opencascade)"/include/opencascade/Standard_Version.hxx
+          $CXX --version | head -1
+          occt=$(grep -h "define OCC_VERSION_COMPLETE" "$CONDA_PREFIX"/include/opencascade/Standard_Version.hxx | awk '{print $3}')
+          echo "::notice title=Linux toolchain::$($CXX -dumpfullversion), OCCT $occt, GLFW $(grep -h 'define GLFW_VERSION_M' "$CONDA_PREFIX"/include/GLFW/glfw3.h | awk '{printf "%s.", $3}')"
       - name: Configure
-        run: cmake --preset macos -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+        run: cmake --preset linux-release -DCMAKE_PREFIX_PATH="$CONDA_PREFIX"
       - name: Build
         id: build
-        run: cmake --build --preset macos 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+        run: cmake --build --preset linux-release 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Test
-        run: ctest --preset macos --output-on-failure 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+        run: ctest --preset linux-release --output-on-failure 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
       - name: Report failures
         if: failure()
         run: bash scripts/ci-annotate.sh build.log test.log
+      - name: Package
+        id: package
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          bash scripts/package-linux.sh build/linux-release/bin release
+          bash scripts/package-linux.sh build/linux-release/bin release --beta
+      # Outside the build environment, from the unpacked archive: does it start?
+      - name: Start check
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p /tmp/start shots && tar -C /tmp/start -xzf release/BreezeCAD-linux.tar.gz
+          set +e
+          timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" env -u LD_LIBRARY_PATH \
+            BZ_SCREENSHOT="$PWD/shots/linux.ppm:40" /tmp/start/BreezeCAD/breezecad > start.log 2>&1
+          status=$?
+          if [ -f shots/linux.ppm ]; then
+            python3 scripts/ppm2png.py shots/linux.ppm shots/start-linux.png && rm shots/linux.ppm
+            echo "::notice title=Linux start check::the packaged program started and drew a frame ($(grep -m1 'OpenGL' start.log | cut -c1-120))"
+          else
+            echo "::warning title=Linux start check::no frame (exit $status): $(tail -5 start.log | tr '\n' ' ' | cut -c1-400)"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        with:
+          name: BreezeCAD-linux
+          path: release/BreezeCAD-linux.tar.gz
+          compression-level: 0
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        with:
+          name: BreezeCAD-beta-linux
+          path: release/BreezeCAD-beta-linux.tar.gz
+          compression-level: 0
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        with:
+          name: start-check-linux
+          path: shots
+          if-no-files-found: ignore
+          retention-days: 7
 
-  linux:
+  linux-occt76:
+    # The system OCCT of Ubuntu 24.04 (7.6, the oldest supported): keeps the
+    # code building with it, as local development uses it. Not packaged.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -158,3 +227,122 @@ jobs:
       - name: Report failures
         if: failure()
         run: bash scripts/ci-annotate.sh build.log test.log
+
+  macos:
+    # Apple Silicon only (arm64); Homebrew's bottles here are built for
+    # macOS 14, which is the oldest system the app supports.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: brew install ninja glfw opencascade dylibbundler
+      - name: Versions
+        run: |
+          clang++ --version | head -1
+          occt=$(grep -h "define OCC_VERSION_COMPLETE" "$(brew --prefix opencascade)"/include/opencascade/Standard_Version.hxx | awk '{print $3}')
+          echo "::notice title=macOS toolchain::$(sw_vers -productVersion) $(uname -m), $(clang++ --version | head -1), OCCT $occt, GLFW $(brew list --versions glfw | awk '{print $2}')"
+      - name: Configure
+        run: cmake --preset macos -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+      - name: Build
+        id: build
+        run: cmake --build --preset macos 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+      - name: Test
+        run: ctest --preset macos --output-on-failure 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+      - name: Report failures
+        if: failure()
+        run: bash scripts/ci-annotate.sh build.log test.log
+      - name: Package
+        id: package
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          bash scripts/package-macos.sh build/macos/bin release
+          bash scripts/package-macos.sh build/macos/bin release --beta
+      # From the unpacked zip, with Homebrew's libraries moved away: does the
+      # app start on its own?
+      - name: Start check
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        continue-on-error: true
+        run: |
+          mkdir -p /tmp/start shots && ditto -x -k release/BreezeCAD-macos.zip /tmp/start
+          cellar="$(brew --prefix)/Cellar"
+          sudo mv "$cellar" "$cellar.away"
+          ( sleep 120; pkill -9 breezecad ) & watchdog=$!
+          set +e
+          BZ_SCREENSHOT="$PWD/shots/macos.ppm:40" /tmp/start/BreezeCAD.app/Contents/MacOS/breezecad > start.log 2>&1
+          status=$?
+          set -e
+          kill $watchdog 2>/dev/null || true
+          sudo mv "$cellar.away" "$cellar"
+          if [ -f shots/macos.ppm ]; then
+            python3 scripts/ppm2png.py shots/macos.ppm shots/start-macos.png && rm shots/macos.ppm
+            echo "::notice title=macOS start check::the packaged app started and drew a frame ($(grep -m1 'OpenGL' start.log | cut -c1-120))"
+          else
+            echo "::warning title=macOS start check::no frame (exit $status): $(tail -5 start.log | tr '\n' ' ' | cut -c1-400)"
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        with:
+          name: BreezeCAD-macos
+          path: release/BreezeCAD-macos.zip
+          compression-level: 0
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        with:
+          name: BreezeCAD-beta-macos
+          path: release/BreezeCAD-beta-macos.zip
+          compression-level: 0
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        with:
+          name: start-check-macos
+          path: shots
+          if-no-files-found: ignore
+          retention-days: 7
+
+  publish:
+    # Only when every platform built and passed its tests.
+    needs: [windows, linux, linux-occt76, macos]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/next' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # to update the next-build pre-release
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: release-windows, path: release }
+      - uses: actions/download-artifact@v4
+        with: { name: BreezeCAD-linux, path: release }
+      - uses: actions/download-artifact@v4
+        with: { name: BreezeCAD-beta-linux, path: release }
+      - uses: actions/download-artifact@v4
+        with: { name: BreezeCAD-macos, path: release }
+      - uses: actions/download-artifact@v4
+        with: { name: BreezeCAD-beta-macos, path: release }
+      - name: Publish the next-build pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          files=(BreezeCAD-windows.zip BreezeCAD-beta-windows.zip BreezeCAD-linux.tar.gz BreezeCAD-beta-linux.tar.gz
+                 BreezeCAD-macos.zip BreezeCAD-beta-macos.zip)
+          for f in "${files[@]}"; do test -s "release/$f" || { echo "::error::missing $f"; exit 1; }; done
+          notes="Свежая сборка ветки next: коммит ${GITHUB_SHA::7}, $(date -u '+%Y-%m-%d %H:%M') UTC.
+
+          Windows 10/11 (64-бит):
+          • BreezeCAD-windows.zip — обычная: распаковать и запустить BreezeCAD/breezecad.exe.
+          • BreezeCAD-beta-windows.zip — для бета-тестеров: с отчётами об ошибках, внутри «ИНСТРУКЦИЯ для тестеров.txt».
+
+          Linux (x86_64; Ubuntu 20.04+, Debian 10+, Fedora и другие не старше 2019 года):
+          • BreezeCAD-linux.tar.gz — обычная: распаковать и запустить BreezeCAD/breezecad.
+          • BreezeCAD-beta-linux.tar.gz — для бета-тестеров: внутри «Запустить BreezeCAD.sh» и «ИНСТРУКЦИЯ для тестеров.txt».
+
+          macOS 14+ на процессорах Apple (M1 и новее):
+          • BreezeCAD-macos.zip — обычная: распаковать и открыть BreezeCAD.app. Первый запуск — правой кнопкой → «Открыть»; на macOS 15+ — «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть».
+          • BreezeCAD-beta-macos.zip — для бета-тестеров: внутри BreezeCAD.app и «ИНСТРУКЦИЯ для тестеров.txt»."
+          if ! gh release view next-build >/dev/null 2>&1; then
+            gh release create next-build --prerelease --target "$GITHUB_SHA" --title "BreezeCAD — свежая сборка (next)" --notes "$notes"
+          fi
+          gh release upload next-build "${files[@]/#/release/}" --clobber
+          gh release edit next-build --notes "$notes"
