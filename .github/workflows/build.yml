@@ -49,7 +49,7 @@ jobs:
           cmake --version | head -1
           grep -h "define OCC_VERSION_COMPLETE" /mingw64/include/opencascade/Standard_Version.hxx
       - name: Configure
-        run: OCCT_DIR=/mingw64/lib/cmake/opencascade cmake --preset windows-mingw
+        run: OCCT_DIR=/mingw64/lib/cmake/opencascade cmake --preset windows-mingw -DBZ_BUILD_MCP=ON
       - name: Build
         id: build
         run: cmake --build --preset windows-mingw 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
@@ -95,6 +95,13 @@ jobs:
           name: BreezeCAD-windows
           path: dist/BreezeCAD
           retention-days: 30
+      # The MCP module: its own package, installed in "Настройки → Модули".
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        with:
+          name: bz-mcp-windows
+          path: build/windows-mingw/packages/*.bzmod
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         with:
@@ -115,7 +122,7 @@ jobs:
           if ! gh release view next-build >/dev/null 2>&1; then
             gh release create next-build --prerelease --target "$GITHUB_SHA" --title "BreezeCAD — свежая сборка (next)" --notes "$notes"
           fi
-          gh release upload next-build dist/BreezeCAD-windows.zip dist/BreezeCAD-beta-windows.zip --clobber
+          gh release upload next-build dist/BreezeCAD-windows.zip dist/BreezeCAD-beta-windows.zip build/windows-mingw/packages/*.bzmod --clobber
           gh release edit next-build --notes "$notes"
 
   macos:
@@ -147,11 +154,18 @@ jobs:
             libocct-visualization-dev libocct-data-exchange-dev libocct-ocaf-dev \
             libfreetype-dev libfontconfig1-dev libtbb-dev
       - name: Configure
-        run: cmake --preset linux-release
+        run: cmake --preset linux-release -DBZ_BUILD_MCP=ON
       - name: Build
+        id: build
         run: cmake --build --preset linux-release 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
       - name: Test
         run: ctest --preset linux-release --output-on-failure 2>&1 | tee test.log; exit ${PIPESTATUS[0]}
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        with:
+          name: bz-mcp-linux
+          path: build/linux-release/packages/*.bzmod
+          retention-days: 30
       - name: Report failures
         if: failure()
         run: bash scripts/ci-annotate.sh build.log test.log
