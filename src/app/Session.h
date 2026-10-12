@@ -59,6 +59,9 @@ public:
     EditMode mode = EditMode::Model;
     ObjectId activeSketch;      ///< sketch being edited in EditMode::Sketch
     ObjectId selectedFeature;   ///< selection in the tree
+    /// Faces chosen in the view (part, Model mode): what the context menu
+    /// acts on. Kept by reference, so they follow the part when it changes.
+    std::vector<render::SelectedFace> selectedFaces;
 
     // --- autosave bookkeeping ---
     double        unsavedSince      = -1.0;   ///< time of the first unsaved change, -1 = clean

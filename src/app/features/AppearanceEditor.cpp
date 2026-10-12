@@ -94,10 +94,45 @@ void AppearanceEditor::Start(AppContext& app, Session& session) {
     if (session.mode == EditMode::Sketch) app.sketch.Finish(app, session);
     myBefore = session.doc.look;
     myLibrary.Reload();
+    myTargets.clear();
     myOpen = true;
 }
 
+void AppearanceEditor::StartOnFaces(AppContext& app, Session& session, std::vector<render::SelectedFace> faces) {
+    Start(app, session);
+    if (!myOpen || faces.empty()) return;
+    myFaces = true;
+    myTargets = std::move(faces);
+    myTargetsChosen = myChosen;   // nothing goes on them until a choice is made
+}
+
+void AppearanceEditor::ApplyToTargets(AppContext& app, Session& session) {
+    const doc::Appearance* a = Chosen();
+    for (const render::SelectedFace& t : myTargets) {
+        // The same face set elsewhere on it: that look goes.
+        std::erase_if(session.doc.look.faces, [&](const doc::Look::FaceLook& f) {
+            return f.body == t.body && app.viewport.SameFace(t.body, f.face, t.face);
+        });
+        session.doc.look.SetFace(t.body, t.face, a);
+    }
+    if (a && a->HasPicture() && !session.doc.look.pictures.contains(a->picture))
+        session.doc.look.pictures[a->picture] = myLibrary.PictureBytes(a->picture);
+    session.doc.TouchLook();
+}
+
+void AppearanceEditor::ResetFaces(AppContext& app, Session& session, const std::vector<render::SelectedFace>& faces) {
+    doc::Look look = session.doc.look;
+    for (const render::SelectedFace& t : faces)
+        std::erase_if(look.faces, [&](const doc::Look::FaceLook& f) {
+            return f.body == t.body && app.viewport.SameFace(t.body, f.face, t.face);
+        });
+    look.Prune();
+    if (look != session.doc.look) session.Execute(doc::SetLook(std::move(look), Tr("Внешний вид")));
+}
+
 std::string AppearanceEditor::Hint() const {
+    if (!myTargets.empty())
+        return Trf("Выберите внешний вид: он ляжет на выбранные грани ({}). Enter — готово, Esc — отмена", myTargets.size());
     return myFaces ? Tr("Выберите внешний вид и щёлкните грань модели. Enter — готово, Esc — отмена")
                    : Tr("Выберите внешний вид и щёлкните тело. Enter — готово, Esc — отмена");
 }
@@ -112,6 +147,7 @@ void AppearanceEditor::Done(AppContext& app, Session& session) {
     (void)app;
     if (!myOpen) return;
     myOpen = false;
+    myTargets.clear();
     if (session.doc.look == myBefore) return;
     // One undo step: the look as it was goes back first, the command brings the new one.
     doc::Look now = session.doc.look;
@@ -123,6 +159,7 @@ void AppearanceEditor::Cancel(AppContext& app, Session& session) {
     (void)app;
     if (!myOpen) return;
     myOpen = false;
+    myTargets.clear();
     if (session.doc.look == myBefore) return;
     session.doc.look = myBefore;
     session.doc.TouchLook();
@@ -547,13 +584,18 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     ImGui::BeginGroup();
     const float inner = width - ui.S(28);
 
-    Section(app, Tr("Щелчок красит"));
-    static constexpr std::array<const char*, 2> targets{N_("Тело целиком"), N_("Грань")};
-    const int target = myFaces ? 1 : 0;
-    if (const int t = ui::Segmented(ui, "look-target", targets, target, 2, inner); t != target) myFaces = t == 1;
-    Caption(app, myFaces ? Tr("Щелчок по грани красит только её; повторный щелчок другим цветом перекрашивает.")
-                         : Tr("Щелчок по телу красит его целиком (свои цвета граней этого тела сбрасываются)."),
-            inner);
+    if (!myTargets.empty()) {
+        Section(app, Trf("Выбрано граней: {}", myTargets.size()).c_str());
+        Caption(app, Tr("Выбранный ниже вид сразу ложится на эти грани. Щелчок по другой грани в модели красит и её."), inner);
+    } else {
+        Section(app, Tr("Щелчок красит"));
+        static constexpr std::array<const char*, 2> targets{N_("Тело целиком"), N_("Грань")};
+        const int target = myFaces ? 1 : 0;
+        if (const int t = ui::Segmented(ui, "look-target", targets, target, 2, inner); t != target) myFaces = t == 1;
+        Caption(app, myFaces ? Tr("Щелчок по грани красит только её; повторный щелчок другим цветом перекрашивает.")
+                             : Tr("Щелчок по телу красит его целиком (свои цвета граней этого тела сбрасываются)."),
+                inner);
+    }
     ImGui::Dummy({0, ui.S(10)});
 
     // What a click puts on.
@@ -571,6 +613,10 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     ImGui::Dummy({0, ui.S(10)});
 
     DrawLibrary(app, inner);
+    if (!myTargets.empty() && myChosen != myTargetsChosen) {
+        myTargetsChosen = myChosen;
+        ApplyToTargets(app, session);
+    }
 
     if (!session.doc.look.Empty()) {
         ImGui::Dummy({0, ui.S(10)});

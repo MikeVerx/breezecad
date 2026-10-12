@@ -69,6 +69,14 @@ struct PickResult {
     std::optional<doc::FaceReference> face;   ///< the face clicked (curved too), found again by its point
 };
 
+/// A face of a shown body chosen by the user in the view (Viewport::SetSelectedFaces).
+struct SelectedFace {
+    ObjectId           body;
+    doc::FaceReference face;   ///< any face, found again by its point (FaceReference::curved)
+
+    bool operator==(const SelectedFace&) const = default;
+};
+
 class Viewport {
 public:
     Viewport();
@@ -137,6 +145,15 @@ public:
     bool StepAnimation(double now);
 
     std::optional<PickResult> Pick(Vec2 pixel);
+
+    // --- faces chosen by the user ---------------------------------------------
+    /// Faces drawn in the selection colour on the shown bodies (a face that
+    /// is no longer there is skipped). Cheap when unchanged.
+    void SetSelectedFaces(const std::vector<SelectedFace>& faces);
+    /// Faces of the shown bodies inside a screen rectangle (corners in any
+    /// order, logical pixels): wholly inside it, or with `crossing` every
+    /// face it touches, as Inventor's window and crossing selection.
+    std::vector<SelectedFace> FacesInRect(Vec2 a, Vec2 b, bool crossing);
 
     /// Shows where the bodies of `model` overlap (Model::Interferences),
     /// over everything else; nullptr hides it. Cheap when unchanged.

@@ -45,6 +45,11 @@
 #include <StdPrs_ToolTriangulatedShape.hxx>
 #include <Prs3d_ShadingAspect.hxx>
 #include <SelectMgr_EntityOwner.hxx>
+#include <SelectMgr_Selection.hxx>
+#include <SelectMgr_SensitiveEntity.hxx>
+#include <Select3D_SensitiveEntity.hxx>
+#include <Poly_Triangulation.hxx>
+#include <TopLoc_Location.hxx>
 #include <StdSelect_BRepOwner.hxx>
 #include <StdSelect_ViewerSelector3d.hxx>
 #include <TopoDS.hxx>
@@ -175,6 +180,35 @@ struct Orientation {
 /// Sketch frame on a planar face: normal points out of the material, the
 /// origin is the world origin projected onto the plane, and X follows the
 /// world X axis (or Y when the face faces along X), as users expect.
+/// A reference to `face` found again by a point inside it: the middle of
+/// one of its display triangles (never on an edge shared with a neighbour).
+std::optional<doc::FaceReference> FaceReferenceOf(const TopoDS_Face& face) {
+    TopLoc_Location location;
+    const Handle(Poly_Triangulation) mesh = BRep_Tool::Triangulation(face, location);
+    if (mesh.IsNull() || mesh->NbTriangles() < 1) return std::nullopt;
+    int a = 0, b = 0, c = 0;
+    mesh->Triangle(1).Get(a, b, c);
+    const gp_Trsf toModel = location.Transformation();
+    const gp_XYZ sum = mesh->Node(a).Transformed(toModel).XYZ() + mesh->Node(b).Transformed(toModel).XYZ() +
+                       mesh->Node(c).Transformed(toModel).XYZ();
+    const Vec3 point = ToVec(sum / 3.0);
+    const std::optional<Vec3> normal = kernel::occt::NormalAt(face, point);
+    if (!normal) return std::nullopt;
+    return doc::FaceReference{*normal, point, true};
+}
+
+/// The owner by which the face selection mode of `shape` picks `face`
+/// (null if that mode was never computed or the face is not there).
+Handle(SelectMgr_EntityOwner) FaceOwner(const Handle(AIS_InteractiveObject)& shape, const TopoDS_Face& face) {
+    const int mode = AIS_Shape::SelectionMode(TopAbs_FACE);
+    if (!shape->HasSelection(mode)) return nullptr;
+    for (const Handle(SelectMgr_SensitiveEntity)& entity : shape->Selection(mode)->Entities()) {
+        const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(entity->BaseSensitive()->OwnerId());
+        if (!owner.IsNull() && owner->Shape().IsSame(face)) return owner;
+    }
+    return nullptr;
+}
+
 std::optional<Frame> PlanarFaceFrame(const TopoDS_Face& face) {
     BRepAdaptor_Surface surface(face);
     if (surface.GetType() != GeomAbs_Plane) return std::nullopt;
@@ -254,6 +288,25 @@ struct Viewport::Impl {
                 context->Activate(s.shape, AIS_Shape::SelectionMode(TopAbs_VERTEX));
             }
         }
+        ShowSelected();
+    }
+
+    /// Faces the user chose (Viewport::SetSelectedFaces), highlighted as
+    /// selected on the shown bodies. Not while picking on an original body.
+    std::vector<SelectedFace> selectedFaces;
+    void ShowSelected() {
+        context->ClearSelected(false);
+        dirty = true;
+        if (original.active) return;
+        for (const SelectedFace& f : selectedFaces)
+            for (const auto& s : shown) {
+                if (s.body != f.body) continue;
+                const std::optional<TopoDS_Face> face = kernel::occt::ResolveAnyFace(s.shape->Shape(), f.face);
+                if (!face) break;
+                if (const Handle(SelectMgr_EntityOwner) owner = FaceOwner(s.shape, *face); !owner.IsNull() && !owner->IsSelected())
+                    context->AddOrRemoveSelected(owner, false);
+                break;
+            }
     }
 
     Handle(Graphic3d_ClipPlane) section;        ///< null: no section
@@ -480,6 +533,7 @@ struct Viewport::Impl {
             ApplyLook(s);
             context->Redisplay(s.shape, false);
         }
+        if (!selectedFaces.empty()) ShowSelected();   // redisplayed shapes come back unselected
         view->SetComputedMode(style == DisplayStyle::HiddenLines);
         dirty = true;
     }
@@ -958,6 +1012,36 @@ std::optional<PickResult> Viewport::Pick(Vec2 pixel) {
         if (result.plane->normal.Dot(Vec3{ex, ey, ez}) < 0) result.plane->normal = -result.plane->normal;
     }
     return result;
+}
+
+// --- faces chosen by the user ----------------------------------------------------
+
+void Viewport::SetSelectedFaces(const std::vector<SelectedFace>& faces) {
+    Impl& m = *myImpl;
+    if (faces == m.selectedFaces) return;
+    m.selectedFaces = faces;
+    m.ShowSelected();
+}
+
+std::vector<SelectedFace> Viewport::FacesInRect(Vec2 a, Vec2 b, bool crossing) {
+    Impl& m = *myImpl;
+    std::vector<SelectedFace> found;
+    if (m.shown.empty() || m.original.active) return found;
+    const auto px = [&](double v) { return static_cast<int>(std::lround(v * m.pixelScale)); };
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->AllowOverlapDetection(crossing);
+    selector->Pick(px(std::min(a.x, b.x)), px(std::min(a.y, b.y)), px(std::max(a.x, b.x)), px(std::max(a.y, b.y)), m.view);
+    selector->AllowOverlapDetection(false);
+    for (int i = 1; i <= selector->NbPicked(); ++i) {
+        const Handle(StdSelect_BRepOwner) brep = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
+        if (brep.IsNull() || brep->Shape().ShapeType() != TopAbs_FACE) continue;
+        ObjectId body;
+        for (const auto& s : m.shown)
+            if (brep->Selectable() == s.shape) body = s.body;
+        if (!body) continue;
+        if (const auto ref = FaceReferenceOf(TopoDS::Face(brep->Shape()))) found.push_back({body, *ref});
+    }
+    return found;
 }
 
 // --- measuring ------------------------------------------------------------------

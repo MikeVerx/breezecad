@@ -367,6 +367,8 @@ void EscapePressed(AppContext& app) {
     } else if (s->mode == EditMode::PickPlane) {
         s->mode = EditMode::Model;
     } else if (s->assembly && AssemblyEscape(app, *s)) {
+    } else if (!s->selectedFaces.empty()) {
+        s->selectedFaces.clear();   // first the faces chosen in the view, then the tree
     } else {
         s->selectedFeature = {};
     }

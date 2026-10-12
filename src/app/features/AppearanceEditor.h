@@ -10,6 +10,7 @@
 #include "app/features/OperationEditor.h"
 #include "core/I18n.h"
 #include "document/Appearance.h"
+#include "render/Viewport.h"
 
 #include <imgui.h>
 
@@ -17,6 +18,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace bz::app {
 
@@ -25,6 +27,12 @@ public:
     AppearanceEditor();
 
     void Start(AppContext& app, Session& session);
+    /// Opens on faces chosen in the view: the appearance picked in the
+    /// library goes on all of them at once (and can still be clicked onto
+    /// other faces). One undo step on Готово, as usual.
+    void StartOnFaces(AppContext& app, Session& session, std::vector<render::SelectedFace> faces);
+    /// Removes the own looks of `faces` (they take the body's look again), one undo step.
+    static void ResetFaces(AppContext& app, Session& session, const std::vector<render::SelectedFace>& faces);
 
     bool        IsOpen() const override { return myOpen; }
     ObjectId    EditedFeature() const override { return {}; }
@@ -55,6 +63,8 @@ private:
     /// Standard and own appearances as rows; returns the clicked id ("" default), or nullopt.
     std::optional<std::string> List(AppContext& app, std::string_view chosen, float width, bool withOwnMenu);
     void DrawCreateDialog(AppContext& app, Session& session);
+    /// Puts the chosen appearance on the faces it was opened on (StartOnFaces).
+    void ApplyToTargets(AppContext& app, Session& session);
     /// A small texture of a library picture (or of the file being chosen), for swatches.
     unsigned Thumbnail(const std::string& key, const std::vector<std::uint8_t>& bytes);
     unsigned ThumbnailOf(const doc::Appearance* a);
@@ -63,6 +73,8 @@ private:
     bool        myFaces = false;          ///< a click colours one face, not the whole body
     std::string myChosen = "std.steel";   ///< id; empty = the default look
     doc::Look   myBefore;                 ///< as it was when the panel opened
+    std::vector<render::SelectedFace> myTargets;   ///< faces it was opened on (StartOnFaces)
+    std::string myTargetsChosen;          ///< what the targets got last (a new choice goes on them)
 
     AppearanceLibrary myLibrary;
 
