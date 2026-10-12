@@ -45,6 +45,7 @@ add_executable(breezecad WIN32
     shell/LeftPanels.cpp
     shell/Ribbon.cpp
     shell/Splash.cpp
+    shell/TouchpadSettings.cpp
     shell/TreePanel.cpp
     sketch/DimensionLayout.cpp
     MouseNavigation.cpp
