@@ -22,6 +22,10 @@ export DISPLAY=:99
 for _ in $(seq 120); do xdotool search --name BreezeCAD >/dev/null 2>&1 && break; sleep 0.5; done
 sleep 3; W=$(xdotool search --name BreezeCAD | head -1); xdotool windowmove "$W" 0 0; sleep 2
 "$UI" shot a1-open 2
-"$UI" clk 500 20; sleep 1; "$UI" shot a2-picker-nothing-chosen
-"$UI" key Escape
+# Кронштейн:2 chosen in the tree, the toolbar picker paints only it
+"$UI" clk 150 316; sleep 0.5; "$UI" shot a2-chosen
+"$UI" clk 500 20; sleep 1; "$UI" shot a3-picker
+"$UI" clk 500 200; sleep 1; "$UI" mousemove 1420 860; "$UI" shot a4-painted 1
+# "Вид" tab of the ribbon, then the tools there
+"$UI" clk 100 58; sleep 1; "$UI" shot a5-view-tab
 "$UI" stop
