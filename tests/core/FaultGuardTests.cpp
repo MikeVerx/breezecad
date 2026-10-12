@@ -50,6 +50,39 @@ TEST_CASE("exceptions pass through guarded work, and guards nest" * doctest::ski
     CHECK_FALSE(bz::guard::RunGuarded(Fault));   // the outer guard is still in place after the inner one
 }
 
+// Б1 (DEBUG-PATCH-1): on Windows the fault was caught, and then the code
+// after the landing crashed while describing it. Everything the caller sees
+// after a caught fault: the description, its own locals, a guard ready for
+// the next fault, also when the fault is deep in the work's stack.
+static int Deep(int depth) {
+    volatile char frame[256] = {};
+    if (depth == 0) {
+        Fault();
+        return 0;
+    }
+    return Deep(depth - 1) + frame[depth % 256];
+}
+
+TEST_CASE("after a caught fault the caller gets a description and its state back" * doctest::skip(kSkip)) {
+    for (int round = 0; round < 50; ++round) {
+        const std::string before(300, 'x');   // on the heap: the description replaces it
+        std::string what = before;
+        double kept = 1.25 * round;
+        const bool ok = bz::guard::RunGuarded([&] { (void)Deep(20 + round); }, &what);
+        CHECK_FALSE(ok);
+#if defined(_WIN32)
+        CHECK(what == "исключение 0xc0000005");
+#else
+        CHECK(what == "SIGSEGV");
+#endif
+        CHECK(kept == 1.25 * round);
+        CHECK(before.size() == 300);
+    }
+    int sum = 0;
+    CHECK(bz::guard::RunGuarded([&] { sum = 3 + 4; }));
+    CHECK(sum == 7);
+}
+
 TEST_CASE("each thread has its own guard" * doctest::skip(kSkip)) {
     bool other = true;
     std::thread t([&] { other = bz::guard::RunGuarded(Fault); });
