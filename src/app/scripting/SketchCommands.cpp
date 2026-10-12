@@ -188,25 +188,36 @@ Json AddItem(SketchEdit& e, const Json& item) {
 }
 
 Json Create(AppContext& app, const Json& args) {
-    Session&          s     = ActivePart(app);
-    const std::string plane = Text(args, "plane", "XY");
+    Session& s = ActivePart(app);
     std::optional<ShownPlane> chosen;
-    for (const ShownPlane& p : OriginPlanes(s))
-        if (p.label == plane || std::to_string(p.id.value) == plane) chosen = p;
-    for (const ShownPlane& p : WorkPlanes(s))
-        if (p.label == plane || std::to_string(p.id.value) == plane) chosen = p;
-    if (!chosen) Fail(std::format("Нет плоскости «{}» (XY, XZ, YZ или имя/id рабочей плоскости)", plane));
+    doc::SketchPlacement placement;
+    if (Has(args, "face")) {   // a flat face of the body; the sketch moves with it on rebuild
+        const kernel::FaceInfo& face = FaceArg(s, args["face"], "face");
+        if (face.kind != doc::SurfaceKind::Plane) Fail("Эскиз ставится только на плоскую грань");
+        const Frame frame = doc::PlaneFrame(face.ref);
+        placement = {face.body, frame, true, face.ref};
+        chosen = ShownPlane{face.body, frame, {}, 0, std::format("грань {}", face.index)};
+    } else {
+        const std::string plane = Text(args, "plane", "XY");
+        for (const ShownPlane& p : OriginPlanes(s))
+            if (p.label == plane || std::to_string(p.id.value) == plane) chosen = p;
+        for (const ShownPlane& p : WorkPlanes(s))
+            if (p.label == plane || std::to_string(p.id.value) == plane) chosen = p;
+        if (!chosen) Fail(std::format("Нет плоскости «{}» (XY, XZ, YZ или имя/id рабочей плоскости)", plane));
+        placement = {chosen->id, chosen->frame, false, {}};
+    }
 
     auto f       = std::make_unique<doc::SketchFeature>();
     f->id        = s.doc.Ids().Next();
     f->name      = Has(args, "name") ? Text(args, "name") : s.doc.UniqueFeatureName(Tr("Эскиз"));
-    f->placement = {chosen->id, chosen->frame, false, {}};
+    f->placement = placement;
     f->sketch.EnsureOrigin(s.doc.Ids());
     const ObjectId id = f->id;
     s.Execute(doc::AddFeature(std::move(f), s.doc.EndMarker()));
     Json out           = AfterChange(s, id);
     const Frame& frame = chosen->frame;
     out["plane"] = {{"name", chosen->label},
+                    {"origin_in_model", {frame.origin.x, frame.origin.y, frame.origin.z}},
                     {"sketch_x_in_model", {frame.xDir.x, frame.xDir.y, frame.xDir.z}},
                     {"sketch_y_in_model", {frame.YDir().x, frame.YDir().y, frame.YDir().z}},
                     {"normal", {frame.normal.x, frame.normal.y, frame.normal.z}}};
@@ -343,9 +354,12 @@ Json ItemSchema() {
 
 void AddSketchCommands(Commands& out) {
     out.push_back({"sketch.create",
-                   "Создаёт пустой эскиз на плоскости начала координат (XY — вид сверху, XZ — спереди, YZ — справа) "
-                   "или на рабочей плоскости. Возвращает id эскиза и как оси эскиза лежат в модели. Модель — Z вверх.",
+                   "Создаёт пустой эскиз на плоскости начала координат (XY — вид сверху, XZ — спереди, YZ — справа), "
+                   "на рабочей плоскости или на плоской грани детали (face — номер из part.faces). Возвращает id эскиза, "
+                   "где лежит его начало (0,0) и как оси эскиза лежат в модели: точка эскиза (u,v) = origin + u·x + v·y. "
+                   "Модель — Z вверх.",
                    Schema({{"plane", StringArg("XY, XZ, YZ или имя/id рабочей плоскости; по умолчанию XY.")},
+                           {"face", IntegerArg("Плоская грань (номер из part.faces) вместо плоскости.")},
                            {"name", StringArg("Имя эскиза; по умолчанию «ЭскизN».")}}),
                    true, &Create});
     out.push_back({"sketch.add",

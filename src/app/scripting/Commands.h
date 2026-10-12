@@ -6,6 +6,9 @@
 
 #include "core/Id.h"
 #include "core/Math.h"
+#include "document/EdgeReference.h"
+#include "document/FaceReference.h"
+#include "kernel/Topology.h"
 
 #include <nlohmann/json.hpp>
 
@@ -47,7 +50,8 @@ using Commands = std::vector<Command>;
 void AddDocumentCommands(Commands& out);   // DocumentCommands.cpp: open, save, export, undo
 void AddPartCommands(Commands& out);       // PartCommands.cpp: tree, parameters, properties, edits
 void AddSketchCommands(Commands& out);     // SketchCommands.cpp: sketches and their geometry
-void AddSolidCommands(Commands& out);      // SolidCommands.cpp: extrude, revolve
+void AddSolidCommands(Commands& out);      // SolidCommands.cpp: extrude, revolve, thread
+void AddTopologyCommands(Commands& out);   // TopologyCommands.cpp: faces, edges, measure
 
 // --- schemas ----------------------------------------------------------------
 
@@ -88,6 +92,22 @@ Session& Active(AppContext& app);
 Session& ActivePart(AppContext& app);
 /// A feature of the part by id; fails when there is none.
 doc::Feature& FeatureOf(Session& part, ObjectId id);
+
+// --- geometry of the bodies (kernel/Topology.h) -----------------------------
+
+/// Faces and edges of the part as it is now (kept until the model changes).
+const kernel::Topology& TopologyOf(Session& part);
+/// A face by its number in part.faces.
+const kernel::FaceInfo& FaceArg(Session& part, const Json& value, const char* what);
+/// A list of edge numbers (part.edges), as references to store.
+std::vector<doc::EdgeReference> EdgeRefs(Session& part, const Json& args, const char* key);
+/// A list of face numbers (part.faces), as references to store.
+std::vector<doc::FaceReference> FaceRefs(Session& part, const Json& args, const char* key);
+/// [x, y, z] in model mm.
+Vec3 Point3(const Json& value, const char* what);
+Json ToJson3(Vec3 v);
+Json Point3Arg(std::string description);
+Json IndexListArg(std::string description);
 
 /// {id, name, type, state, message, suppressed}
 Json Describe(const doc::Feature& feature);

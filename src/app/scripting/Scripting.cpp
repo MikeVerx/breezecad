@@ -8,6 +8,7 @@
 #include "core/Log.h"
 #include "document/Feature.h"
 
+#include <cmath>
 #include <format>
 
 namespace bz::app::scripting {
@@ -21,6 +22,7 @@ const Commands& Table() {
         AddPartCommands(all);
         AddSketchCommands(all);
         AddSolidCommands(all);
+        AddTopologyCommands(all);
         return all;
     }();
     return table;
@@ -194,6 +196,70 @@ doc::Feature& FeatureOf(Session& part, ObjectId id) {
     if (!f) Fail(std::format("В детали нет элемента с id {}", id.value));
     return *f;
 }
+
+const kernel::Topology& TopologyOf(Session& part) {
+    // One part at a time is asked about; keyed by the model and its revision.
+    static const kernel::Model* model = nullptr;
+    static std::uint64_t        revision = ~std::uint64_t{0};
+    static kernel::Topology     topology;
+    part.RebuildNow();
+    if (model != &part.model || revision != part.model.Revision()) {
+        topology = kernel::DescribeTopology(part.model);
+        model    = &part.model;
+        revision = part.model.Revision();
+    }
+    return topology;
+}
+
+const kernel::FaceInfo& FaceArg(Session& part, const Json& value, const char* what) {
+    if (!value.is_number_integer()) Fail(std::format("«{}» — номер грани из part.faces", what));
+    const kernel::Topology& t = TopologyOf(part);
+    const long long i = value.get<long long>();
+    if (i < 0 || static_cast<std::size_t>(i) >= t.faces.size())
+        Fail(std::format("Нет грани {} (в детали {} граней; список — part.faces, номера меняются после каждой правки)", i, t.faces.size()));
+    return t.faces[static_cast<std::size_t>(i)];
+}
+
+std::vector<doc::EdgeReference> EdgeRefs(Session& part, const Json& args, const char* key) {
+    const Json& list = Required(args, key);
+    if (!list.is_array() || list.empty()) Fail(std::format("«{}» — непустой список номеров рёбер из part.edges", key));
+    const kernel::Topology& t = TopologyOf(part);
+    std::vector<doc::EdgeReference> out;
+    for (const Json& v : list) {
+        if (!v.is_number_integer()) Fail(std::format("«{}»: номера рёбер — целые числа", key));
+        const long long i = v.get<long long>();
+        if (i < 0 || static_cast<std::size_t>(i) >= t.edges.size())
+            Fail(std::format("Нет ребра {} (в детали {} рёбер; список — part.edges, номера меняются после каждой правки)", i, t.edges.size()));
+        out.push_back(t.edges[static_cast<std::size_t>(i)].ref);
+    }
+    return out;
+}
+
+std::vector<doc::FaceReference> FaceRefs(Session& part, const Json& args, const char* key) {
+    const Json& list = Required(args, key);
+    if (!list.is_array() || list.empty()) Fail(std::format("«{}» — непустой список номеров граней из part.faces", key));
+    std::vector<doc::FaceReference> out;
+    for (const Json& v : list) out.push_back(FaceArg(part, v, key).ref);
+    return out;
+}
+
+Vec3 Point3(const Json& v, const char* what) {
+    if (!v.is_array() || v.size() != 3 || !v[0].is_number() || !v[1].is_number() || !v[2].is_number())
+        Fail(std::format("«{}» — не точка [x, y, z]", what));
+    return {v[0].get<double>(), v[1].get<double>(), v[2].get<double>()};
+}
+
+Json ToJson3(Vec3 v) {
+    const auto r = [](double x) { return std::abs(x) < 5e-7 ? 0.0 : std::round(x * 1e6) / 1e6; };
+    return Json::array({r(v.x), r(v.y), r(v.z)});
+}
+
+Json Point3Arg(std::string d) {
+    return {{"type", "array"}, {"items", {{"type", "number"}}}, {"minItems", 3}, {"maxItems", 3},
+            {"description", std::move(d) + " [x, y, z] в мм, координаты модели (Z вверх)."}};
+}
+
+Json IndexListArg(std::string d) { return {{"type", "array"}, {"items", {{"type", "integer"}}}, {"description", std::move(d)}}; }
 
 Json Describe(const doc::Feature& f) {
     static constexpr const char* kStates[] = {"not_computed", "ok", "warning", "error", "suppressed"};
