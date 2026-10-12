@@ -204,7 +204,7 @@ Handle(SelectMgr_EntityOwner) FaceOwner(const Handle(AIS_InteractiveObject)& sha
     if (!shape->HasSelection(mode)) return nullptr;
     for (const Handle(SelectMgr_SensitiveEntity)& entity : shape->Selection(mode)->Entities()) {
         const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(entity->BaseSensitive()->OwnerId());
-        if (!owner.IsNull() && owner->Shape().IsSame(face)) return owner;
+        if (!owner.IsNull() && owner->Shape().IsSame(face)) return Handle(SelectMgr_EntityOwner)(owner);
     }
     return nullptr;
 }
