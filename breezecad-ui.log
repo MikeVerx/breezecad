@@ -1,0 +1,28 @@
+10:24:45.423 INFO  BreezeCAD 0.2.0 (ci/ui-probe 4d8440c, 2026-10-12) starting
+10:24:45.424 INFO  Interface language: ru
+10:24:50.445 INFO  Window: OpenGL 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4
+10:24:50.445 INFO  Graphics: Mesa / llvmpipe (LLVM 20.1.2, 256 bits)
+10:24:50.445 INFO  Assets: /home/runner/work/breezecad/breezecad/build/linux-release/bin/assets
+10:24:50.647 INFO  Viewport: OpenGL ready
+10:24:50.651 DEBUG Action: open кронштейны.bza
+10:24:50.651 INFO  Opened /home/runner/asm/кронштейны.bza
+10:24:51.493 INFO  Slow frame 835 ms: scene 543 ms, present 96 ms, sync 78 ms, rebuild 64 ms, assembly 64 ms, asm.parts 64 ms
+10:24:51.587 INFO  Slow frame 93 ms: scene 56 ms, present 37 ms, interface 0 ms, rebuild 0 ms, assembly 0 ms, asm.parts 0 ms
+10:24:59.516 INFO  Screenshot saved: /home/runner/work/breezecad/breezecad/shots/a1-open.ppm
+10:25:00.717 INFO  Slow frame 94 ms: scene 56 ms, interface 21 ms, present 17 ms, rebuild 0 ms, assembly 0 ms, asm.parts 0 ms
+10:25:02.782 INFO  Screenshot saved: /home/runner/work/breezecad/breezecad/shots/a2-chosen.ppm
+10:25:06.905 INFO  Screenshot saved: /home/runner/work/breezecad/breezecad/shots/a3-picker.ppm
+10:25:07.792 DEBUG Action: assembly Внешний вид
+10:25:07.995 INFO  Slow frame 188 ms: scene 151 ms, present 16 ms, interface 0 ms, rebuild 0 ms, assembly 0 ms, asm.parts 0 ms
+10:25:10.324 INFO  Screenshot saved: /home/runner/work/breezecad/breezecad/shots/a4-painted.ppm
+10:25:14.467 INFO  Screenshot saved: /home/runner/work/breezecad/breezecad/shots/a5-view-tab.ppm
+10:25:15.371 DEBUG Action: action view.appearance
+10:25:16.467 INFO  Slow frame 94 ms: scene 56 ms, interface 20 ms, present 18 ms, rebuild 0 ms, assembly 0 ms, asm.parts 0 ms
+10:25:17.893 INFO  Screenshot saved: /home/runner/work/breezecad/breezecad/shots/b1-panel.ppm
+10:25:23.448 INFO  Screenshot saved: /home/runner/work/breezecad/breezecad/shots/c0-hover.ppm
+10:25:24.286 DEBUG Action: appearance грань
+10:25:24.403 INFO  Slow frame 102 ms: scene 60 ms, present 18 ms, interface 1 ms, rebuild 0 ms, assembly 0 ms, asm.parts 0 ms
+10:25:26.837 INFO  Screenshot saved: /home/runner/work/breezecad/breezecad/shots/c1-face-in-assembly.ppm
+10:25:27.923 DEBUG Action: assembly Внешний вид
+10:25:29.040 INFO  Slow frame 115 ms: scene 56 ms, interface 21 ms, present 16 ms, rebuild 0 ms, assembly 0 ms, asm.parts 0 ms
+10:25:31.439 INFO  Screenshot saved: /home/runner/work/breezecad/breezecad/shots/c2-done.ppm
