@@ -31,6 +31,6 @@ sleep 3; W=$(xdotool search --name BreezeCAD | head -1); xdotool windowmove "$W"
 "$UI" clk 50 100; sleep 1; "$UI" mousemove 1420 860; "$UI" shot b1-panel
 "$UI" clk 260 286; sleep 0.5            # Поверхность
 "$UI" clk 130 721; sleep 0.5            # Чугун
-"$UI" clk 936 634; sleep 1; "$UI" mousemove 1420 860; "$UI" shot c1-face-in-assembly 1
+"$UI" mousemove 936 634; sleep 1; "$UI" shot c0-hover; "$UI" clk 936 634; sleep 1; "$UI" mousemove 1420 860; "$UI" shot c1-face-in-assembly 1
 "$UI" clk 265 821; sleep 2; "$UI" mousemove 1420 860; "$UI" shot c2-done 1
 "$UI" stop
