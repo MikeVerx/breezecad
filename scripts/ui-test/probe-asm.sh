@@ -29,4 +29,10 @@ sleep 3; W=$(xdotool search --name BreezeCAD | head -1); xdotool windowmove "$W"
 # "Вид" tab of the ribbon, then the tools there
 "$UI" clk 100 58; sleep 1; "$UI" shot a5-view-tab
 "$UI" clk 50 100; sleep 1; "$UI" mousemove 1420 860; "$UI" shot b1-panel
+"$UI" clk 130 687; sleep 1; "$UI" mousemove 1420 860; "$UI" shot b2-blued-steel
+"$UI" clk 260 286; sleep 0.5            # Поверхность
+"$UI" clk 130 721; sleep 0.5            # Чугун
+"$UI" clk 845 368; sleep 1; "$UI" mousemove 1420 860; "$UI" shot b3-face
+"$UI" clk 260 394; sleep 0.5; "$UI" shot b4-to-part   # В детали
+"$UI" clk 265 821; sleep 4; "$UI" mousemove 1420 860; "$UI" shot b5-written 2
 "$UI" stop
