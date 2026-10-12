@@ -1,4 +1,5 @@
 #include "kernel/Model.h"
+#include <gp_Pnt.hxx>
 
 #include <Standard_Version.hxx>
 
@@ -1088,6 +1089,19 @@ void Model::Adopt(Model&& fork, std::size_t start) {
 std::uint64_t Model::Revision() const { return myImpl->revision; }
 
 const std::vector<BodyInfo>& Model::Bodies() const { return myImpl->infos; }
+
+ObjectId Model::BodyNearest(Vec3 point) const {
+    const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(gp_Pnt(point.x, point.y, point.z));
+    ObjectId best;
+    double bestDistance = 1e300;
+    for (const Body& b : myImpl->bodies) {
+        BRepExtrema_DistShapeShape distance(probe, b.shape);
+        if (!distance.IsDone() || distance.Value() >= bestDistance) continue;
+        best = b.id;
+        bestDistance = distance.Value();
+    }
+    return best;
+}
 
 std::optional<Bounds> Model::BoundingBox() const {
     Bnd_Box box;

@@ -125,13 +125,16 @@ AssemblyState& Session::MakeAssembly() {
 
 std::string_view Session::DocumentType() const { return assembly ? doc::kAssemblyType : doc::kPartType; }
 
-std::uint64_t Session::ContentRevision() const { return assembly ? assembly->assembly.Revision() : doc.Revision(); }
+std::uint64_t Session::ContentRevision() const {
+    return assembly ? assembly->assembly.Revision() + assembly->assembly.LookRevision() : doc.Revision();
+}
 
 Status Session::WriteFile(const std::filesystem::path& target, std::string_view generator) const {
     if (!assembly) return doc::SaveBzc(doc, target, generator);
     if (path == target) return assembly::SaveAssembly(assembly->assembly, target, generator);
     Expected<assembly::Assembly> copy = assembly::AssemblyFromJson(assembly::AssemblyToJson(assembly->assembly));
     if (!copy) return copy.GetError();
+    copy->look.pictures = assembly->assembly.look.pictures;   // not in the JSON
     assembly::RebasePaths(*copy, path, target);
     return assembly::SaveAssembly(*copy, target, generator);
 }

@@ -3,6 +3,11 @@
 #include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
 #include "core/PathText.h"
+#include "core/Version.h"
+#include "app/AssemblyState.h"
+#include "app/Session.h"
+#include "assembly/AssemblyFile.h"
+#include "document/BzcFile.h"
 #include "document/Commands.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
@@ -26,6 +31,9 @@
 
 namespace bz::app {
 namespace {
+
+/// What a part file written from here says made it.
+std::string PartGenerator() { return std::string("BreezeCAD ") + Version(); }
 
 void Section(AppContext& app, const char* label) {
     ui::FieldLabel(app.ui, label);
@@ -92,9 +100,16 @@ void AppearanceEditor::Start(AppContext& app, Session& session) {
     }
     app.ops.Close(app, session);
     if (session.mode == EditMode::Sketch) app.sketch.Finish(app, session);
-    myBefore = session.doc.look;
+    myBefore = LookOf(session);
     myLibrary.Reload();
     myTargets.clear();
+    myTargetBodies.clear();
+    myEdits.clear();
+    myFaces = false;   // a whole object by default
+    // In an assembly the component chosen there is what the library paints.
+    if (session.assembly && session.assembly->assembly.FindComponent(session.assembly->selected))
+        myTargetBodies.push_back(session.assembly->selected);
+    myTargetsChosen = myChosen;   // nothing goes on them until a choice is made
     myOpen = true;
 }
 
@@ -103,24 +118,84 @@ void AppearanceEditor::StartOnFaces(AppContext& app, Session& session, std::vect
     if (!myOpen || faces.empty()) return;
     myFaces = true;
     myTargets = std::move(faces);
-    myTargetsChosen = myChosen;   // nothing goes on them until a choice is made
+}
+
+doc::Look& AppearanceEditor::LookOf(Session& session) {
+    return session.assembly ? session.assembly->assembly.look : session.doc.look;
+}
+
+void AppearanceEditor::Touch(Session& session) {
+    if (session.assembly) session.assembly->assembly.TouchLook();
+    else session.doc.TouchLook();
+}
+
+doc::FaceReference AppearanceEditor::Stored(Session& session, ObjectId body, doc::FaceReference shown) {
+    if (!session.assembly) return shown;
+    const assembly::Component* c = session.assembly->assembly.FindComponent(body);
+    if (!c) return shown;
+    const assembly::Placement back = c->placement.Inverse();
+    shown.point = back.Point(shown.point);
+    shown.normal = back.Direction(shown.normal);
+    return shown;
+}
+
+doc::FaceReference AppearanceEditor::Shown(Session& session, ObjectId body, doc::FaceReference stored) {
+    if (!session.assembly) return stored;
+    const assembly::Component* c = session.assembly->assembly.FindComponent(body);
+    if (!c) return stored;
+    stored.point = c->placement.Point(stored.point);
+    stored.normal = c->placement.Direction(stored.normal);
+    return stored;
+}
+
+void AppearanceEditor::KeepPicture(Session& session) {
+    doc::Look& look = LookOf(session);
+    if (const doc::Appearance* a = Chosen(); a && a->HasPicture() && !look.pictures.contains(a->picture))
+        look.pictures[a->picture] = myLibrary.PictureBytes(a->picture);
+}
+
+void AppearanceEditor::PaintBody(Session& session, ObjectId body) {
+    LookOf(session).SetBody(body, Chosen());
+    KeepPicture(session);
+    Touch(session);
+    if (session.assembly) myEdits.push_back({body, std::nullopt, myChosen});
+}
+
+void AppearanceEditor::PaintFace(AppContext& app, Session& session, ObjectId body, const doc::FaceReference& shown) {
+    doc::Look& look = LookOf(session);
+    // The same face set before (picked at another point of it): that look goes.
+    std::erase_if(look.faces, [&](const doc::Look::FaceLook& f) {
+        return f.body == body && app.viewport.SameFace(body, Shown(session, body, f.face), shown);
+    });
+    const doc::FaceReference stored = Stored(session, body, shown);
+    look.SetFace(body, stored, Chosen());
+    KeepPicture(session);
+    Touch(session);
+    if (session.assembly) myEdits.push_back({body, stored, myChosen});
 }
 
 void AppearanceEditor::ApplyToTargets(AppContext& app, Session& session) {
-    const doc::Appearance* a = Chosen();
-    for (const render::SelectedFace& t : myTargets) {
-        // The same face set elsewhere on it: that look goes.
-        std::erase_if(session.doc.look.faces, [&](const doc::Look::FaceLook& f) {
-            return f.body == t.body && app.viewport.SameFace(t.body, f.face, t.face);
-        });
-        session.doc.look.SetFace(t.body, t.face, a);
+    if (myFaces) {
+        for (const render::SelectedFace& t : myTargets) PaintFace(app, session, t.body, t.face);
+        return;
     }
-    if (a && a->HasPicture() && !session.doc.look.pictures.contains(a->picture))
-        session.doc.look.pictures[a->picture] = myLibrary.PictureBytes(a->picture);
-    session.doc.TouchLook();
+    // A whole object: the bodies of the faces chosen, and the component chosen.
+    std::vector<ObjectId> bodies = myTargetBodies;
+    for (const render::SelectedFace& t : myTargets)
+        if (std::find(bodies.begin(), bodies.end(), t.body) == bodies.end()) bodies.push_back(t.body);
+    for (const ObjectId body : bodies) PaintBody(session, body);
+}
+
+std::size_t AppearanceEditor::TargetCount() const {
+    if (myFaces) return myTargets.size();
+    std::vector<ObjectId> bodies = myTargetBodies;
+    for (const render::SelectedFace& t : myTargets)
+        if (std::find(bodies.begin(), bodies.end(), t.body) == bodies.end()) bodies.push_back(t.body);
+    return bodies.size();
 }
 
 void AppearanceEditor::ResetFaces(AppContext& app, Session& session, const std::vector<render::SelectedFace>& faces) {
+    if (session.assembly) return;   // faces are chosen this way in a part only
     doc::Look look = session.doc.look;
     for (const render::SelectedFace& t : faces)
         std::erase_if(look.faces, [&](const doc::Look::FaceLook& f) {
@@ -131,8 +206,9 @@ void AppearanceEditor::ResetFaces(AppContext& app, Session& session, const std::
 }
 
 std::string AppearanceEditor::Hint() const {
-    if (!myTargets.empty())
-        return Trf("Выберите внешний вид: он ляжет на выбранные грани ({}). Enter — готово, Esc — отмена", myTargets.size());
+    if (const std::size_t n = TargetCount(); n > 0)
+        return myFaces ? Trf("Выберите внешний вид: он ляжет на выбранные грани ({}). Enter — готово, Esc — отмена", n)
+                       : Trf("Выберите внешний вид: он ляжет на выбранные объекты ({}). Enter — готово, Esc — отмена", n);
     return myFaces ? Tr("Выберите внешний вид и щёлкните грань модели. Enter — готово, Esc — отмена")
                    : Tr("Выберите внешний вид и щёлкните тело. Enter — готово, Esc — отмена");
 }
@@ -143,46 +219,144 @@ const doc::Appearance* AppearanceEditor::Chosen() const {
     return myLibrary.Find(myChosen);
 }
 
-void AppearanceEditor::Done(AppContext& app, Session& session) {
-    (void)app;
-    if (!myOpen) return;
+void AppearanceEditor::Close(AppContext& app) {
     myOpen = false;
     myTargets.clear();
-    if (session.doc.look == myBefore) return;
+    myTargetBodies.clear();
+    app.viewport.SetHoveredBody({});
+}
+
+void AppearanceEditor::Done(AppContext& app, Session& session) {
+    if (!myOpen) return;
+    Close(app);
+    std::vector<Edit> edits = std::move(myEdits);
+    myEdits.clear();
+    doc::Look& look = LookOf(session);
+    if (look == myBefore) return;
+    if (session.assembly) {
+        AssemblyState& st = *session.assembly;
+        doc::Look painted = std::move(look);
+        look = myBefore;
+        if (myToPart) {
+            // The looks go into the parts' files. The assembly keeps its
+            // own overrides, except where they would hide what was just
+            // written (a reset in the panel clears them all).
+            doc::Look kept = painted.Empty() ? doc::Look{} : myBefore;
+            for (const Edit& e : edits) {
+                if (e.face) kept.SetFace(e.component, *e.face, nullptr);
+                else kept.SetBody(e.component, nullptr);
+            }
+            if (kept != myBefore) {
+                st.Checkpoint(Tr("Внешний вид"));
+                look = std::move(kept);
+                look.pictures = myBefore.pictures;
+            }
+            st.assembly.TouchLook();
+            WriteIntoParts(app, session, painted, edits);
+            return;
+        }
+        st.Checkpoint(Tr("Внешний вид"));   // remembers it as it was: one undo step
+        look = std::move(painted);
+        st.assembly.TouchLook();
+        return;
+    }
     // One undo step: the look as it was goes back first, the command brings the new one.
-    doc::Look now = session.doc.look;
-    session.doc.look = myBefore;
+    doc::Look now = std::move(look);
+    look = myBefore;
     session.Execute(doc::SetLook(std::move(now), Tr("Внешний вид")));
 }
 
 void AppearanceEditor::Cancel(AppContext& app, Session& session) {
-    (void)app;
     if (!myOpen) return;
-    myOpen = false;
-    myTargets.clear();
-    if (session.doc.look == myBefore) return;
-    session.doc.look = myBefore;
-    session.doc.TouchLook();
+    Close(app);
+    myEdits.clear();
+    doc::Look& look = LookOf(session);
+    if (look == myBefore) return;
+    look = myBefore;
+    Touch(session);
+}
+
+void AppearanceEditor::WriteIntoParts(AppContext& app, Session& session, const doc::Look& painted, const std::vector<Edit>& edits) {
+    AssemblyState& st = *session.assembly;
+    // The edits of each part file, in the order they were made (the last wins).
+    std::vector<std::pair<std::filesystem::path, std::vector<const Edit*>>> files;
+    for (const Edit& e : edits) {
+        const assembly::Component* c = st.assembly.FindComponent(e.component);
+        if (!c) continue;
+        const std::filesystem::path file = assembly::ResolvePartPath(session.path, c->path);
+        auto it = std::find_if(files.begin(), files.end(), [&](const auto& f) { return f.first == file; });
+        if (it == files.end()) it = files.insert(files.end(), {file, {}});
+        it->second.push_back(&e);
+    }
+    const auto apply = [&](doc::Look& target, const std::vector<const Edit*>& list) {
+        for (const Edit* e : list) {
+            const doc::Appearance* a = e->appearance.empty() ? nullptr : painted.Find(e->appearance);
+            const kernel::Model* part = st.geometry.PartModelOf(e->component);
+            if (!part) continue;
+            if (!e->face) {
+                for (const kernel::BodyInfo& b : part->Bodies()) target.SetBody(b.id, a);
+            } else if (const ObjectId body = part->BodyNearest(e->face->point)) {
+                target.SetFace(body, *e->face, a);
+            }
+            if (a && a->HasPicture())
+                if (const auto it = painted.pictures.find(a->picture); it != painted.pictures.end()) target.pictures[a->picture] = it->second;
+        }
+        target.Prune();
+    };
+    int written = 0;
+    for (const auto& [file, list] : files) {
+        const std::string name = ToUtf8(file.stem());
+        // Open in a tab: the change goes there (with its own undo), saved
+        // at once unless the tab has changes of its own.
+        Session* open = nullptr;
+        for (const auto& other : app.workspace.sessions)
+            if (!other->assembly && !other->path.empty() && other->path == file) open = other.get();
+        if (open) {
+            const bool hadChanges = open->IsModified();
+            doc::Look look = open->doc.look;
+            apply(look, list);
+            if (look == open->doc.look) continue;
+            open->Execute(doc::SetLook(std::move(look), Tr("Внешний вид")));
+            if (hadChanges) {
+                app.notes.Info(Trf("Деталь «{}» открыта и не сохранена: вид добавлен в неё, сохраните её", name));
+                continue;
+            }
+            if (const Status s = open->WriteFile(file, PartGenerator()); !s) {
+                app.notes.Error(Tr(s.GetError().message));
+                continue;
+            }
+            open->MarkSaved();
+            ++written;
+            continue;
+        }
+        Expected<doc::Document> part = doc::LoadBzc(file);
+        if (!part) {
+            app.notes.Error(Trf("Не удалось открыть деталь «{}»: {}", name, Tr(part.GetError().message)));
+            continue;
+        }
+        apply(part->look, list);
+        if (const Status s = doc::SaveBzc(*part, file, PartGenerator()); !s) {
+            app.notes.Error(Tr(s.GetError().message));
+            continue;
+        }
+        ++written;
+    }
+    // The assembly reads the changed files again on its own (they are newer).
+    if (written > 0) app.notes.Success(Trf("Внешний вид записан в детали: {}", written));
 }
 
 void AppearanceEditor::DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) {
+    const std::optional<render::PickResult> hit =
+        vf.hovered ? app.viewport.Pick(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt;
+    // A whole object is painted: it is lit up as a whole under the cursor.
+    app.viewport.SetHoveredBody(!myFaces && hit ? hit->body : ObjectId{});
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
-    const auto hit = app.viewport.Pick(vf.ToLocal(ImGui::GetMousePos()));
     if (!hit || !hit->body) return;
     if (myFaces) {
-        if (!hit->face) return;
-        // The same face clicked elsewhere: its earlier colour goes.
-        std::erase_if(session.doc.look.faces, [&](const doc::Look::FaceLook& f) {
-            return f.body == hit->body && app.viewport.SameFace(hit->body, f.face, *hit->face);
-        });
-        session.doc.look.SetFace(hit->body, *hit->face, Chosen());
+        if (hit->face) PaintFace(app, session, hit->body, *hit->face);
     } else {
-        session.doc.look.SetBody(hit->body, Chosen());
+        PaintBody(session, hit->body);
     }
-    // A picture goes into the part's file with it.
-    if (const doc::Appearance* a = Chosen(); a && a->HasPicture() && !session.doc.look.pictures.contains(a->picture))
-        session.doc.look.pictures[a->picture] = myLibrary.PictureBytes(a->picture);
-    session.doc.TouchLook();
 }
 
 void AppearanceEditor::Sample(AppContext& app, ImDrawList* dl, ImVec2 p, float size, const doc::Appearance* a) {
@@ -492,11 +666,11 @@ void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
             myChosen = saved->id;
             if (saved->HasPicture()) myThumbnails.erase(saved->picture);   // a new picture under the same name
             // Already on the part: it takes the changed definition (and picture).
-            doc::Look& look = app.Doc()->doc.look;
+            doc::Look& look = LookOf(*app.Doc());
             if (look.Refresh(*saved)) {
                 if (saved->HasPicture()) look.pictures[saved->picture] = myLibrary.PictureBytes(saved->picture);
                 look.Prune();
-                app.Doc()->doc.TouchLook();
+                Touch(*app.Doc());
             }
         } else {
             app.notes.Error(Tr(saved.GetError().message));
@@ -510,11 +684,19 @@ void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
 void AppearanceEditor::DrawToolbarPicker(AppContext& app, Session* session, ImVec2 pos, float width, float height) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
-    const bool enabled = session && !session->model.Bodies().empty();
-    // What the part looks like now: one appearance on every body, or a mix.
+    // In an assembly it paints the component chosen there (nothing chosen:
+    // nothing to paint), in a part every body.
+    AssemblyState* st = session ? session->assembly.get() : nullptr;
+    const ObjectId component = st && st->assembly.FindComponent(st->selected) ? st->selected : ObjectId{};
+    const bool enabled = session && !session->model.Bodies().empty() && (!st || component);
+    // What it looks like now: one appearance on every body, or a mix.
     const doc::Appearance* current = nullptr;
     bool mixed = false;
-    if (enabled) {
+    if (enabled && st) {
+        const doc::Look& look = st->ShownLook();
+        current = look.OfBody(component);
+        mixed = std::any_of(look.faces.begin(), look.faces.end(), [&](const doc::Look::FaceLook& f) { return f.body == component; });
+    } else if (enabled) {
         const doc::Look& look = session->doc.look;
         const auto& bodies = session->model.Bodies();
         current = look.OfBody(bodies.front().id);
@@ -531,12 +713,14 @@ void AppearanceEditor::DrawToolbarPicker(AppContext& app, Session* session, ImVe
     dl->AddRect(pos, {pos.x + width, pos.y + height}, ui::ToU32(c.fieldBorder), ui.S(6));
     const float s = ui.S(16);
     if (enabled) Sample(app, dl, {pos.x + ui.S(7), pos.y + (height - s) / 2}, s, mixed ? nullptr : current);
-    const std::string name = !enabled ? std::string(Tr("Внешний вид")) : mixed ? std::string(Tr("Разные")) : current ? NameOf(*current) : std::string(Tr("По умолчанию"));
+    const std::string name = !enabled ? std::string(st ? Tr("Выберите компонент") : Tr("Внешний вид")) : mixed ? std::string(Tr("Разные")) : current ? NameOf(*current) : std::string(Tr("По умолчанию"));
     const ImVec4 clip{pos.x, pos.y, pos.x + width - ui.S(22), pos.y + height};
     dl->AddText(ui.fonts.body, ui.S(12), {pos.x + ui.S(30), pos.y + (height - ui.S(12)) / 2 - ui.S(1)},
                 ui::ToU32(enabled ? c.text : c.textMuted), name.c_str(), nullptr, 0, &clip);
     ui.icons.Draw(dl, "ui-chevron-down", {pos.x + width - ui.S(18), pos.y + (height - ui.S(10)) / 2}, ui.S(10), c.textMuted);
-    if (hovered) ui::ItemTooltip(ui, Tr("Внешний вид детали (всех тел). Грани и отдельные тела — «Вид → Внешний вид»"));
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ui::ItemTooltip(ui, st ? Tr("Внешний вид выбранного компонента, только в этой сборке. Сначала выберите компонент. Грани и запись в деталь — «Вид → Внешний вид»")
+                               : Tr("Внешний вид детали (всех тел). Грани и отдельные тела — «Вид → Внешний вид»"));
     if (clicked) {
         myLibrary.Reload();
         ImGui::OpenPopup("##look-picker");
@@ -551,6 +735,19 @@ void AppearanceEditor::DrawToolbarPicker(AppContext& app, Session* session, ImVe
     if (const auto picked = List(app, mixed ? std::string_view("-") : std::string_view(chosen), ui.S(224), false); picked && session) {
         const doc::Appearance* a = picked->empty() ? nullptr : doc::FindStandard(*picked);
         if (!a && !picked->empty()) a = myLibrary.Find(*picked);
+        if (st) {
+            doc::Look look = st->assembly.look;
+            look.SetBody(component, a);
+            if (a && a->HasPicture()) look.pictures[a->picture] = myLibrary.PictureBytes(a->picture);
+            if (look != st->assembly.look) {
+                st->Checkpoint(Tr("Внешний вид"));
+                st->assembly.look = std::move(look);
+                st->assembly.TouchLook();
+            }
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
         doc::Look look = session->doc.look;
         for (const auto& b : session->model.Bodies()) look.SetBody(b.id, a);
         if (a && a->HasPicture()) look.pictures[a->picture] = myLibrary.PictureBytes(a->picture);
@@ -584,16 +781,33 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     ImGui::BeginGroup();
     const float inner = width - ui.S(28);
 
-    if (!myTargets.empty()) {
-        Section(app, Trf("Выбрано граней: {}", myTargets.size()).c_str());
-        Caption(app, Tr("Выбранный ниже вид сразу ложится на эти грани. Щелчок по другой грани в модели красит и её."), inner);
-    } else {
-        Section(app, Tr("Щелчок красит"));
-        static constexpr std::array<const char*, 2> targets{N_("Тело целиком"), N_("Грань")};
-        const int target = myFaces ? 1 : 0;
-        if (const int t = ui::Segmented(ui, "look-target", targets, target, 2, inner); t != target) myFaces = t == 1;
-        Caption(app, myFaces ? Tr("Щелчок по грани красит только её; повторный щелчок другим цветом перекрашивает.")
-                             : Tr("Щелчок по телу красит его целиком (свои цвета граней этого тела сбрасываются)."),
+    // What is painted: a whole object (the default) or single faces.
+    Section(app, Tr("Что красить"));
+    static constexpr std::array<const char*, 2> targets{N_("Объект"), N_("Поверхность")};
+    const int target = myFaces ? 1 : 0;
+    if (const int t = ui::Segmented(ui, "look-target", targets, target, 2, inner); t != target) {
+        myFaces = t == 1;
+        myTargetsChosen = myChosen;   // the next choice goes on the targets in the new mode
+    }
+    if (const std::size_t n = TargetCount(); n > 0)
+        Caption(app, (myFaces ? Trf("Выбрано граней: {}. Вид из списка сразу ложится на них; щелчок по другой грани красит и её.", n)
+                              : Trf("Выбрано объектов: {}. Вид из списка сразу ложится на них целиком; щелчок по другому объекту красит и его.", n))
+                         .c_str(),
+                inner);
+    else
+        Caption(app, myFaces ? Tr("Щелчок по грани красит только её; повторный щелчок другим видом перекрашивает.")
+                             : session.assembly ? Tr("Щелчок по компоненту красит его целиком. Без выбранного компонента выбор в списке ничего не красит.")
+                                                : Tr("Щелчок по телу красит его целиком (свои виды граней этого тела сбрасываются)."),
+                inner);
+    // Assembly: where the look is kept.
+    if (session.assembly) {
+        ImGui::Dummy({0, ui.S(8)});
+        Section(app, Tr("Где сохранить"));
+        static constexpr std::array<const char*, 2> places{N_("Только в сборке"), N_("В детали")};
+        const int place = myToPart ? 1 : 0;
+        if (const int p = ui::Segmented(ui, "look-place", places, place, 2, inner); p != place) myToPart = p == 1;
+        Caption(app, myToPart ? Tr("По «Готово» вид запишется в файлы деталей: изменятся все их копии, в этой и других сборках.")
+                              : Tr("Вид только для этой сборки: файлы деталей не меняются."),
                 inner);
     }
     ImGui::Dummy({0, ui.S(10)});
@@ -613,16 +827,16 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     ImGui::Dummy({0, ui.S(10)});
 
     DrawLibrary(app, inner);
-    if (!myTargets.empty() && myChosen != myTargetsChosen) {
+    if (TargetCount() > 0 && myChosen != myTargetsChosen) {
         myTargetsChosen = myChosen;
         ApplyToTargets(app, session);
     }
 
-    if (!session.doc.look.Empty()) {
+    if (!LookOf(session).Empty()) {
         ImGui::Dummy({0, ui.S(10)});
-        if (ui::LinkButton(ui, "##reset-look", Tr("Сбросить все цвета детали"))) {
-            session.doc.look = {};
-            session.doc.TouchLook();
+        if (ui::LinkButton(ui, "##reset-look", session.assembly ? Tr("Сбросить виды, заданные в сборке") : Tr("Сбросить все цвета детали"))) {
+            LookOf(session) = {};
+            Touch(session);
         }
     }
     ImGui::EndGroup();
