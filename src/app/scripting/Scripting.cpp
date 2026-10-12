@@ -30,6 +30,7 @@ const Commands& Table() {
         AddFeatureCommands(all);
         AddWorkCommands(all);
         AddViewCommands(all);
+        AddAssemblyCommands(all);
         return all;
     }();
     return table;

@@ -839,8 +839,9 @@ std::optional<Image> Viewport::Snapshot(const CameraState& camera, int width, in
     const bool bgra = pixels.Format() == Image_Format_BGRA;
     if (!rgba && !bgra) return std::nullopt;
     for (int y = 0; y < out.height; ++y) {
-        const auto row = static_cast<std::size_t>(pixels.IsTopDown() ? y : out.height - 1 - y);
-        const std::uint8_t* from = pixels.Row(row);
+        // Row(0) is the top row whichever way the bytes lie (Image_PixMap
+        // applies its own top-down order).
+        const std::uint8_t* from = pixels.Row(static_cast<std::size_t>(y));
         std::uint8_t* to = &out.rgba[static_cast<std::size_t>(y) * static_cast<std::size_t>(out.width) * 4];
         for (int x = 0; x < out.width; ++x, from += 4, to += 4) {
             to[0] = bgra ? from[2] : from[0];

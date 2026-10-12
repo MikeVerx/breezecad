@@ -5,6 +5,7 @@
 
 #include "app/AppContext.h"
 #include "document/StandardParts.h"
+#include "kernel/AssemblyModel.h"
 
 #include <filesystem>
 
@@ -53,5 +54,16 @@ void DrawConstraintPanel(AppContext& app, Session& session, float width);
 
 /// "Закрепить" / "Освободить" the selected component.
 void ToggleGrounded(AppContext& app);
+
+// --- for commands (scripting): what the clicks above do ----------------------
+
+/// What a pick for a constraint of this type takes (a face, a circular edge, an axis).
+kernel::AssemblyPick ConstraintPick(assembly::ConstraintType type);
+/// Why `g` cannot be used for this constraint (with `first` already picked,
+/// if any; Russian, untranslated), or nullptr when it can.
+const char* ConstraintUnfit(assembly::ConstraintType type, const assembly::GeometryRef& g, const assembly::GeometryRef* first);
+/// The file of a standard part next to the assembly (made and saved the
+/// first time); nullopt with a notification when it cannot be made.
+std::optional<std::filesystem::path> StandardPartFileOf(AppContext& app, const Session& session, const doc::parts::Request& request);
 
 } // namespace bz::app
