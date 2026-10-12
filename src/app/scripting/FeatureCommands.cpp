@@ -27,42 +27,6 @@ namespace bz::app::scripting {
 
 namespace {
 
-/// Adds `f` at the end of the part (before the end marker), names it and
-/// its unnamed parameters, rebuilds; the reply says how it went.
-Json Add(Session& s, std::unique_ptr<doc::Feature> f, const Json& args, const char* title, std::vector<Parameter*> name = {}) {
-    f->id   = s.doc.Ids().Next();
-    f->name = Has(args, "name") ? Text(args, "name") : s.doc.UniqueFeatureName(Tr(title));
-    int next = std::stoi(s.doc.NextParameterName().substr(1));
-    for (Parameter* p : name)
-        if (p->name.empty()) p->name = "d" + std::to_string(next++);
-    const ObjectId id = f->id;
-    s.Execute(doc::AddFeature(std::move(f), s.doc.EndMarker()));
-    Json out = AfterChange(s, id);
-    RollBackIfFailed(s, id);
-    for (const Parameter* p : s.doc.Find(id)->Parameters())
-        if (!p->name.empty()) out["parameters"].push_back({{"name", p->name}, {"expression", p->expression}});
-    if (const auto props = s.model.Properties()) out["volume_mm3"] = props->volume;
-    return out;
-}
-
-/// An origin plane by name or a work plane by id.
-ObjectId PlaneId(Session& s, const Json& args, const char* key) {
-    const Json& v = Required(args, key);
-    if (v.is_string()) {
-        const std::string p = v.get<std::string>();
-        if (p == "XY") return doc::origin::kPlaneXY;
-        if (p == "XZ") return doc::origin::kPlaneXZ;
-        if (p == "YZ") return doc::origin::kPlaneYZ;
-        for (const auto& f : s.doc.Features())
-            if (f->name == p && f->Type() == doc::WorkPlaneFeature::kType) return f->id;
-        Fail(std::format("«{}»: нет плоскости «{}» (XY, XZ, YZ или рабочая плоскость)", key, p));
-    }
-    const ObjectId id = Id(args, key);
-    if (doc::origin::PlaneFrame(id)) return id;
-    if (!s.doc.FindAs<doc::WorkPlaneFeature>(id)) Fail(std::format("«{}»: {} — не плоскость", key, id.value));
-    return id;
-}
-
 doc::ModelAxis AxisArg(const Json& args, const char* key, doc::ModelAxis fallback) {
     static const std::vector<std::string> kAxes = {"X", "Y", "Z"};
     return static_cast<doc::ModelAxis>(Choice(args, key, kAxes, static_cast<std::size_t>(fallback)));
@@ -108,7 +72,7 @@ Json Hole(AppContext& app, const Json& args) {
     if (!f->throughAll) name.push_back(&f->depth);
     if (f->type == doc::HoleType::Counterbore) name.insert(name.end(), {&f->headDiameter, &f->headDepth});
     if (f->type == doc::HoleType::Countersink) name.push_back(&f->sinkDiameter);
-    return Add(s, std::move(f), args, "Отверстие", name);
+    return AddToPart(s, std::move(f), args, "Отверстие", name);
 }
 
 template <class T>
@@ -120,7 +84,7 @@ Json EdgeOp(AppContext& app, const Json& args, const char* title, const char* va
     if constexpr (std::is_same_v<T, doc::FilletFeature>) p = &f->radius;
     else p = &f->distance;
     p->expression = Expression(args, valueKey);
-    return Add(s, std::move(f), args, title, std::vector<Parameter*>{p});
+    return AddToPart(s, std::move(f), args, title, std::vector<Parameter*>{p});
 }
 
 Json Shell(AppContext& app, const Json& args) {
@@ -130,7 +94,7 @@ Json Shell(AppContext& app, const Json& args) {
     f->thickness.expression = Expression(args, "thickness");
     f->outward = Flag(args, "outward", false);
     std::vector<Parameter*> name{&f->thickness};
-    return Add(s, std::move(f), args, "Оболочка", name);
+    return AddToPart(s, std::move(f), args, "Оболочка", name);
 }
 
 Json Pattern(AppContext& app, const Json& args) {
@@ -165,7 +129,7 @@ Json Pattern(AppContext& app, const Json& args) {
         name = {&f->circularCount, &f->angle};
     }
     const char* title = f->kind == doc::PatternKind::Circular ? "Круговой массив" : "Массив";
-    return Add(s, std::move(f), args, title, name);
+    return AddToPart(s, std::move(f), args, title, name);
 }
 
 Json Mirror(AppContext& app, const Json& args) {
@@ -178,9 +142,9 @@ Json Mirror(AppContext& app, const Json& args) {
         if (face.kind != doc::SurfaceKind::Plane) Fail("Зеркало — относительно плоской грани");
         f->face = face.ref;
     } else {
-        f->plane = PlaneId(s, args, "plane");
+        f->plane = PlaneArg(s, args, "plane");
     }
-    return Add(s, std::move(f), args, "Зеркало");
+    return AddToPart(s, std::move(f), args, "Зеркало");
 }
 
 Json Loft(AppContext& app, const Json& args) {
@@ -196,7 +160,7 @@ Json Loft(AppContext& app, const Json& args) {
     const bool hasBody = !s.model.Bodies().empty();
     f->operation = static_cast<doc::BooleanOp>(Choice(args, "operation", kOperations, hasBody ? 1 : 0));
     f->ruled     = Flag(args, "ruled", false);
-    return Add(s, std::move(f), args, "Лофт");
+    return AddToPart(s, std::move(f), args, "Лофт");
 }
 
 Json Section(AppContext& app, const Json& args) {
@@ -207,10 +171,10 @@ Json Section(AppContext& app, const Json& args) {
         if (face.kind != doc::SurfaceKind::Plane) Fail("Сечение — плоской гранью или плоскостью");
         f->face = face.ref;
     } else {
-        f->plane = PlaneId(s, args, "plane");
+        f->plane = PlaneArg(s, args, "plane");
     }
     f->flipped = Flag(args, "flipped", false);
-    return Add(s, std::move(f), args, "Сечение");
+    return AddToPart(s, std::move(f), args, "Сечение");
 }
 
 Json OpSchema(Json own, std::vector<std::string> required = {}) {

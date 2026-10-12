@@ -25,6 +25,7 @@ add_executable(breezecad WIN32
     scripting/TopologyCommands.cpp
     scripting/GenericCommands.cpp
     scripting/FeatureCommands.cpp
+    scripting/WorkCommands.cpp
     features/AppearanceEditor.cpp
     features/CopyEditors.cpp
     features/CoilEditor.cpp

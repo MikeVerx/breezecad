@@ -54,6 +54,7 @@ void AddSolidCommands(Commands& out);      // SolidCommands.cpp: extrude, revolv
 void AddTopologyCommands(Commands& out);   // TopologyCommands.cpp: faces, edges, measure
 void AddGenericCommands(Commands& out);    // GenericCommands.cpp: any feature by its fields, the tree
 void AddFeatureCommands(Commands& out);    // FeatureCommands.cpp: hole, fillet, shell, patterns, mirror, loft
+void AddWorkCommands(Commands& out);       // WorkCommands.cpp: work planes, axes, points
 
 // --- schemas ----------------------------------------------------------------
 
@@ -101,6 +102,8 @@ doc::Feature& FeatureOf(Session& part, ObjectId id);
 const kernel::Topology& TopologyOf(Session& part);
 /// A face by its number in part.faces.
 const kernel::FaceInfo& FaceArg(Session& part, const Json& value, const char* what);
+/// An edge by its number in part.edges.
+const kernel::EdgeInfo& EdgeArg(Session& part, const Json& value, const char* what);
 /// A list of edge numbers (part.edges), as references to store.
 std::vector<doc::EdgeReference> EdgeRefs(Session& part, const Json& args, const char* key);
 /// A list of face numbers (part.faces), as references to store.
@@ -120,6 +123,13 @@ Json AfterChange(Session& part, ObjectId feature);
 /// back (undo) and the caller gets the reason as an error — no broken item
 /// is left in the tree. Nothing happens for one that built (or warned).
 void RollBackIfFailed(Session& part, ObjectId feature);
+/// Adds `f` at the end of the part (before the end marker), names it
+/// (args.name or "<title>N") and gives the parameters in `name` a dN name;
+/// rebuilds, rolls back on failure. The reply: the feature, its named
+/// parameters and the part's volume.
+Json AddToPart(Session& part, std::unique_ptr<doc::Feature> f, const Json& args, const char* title, std::vector<Parameter*> name = {});
+/// A plane: "XY" / "XZ" / "YZ", a work plane's name or its id.
+ObjectId PlaneArg(Session& part, const Json& args, const char* key);
 
 } // namespace scripting
 } // namespace bz::app

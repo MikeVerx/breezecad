@@ -6,7 +6,10 @@
 #include "app/scripting/Commands.h"
 #include "core/I18n.h"
 #include "core/Log.h"
+#include "document/Commands.h"
 #include "document/Feature.h"
+#include "document/Origin.h"
+#include "document/WorkPlaneFeature.h"
 
 #include <cmath>
 #include <format>
@@ -25,6 +28,7 @@ const Commands& Table() {
         AddTopologyCommands(all);
         AddGenericCommands(all);
         AddFeatureCommands(all);
+        AddWorkCommands(all);
         return all;
     }();
     return table;
@@ -222,18 +226,20 @@ const kernel::FaceInfo& FaceArg(Session& part, const Json& value, const char* wh
     return t.faces[static_cast<std::size_t>(i)];
 }
 
+const kernel::EdgeInfo& EdgeArg(Session& part, const Json& value, const char* what) {
+    if (!value.is_number_integer()) Fail(std::format("«{}» — номер ребра из part.edges", what));
+    const kernel::Topology& t = TopologyOf(part);
+    const long long i = value.get<long long>();
+    if (i < 0 || static_cast<std::size_t>(i) >= t.edges.size())
+        Fail(std::format("Нет ребра {} (в детали {} рёбер; список — part.edges, номера меняются после каждой правки)", i, t.edges.size()));
+    return t.edges[static_cast<std::size_t>(i)];
+}
+
 std::vector<doc::EdgeReference> EdgeRefs(Session& part, const Json& args, const char* key) {
     const Json& list = Required(args, key);
     if (!list.is_array() || list.empty()) Fail(std::format("«{}» — непустой список номеров рёбер из part.edges", key));
-    const kernel::Topology& t = TopologyOf(part);
     std::vector<doc::EdgeReference> out;
-    for (const Json& v : list) {
-        if (!v.is_number_integer()) Fail(std::format("«{}»: номера рёбер — целые числа", key));
-        const long long i = v.get<long long>();
-        if (i < 0 || static_cast<std::size_t>(i) >= t.edges.size())
-            Fail(std::format("Нет ребра {} (в детали {} рёбер; список — part.edges, номера меняются после каждой правки)", i, t.edges.size()));
-        out.push_back(t.edges[static_cast<std::size_t>(i)].ref);
-    }
+    for (const Json& v : list) out.push_back(EdgeArg(part, v, key).ref);
     return out;
 }
 
@@ -288,6 +294,39 @@ void RollBackIfFailed(Session& part, ObjectId feature) {
     part.Undo();
     part.RebuildNow();
     Fail(std::format("«{}» не построена, шаг отменён: {}", name, why));
+}
+
+Json AddToPart(Session& s, std::unique_ptr<doc::Feature> f, const Json& args, const char* title, std::vector<Parameter*> name) {
+    f->id   = s.doc.Ids().Next();
+    f->name = Has(args, "name") ? Text(args, "name") : s.doc.UniqueFeatureName(Tr(title));
+    int next = std::stoi(s.doc.NextParameterName().substr(1));
+    for (Parameter* p : name)
+        if (p->name.empty()) p->name = "d" + std::to_string(next++);
+    const ObjectId id = f->id;
+    s.Execute(doc::AddFeature(std::move(f), s.doc.EndMarker()));
+    Json out = AfterChange(s, id);
+    RollBackIfFailed(s, id);
+    for (const Parameter* p : s.doc.Find(id)->Parameters())
+        if (!p->name.empty()) out["parameters"].push_back({{"name", p->name}, {"expression", p->expression}});
+    if (const auto props = s.model.Properties()) out["volume_mm3"] = props->volume;
+    return out;
+}
+
+ObjectId PlaneArg(Session& s, const Json& args, const char* key) {
+    const Json& v = Required(args, key);
+    if (v.is_string()) {
+        const std::string p = v.get<std::string>();
+        if (p == "XY") return doc::origin::kPlaneXY;
+        if (p == "XZ") return doc::origin::kPlaneXZ;
+        if (p == "YZ") return doc::origin::kPlaneYZ;
+        for (const auto& f : s.doc.Features())
+            if (f->name == p && f->Type() == doc::WorkPlaneFeature::kType) return f->id;
+        Fail(std::format("«{}»: нет плоскости «{}» (XY, XZ, YZ или рабочая плоскость)", key, p));
+    }
+    const ObjectId id = Id(args, key);
+    if (doc::origin::PlaneFrame(id)) return id;
+    if (!s.doc.FindAs<doc::WorkPlaneFeature>(id)) Fail(std::format("«{}»: {} — не плоскость", key, id.value));
+    return id;
 }
 
 } // namespace bz::app::scripting
