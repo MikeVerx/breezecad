@@ -28,6 +28,9 @@ option(BZ_BUILD_TESTS "Build unit tests"                          ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+# std::thread: glibc before 2.34 (the Linux package targets 2.28) keeps
+# pthread_create in libpthread, which must then be linked explicitly.
+find_package(Threads REQUIRED)
 include(CompilerWarnings)
 include(ThirdParty)
 include(OpenCascade)
