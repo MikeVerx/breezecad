@@ -729,6 +729,10 @@ void DrawMouseSettings(AppContext& app, float width) {
         const int inv = s.invertOrbit ? 1 : 0;
         ui::FieldLabel(ui, Tr("Вращение по вертикали"));
         if (const int n = ui::Segmented(ui, "orbit-invert", vertical, inv, 2, width); n != inv) s.invertOrbit = n == 1;
+        static constexpr std::array<const char*, 2> sideways{N_("Свободное"), N_("Поворотный стол")};
+        const int table = s.turntableOrbit ? 1 : 0;
+        ui::FieldLabel(ui, Tr("Вращение вбок"));
+        if (const int n = ui::Segmented(ui, "orbit-turntable", sideways, table, 2, width); n != table) s.turntableOrbit = n == 1;
     }
     {
         ui::FontScope font(ui.fonts.caption);

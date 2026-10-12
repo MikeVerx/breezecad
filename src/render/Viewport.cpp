@@ -818,14 +818,16 @@ void Viewport::SetCamera(const CameraState& state) {
     myImpl->dirty = true;
 }
 
-void Viewport::Orbit(double yaw, double pitch, Vec3 pivot) {
+void Viewport::Orbit(double yaw, double pitch, Vec3 pivot, bool turntable) {
     CameraState c = Camera();
     const Vec3 dir = (c.center - c.eye).Normalized();
     const Vec3 right = dir.Cross(c.up).Normalized();
 
     gp_Trsf pitchRot, yawRot;
     pitchRot.SetRotation(gp_Ax1(ToPnt(pivot), ToDir(right)), -pitch);
-    yawRot.SetRotation(gp_Ax1(ToPnt(pivot), gp::DZ()), -yaw);
+    // Free: sideways drag turns about the screen's vertical, whatever the
+    // view (a model seen from the top no longer spins in its own plane).
+    yawRot.SetRotation(gp_Ax1(ToPnt(pivot), turntable ? gp::DZ() : ToDir(c.up)), -yaw);
     const gp_Trsf t = yawRot.Multiplied(pitchRot);
 
     const gp_Pnt eye = ToPnt(c.eye).Transformed(t);

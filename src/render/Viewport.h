@@ -119,9 +119,10 @@ public:
     CameraState    Camera() const;
     void           SetCamera(const CameraState& camera);
 
-    /// Turntable orbit: `yaw` around world Z, `pitch` around the screen's
-    /// horizontal axis, both in radians, about `pivot`.
-    void Orbit(double yaw, double pitch, Vec3 pivot);
+    /// Orbit about `pivot`, angles in radians: `pitch` around the screen's
+    /// horizontal axis; `yaw` around the screen's vertical axis (free, as in
+    /// Inventor and KOMPAS) or, with `turntable`, around world Z.
+    void Orbit(double yaw, double pitch, Vec3 pivot, bool turntable = false);
     void Pan(double dxPixels, double dyPixels);
     /// Zooms by `factor` (>1 closer) keeping the point under the cursor still.
     void ZoomAt(double factor, Vec2 pixel);

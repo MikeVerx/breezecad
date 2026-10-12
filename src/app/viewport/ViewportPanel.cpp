@@ -198,7 +198,8 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
         if (nav.moved && (io.MouseDelta.x != 0 || io.MouseDelta.y != 0)) {
             if (nav.orbiting) {
                 const double k = kOrbitPerPixel * app.settings.orbitSpeed;
-                app.viewport.Orbit(io.MouseDelta.x * k, io.MouseDelta.y * k * (app.settings.invertOrbit ? -1.0 : 1.0), nav.pivot);
+                app.viewport.Orbit(io.MouseDelta.x * k, io.MouseDelta.y * k * (app.settings.invertOrbit ? -1.0 : 1.0), nav.pivot,
+                                   app.settings.turntableOrbit);
             }
             if (nav.panning) app.viewport.Pan(io.MouseDelta.x, io.MouseDelta.y);
             if (nav.zooming) app.viewport.ZoomAt(std::pow(1.01, static_cast<double>(-io.MouseDelta.y)), vf.ToLocal(nav.zoomAt));
@@ -378,7 +379,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const ui::ViewCubeAction cube = ui::DrawViewCube(ui, vf.projection, pos, {pos.x + size.x, pos.y + size.y}, app.settings.showTriad);
     if (cube.lookFrom) LookFrom(app, cube.lookFrom->first, cube.lookFrom->second);
     if (cube.home) HomeView(app);
-    if (cube.dragYaw != 0 || cube.dragPitch != 0) app.viewport.Orbit(cube.dragYaw, cube.dragPitch, app.viewport.ModelCenter());
+    if (cube.dragYaw != 0 || cube.dragPitch != 0) app.viewport.Orbit(cube.dragYaw, cube.dragPitch, app.viewport.ModelCenter(), app.settings.turntableOrbit);
 
     session.camera = app.viewport.Camera();
     EndArea();
