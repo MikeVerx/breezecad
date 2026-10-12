@@ -1,7 +1,12 @@
 #include "render/TexturedFaces.h"
 
 #include <BRepAdaptor_Surface.hxx>
+#include <AIS_Shape.hxx>
+#include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
+#include <StdPrs_ToolTriangulatedShape.hxx>
+#include <StdSelect_BRepSelectionTool.hxx>
+#include <TopoDS_Compound.hxx>
 #include <Graphic3d_ArrayOfTriangles.hxx>
 #include <Graphic3d_AspectFillArea3d.hxx>
 #include <Graphic3d_Group.hxx>
@@ -138,6 +143,16 @@ void TexturedFaces::Compute(const Handle(PrsMgr_PresentationManager)&, const Han
     Handle(Graphic3d_Group) group = presentation->NewGroup();
     group->SetGroupPrimitivesAspect(aspect);
     group->AddPrimitiveArray(array);
+}
+
+void TexturedFaces::ComputeSelection(const Handle(SelectMgr_Selection)& selection, const Standard_Integer mode) {
+    if (mode != AIS_Shape::SelectionMode(TopAbs_FACE)) return;
+    TopoDS_Compound all;
+    BRep_Builder builder;
+    builder.MakeCompound(all);
+    for (const TopoDS_Face& face : myFaces) builder.Add(all, face);
+    StdSelect_BRepSelectionTool::Load(selection, Handle(SelectMgr_SelectableObject)(this), all, TopAbs_FACE,
+                                      StdPrs_ToolTriangulatedShape::GetDeflection(all, myDrawer), myDrawer->DeviationAngle());
 }
 
 } // namespace bz::render
