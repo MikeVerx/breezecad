@@ -1,0 +1,1305 @@
+[1/253] Build info
+[2/253] Building C object CMakeFiles/bz_miniz.dir/third_party/miniz/miniz.c.o
+[3/253] Building CXX object src/core/CMakeFiles/bz_core.dir/BuildInfo.cpp.o
+[4/253] Building CXX object src/core/CMakeFiles/bz_core.dir/Expression.cpp.o
+[5/253] Building C object CMakeFiles/bz_stb.dir/third_party/stb/stb_image.c.o
+[6/253] Linking C static library libbz_stb.a
+[7/253] Building CXX object src/core/CMakeFiles/bz_core.dir/FaultGuard.cpp.o
+[8/253] Building CXX object src/core/CMakeFiles/bz_core.dir/Monitor.cpp.o
+[9/253] Building CXX object src/core/CMakeFiles/bz_core.dir/Log.cpp.o
+[10/253] Building CXX object src/core/CMakeFiles/bz_core.dir/Image.cpp.o
+[11/253] Building CXX object src/core/CMakeFiles/bz_core.dir/I18n.cpp.o
+[12/253] Building CXX object src/core/CMakeFiles/bz_core.dir/Units.cpp.o
+[13/253] Building CXX object src/core/CMakeFiles/bz_core.dir/ViewProjection.cpp.o
+[14/253] Building C object CMakeFiles/bz_miniz.dir/third_party/miniz/miniz_tdef.c.o
+[15/253] Building C object CMakeFiles/bz_miniz.dir/third_party/miniz/miniz_tinfl.c.o
+[16/253] Building C object CMakeFiles/bz_miniz.dir/third_party/miniz/miniz_zip.c.o
+/home/runner/work/breezecad/breezecad/third_party/miniz/miniz_zip.c:165:9: note: '#pragma message: Using fopen, ftello, fseeko, stat() etc. path for file I/O - this path may not support large files.'
+  165 | #pragma message("Using fopen, ftello, fseeko, stat() etc. path for file I/O - this path may not support large files.")
+      |         ^~~~~~~
+[17/253] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/EquationSystem.cpp.o
+[18/253] Building CXX object src/core/CMakeFiles/bz_core.dir/Profile.cpp.o
+[19/253] Linking CXX static library src/core/libbz_core.a
+[20/253] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Mirror.cpp.o
+[21/253] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Shapes.cpp.o
+[22/253] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Move.cpp.o
+[23/253] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Fillet.cpp.o
+[24/253] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Sketch.cpp.o
+[25/253] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/SplineGeometry.cpp.o
+[26/253] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Offset.cpp.o
+In file included from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/stl_iterator.h:85,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/ranges_base.h:37,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/ranges_util.h:34,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/tuple:44,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/functional:53,
+                 from /home/runner/work/breezecad/breezecad/src/core/Id.h:5,
+                 from /home/runner/work/breezecad/breezecad/src/sketch/Sketch.h:3,
+                 from /home/runner/work/breezecad/breezecad/src/sketch/Offset.h:7,
+                 from /home/runner/work/breezecad/breezecad/src/sketch/Offset.cpp:1:
+In function 'constexpr decltype (::new(void*(0)) _Tp) std::construct_at(_Tp*, _Args&& ...) [with _Tp = bz::sketch::Chain::Piece; _Args = {bz::sketch::Chain::Piece}]',
+    inlined from 'static constexpr void std::allocator_traits<std::allocator<_Up> >::construct(allocator_type&, _Up*, _Args&& ...) [with _Up = bz::sketch::Chain::Piece; _Args = {bz::sketch::Chain::Piece}; _Tp = bz::sketch::Chain::Piece]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/alloc_traits.h:540:21,
+    inlined from 'constexpr void std::vector<_Tp, _Alloc>::_M_realloc_insert(iterator, _Args&& ...) [with _Args = {bz::sketch::Chain::Piece}; _Tp = bz::sketch::Chain::Piece; _Alloc = std::allocator<bz::sketch::Chain::Piece>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/vector.tcc:468:28,
+    inlined from 'constexpr std::vector<_Tp, _Alloc>::iterator std::vector<_Tp, _Alloc>::_M_insert_rval(const_iterator, value_type&&) [with _Tp = bz::sketch::Chain::Piece; _Alloc = std::allocator<bz::sketch::Chain::Piece>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/vector.tcc:372:19,
+    inlined from 'constexpr std::vector<_Tp, _Alloc>::iterator std::vector<_Tp, _Alloc>::insert(const_iterator, value_type&&) [with _Tp = bz::sketch::Chain::Piece; _Alloc = std::allocator<bz::sketch::Chain::Piece>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/stl_vector.h:1394:30,
+    inlined from 'std::optional<bz::sketch::Chain> bz::sketch::ChainOf(const Sketch&, bz::ObjectId)' at /home/runner/work/breezecad/breezecad/src/sketch/Offset.cpp:222:28:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/stl_construct.h:97:14: warning: potential null pointer dereference [-Wnull-dereference]
+   97 |     { return ::new((void*)__location) _Tp(std::forward<_Args>(__args)...); }
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[27/253] Linking C static library libbz_miniz.a
+[28/253] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Trim.cpp.o
+[29/253] Building CXX object src/sketch/CMakeFiles/bz_sketch.dir/Solver.cpp.o
+[30/253] Linking CXX static library src/sketch/libbz_sketch.a
+[31/253] Building CXX object src/document/CMakeFiles/bz_document.dir/Appearance.cpp.o
+/home/runner/work/breezecad/breezecad/src/document/Appearance.cpp: In function 'bz::doc::Appearance bz::doc::{anonymous}::Make(const char*, const char*, uint32_t, uint32_t, bz::doc::Finish, float)':
+/home/runner/work/breezecad/breezecad/src/document/Appearance.cpp:19:73: warning: missing initializer for member 'bz::doc::Appearance::picture' [-Wmissing-field-initializers]
+   19 |     return {id, name, Color::Hex(face, alpha), Color::Hex(edges), finish};
+      |                                                                         ^
+[32/253] Building CXX object src/document/CMakeFiles/bz_document.dir/Commands.cpp.o
+[33/253] Building CXX object src/document/CMakeFiles/bz_document.dir/DocumentTypes.cpp.o
+[34/253] Building CXX object src/document/CMakeFiles/bz_document.dir/Document.cpp.o
+[35/253] Building CXX object src/document/CMakeFiles/bz_document.dir/SectionFeature.cpp.o
+[36/253] Building CXX object src/document/CMakeFiles/bz_document.dir/CoilFeature.cpp.o
+[37/253] Building CXX object src/document/CMakeFiles/bz_document.dir/ShellFeature.cpp.o
+[38/253] Building CXX object src/document/CMakeFiles/bz_document.dir/BzcFile.cpp.o
+/home/runner/work/breezecad/breezecad/src/document/BzcFile.cpp: In function 'std::string bz::doc::DocumentToJson(const Document&)':
+/home/runner/work/breezecad/breezecad/src/document/BzcFile.cpp:78:26: warning: unused variable 'reserved' [-Wunused-variable]
+   78 |         for (const char* reserved : {"id", "type", "name", "suppressed"})
+      |                          ^~~~~~~~
+In file included from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/ios:45,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/ostream:40,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/unique_ptr.h:42,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/memory:78,
+                 from /home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json_fwd.hpp:14,
+                 from /home/runner/work/breezecad/breezecad/src/document/Appearance.h:13,
+                 from /home/runner/work/breezecad/breezecad/src/document/Document.h:6,
+                 from /home/runner/work/breezecad/breezecad/src/document/BzcFile.h:7,
+                 from /home/runner/work/breezecad/breezecad/src/document/BzcFile.cpp:1:
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::egptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:49,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:182:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'bz::Expected<std::__cxx11::basic_string<char> > bz::doc::{anonymous}::ReadWholeFile(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/src/document/BzcFile.cpp:49:17,
+    inlined from 'bz::Expected<bz::doc::BzcArchive> bz::doc::ReadBzcArchive(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/src/document/BzcFile.cpp:186:53:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:495:30: warning: potential null pointer dereference [-Wnull-dereference]
+  495 |       egptr() const { return _M_in_end; }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::gptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:33,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:182:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'bz::Expected<std::__cxx11::basic_string<char> > bz::doc::{anonymous}::ReadWholeFile(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/src/document/BzcFile.cpp:49:17,
+    inlined from 'bz::Expected<bz::doc::BzcArchive> bz::doc::ReadBzcArchive(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/src/document/BzcFile.cpp:186:53:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:492:30: warning: potential null pointer dereference [-Wnull-dereference]
+  492 |       gptr()  const { return _M_in_cur;  }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::egptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:49,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:209:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'bz::Expected<std::__cxx11::basic_string<char> > bz::doc::{anonymous}::ReadWholeFile(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/src/document/BzcFile.cpp:49:17,
+    inlined from 'bz::Expected<bz::doc::BzcArchive> bz::doc::ReadBzcArchive(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/src/document/BzcFile.cpp:186:53:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:495:30: warning: potential null pointer dereference [-Wnull-dereference]
+  495 |       egptr() const { return _M_in_end; }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::gptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:33,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:209:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'bz::Expected<std::__cxx11::basic_string<char> > bz::doc::{anonymous}::ReadWholeFile(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/src/document/BzcFile.cpp:49:17,
+    inlined from 'bz::Expected<bz::doc::BzcArchive> bz::doc::ReadBzcArchive(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/src/document/BzcFile.cpp:186:53:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:492:30: warning: potential null pointer dereference [-Wnull-dereference]
+  492 |       gptr()  const { return _M_in_cur;  }
+      |                              ^~~~~~~~~
+[39/253] Building CXX object src/document/CMakeFiles/bz_document.dir/EdgeFeature.cpp.o
+[40/253] Building CXX object src/document/CMakeFiles/bz_document.dir/FaceReference.cpp.o
+[41/253] Building CXX object src/document/CMakeFiles/bz_document.dir/FeatureRegistry.cpp.o
+[42/253] Building CXX object src/document/CMakeFiles/bz_document.dir/ExtrudeFeature.cpp.o
+[43/253] Building CXX object src/document/CMakeFiles/bz_document.dir/LoftFeature.cpp.o
+[44/253] Building CXX object src/document/CMakeFiles/bz_document.dir/HoleFeature.cpp.o
+[45/253] Building CXX object src/document/CMakeFiles/bz_document.dir/PatternFeature.cpp.o
+[46/253] Building CXX object src/document/CMakeFiles/bz_document.dir/Recompute.cpp.o
+[47/253] Building CXX object src/document/CMakeFiles/bz_document.dir/JsonIO.cpp.o
+In file included from /home/runner/work/breezecad/breezecad/src/document/JsonIO.h:12,
+                 from /home/runner/work/breezecad/breezecad/src/document/JsonIO.cpp:1:
+In member function 'constexpr bool nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::is_array() const [with ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void]',
+    inlined from 'const nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::value_type& nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::operator[](size_type) const [with ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void]' at /home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json.hpp:21411:13,
+    inlined from 'bool bz::doc::json_io::LoadPointPicks(const Json&, std::vector<bz::Vec3>&, std::vector<std::optional<bz::doc::EdgeReference> >&, std::vector<bz::ObjectId>&)' at /home/runner/work/breezecad/breezecad/src/document/JsonIO.cpp:146:71:
+/home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json.hpp:20668:23: warning: potential null pointer dereference [-Wnull-dereference]
+20668 |         return m_data.m_type == value_t::array;
+      |                ~~~~~~~^~~~~~
+In member function 'nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::size_type nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::size() const [with ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void]',
+    inlined from 'bool bz::doc::json_io::LoadPointPicks(const Json&, std::vector<bz::Vec3>&, std::vector<std::optional<bz::doc::EdgeReference> >&, std::vector<bz::ObjectId>&)' at /home/runner/work/breezecad/breezecad/src/document/JsonIO.cpp:145:45:
+/home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json.hpp:22249:24: warning: potential null pointer dereference [-Wnull-dereference]
+22249 |         switch (m_data.m_type)
+      |                 ~~~~~~~^~~~~~
+In member function 'constexpr bool nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::is_array() const [with ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void]',
+    inlined from 'const nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::value_type& nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::operator[](size_type) const [with ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void]' at /home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json.hpp:21411:13,
+    inlined from 'bool bz::doc::json_io::LoadPointPicks(const Json&, std::vector<bz::Vec3>&, std::vector<std::optional<bz::doc::EdgeReference> >&, std::vector<bz::ObjectId>&)' at /home/runner/work/breezecad/breezecad/src/document/JsonIO.cpp:146:44:
+/home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json.hpp:20668:23: warning: potential null pointer dereference [-Wnull-dereference]
+20668 |         return m_data.m_type == value_t::array;
+      |                ~~~~~~~^~~~~~
+In member function 'nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::size_type nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::size() const [with ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void]',
+    inlined from 'bool bz::doc::json_io::LoadPointPicks(const Json&, std::vector<bz::Vec3>&, std::vector<std::optional<bz::doc::EdgeReference> >&, std::vector<bz::ObjectId>&)' at /home/runner/work/breezecad/breezecad/src/document/JsonIO.cpp:149:45:
+/home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json.hpp:22249:24: warning: potential null pointer dereference [-Wnull-dereference]
+22249 |         switch (m_data.m_type)
+      |                 ~~~~~~~^~~~~~
+In member function 'constexpr bool nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::is_array() const [with ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void]',
+    inlined from 'const nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::value_type& nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::operator[](size_type) const [with ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void]' at /home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json.hpp:21411:13,
+    inlined from 'bool bz::doc::json_io::LoadPointPicks(const Json&, std::vector<bz::Vec3>&, std::vector<std::optional<bz::doc::EdgeReference> >&, std::vector<bz::ObjectId>&)' at /home/runner/work/breezecad/breezecad/src/document/JsonIO.cpp:150:42:
+/home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json.hpp:20668:23: warning: potential null pointer dereference [-Wnull-dereference]
+20668 |         return m_data.m_type == value_t::array;
+      |                ~~~~~~~^~~~~~
+[48/253] Building CXX object src/document/CMakeFiles/bz_document.dir/WorkPlaneFeature.cpp.o
+[49/253] Building CXX object src/document/CMakeFiles/bz_document.dir/RevolveFeature.cpp.o
+[50/253] Building CXX object src/document/CMakeFiles/bz_document.dir/SketchSolidFeature.cpp.o
+[51/253] Building CXX object src/document/CMakeFiles/bz_document.dir/SweepFeature.cpp.o
+[52/253] Building CXX object src/document/CMakeFiles/bz_document.dir/SketchFeature.cpp.o
+[53/253] Building CXX object src/document/CMakeFiles/bz_document.dir/ThreadFeature.cpp.o
+In file included from /home/runner/work/breezecad/breezecad/src/document/JsonIO.h:12,
+                 from /home/runner/work/breezecad/breezecad/src/document/ThreadFeature.cpp:3:
+In member function 'constexpr bool nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::is_object() const [with ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void]',
+    inlined from 'const nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::value_type& nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::operator[](const typename object_t::key_type&) const [with ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void]' at /home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json.hpp:21446:13,
+    inlined from 'const nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::value_type& nlohmann::json_abi_v3_11_3::basic_json<ObjectType, ArrayType, StringType, BooleanType, NumberIntegerType, NumberUnsignedType, NumberFloatType, AllocatorType, JSONSerializer, BinaryType, CustomBaseClass>::operator[](T*) const [with T = const char; ObjectType = std::map; ArrayType = std::vector; StringType = std::__cxx11::basic_string<char>; BooleanType = bool; NumberIntegerType = long int; NumberUnsignedType = long unsigned int; NumberFloatType = double; AllocatorType = std::allocator; JSONSerializer = nlohmann::json_abi_v3_11_3::adl_serializer; BinaryType = std::vector<unsigned char>; CustomBaseClass = void]' at /home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json.hpp:21467:26,
+    inlined from 'virtual bz::Status bz::doc::ThreadFeature::LoadFields(const bz::doc::json_io::Json&)' at /home/runner/work/breezecad/breezecad/src/document/ThreadFeature.cpp:70:34:
+/home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json.hpp:20661:23: warning: potential null pointer dereference [-Wnull-dereference]
+20661 |         return m_data.m_type == value_t::object;
+      |                ~~~~~~~^~~~~~
+[54/253] Building CXX object src/document/CMakeFiles/bz_document.dir/StandardParts.cpp.o
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp: In function 'bz::Expected<bz::doc::parts::Made> bz::doc::parts::MakePart(const Request&)':
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:808:57: warning: potential null pointer dereference [-Wnull-dereference]
+  808 |                 dkV = r.dk, kV = r.k, recessV = r.s, tV = r.t;
+      |                                                      ~~~^~~~~
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:808:47: warning: potential null pointer dereference [-Wnull-dereference]
+  808 |                 dkV = r.dk, kV = r.k, recessV = r.s, tV = r.t;
+      |                                       ~~~~~~~~^~~~~
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:808:32: warning: potential null pointer dereference [-Wnull-dereference]
+  808 |                 dkV = r.dk, kV = r.k, recessV = r.s, tV = r.t;
+      |                             ~~~^~~~~
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:808:21: warning: potential null pointer dereference [-Wnull-dereference]
+  808 |                 dkV = r.dk, kV = r.k, recessV = r.s, tV = r.t;
+      |                 ~~~~^~~~~~
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:811:21: warning: potential null pointer dereference [-Wnull-dereference]
+  811 |                 dkV = r.dk, kV = r.k, recessV = r.n, tV = r.t;
+      |                 ~~~~^~~~~~
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:811:57: warning: potential null pointer dereference [-Wnull-dereference]
+  811 |                 dkV = r.dk, kV = r.k, recessV = r.n, tV = r.t;
+      |                                                      ~~~^~~~~
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:811:47: warning: potential null pointer dereference [-Wnull-dereference]
+  811 |                 dkV = r.dk, kV = r.k, recessV = r.n, tV = r.t;
+      |                                       ~~~~~~~~^~~~~
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:811:32: warning: potential null pointer dereference [-Wnull-dereference]
+  811 |                 dkV = r.dk, kV = r.k, recessV = r.n, tV = r.t;
+      |                             ~~~^~~~~
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:811:21: warning: potential null pointer dereference [-Wnull-dereference]
+  811 |                 dkV = r.dk, kV = r.k, recessV = r.n, tV = r.t;
+      |                 ~~~~^~~~~~
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:811:57: warning: potential null pointer dereference [-Wnull-dereference]
+  811 |                 dkV = r.dk, kV = r.k, recessV = r.n, tV = r.t;
+      |                                                      ~~~^~~~~
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:811:47: warning: potential null pointer dereference [-Wnull-dereference]
+  811 |                 dkV = r.dk, kV = r.k, recessV = r.n, tV = r.t;
+      |                                       ~~~~~~~~^~~~~
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:811:32: warning: potential null pointer dereference [-Wnull-dereference]
+  811 |                 dkV = r.dk, kV = r.k, recessV = r.n, tV = r.t;
+      |                             ~~~^~~~~
+/home/runner/work/breezecad/breezecad/src/document/StandardParts.cpp:831:42: warning: potential null pointer dereference [-Wnull-dereference]
+  831 |             const double thread = socket ? FindRow(Rows(kIso10642), dn)->b : 38.0;
+      |                                   ~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[55/253] Building CXX object src/document/CMakeFiles/bz_document.dir/UnknownFeature.cpp.o
+[56/253] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-blend.c.o
+[57/253] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-canvas.c.o
+[58/253] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-font.c.o
+[59/253] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-matrix.c.o
+[60/253] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-paint.c.o
+[61/253] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-path.c.o
+[62/253] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-rasterize.c.o
+[63/253] Building CXX object src/document/CMakeFiles/bz_document.dir/WorkAxisFeature.cpp.o
+[64/253] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-ft-math.c.o
+[65/253] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-ft-raster.c.o
+[66/253] Building CXX object src/document/CMakeFiles/bz_document.dir/WorkPointFeature.cpp.o
+[67/253] Linking CXX static library src/document/libbz_document.a
+[68/253] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-ft-stroker.c.o
+[69/253] Building CXX object src/assembly/CMakeFiles/bz_assembly.dir/Assembly.cpp.o
+[70/253] Building C object third_party/lunasvg/plutovg/CMakeFiles/plutovg.dir/source/plutovg-surface.c.o
+[71/253] Building CXX object src/assembly/CMakeFiles/bz_assembly.dir/Solver.cpp.o
+[72/253] Building CXX object src/assembly/CMakeFiles/bz_assembly.dir/AssemblyFile.cpp.o
+[73/253] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/imgui.cpp.o
+[74/253] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/imgui_demo.cpp.o
+[75/253] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/imgui_tables.cpp.o
+[76/253] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/misc/cpp/imgui_stdlib.cpp.o
+[77/253] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/backends/imgui_impl_glfw.cpp.o
+[78/253] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/imgui_draw.cpp.o
+[79/253] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/backends/imgui_impl_opengl3.cpp.o
+[80/253] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/lunasvg.cpp.o
+[81/253] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/graphics.cpp.o
+[82/253] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svggeometryelement.cpp.o
+[83/253] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svgelement.cpp.o
+[84/253] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svglayoutstate.cpp.o
+[85/253] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svgpaintelement.cpp.o
+[86/253] Building CXX object CMakeFiles/bz_imgui.dir/third_party/imgui/imgui_widgets.cpp.o
+[87/253] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svgrenderstate.cpp.o
+[88/253] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svgparser.cpp.o
+[89/253] Linking C static library third_party/lunasvg/plutovg/libplutovg.a
+[90/253] Linking CXX static library src/assembly/libbz_assembly.a
+[91/253] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svgproperty.cpp.o
+[92/253] Building CXX object third_party/lunasvg/CMakeFiles/lunasvg.dir/source/svgtextelement.cpp.o
+[93/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/AssemblyReadApi.cpp.o
+[94/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/AutoDrop.cpp.o
+[95/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/ComponentPattern.cpp.o
+[96/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/AssemblyModel.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/AssemblyModel.cpp:138:98: warning: 'TopTools_ListOfShape' is deprecated: TopTools_ListOfShape is deprecated, use NCollection_List<TopoDS_Shape> directly [-Wdeprecated-declarations]
+  138 | GeometryRef CircleOf(const BRepAdaptor_Curve& curve, const TopTools_ListOfShape& faces, Vec3 pick) {
+      |                                                                                                  ^
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedDataMapOfShapeListOfShape.hxx:25,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/AssemblyModel.cpp:21:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_ListOfShape.hxx:31:40: note: declared here
+   31 | typedef NCollection_List<TopoDS_Shape> TopTools_ListOfShape;
+      |                                        ^~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/AssemblyModel.cpp: In function 'std::optional<bz::assembly::GeometryRef> bz::kernel::{anonymous}::NearestCircle(const TopoDS_Shape&, bz::Vec3, double)':
+/home/runner/work/breezecad/breezecad/src/kernel/AssemblyModel.cpp:155:47: warning: 'TopTools_IndexedDataMapOfShapeListOfShape' is deprecated: TopTools_IndexedDataMapOfShapeListOfShape is deprecated, use NCollection_IndexedDataMap<TopoDS_Shape, TopTools_ListOfShape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+  155 |     TopTools_IndexedDataMapOfShapeListOfShape faces;
+      |                                               ^~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedDataMapOfShapeListOfShape.hxx:37:3: note: declared here
+   37 |   TopTools_IndexedDataMapOfShapeListOfShape;
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/AssemblyModel.cpp: In function 'std::vector<bz::assembly::GeometryRef> bz::kernel::{anonymous}::AllCircles(const TopoDS_Shape&)':
+/home/runner/work/breezecad/breezecad/src/kernel/AssemblyModel.cpp:174:47: warning: 'TopTools_IndexedDataMapOfShapeListOfShape' is deprecated: TopTools_IndexedDataMapOfShapeListOfShape is deprecated, use NCollection_IndexedDataMap<TopoDS_Shape, TopTools_ListOfShape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+  174 |     TopTools_IndexedDataMapOfShapeListOfShape faces;
+      |                                               ^~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedDataMapOfShapeListOfShape.hxx:37:3: note: declared here
+   37 |   TopTools_IndexedDataMapOfShapeListOfShape;
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[97/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Coil.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Coil.cpp: In function 'bz::Expected<TopoDS_Shape> bz::kernel::occt::MakeCoil(const std::vector<TopoDS_Face>&, const bz::doc::CoilFeature&, const bz::sketch::Sketch&, const bz::Frame&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Coil.cpp:122:80: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  122 |         return Error{std::format("Ошибка пружины: {}", failure.GetMessageString())};
+      |                                                        ~~~~~~~~~~~~~~~~~~~~~~~~^~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_DomainError.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_RangeError.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_OutOfRange.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Mat.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Trsf.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Datum3D.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.lxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.hxx:163,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Face.hxx:20,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Coil.h:8,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Coil.cpp:1:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+[98/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Section.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Section.cpp: In function 'bz::Expected<std::optional<TopoDS_Shape> > bz::kernel::occt::CutByPlane(const TopoDS_Shape&, const bz::Frame&, bool)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Section.cpp:42:80: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+   42 |         return Error{std::format("Ошибка сечения: {}", failure.GetMessageString())};
+      |                                                        ~~~~~~~~~~~~~~~~~~~~~~~~^~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_DomainError.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_RangeError.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_OutOfRange.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Mat.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Trsf.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Datum3D.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.lxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.hxx:163,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:21,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Section.h:6,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Section.cpp:1:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+[99/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/EdgeMatch.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp:84:105: warning: 'TopTools_IndexedDataMapOfShapeListOfShape' is deprecated: TopTools_IndexedDataMapOfShapeListOfShape is deprecated, use NCollection_IndexedDataMap<TopoDS_Shape, TopTools_ListOfShape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+   84 |                        const TopTools_IndexedMapOfShape* faceIndex = nullptr, FaceCache* cache = nullptr) {
+      |                                                                                                         ^
+In file included from /home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp:9:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedDataMapOfShapeListOfShape.hxx:37:3: note: declared here
+   37 |   TopTools_IndexedDataMapOfShapeListOfShape;
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp:84:105: warning: 'TopTools_IndexedMapOfShape' is deprecated: TopTools_IndexedMapOfShape is deprecated, use NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+   84 |                        const TopTools_IndexedMapOfShape* faceIndex = nullptr, FaceCache* cache = nullptr) {
+      |                                                                                                         ^
+In file included from /home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp:10:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedMapOfShape.hxx:32:71: note: declared here
+   32 | typedef NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> TopTools_IndexedMapOfShape;
+      |                                                                       ^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp: In function 'bz::doc::EdgeReference bz::kernel::occt::{anonymous}::Describe(const TopoDS_Edge&, const TopTools_IndexedDataMapOfShapeListOfShape&, const TopTools_IndexedMapOfShape*, FaceCache*)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp:103:37: warning: 'TopTools_ListOfShape' is deprecated: TopTools_ListOfShape is deprecated, use NCollection_List<TopoDS_Shape> directly [-Wdeprecated-declarations]
+  103 |     if (const TopTools_ListOfShape* list = edgeFaces.Seek(edge))
+      |                                     ^~~~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedDataMapOfShapeListOfShape.hxx:25:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_ListOfShape.hxx:31:40: note: declared here
+   31 | typedef NCollection_List<TopoDS_Shape> TopTools_ListOfShape;
+      |                                        ^~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp: In function 'bz::doc::EdgeReference bz::kernel::occt::DescribeEdge(const TopoDS_Edge&, const TopoDS_Shape&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp:148:47: warning: 'TopTools_IndexedDataMapOfShapeListOfShape' is deprecated: TopTools_IndexedDataMapOfShapeListOfShape is deprecated, use NCollection_IndexedDataMap<TopoDS_Shape, TopTools_ListOfShape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+  148 |     TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+      |                                               ^~~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedDataMapOfShapeListOfShape.hxx:37:3: note: declared here
+   37 |   TopTools_IndexedDataMapOfShapeListOfShape;
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp: In function 'std::vector<std::optional<TopoDS_Edge> > bz::kernel::occt::ResolveEdges(const std::vector<bz::doc::EdgeReference>&, const TopoDS_Shape&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp:154:47: warning: 'TopTools_IndexedDataMapOfShapeListOfShape' is deprecated: TopTools_IndexedDataMapOfShapeListOfShape is deprecated, use NCollection_IndexedDataMap<TopoDS_Shape, TopTools_ListOfShape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+  154 |     TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+      |                                               ^~~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedDataMapOfShapeListOfShape.hxx:37:3: note: declared here
+   37 |   TopTools_IndexedDataMapOfShapeListOfShape;
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp:157:32: warning: 'TopTools_IndexedMapOfShape' is deprecated: TopTools_IndexedMapOfShape is deprecated, use NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+  157 |     TopTools_IndexedMapOfShape faceIndex;
+      |                                ^~~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedMapOfShape.hxx:32:71: note: declared here
+   32 | typedef NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> TopTools_IndexedMapOfShape;
+      |                                                                       ^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp: In function 'std::optional<bz::doc::EdgeReference> bz::kernel::occt::DescribeVertexEdge(const TopoDS_Vertex&, const TopoDS_Shape&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.cpp:207:47: warning: 'TopTools_IndexedDataMapOfShapeListOfShape' is deprecated: TopTools_IndexedDataMapOfShapeListOfShape is deprecated, use NCollection_IndexedDataMap<TopoDS_Shape, TopTools_ListOfShape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+  207 |     TopTools_IndexedDataMapOfShapeListOfShape edgesOf;
+      |                                               ^~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedDataMapOfShapeListOfShape.hxx:37:3: note: declared here
+   37 |   TopTools_IndexedDataMapOfShapeListOfShape;
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[100/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/Model.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/Model.cpp: In lambda function:
+/home/runner/work/breezecad/breezecad/src/kernel/Model.cpp:942:117: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  942 |             f.status = {FeatureState::Error, std::format("Ошибка геометрического ядра: {}", failure.GetMessageString())};
+      |                                                                                             ~~~~~~~~~~~~~~~~~~~~~~~~^~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_DomainError.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_RangeError.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_OutOfRange.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Mat.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_XYZ.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Pnt.hxx:21,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/Model.cpp:2:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+[101/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Export.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Export.cpp: In member function 'bz::Status bz::kernel::Model::ExportStep(const std::filesystem::__cxx11::path&) const':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Export.cpp:119:86: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  119 |         return Error{std::format("Ошибка экспорта STEP: {}", failure.GetMessageString())};
+      |                                                              ~~~~~~~~~~~~~~~~~~~~~~~~^~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_DomainError.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_RangeError.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_OutOfRange.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Mat.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Trsf.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Datum3D.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.lxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.hxx:163,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Face.hxx:20,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.h:9,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/ModelImpl.h:6,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Export.cpp:4:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+[102/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/FaceMatch.cpp.o
+[103/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Extrude.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp: In function 'bz::Expected<TopoDS_Shape> bz::kernel::occt::{anonymous}::CutToFace(const TopoDS_Shape&, const TopoDS_Face&, const std::vector<TopoDS_Face>&, const gp_Vec&, double)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp:117:30: warning: 'TopTools_ListOfShape' is deprecated: TopTools_ListOfShape is deprecated, use NCollection_List<TopoDS_Shape> directly [-Wdeprecated-declarations]
+  117 |         TopTools_ListOfShape arguments, tools;
+      |                              ^~~~~~~~~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedDataMapOfShapeListOfShape.hxx:25,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp:30:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_ListOfShape.hxx:31:40: note: declared here
+   31 | typedef NCollection_List<TopoDS_Shape> TopTools_ListOfShape;
+      |                                        ^~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp:117:41: warning: 'TopTools_ListOfShape' is deprecated: TopTools_ListOfShape is deprecated, use NCollection_List<TopoDS_Shape> directly [-Wdeprecated-declarations]
+  117 |         TopTools_ListOfShape arguments, tools;
+      |                                         ^~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_ListOfShape.hxx:31:40: note: declared here
+   31 | typedef NCollection_List<TopoDS_Shape> TopTools_ListOfShape;
+      |                                        ^~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp: In function 'bz::Expected<TopoDS_Shape> bz::kernel::occt::MakeExtrusion(const std::vector<TopoDS_Face>&, const bz::doc::ExtrudeFeature&, const bz::Frame&, double, const std::optional<bz::Frame>&, const std::optional<TopoDS_Face>&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp:169:89: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  169 |             return Error{std::format("Ошибка выдавливания: {}", failure.GetMessageString())};
+      |                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~^~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_DomainError.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_RangeError.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_OutOfRange.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Mat.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Trsf.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Datum3D.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.lxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.hxx:163,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Face.hxx:20,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.h:6,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp:1:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp:224:85: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  224 |         return Error{std::format("Ошибка выдавливания: {}", failure.GetMessageString())};
+      |                                                             ~~~~~~~~~~~~~~~~~~~~~~~~^~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp: In function 'bz::Expected<TopoDS_Shape> bz::kernel::occt::ApplyBoolean(const TopoDS_Shape&, const TopoDS_Shape&, bz::doc::BooleanOp)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp:254:89: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  254 |         return Error{std::format("Ошибка булевой операции: {}", failure.GetMessageString())};
+      |                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~^~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp: In function 'bz::Expected<TopoDS_Shape> bz::kernel::occt::ApplyBoolean(const TopoDS_Shape&, const std::vector<TopoDS_Shape>&, bz::doc::BooleanOp)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp:262:30: warning: 'TopTools_ListOfShape' is deprecated: TopTools_ListOfShape is deprecated, use NCollection_List<TopoDS_Shape> directly [-Wdeprecated-declarations]
+  262 |         TopTools_ListOfShape arguments, toolList;
+      |                              ^~~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_ListOfShape.hxx:31:40: note: declared here
+   31 | typedef NCollection_List<TopoDS_Shape> TopTools_ListOfShape;
+      |                                        ^~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp:262:41: warning: 'TopTools_ListOfShape' is deprecated: TopTools_ListOfShape is deprecated, use NCollection_List<TopoDS_Shape> directly [-Wdeprecated-declarations]
+  262 |         TopTools_ListOfShape arguments, toolList;
+      |                                         ^~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_ListOfShape.hxx:31:40: note: declared here
+   31 | typedef NCollection_List<TopoDS_Shape> TopTools_ListOfShape;
+      |                                        ^~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp:283:89: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  283 |         return Error{std::format("Ошибка булевой операции: {}", failure.GetMessageString())};
+      |                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~^~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp: In function 'TopoDS_Shape bz::kernel::occt::Clean(const TopoDS_Shape&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Extrude.cpp:291:47: warning: 'TopTools_IndexedDataMapOfShapeListOfShape' is deprecated: TopTools_IndexedDataMapOfShapeListOfShape is deprecated, use NCollection_IndexedDataMap<TopoDS_Shape, TopTools_ListOfShape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+  291 |     TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+      |                                               ^~~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedDataMapOfShapeListOfShape.hxx:37:3: note: declared here
+   37 |   TopTools_IndexedDataMapOfShapeListOfShape;
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[104/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Fillet.cpp.o
+[105/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Hole.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Hole.cpp: In function 'bz::Expected<TopoDS_Shape> bz::kernel::occt::HoleTools(const TopoDS_Shape&, const bz::doc::HoleFeature&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Hole.cpp:80:82: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+   80 |         return Error{std::format("Ошибка отверстия: {}", failure.GetMessageString())};
+      |                                                          ~~~~~~~~~~~~~~~~~~~~~~~~^~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_DomainError.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_RangeError.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_OutOfRange.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Mat.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Trsf.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Datum3D.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.lxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.hxx:163,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:21,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Hole.h:6,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Hole.cpp:1:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+[106/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Loft.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Loft.cpp: In function 'bz::Expected<TopoDS_Shape> bz::kernel::occt::MakeLoft(const std::vector<TopoDS_Wire>&, bool)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Loft.cpp:21:78: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+   21 |         return Error{std::format("Ошибка лофта: {}", failure.GetMessageString())};
+      |                                                      ~~~~~~~~~~~~~~~~~~~~~~~~^~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_DomainError.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_RangeError.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_OutOfRange.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Mat.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Trsf.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Datum3D.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.lxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.hxx:163,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:21,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Loft.h:5,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Loft.cpp:1:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+[107/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Measure.cpp.o
+[108/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Points.cpp.o
+[109/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Project.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Project.cpp: In function 'bz::Expected<bz::kernel::RevolvedProjection> bz::kernel::occt::ProjectRevolved(const TopoDS_Shape&, const TopoDS_Face&, const bz::Frame&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Project.cpp:190:51: warning: 'TopTools_IndexedDataMapOfShapeListOfShape' is deprecated: TopTools_IndexedDataMapOfShapeListOfShape is deprecated, use NCollection_IndexedDataMap<TopoDS_Shape, TopTools_ListOfShape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+  190 |         TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+      |                                                   ^~~~~~~~~
+In file included from /home/runner/work/breezecad/breezecad/src/kernel/occt/Project.cpp:14:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedDataMapOfShapeListOfShape.hxx:37:3: note: declared here
+   37 |   TopTools_IndexedDataMapOfShapeListOfShape;
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Project.cpp:202:29: warning: 'TopTools_MapOfShape' is deprecated: TopTools_MapOfShape is deprecated, use NCollection_Map<TopoDS_Shape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+  202 |         TopTools_MapOfShape taken;
+      |                             ^~~~~
+In file included from /home/runner/work/breezecad/breezecad/src/kernel/occt/Project.cpp:15:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_MapOfShape.hxx:32:64: note: declared here
+   32 | typedef NCollection_Map<TopoDS_Shape, TopTools_ShapeMapHasher> TopTools_MapOfShape;
+      |                                                                ^~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Project.cpp:300:104: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  300 |         return Error{std::format("Не удалось спроецировать тело вращения: {}", failure.GetMessageString())};
+      |                                                                                ~~~~~~~~~~~~~~~~~~~~~~~~^~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_DomainError.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_RangeError.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_OutOfRange.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Mat.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Trsf.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Datum3D.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.lxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.hxx:163,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Edge.hxx:20,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Project.h:6,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Project.cpp:1:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+[110/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Shell.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Shell.cpp: In function 'bz::Expected<TopoDS_Shape> bz::kernel::occt::MakeShell(const TopoDS_Shape&, const std::vector<TopoDS_Face>&, double, bool)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Shell.cpp:44:34: warning: 'TopTools_ListOfShape' is deprecated: TopTools_ListOfShape is deprecated, use NCollection_List<TopoDS_Shape> directly [-Wdeprecated-declarations]
+   44 |             TopTools_ListOfShape faces;
+      |                                  ^~~~~
+In file included from /home/runner/work/breezecad/breezecad/src/kernel/occt/Shell.cpp:11:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_ListOfShape.hxx:31:40: note: declared here
+   31 | typedef NCollection_List<TopoDS_Shape> TopTools_ListOfShape;
+      |                                        ^~~~~~~~~~~~~~~~~~~~
+[111/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Revolve.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Revolve.cpp: In function 'bz::Expected<TopoDS_Shape> bz::kernel::occt::MakeRevolution(const std::vector<TopoDS_Face>&, const bz::doc::RevolveFeature&, const bz::sketch::Sketch&, const bz::Frame&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Revolve.cpp:103:81: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  103 |         return Error{std::format("Ошибка вращения: {}", failure.GetMessageString())};
+      |                                                         ~~~~~~~~~~~~~~~~~~~~~~~~^~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_DomainError.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_RangeError.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_OutOfRange.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Mat.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Trsf.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Datum3D.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.lxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.hxx:163,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Face.hxx:20,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Revolve.h:7,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Revolve.cpp:1:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+[112/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/SketchGeometry.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp: In function 'std::vector<TopoDS_Edge> bz::kernel::occt::{anonymous}::MakeEdges(const bz::doc::SketchFeature&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:86:33: warning: 'TColgp_Array1OfPnt' is deprecated: TColgp_Array1OfPnt is deprecated, use NCollection_Array1<gp_Pnt> directly [-Wdeprecated-declarations]
+   86 |         TColgp_Array1OfPnt poles(1, static_cast<int>(b.poles.size()));
+      |                                 ^
+In file included from /home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:24:
+/home/runner/micromamba/envs/bz/include/opencascade/TColgp_Array1OfPnt.hxx:30:36: note: declared here
+   30 | typedef NCollection_Array1<gp_Pnt> TColgp_Array1OfPnt;
+      |                                    ^~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:88:35: warning: 'TColStd_Array1OfReal' is deprecated: TColStd_Array1OfReal is deprecated, use NCollection_Array1<double> directly [-Wdeprecated-declarations]
+   88 |         TColStd_Array1OfReal knots(1, static_cast<int>(b.knots.size()));
+      |                                   ^
+In file included from /home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:23:
+/home/runner/micromamba/envs/bz/include/opencascade/TColStd_Array1OfReal.hxx:29:36: note: declared here
+   29 | typedef NCollection_Array1<double> TColStd_Array1OfReal;
+      |                                    ^~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:89:38: warning: 'TColStd_Array1OfInteger' is deprecated: TColStd_Array1OfInteger is deprecated, use NCollection_Array1<int> directly [-Wdeprecated-declarations]
+   89 |         TColStd_Array1OfInteger mults(1, static_cast<int>(b.knots.size()));
+      |                                      ^
+In file included from /home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:22:
+/home/runner/micromamba/envs/bz/include/opencascade/TColStd_Array1OfInteger.hxx:30:33: note: declared here
+   30 | typedef NCollection_Array1<int> TColStd_Array1OfInteger;
+      |                                 ^~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:20,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Face.hxx:20,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.h:9,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:1:
+/home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp: In function 'bz::Expected<TopoDS_Wire> bz::kernel::occt::BuildPath(const bz::doc::SketchFeature&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:188:16: warning: 'TopTools_HSequenceOfShape' is deprecated: TopTools_HSequenceOfShape is deprecated, use NCollection_HSequence<TopoDS_Shape> directly [-Wdeprecated-declarations]
+  188 |         Handle(TopTools_HSequenceOfShape) loose = new TopTools_HSequenceOfShape();
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:26:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_HSequenceOfShape.hxx:32:45: note: declared here
+   32 | typedef NCollection_HSequence<TopoDS_Shape> TopTools_HSequenceOfShape;
+      |                                             ^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:188:55: warning: 'TopTools_HSequenceOfShape' is deprecated: TopTools_HSequenceOfShape is deprecated, use NCollection_HSequence<TopoDS_Shape> directly [-Wdeprecated-declarations]
+  188 |         Handle(TopTools_HSequenceOfShape) loose = new TopTools_HSequenceOfShape();
+      |                                                       ^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_HSequenceOfShape.hxx:32:45: note: declared here
+   32 | typedef NCollection_HSequence<TopoDS_Shape> TopTools_HSequenceOfShape;
+      |                                             ^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:190:16: warning: 'TopTools_HSequenceOfShape' is deprecated: TopTools_HSequenceOfShape is deprecated, use NCollection_HSequence<TopoDS_Shape> directly [-Wdeprecated-declarations]
+  190 |         Handle(TopTools_HSequenceOfShape) wires;
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_HSequenceOfShape.hxx:32:45: note: declared here
+   32 | typedef NCollection_HSequence<TopoDS_Shape> TopTools_HSequenceOfShape;
+      |                                             ^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:191:54: warning: 'static void ShapeAnalysis_FreeBounds::ConnectEdgesToWires(occ::handle<NCollection_HSequence<TopoDS_Shape> >&, double, bool, occ::handle<NCollection_HSequence<TopoDS_Shape> >&)' is deprecated: Use ConnectEdgesToWires() returning handle by value instead [-Wdeprecated-declarations]
+  191 |         ShapeAnalysis_FreeBounds::ConnectEdgesToWires(loose, 1e-6, false, wires);
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:20:
+/home/runner/micromamba/envs/bz/include/opencascade/ShapeAnalysis_FreeBounds.hxx:130:31: note: declared here
+  130 |   Standard_EXPORT static void ConnectEdgesToWires(
+      |                               ^~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:196:83: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  196 |         return Error{std::format("Ошибка траектории: {}", failure.GetMessageString())};
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~^~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_DomainError.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_RangeError.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_OutOfRange.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Mat.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Trsf.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Datum3D.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.lxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.hxx:163,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:21:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp: In function 'bz::Expected<bz::kernel::occt::SketchProfile> bz::kernel::occt::BuildProfile(const bz::doc::SketchFeature&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/SketchGeometry.cpp:262:89: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  262 |         return Error{std::format("Ошибка геометрии эскиза: {}", failure.GetMessageString())};
+      |                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~^~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+[113/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Sweep.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Sweep.cpp: In function 'bz::Expected<TopoDS_Shape> bz::kernel::occt::MakeSweep(const std::vector<TopoDS_Face>&, const TopoDS_Wire&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Sweep.cpp:25:79: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+   25 |         return Error{std::format("Ошибка сдвига: {}", failure.GetMessageString())};
+      |                                                       ~~~~~~~~~~~~~~~~~~~~~~~~^~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_DomainError.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_RangeError.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_OutOfRange.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Mat.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Trsf.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Datum3D.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.lxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.hxx:163,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Face.hxx:20,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Sweep.h:5,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Sweep.cpp:1:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+[114/253] Linking CXX static library libbz_imgui.a
+[115/253] Linking CXX static library third_party/lunasvg/liblunasvg.a
+[116/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Text.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Text.cpp: In lambda function:
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Text.cpp:94:44: warning: 'TColStd_SequenceOfHAsciiString' is deprecated: TColStd_SequenceOfHAsciiString is deprecated, use NCollection_Sequence<opencascade::handle<TCollection_HAsciiString>> directly [-Wdeprecated-declarations]
+   94 |             TColStd_SequenceOfHAsciiString names;
+      |                                            ^~~~~
+In file included from /home/runner/work/breezecad/breezecad/src/kernel/occt/Text.cpp:12:
+/home/runner/micromamba/envs/bz/include/opencascade/TColStd_SequenceOfHAsciiString.hxx:35:3: note: declared here
+   35 |   TColStd_SequenceOfHAsciiString;
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[117/253] Building CXX object src/modules/CMakeFiles/bz_modules.dir/ModuleHost.cpp.o
+[118/253] Building CXX object src/modules/CMakeFiles/bz_modules.dir/DynamicLibrary.cpp.o
+[119/253] Building CXX object src/kernel/CMakeFiles/bz_kernel.dir/occt/Thread.cpp.o
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Thread.cpp: In function 'bz::Expected<bz::kernel::occt::ThreadSite> bz::kernel::occt::FindThreadSite(const TopoDS_Shape&, const bz::doc::CylinderTouch&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Thread.cpp:105:79: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  105 |         return Error{std::format("Ошибка резьбы: {}", failure.GetMessageString())};
+      |                                                       ~~~~~~~~~~~~~~~~~~~~~~~~^~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_DomainError.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_RangeError.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_OutOfRange.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Mat.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Trsf.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Datum3D.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.lxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopLoc_Location.hxx:163,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:21,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Thread.h:6,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/Thread.cpp:1:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Thread.cpp: In function 'bz::Expected<TopoDS_Shape> bz::kernel::occt::ThreadTool(const TopoDS_Shape&, const bz::doc::ThreadFeature&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Thread.cpp:241:79: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  241 |         return Error{std::format("Ошибка резьбы: {}", failure.GetMessageString())};
+      |                                                       ~~~~~~~~~~~~~~~~~~~~~~~~^~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Thread.cpp: In function 'bz::Expected<TopoDS_Shape> bz::kernel::occt::CosmeticThread(const TopoDS_Shape&, const bz::doc::ThreadFeature&)':
+/home/runner/work/breezecad/breezecad/src/kernel/occt/Thread.cpp:261:79: warning: 'const char* Standard_Failure::GetMessageString() const' is deprecated: Use what() instead [-Wdeprecated-declarations]
+  261 |         return Error{std::format("Ошибка резьбы: {}", failure.GetMessageString())};
+      |                                                       ~~~~~~~~~~~~~~~~~~~~~~~~^~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_Failure.hxx:60:15: note: declared here
+   60 |   const char* GetMessageString() const noexcept { return what(); }
+      |               ^~~~~~~~~~~~~~~~
+[120/253] Linking CXX static library src/kernel/libbz_kernel.a
+[121/253] Building CXX object src/modules/CMakeFiles/bz_modules.dir/ModuleManifest.cpp.o
+[122/253] Building CXX object src/platform/CMakeFiles/bz_platform.dir/Launch.cpp.o
+[123/253] Building CXX object src/platform/CMakeFiles/bz_platform.dir/FileDialogs.cpp.o
+[124/253] Building CXX object src/modules/CMakeFiles/bz_modules.dir/ModuleManager.cpp.o
+[125/253] Building CXX object src/platform/CMakeFiles/bz_platform.dir/ProcessInfo.cpp.o
+[126/253] Building CXX object src/platform/CMakeFiles/bz_platform.dir/SystemTheme.cpp.o
+[127/253] Building CXX object src/platform/CMakeFiles/bz_platform.dir/Paths.cpp.o
+[128/253] Building CXX object src/platform/CMakeFiles/bz_platform.dir/SystemInfo.cpp.o
+[129/253] Building CXX object src/platform/CMakeFiles/bz_platform.dir/Window.cpp.o
+[130/253] Building CXX object src/platform/CMakeFiles/bz_platform.dir/Touchpad.cpp.o
+[131/253] Building CXX object src/render/CMakeFiles/bz_render.dir/TexturedFaces.cpp.o
+In file included from /home/runner/work/breezecad/breezecad/src/render/TexturedFaces.cpp:1:
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.h:27:63: warning: 'Standard_Integer' is deprecated: Standard_Integer is deprecated, use int directly [-Wdeprecated-declarations]
+   27 |     bool AcceptDisplayMode(const Standard_Integer mode) const override { return mode == 0; }
+      |                                                               ^~~~~~~~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_Integer.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Pnt.hxx:18,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_Ax1.hxx:18,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/gp_GTrsf.hxx:18,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/PrsMgr_PresentableObject.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/SelectMgr_SelectableObject.hxx:20,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/AIS_InteractiveObject.hxx:22,
+                 from /home/runner/work/breezecad/breezecad/src/render/TexturedFaces.h:7:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_TypeDef.hxx:68:13: note: declared here
+   68 | typedef int Standard_Integer;
+      |             ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.h:31:47: warning: 'Standard_Integer' is deprecated: Standard_Integer is deprecated, use int directly [-Wdeprecated-declarations]
+   31 |                  const Standard_Integer mode) override;
+      |                                               ^~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_TypeDef.hxx:68:13: note: declared here
+   68 | typedef int Standard_Integer;
+      |             ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.h:35:102: warning: 'Standard_Integer' is deprecated: Standard_Integer is deprecated, use int directly [-Wdeprecated-declarations]
+   35 |     void ComputeSelection(const Handle(SelectMgr_Selection)& selection, const Standard_Integer mode) override;
+      |                                                                                                      ^~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_TypeDef.hxx:68:13: note: declared here
+   68 | typedef int Standard_Integer;
+      |             ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.cpp: In function 'opencascade::handle<Graphic3d_Texture2D> bz::render::MakePictureTexture(int, int, std::span<const unsigned char>)':
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.cpp:66:59: warning: 'Standard_Size' is deprecated: Standard_Size is deprecated, use size_t directly [-Wdeprecated-declarations]
+   66 |     if (!pixmap->InitTrash(Image_Format_RGBA, static_cast<Standard_Size>(width), static_cast<Standard_Size>(height))) return nullptr;
+      |                                                           ^~~~~~~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_TypeDef.hxx:100:16: note: declared here
+  100 | typedef size_t Standard_Size;
+      |                ^~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.cpp:66:94: warning: 'Standard_Size' is deprecated: Standard_Size is deprecated, use size_t directly [-Wdeprecated-declarations]
+   66 |     if (!pixmap->InitTrash(Image_Format_RGBA, static_cast<Standard_Size>(width), static_cast<Standard_Size>(height))) return nullptr;
+      |                                                                                              ^~~~~~~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_TypeDef.hxx:100:16: note: declared here
+  100 | typedef size_t Standard_Size;
+      |                ^~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.cpp:70:51: warning: 'Standard_Size' is deprecated: Standard_Size is deprecated, use size_t directly [-Wdeprecated-declarations]
+   70 |         std::memcpy(pixmap->ChangeRow(static_cast<Standard_Size>(y)), rgba.data() + row * static_cast<std::size_t>(y), row);
+      |                                                   ^~~~~~~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_TypeDef.hxx:100:16: note: declared here
+  100 | typedef size_t Standard_Size;
+      |                ^~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.cpp: At global scope:
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.cpp:84:51: warning: 'Standard_Integer' is deprecated: Standard_Integer is deprecated, use int directly [-Wdeprecated-declarations]
+   84 |                             const Standard_Integer) {
+      |                                                   ^
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_TypeDef.hxx:68:13: note: declared here
+   68 | typedef int Standard_Integer;
+      |             ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.cpp:148:111: warning: 'Standard_Integer' is deprecated: Standard_Integer is deprecated, use int directly [-Wdeprecated-declarations]
+  148 | void TexturedFaces::ComputeSelection(const Handle(SelectMgr_Selection)& selection, const Standard_Integer mode) {
+      |                                                                                                               ^
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_TypeDef.hxx:68:13: note: declared here
+   68 | typedef int Standard_Integer;
+      |             ^~~~~~~~~~~~~~~~
+[132/253] Building CXX object src/ui/CMakeFiles/bz_ui.dir/GestureArt.cpp.o
+[133/253] Building CXX object src/ui/CMakeFiles/bz_ui.dir/Icons.cpp.o
+In file included from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/locale_facets.h:44,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/locale:42,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/fs_path.h:36,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/filesystem:49,
+                 from /home/runner/work/breezecad/breezecad/src/ui/Icons.h:7,
+                 from /home/runner/work/breezecad/breezecad/src/ui/Icons.cpp:1:
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::egptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:49,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:182:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Allocator>& std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_replace_dispatch(const_iterator, const_iterator, _InputIterator, _InputIterator, std::__false_type) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:441:21,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>& std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::replace(const_iterator, const_iterator, _InputIterator, _InputIterator) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:2374:36,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>& std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::assign(_InputIterator, _InputIterator) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:1719:31,
+    inlined from 'const bz::ui::Icons::Svg& bz::ui::Icons::Load(std::string_view)' at /home/runner/work/breezecad/breezecad/src/ui/Icons.cpp:44:24:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:495:30: warning: potential null pointer dereference [-Wnull-dereference]
+  495 |       egptr() const { return _M_in_end; }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::gptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:33,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:182:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Allocator>& std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_replace_dispatch(const_iterator, const_iterator, _InputIterator, _InputIterator, std::__false_type) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:441:21,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>& std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::replace(const_iterator, const_iterator, _InputIterator, _InputIterator) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:2374:36,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>& std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::assign(_InputIterator, _InputIterator) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:1719:31,
+    inlined from 'const bz::ui::Icons::Svg& bz::ui::Icons::Load(std::string_view)' at /home/runner/work/breezecad/breezecad/src/ui/Icons.cpp:44:24:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:492:30: warning: potential null pointer dereference [-Wnull-dereference]
+  492 |       gptr()  const { return _M_in_cur;  }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::egptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:49,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:209:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Allocator>& std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_replace_dispatch(const_iterator, const_iterator, _InputIterator, _InputIterator, std::__false_type) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:441:21,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>& std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::replace(const_iterator, const_iterator, _InputIterator, _InputIterator) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:2374:36,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>& std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::assign(_InputIterator, _InputIterator) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:1719:31,
+    inlined from 'const bz::ui::Icons::Svg& bz::ui::Icons::Load(std::string_view)' at /home/runner/work/breezecad/breezecad/src/ui/Icons.cpp:44:24:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:495:30: warning: potential null pointer dereference [-Wnull-dereference]
+  495 |       egptr() const { return _M_in_end; }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::gptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:33,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:209:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Allocator>& std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_replace_dispatch(const_iterator, const_iterator, _InputIterator, _InputIterator, std::__false_type) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:441:21,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>& std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::replace(const_iterator, const_iterator, _InputIterator, _InputIterator) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:2374:36,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>& std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::assign(_InputIterator, _InputIterator) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:1719:31,
+    inlined from 'const bz::ui::Icons::Svg& bz::ui::Icons::Load(std::string_view)' at /home/runner/work/breezecad/breezecad/src/ui/Icons.cpp:44:24:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:492:30: warning: potential null pointer dereference [-Wnull-dereference]
+  492 |       gptr()  const { return _M_in_cur;  }
+      |                              ^~~~~~~~~
+[134/253] Building CXX object src/ui/CMakeFiles/bz_ui.dir/Theme.cpp.o
+[135/253] Building CXX object src/ui/CMakeFiles/bz_ui.dir/Fonts.cpp.o
+[136/253] Building CXX object src/ui/CMakeFiles/bz_ui.dir/Menus.cpp.o
+[137/253] Building CXX object src/ui/CMakeFiles/bz_ui.dir/ViewCube.cpp.o
+[138/253] Copying assets
+[139/253] Building C object examples/modules/CMakeFiles/bz_example_module.dir/hello/hello.c.o
+[140/253] Building C object examples/modules/CMakeFiles/bz_example_module_fail.dir/hello/hello.c.o
+[141/253] Linking CXX static library src/modules/libbz_modules.a
+[142/253] Linking CXX static library src/platform/libbz_platform.a
+[143/253] Building CXX object src/render/CMakeFiles/bz_render.dir/Viewport.cpp.o
+In file included from /home/runner/work/breezecad/breezecad/src/render/Viewport.cpp:9:
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.h:27:63: warning: 'Standard_Integer' is deprecated: Standard_Integer is deprecated, use int directly [-Wdeprecated-declarations]
+   27 |     bool AcceptDisplayMode(const Standard_Integer mode) const override { return mode == 0; }
+      |                                                               ^~~~~~~~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Standard_Integer.hxx:19,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard.hxx:21,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_Transient.hxx:18,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Standard_Handle.hxx:22,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Shape.hxx:20,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/TopoDS_Edge.hxx:20,
+                 from /home/runner/work/breezecad/breezecad/src/kernel/occt/EdgeMatch.h:7,
+                 from /home/runner/work/breezecad/breezecad/src/render/Viewport.cpp:5:
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_TypeDef.hxx:68:13: note: declared here
+   68 | typedef int Standard_Integer;
+      |             ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.h:31:47: warning: 'Standard_Integer' is deprecated: Standard_Integer is deprecated, use int directly [-Wdeprecated-declarations]
+   31 |                  const Standard_Integer mode) override;
+      |                                               ^~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_TypeDef.hxx:68:13: note: declared here
+   68 | typedef int Standard_Integer;
+      |             ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/TexturedFaces.h:35:102: warning: 'Standard_Integer' is deprecated: Standard_Integer is deprecated, use int directly [-Wdeprecated-declarations]
+   35 |     void ComputeSelection(const Handle(SelectMgr_Selection)& selection, const Standard_Integer mode) override;
+      |                                                                                                      ^~~~~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/Standard_TypeDef.hxx:68:13: note: declared here
+   68 | typedef int Standard_Integer;
+      |             ^~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/Viewport.cpp: In member function 'void bz::render::Viewport::Impl::ApplyLook(const Shown&)':
+/home/runner/work/breezecad/breezecad/src/render/Viewport.cpp:500:36: warning: 'TopTools_IndexedMapOfShape' is deprecated: TopTools_IndexedMapOfShape is deprecated, use NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+  500 |         TopTools_IndexedMapOfShape ownLook;
+      |                                    ^~~~~~~
+In file included from /home/runner/work/breezecad/breezecad/src/render/Viewport.cpp:38:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedMapOfShape.hxx:32:71: note: declared here
+   32 | typedef NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> TopTools_IndexedMapOfShape;
+      |                                                                       ^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/Viewport.cpp:539:40: warning: 'TopTools_IndexedMapOfShape' is deprecated: TopTools_IndexedMapOfShape is deprecated, use NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+  539 |             TopTools_IndexedMapOfShape seen;
+      |                                        ^~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedMapOfShape.hxx:32:71: note: declared here
+   32 | typedef NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> TopTools_IndexedMapOfShape;
+      |                                                                       ^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/Viewport.cpp: In member function 'bz::ViewProjection bz::render::Viewport::Projection() const':
+/home/runner/work/breezecad/breezecad/src/render/Viewport.cpp:863:27: warning: 'Graphic3d_Mat4d' is deprecated: Graphic3d_Mat4d is deprecated, use NCollection_Mat4<double> directly [-Wdeprecated-declarations]
+  863 |     const Graphic3d_Mat4d vp = cam->ProjectionMatrix() * cam->OrientationMatrix();
+      |                           ^~
+In file included from /home/runner/work/breezecad/breezecad/src/render/Viewport.cpp:34:
+/home/runner/micromamba/envs/bz/include/opencascade/Graphic3d_Mat4d.hxx:30:34: note: declared here
+   30 | typedef NCollection_Mat4<double> Graphic3d_Mat4d;
+      |                                  ^~~~~~~~~~~~~~~
+/home/runner/work/breezecad/breezecad/src/render/Viewport.cpp: In member function 'std::vector<bz::doc::EdgeReference> bz::render::Viewport::PickFaceEdges(bz::Vec2)':
+/home/runner/work/breezecad/breezecad/src/render/Viewport.cpp:1341:36: warning: 'TopTools_IndexedMapOfShape' is deprecated: TopTools_IndexedMapOfShape is deprecated, use NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+ 1341 |         TopTools_IndexedMapOfShape edges;
+      |                                    ^~~~~
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedMapOfShape.hxx:32:71: note: declared here
+   32 | typedef NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> TopTools_IndexedMapOfShape;
+      |                                                                       ^~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/runner/micromamba/envs/bz/include/opencascade/Message.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/NCollection_DataMap.hxx:33,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Graphic3d_Group.hxx:23,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Graphic3d_CStructure.hxx:20,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Graphic3d_Structure.hxx:20,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/Prs3d_Presentation.hxx:20,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/PrsMgr_Presentation.hxx:20,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/PrsMgr_PresentableObject.hxx:25,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/SelectMgr_SelectableObject.hxx:20,
+                 from /home/runner/micromamba/envs/bz/include/opencascade/AIS_InteractiveObject.hxx:22,
+                 from /home/runner/work/breezecad/breezecad/src/render/TexturedFaces.h:7:
+In member function 'const TheItemType& NCollection_DynamicArray<TheItemType>::at(size_t) const [with TheItemType = opencascade::handle<OpenGl_Texture>]',
+    inlined from 'const TheItemType& NCollection_DynamicArray<TheItemType>::Value(int) const [with TheItemType = opencascade::handle<OpenGl_Texture>]' at /home/runner/micromamba/envs/bz/include/opencascade/NCollection_DynamicArray.hxx:691:14,
+    inlined from 'occ::handle<OpenGl_Texture>& OpenGl_FrameBuffer::ColorTexture(int) const' at /home/runner/micromamba/envs/bz/include/opencascade/OpenGl_FrameBuffer.hxx:243:33,
+    inlined from 'unsigned int bz::render::Viewport::TextureId() const' at /home/runner/work/breezecad/breezecad/src/render/Viewport.cpp:853:46:
+/home/runner/micromamba/envs/bz/include/opencascade/NCollection_DynamicArray.hxx:873:46: warning: potential null pointer dereference [-Wnull-dereference]
+  873 |     return getArray()[theInd >> myBlockShift][theInd & myBlockMask];
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+In member function 'TheItemType* NCollection_DynamicArray<TheItemType>::DynamicIterator<IsConstant>::blockStart(size_t) const [with bool IsConstant = true; TheItemType = opencascade::handle<SelectMgr_SensitiveEntity>]',
+    inlined from 'void NCollection_DynamicArray<TheItemType>::DynamicIterator<IsConstant>::setIndex(size_t) [with bool IsConstant = true; TheItemType = opencascade::handle<SelectMgr_SensitiveEntity>]' at /home/runner/micromamba/envs/bz/include/opencascade/NCollection_DynamicArray.hxx:293:44,
+    inlined from 'NCollection_DynamicArray<TheItemType>::DynamicIterator<IsConstant>::DynamicIterator(size_t, const NCollection_DynamicArray<TheItemType>&) [with bool IsConstant = true; TheItemType = opencascade::handle<SelectMgr_SensitiveEntity>]' at /home/runner/micromamba/envs/bz/include/opencascade/NCollection_DynamicArray.hxx:117:15,
+    inlined from 'NCollection_DynamicArray<TheItemType>::DynamicIterator<IsConstant>::DynamicIterator(const NCollection_DynamicArray<TheItemType>&) [with bool IsConstant = true; TheItemType = opencascade::handle<SelectMgr_SensitiveEntity>]' at /home/runner/micromamba/envs/bz/include/opencascade/NCollection_DynamicArray.hxx:102:38,
+    inlined from 'NCollection_DynamicArray<TheItemType>::const_iterator NCollection_DynamicArray<TheItemType>::begin() const [with TheItemType = opencascade::handle<SelectMgr_SensitiveEntity>]' at /home/runner/micromamba/envs/bz/include/opencascade/NCollection_DynamicArray.hxx:319:70,
+    inlined from 'opencascade::handle<SelectMgr_EntityOwner> bz::render::{anonymous}::FaceOwner(const opencascade::handle<AIS_InteractiveObject>&, const TopoDS_Face&)' at /home/runner/work/breezecad/breezecad/src/render/Viewport.cpp:205:93:
+/home/runner/micromamba/envs/bz/include/opencascade/NCollection_DynamicArray.hxx:299:47: warning: potential null pointer dereference [-Wnull-dereference]
+  299 |       return myOwner->getArray()[theBlockIndex];
+      |                                               ^
+[144/253] Linking CXX static library src/render/libbz_render.a
+[145/253] Building CXX object src/ui/CMakeFiles/bz_ui.dir/Widgets.cpp.o
+[146/253] Linking CXX static library src/ui/libbz_ui.a
+[147/253] Building CXX object src/app/CMakeFiles/breezecad.dir/Actions.cpp.o
+[148/253] Building CXX object src/app/CMakeFiles/breezecad.dir/main.cpp.o
+[149/253] Building CXX object src/app/CMakeFiles/breezecad.dir/AppActions.cpp.o
+[150/253] Building CXX object src/app/CMakeFiles/breezecad.dir/AppearanceLibrary.cpp.o
+/home/runner/work/breezecad/breezecad/src/app/AppearanceLibrary.cpp: In member function 'bz::Expected<int> bz::app::AppearanceLibrary::Import(const std::filesystem::__cxx11::path&)':
+/home/runner/work/breezecad/breezecad/src/app/AppearanceLibrary.cpp:121:31: warning: declaration of 'bytes' shadows a previous local [-Wshadow]
+  121 |             const std::string bytes(static_cast<const char*>(data), size);
+      |                               ^~~~~
+/home/runner/work/breezecad/breezecad/src/app/AppearanceLibrary.cpp:111:27: note: shadowed declaration is here
+  111 |         const std::string bytes = ReadText(file);
+      |                           ^~~~~
+In file included from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/ios:45,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/ostream:40,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/unique_ptr.h:42,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/memory:78,
+                 from /home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json_fwd.hpp:14,
+                 from /home/runner/work/breezecad/breezecad/src/document/Appearance.h:13,
+                 from /home/runner/work/breezecad/breezecad/src/app/AppearanceLibrary.h:7,
+                 from /home/runner/work/breezecad/breezecad/src/app/AppearanceLibrary.cpp:1:
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::egptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:49,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:182:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'std::string bz::app::{anonymous}::ReadText(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/src/app/AppearanceLibrary.cpp:26:81:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:495:30: warning: potential null pointer dereference [-Wnull-dereference]
+  495 |       egptr() const { return _M_in_end; }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::gptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:33,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:182:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'std::string bz::app::{anonymous}::ReadText(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/src/app/AppearanceLibrary.cpp:26:81:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:492:30: warning: potential null pointer dereference [-Wnull-dereference]
+  492 |       gptr()  const { return _M_in_cur;  }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::egptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:49,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:209:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'std::string bz::app::{anonymous}::ReadText(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/src/app/AppearanceLibrary.cpp:26:81:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:495:30: warning: potential null pointer dereference [-Wnull-dereference]
+  495 |       egptr() const { return _M_in_end; }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::gptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:33,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:209:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'std::string bz::app::{anonymous}::ReadText(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/src/app/AppearanceLibrary.cpp:26:81:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:492:30: warning: potential null pointer dereference [-Wnull-dereference]
+  492 |       gptr()  const { return _M_in_cur;  }
+      |                              ^~~~~~~~~
+[151/253] Building CXX object src/app/CMakeFiles/breezecad.dir/AssemblyState.cpp.o
+[152/253] Building CXX object src/app/CMakeFiles/breezecad.dir/Application.cpp.o
+/home/runner/work/breezecad/breezecad/src/app/Application.cpp: In member function 'void bz::app::Application::ApplyTheme(bool)':
+/home/runner/work/breezecad/breezecad/src/app/Application.cpp:228:21: warning: declaration of 'bg' shadows a previous local [-Wshadow]
+  228 |     if (const char* bg = std::getenv("BZ_VIEW_BG")) top = bottom = Color::Hex(static_cast<std::uint32_t>(std::strtoul(bg, nullptr, 16)));
+      |                     ^~
+/home/runner/work/breezecad/breezecad/src/app/Application.cpp:224:29: note: shadowed declaration is here
+  224 |     const BackgroundColours bg = ColoursOf(FindBackground(mySettings.background), c);
+      |                             ^~
+[153/253] Building CXX object src/app/CMakeFiles/breezecad.dir/Backgrounds.cpp.o
+[154/253] Building CXX object src/app/CMakeFiles/breezecad.dir/Autosave.cpp.o
+[155/253] Building CXX object src/app/CMakeFiles/breezecad.dir/assembly/AssemblyUi.cpp.o
+[156/253] Building CXX object src/app/CMakeFiles/breezecad.dir/Format.cpp.o
+[157/253] Building CXX object src/app/CMakeFiles/breezecad.dir/BetaTesting.cpp.o
+In file included from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/locale_facets.h:44,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/locale:42,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/fs_path.h:36,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/filesystem:49,
+                 from /home/runner/work/breezecad/breezecad/src/app/BetaTesting.h:11,
+                 from /home/runner/work/breezecad/breezecad/src/app/BetaTesting.cpp:1:
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::egptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:49,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:182:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'bz::Expected<std::filesystem::__cxx11::path> bz::app::beta::Pack(const std::filesystem::__cxx11::path&, const std::string&, bool)' at /home/runner/work/breezecad/breezecad/src/app/BetaTesting.cpp:240:101:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:495:30: warning: potential null pointer dereference [-Wnull-dereference]
+  495 |       egptr() const { return _M_in_end; }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::gptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:33,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:182:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'bz::Expected<std::filesystem::__cxx11::path> bz::app::beta::Pack(const std::filesystem::__cxx11::path&, const std::string&, bool)' at /home/runner/work/breezecad/breezecad/src/app/BetaTesting.cpp:240:101:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:492:30: warning: potential null pointer dereference [-Wnull-dereference]
+  492 |       gptr()  const { return _M_in_cur;  }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::egptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:49,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:209:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'bz::Expected<std::filesystem::__cxx11::path> bz::app::beta::Pack(const std::filesystem::__cxx11::path&, const std::string&, bool)' at /home/runner/work/breezecad/breezecad/src/app/BetaTesting.cpp:240:101:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:495:30: warning: potential null pointer dereference [-Wnull-dereference]
+  495 |       egptr() const { return _M_in_end; }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::gptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:33,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:209:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'bz::Expected<std::filesystem::__cxx11::path> bz::app::beta::Pack(const std::filesystem::__cxx11::path&, const std::string&, bool)' at /home/runner/work/breezecad/breezecad/src/app/BetaTesting.cpp:240:101:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:492:30: warning: potential null pointer dereference [-Wnull-dereference]
+  492 |       gptr()  const { return _M_in_cur;  }
+      |                              ^~~~~~~~~
+[158/253] Building CXX object src/app/CMakeFiles/breezecad.dir/Materials.cpp.o
+[159/253] Building CXX object src/app/CMakeFiles/breezecad.dir/Notifications.cpp.o
+[160/253] Building CXX object src/app/CMakeFiles/breezecad.dir/Language.cpp.o
+[161/253] Building CXX object src/app/CMakeFiles/breezecad.dir/Operations.cpp.o
+[162/253] Building CXX object src/app/CMakeFiles/breezecad.dir/TouchNavigation.cpp.o
+[163/253] Building CXX object src/app/CMakeFiles/breezecad.dir/Session.cpp.o
+[164/253] Building CXX object src/app/CMakeFiles/breezecad.dir/Workspace.cpp.o
+[165/253] Building CXX object src/app/CMakeFiles/breezecad.dir/Settings.cpp.o
+[166/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/AppearanceEditor.cpp.o
+/home/runner/work/breezecad/breezecad/src/app/features/AppearanceEditor.cpp: In function 'void bz::app::{anonymous}::DrawSample(ImDrawList*, ImVec2, float, const bz::doc::Appearance*, const bz::ui::ThemeColors&, float, unsigned int)':
+/home/runner/work/breezecad/breezecad/src/app/features/AppearanceEditor.cpp:77:46: warning: conversion from 'int' to 'float' may change value [-Wconversion]
+   77 |                     dl->AddRectFilled({p.x + i * cell, p.y + j * cell}, {p.x + (i + 1) * cell, p.y + (j + 1) * cell}, IM_COL32(200, 204, 210, 255));
+      |                                              ^
+/home/runner/work/breezecad/breezecad/src/app/features/AppearanceEditor.cpp:77:62: warning: conversion from 'int' to 'float' may change value [-Wconversion]
+   77 |                     dl->AddRectFilled({p.x + i * cell, p.y + j * cell}, {p.x + (i + 1) * cell, p.y + (j + 1) * cell}, IM_COL32(200, 204, 210, 255));
+      |                                                              ^
+/home/runner/work/breezecad/breezecad/src/app/features/AppearanceEditor.cpp:77:83: warning: conversion from 'int' to 'float' may change value [-Wconversion]
+   77 |                     dl->AddRectFilled({p.x + i * cell, p.y + j * cell}, {p.x + (i + 1) * cell, p.y + (j + 1) * cell}, IM_COL32(200, 204, 210, 255));
+      |                                                                                ~~~^~~~
+/home/runner/work/breezecad/breezecad/src/app/features/AppearanceEditor.cpp:77:105: warning: conversion from 'int' to 'float' may change value [-Wconversion]
+   77 |                     dl->AddRectFilled({p.x + i * cell, p.y + j * cell}, {p.x + (i + 1) * cell, p.y + (j + 1) * cell}, IM_COL32(200, 204, 210, 255));
+      |                                                                                                      ~~~^~~~
+[167/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/CoilEditor.cpp.o
+[168/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/CopyEditors.cpp.o
+[169/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/SketchAxis.cpp.o
+[170/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/HoleEditor.cpp.o
+[171/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/LoftEditor.cpp.o
+[172/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/EdgeOperationEditor.cpp.o
+[173/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/SweepEditor.cpp.o
+[174/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/PointPick.cpp.o
+[175/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/ThreadEditor.cpp.o
+/home/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp: In member function 'virtual void bz::app::ThreadEditor::DrawBody(bz::app::AppContext&, bz::app::Session&, bz::doc::Feature&, float)':
+/home/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp:129:23: warning: declaration of 'chosen' shadows a previous local [-Wshadow]
+  129 |         if (const int chosen = ui::Segmented(ui, "extent", labels, current, 2, width); chosen != current) {
+      |                       ^~~~~~
+/home/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp:76:23: note: shadowed declaration is here
+   76 |     const std::string chosen = f.size > 0 ? "M" + mm(f.size) : std::string(Tr("По грани"));
+      |                       ^~~~~~
+/home/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp:140:23: warning: declaration of 'chosen' shadows a previous local [-Wshadow]
+  140 |         if (const int chosen = ui::Segmented(ui, "end", ends, current, 2, width); chosen != current) {
+      |                       ^~~~~~
+/home/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp:76:23: note: shadowed declaration is here
+   76 |     const std::string chosen = f.size > 0 ? "M" + mm(f.size) : std::string(Tr("По грани"));
+      |                       ^~~~~~
+/home/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp:150:19: warning: declaration of 'chosen' shadows a previous local [-Wshadow]
+  150 |     if (const int chosen = ui::Segmented(ui, "hand", hands, current, 2, width); chosen != current) {
+      |                   ^~~~~~
+/home/runner/work/breezecad/breezecad/src/app/features/ThreadEditor.cpp:76:23: note: shadowed declaration is here
+   76 |     const std::string chosen = f.size > 0 ? "M" + mm(f.size) : std::string(Tr("По грани"));
+      |                       ^~~~~~
+[176/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/WorkPointEditor.cpp.o
+[177/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/ShellEditor.cpp.o
+[178/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/WorkAxisEditor.cpp.o
+[179/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/WorkPlaneEditor.cpp.o
+[180/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/DragArrow.cpp.o
+[181/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/ExtrudeEditor.cpp.o
+[182/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/RevolveEditor.cpp.o
+[183/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/FeatureOperationEditor.cpp.o
+[184/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/SectionEditor.cpp.o
+[185/253] Building CXX object src/app/CMakeFiles/breezecad.dir/features/SketchOperationEditor.cpp.o
+[186/253] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/Bars.cpp.o
+[187/253] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/HomeScreen.cpp.o
+[188/253] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/Header.cpp.o
+[189/253] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/LeftPanels.cpp.o
+[190/253] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/Ribbon.cpp.o
+[191/253] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/Dialogs.cpp.o
+[192/253] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/Splash.cpp.o
+[193/253] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/DimensionLayout.cpp.o
+[194/253] Building CXX object src/app/CMakeFiles/breezecad.dir/MouseNavigation.cpp.o
+[195/253] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/TouchpadSettings.cpp.o
+[196/253] Building CXX object src/app/CMakeFiles/breezecad.dir/ShortcutPresets.cpp.o
+[197/253] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/SketchOverlay.cpp.o
+[198/253] Building CXX object src/app/CMakeFiles/breezecad.dir/shell/TreePanel.cpp.o
+[199/253] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/SketchText.cpp.o
+[200/253] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/SketchPick.cpp.o
+[201/253] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/SketchEditor.cpp.o
+[202/253] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/MarkingMenu.cpp.o
+[203/253] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/SketchToolPanel.cpp.o
+[204/253] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/Measure.cpp.o
+[205/253] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/Planes.cpp.o
+[206/253] Building CXX object src/app/CMakeFiles/breezecad.dir/sketch/SketchTools.cpp.o
+[207/253] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/Section.cpp.o
+[208/253] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/TouchGestures.cpp.o
+[209/253] Linking C shared library modules/hello/libhello.so
+[210/253] Linking C shared library modules/hello-fail/libhello.so
+[211/253] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/ViewportPanel.cpp.o
+/home/runner/work/breezecad/breezecad/src/app/viewport/ViewportPanel.cpp: In function 'void bz::app::DrawViewport(AppContext&, Session&, ImVec2, ImVec2)':
+/home/runner/work/breezecad/breezecad/src/app/viewport/ViewportPanel.cpp:249:21: warning: declaration of 'dl' shadows a previous local [-Wshadow]
+  249 |         ImDrawList* dl = ImGui::GetWindowDrawList();
+      |                     ^~
+/home/runner/work/breezecad/breezecad/src/app/viewport/ViewportPanel.cpp:215:17: note: shadowed declaration is here
+  215 |     ImDrawList* dl = BeginArea("##viewport", pos, size, ui.C().viewportBottom);
+      |                 ^~
+[212/253] Building CXX object tests/CMakeFiles/bz_tests.dir/assembly/AssemblyFileTests.cpp.o
+[213/253] Building CXX object src/app/CMakeFiles/breezecad.dir/viewport/FaceSelection.cpp.o
+[214/253] Building CXX object tests/CMakeFiles/bz_tests.dir/main.cpp.o
+[215/253] Building CXX object tests/CMakeFiles/bz_tests.dir/core/ExpressionTests.cpp.o
+[216/253] Building CXX object tests/CMakeFiles/bz_tests.dir/assembly/SolverTests.cpp.o
+[217/253] Building CXX object tests/CMakeFiles/bz_tests.dir/core/FaultGuardTests.cpp.o
+[218/253] Building CXX object tests/CMakeFiles/bz_tests.dir/core/ImageTests.cpp.o
+[219/253] Building CXX object tests/CMakeFiles/bz_tests.dir/core/I18nTests.cpp.o
+[220/253] Building CXX object tests/CMakeFiles/bz_tests.dir/document/AppearanceTests.cpp.o
+[221/253] Building CXX object tests/CMakeFiles/bz_tests.dir/core/SourceRulesTests.cpp.o
+[222/253] Building CXX object tests/CMakeFiles/bz_tests.dir/document/DocumentTests.cpp.o
+[223/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/AssemblyModelTests.cpp.o
+[224/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/AutoDropTests.cpp.o
+[225/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/CoilTests.cpp.o
+[226/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/ComponentPatternTests.cpp.o
+[227/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/FilletTests.cpp.o
+[228/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/BracketTests.cpp.o
+/home/runner/work/breezecad/breezecad/tests/kernel/BracketTests.cpp: In function 'std::vector<bz::doc::EdgeReference> {anonymous}::Edges(const bz::kernel::Model&, const std::function<bool(gp_Pnt, gp_Dir)>&)':
+/home/runner/work/breezecad/breezecad/tests/kernel/BracketTests.cpp:54:32: warning: 'TopTools_IndexedMapOfShape' is deprecated: TopTools_IndexedMapOfShape is deprecated, use NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+   54 |     TopTools_IndexedMapOfShape edges;   // each edge once (an explorer meets it on both faces)
+      |                                ^~~~~
+In file included from /home/runner/work/breezecad/breezecad/tests/kernel/BracketTests.cpp:18:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedMapOfShape.hxx:32:71: note: declared here
+   32 | typedef NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> TopTools_IndexedMapOfShape;
+      |                                                                       ^~~~~~~~~~~~~~~~~~~~~~~~~~
+[229/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/HoleTests.cpp.o
+[230/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/LoftTests.cpp.o
+[231/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/MeasureTests.cpp.o
+[232/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/ProjectionTests.cpp.o
+/home/runner/work/breezecad/breezecad/tests/kernel/ProjectionTests.cpp: In function 'bz::doc::EdgeReference {anonymous}::EdgeAt(const bz::kernel::Model&, GeomAbs_CurveType, double)':
+/home/runner/work/breezecad/breezecad/tests/kernel/ProjectionTests.cpp:22:32: warning: 'TopTools_IndexedMapOfShape' is deprecated: TopTools_IndexedMapOfShape is deprecated, use NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+   22 |     TopTools_IndexedMapOfShape edges;
+      |                                ^~~~~
+In file included from /home/runner/work/breezecad/breezecad/tests/kernel/ProjectionTests.cpp:8:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedMapOfShape.hxx:32:71: note: declared here
+   32 | typedef NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> TopTools_IndexedMapOfShape;
+      |                                                                       ^~~~~~~~~~~~~~~~~~~~~~~~~~
+[233/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/ModelTests.cpp.o
+In file included from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/locale_facets.h:44,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/locale:42,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/fs_path.h:36,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/filesystem:49,
+                 from /home/runner/work/breezecad/breezecad/src/core/PathText.h:9,
+                 from /home/runner/work/breezecad/breezecad/tests/kernel/ModelTests.cpp:1:
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::egptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:49,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:182:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'void DOCTEST_ANON_FUNC_16()' at /home/runner/work/breezecad/breezecad/tests/kernel/ModelTests.cpp:177:100:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:495:30: warning: potential null pointer dereference [-Wnull-dereference]
+  495 |       egptr() const { return _M_in_end; }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::gptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:33,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:182:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'void DOCTEST_ANON_FUNC_16()' at /home/runner/work/breezecad/breezecad/tests/kernel/ModelTests.cpp:177:100:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:492:30: warning: potential null pointer dereference [-Wnull-dereference]
+  492 |       gptr()  const { return _M_in_cur;  }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::egptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:49,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:209:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'void DOCTEST_ANON_FUNC_16()' at /home/runner/work/breezecad/breezecad/tests/kernel/ModelTests.cpp:177:100:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:495:30: warning: potential null pointer dereference [-Wnull-dereference]
+  495 |       egptr() const { return _M_in_end; }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::gptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:33,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:209:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'void DOCTEST_ANON_FUNC_16()' at /home/runner/work/breezecad/breezecad/tests/kernel/ModelTests.cpp:177:100:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:492:30: warning: potential null pointer dereference [-Wnull-dereference]
+  492 |       gptr()  const { return _M_in_cur;  }
+      |                              ^~~~~~~~~
+[234/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/PatternTests.cpp.o
+[235/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/RevolvedProjectionTests.cpp.o
+[236/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/ShellTests.cpp.o
+[237/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/SectionTests.cpp.o
+[238/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/RevolveTests.cpp.o
+[239/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/SweepTests.cpp.o
+[240/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/StandardPartsTests.cpp.o
+[241/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/ThreadTests.cpp.o
+[242/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/WorkPlaneTests.cpp.o
+[243/253] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/FilletTests.cpp.o
+[244/253] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/MirrorTests.cpp.o
+[245/253] Building CXX object tests/CMakeFiles/bz_tests.dir/kernel/WorkPointTests.cpp.o
+/home/runner/work/breezecad/breezecad/tests/kernel/WorkPointTests.cpp: In function 'bz::doc::EdgeReference {anonymous}::EdgeAt(const bz::kernel::Model&, GeomAbs_CurveType, double)':
+/home/runner/work/breezecad/breezecad/tests/kernel/WorkPointTests.cpp:43:32: warning: 'TopTools_IndexedMapOfShape' is deprecated: TopTools_IndexedMapOfShape is deprecated, use NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> directly [-Wdeprecated-declarations]
+   43 |     TopTools_IndexedMapOfShape edges;
+      |                                ^~~~~
+In file included from /home/runner/work/breezecad/breezecad/tests/kernel/WorkPointTests.cpp:11:
+/home/runner/micromamba/envs/bz/include/opencascade/TopTools_IndexedMapOfShape.hxx:32:71: note: declared here
+   32 | typedef NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> TopTools_IndexedMapOfShape;
+      |                                                                       ^~~~~~~~~~~~~~~~~~~~~~~~~~
+[246/253] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/MoveTests.cpp.o
+[247/253] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/OffsetTests.cpp.o
+[248/253] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/ShapesTests.cpp.o
+[249/253] Building CXX object tests/CMakeFiles/bz_tests.dir/modules/ModuleTests.cpp.o
+In file included from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/ios:45,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/ostream:40,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/unique_ptr.h:42,
+                 from /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/memory:78,
+                 from /home/runner/work/breezecad/breezecad/third_party/nlohmann/nlohmann/json_fwd.hpp:14,
+                 from /home/runner/work/breezecad/breezecad/src/document/Appearance.h:13,
+                 from /home/runner/work/breezecad/breezecad/src/assembly/Assembly.h:13,
+                 from /home/runner/work/breezecad/breezecad/tests/modules/ModuleTests.cpp:1:
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::egptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:49,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:182:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'std::string {anonymous}::ReadFile(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/tests/modules/ModuleTests.cpp:35:51,
+    inlined from 'void DOCTEST_ANON_FUNC_6()' at /home/runner/work/breezecad/breezecad/tests/modules/ModuleTests.cpp:133:9:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:495:30: warning: potential null pointer dereference [-Wnull-dereference]
+  495 |       egptr() const { return _M_in_end; }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::gptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:33,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:182:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'std::string {anonymous}::ReadFile(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/tests/modules/ModuleTests.cpp:35:51,
+    inlined from 'void DOCTEST_ANON_FUNC_6()' at /home/runner/work/breezecad/breezecad/tests/modules/ModuleTests.cpp:133:9:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:492:30: warning: potential null pointer dereference [-Wnull-dereference]
+  492 |       gptr()  const { return _M_in_cur;  }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::egptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:49,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:209:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'std::string {anonymous}::ReadFile(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/tests/modules/ModuleTests.cpp:35:51,
+    inlined from 'void DOCTEST_ANON_FUNC_6()' at /home/runner/work/breezecad/breezecad/tests/modules/ModuleTests.cpp:133:9:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:495:30: warning: potential null pointer dereference [-Wnull-dereference]
+  495 |       egptr() const { return _M_in_end; }
+      |                              ^~~~~~~~~
+In member function 'std::basic_streambuf<_CharT, _Traits>::char_type* std::basic_streambuf<_CharT, _Traits>::gptr() const [with _CharT = char; _Traits = std::char_traits<char>]',
+    inlined from 'std::basic_streambuf<_CharT, _Traits>::int_type std::basic_streambuf<_CharT, _Traits>::sbumpc() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:326:33,
+    inlined from 'std::istreambuf_iterator<_CharT, _Traits>& std::istreambuf_iterator<_CharT, _Traits>::operator++() [with _CharT = char; _Traits = std::char_traits<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/streambuf_iterator.h:173:17,
+    inlined from 'constexpr void std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::_M_construct(_InIterator, _InIterator, std::input_iterator_tag) [with _InIterator = std::istreambuf_iterator<char, std::char_traits<char> >; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.tcc:209:6,
+    inlined from 'constexpr std::__cxx11::basic_string<_CharT, _Traits, _Alloc>::basic_string(_InputIterator, _InputIterator, const _Alloc&) [with _InputIterator = std::istreambuf_iterator<char, std::char_traits<char> >; <template-parameter-2-2> = void; _CharT = char; _Traits = std::char_traits<char>; _Alloc = std::allocator<char>]' at /home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/bits/basic_string.h:765:16,
+    inlined from 'std::string {anonymous}::ReadFile(const std::filesystem::__cxx11::path&)' at /home/runner/work/breezecad/breezecad/tests/modules/ModuleTests.cpp:35:51,
+    inlined from 'void DOCTEST_ANON_FUNC_6()' at /home/runner/work/breezecad/breezecad/tests/modules/ModuleTests.cpp:133:9:
+/home/runner/micromamba/envs/bz/lib/gcc/x86_64-conda-linux-gnu/13.4.0/include/c++/streambuf:492:30: warning: potential null pointer dereference [-Wnull-dereference]
+  492 |       gptr()  const { return _M_in_cur;  }
+      |                              ^~~~~~~~~
+[250/253] Linking CXX executable bin/breezecad
+[251/253] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/SolverTests.cpp.o
+[252/253] Building CXX object tests/CMakeFiles/bz_tests.dir/sketch/TrimTests.cpp.o
+[253/253] Linking CXX executable bin/bz_tests

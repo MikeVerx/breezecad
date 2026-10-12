@@ -1,0 +1,9 @@
+20:46:18.665 INFO  BreezeCAD 0.2.0 (7/merge 335705e, 2026-10-12) starting
+20:46:18.665 INFO  Interface language: ru
+20:46:18.733 INFO  Window: OpenGL 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4
+20:46:18.733 INFO  Graphics: Mesa / llvmpipe (LLVM 20.1.2, 256 bits)
+20:46:18.733 INFO  Assets: /tmp/start/BreezeCAD/assets
+20:46:18.735 INFO  Touchpad: XInput 2.4, 0 scrolling devices (0 touchpads), pinch and rotation on
+20:46:18.744 INFO  Viewport: OpenGL ready
+20:46:19.965 INFO  Screenshot saved: /home/runner/work/breezecad/breezecad/shots/touchpad.ppm
+20:46:19.966 INFO  BreezeCAD exits normally
