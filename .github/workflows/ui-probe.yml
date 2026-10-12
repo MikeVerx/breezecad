@@ -7,6 +7,8 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Dependencies
@@ -31,10 +33,11 @@ jobs:
           BZ_BIN: ${{ github.workspace }}/build/linux-release/bin
           SHOTS: ${{ github.workspace }}/shots
         run: bash scripts/ui-test/probe-faces.sh || true
-      - uses: actions/upload-artifact@v4
+      - name: Keep the screenshots in a branch
         if: always()
-        with:
-          name: shots
-          path: |
-            shots/*.png
-            /tmp/breezecad-ui.log
+        run: |
+          mkdir -p out && cp shots/*.png out/ 2>/dev/null || true
+          cp /tmp/breezecad-ui.log out/ 2>/dev/null || true
+          cd out && git init -q && git checkout -q -b ui-probe-shots
+          git add -A && git -c user.name=ci -c user.email=ci@local commit -qm "shots ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ui-probe-shots
