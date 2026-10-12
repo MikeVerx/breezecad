@@ -42,7 +42,8 @@ void DrawTouchpadSettings(AppContext& app, float width) {
 
     const float rows = 8;
     const float artW = ui.S(124), artH = ui.S(52), gap = ui.S(14), rowGap = ui.S(10);
-    const float listH = std::min(rows * (artH + rowGap), std::max(ui.S(240), ImGui::GetIO().DisplaySize.y * 0.5f));
+    // The rest of the dialog takes about 480 px: the list scrolls on small screens.
+    const float listH = std::clamp(ImGui::GetIO().DisplaySize.y - ui.S(480), ui.S(200), rows * (artH + rowGap));
     ImGui::BeginChild("##touchpad-gestures", {width, listH}, ImGuiChildFlags_None);
     const float w = ImGui::GetContentRegionAvail().x;
     const float textW = ui.S(180);
@@ -64,6 +65,7 @@ void DrawTouchpadSettings(AppContext& app, float width) {
             ImGui::PopStyleColor();
         }
         if (!available) {
+            ImGui::SetCursorScreenPos({at.x + artW + gap, ImGui::GetCursorScreenPos().y});
             ui::FontScope font(ui.fonts.caption);
             ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
             ImGui::TextUnformatted(Tr("недоступно в этой системе"));
@@ -122,18 +124,12 @@ void DrawTouchpadSettings(AppContext& app, float width) {
         int current = 1;
         for (std::size_t i = 0; i < values.size(); ++i)
             if (std::abs(values[i] - t.speed) < 1e-6) current = static_cast<int>(i);
-        const float half = (width - ui.S(8)) / 2;
-        ImGui::BeginGroup();
         ui::FieldLabel(ui, Tr("Скорость"));
-        if (const int n = ui::Segmented(ui, "touch-speed", speeds, current, 2, half); n != current) t.speed = values[static_cast<std::size_t>(n)];
-        ImGui::EndGroup();
-        ImGui::SameLine(0, ui.S(8));
-        ImGui::BeginGroup();
+        if (const int n = ui::Segmented(ui, "touch-speed", speeds, current, 4, width); n != current) t.speed = values[static_cast<std::size_t>(n)];
         static constexpr std::array<const char*, 2> direction{N_("Как пальцы"), N_("Наоборот")};
         ui::FieldLabel(ui, Tr("Вид движется"));
         const int inv = t.invert ? 1 : 0;
-        if (const int n = ui::Segmented(ui, "touch-invert", direction, inv, 2, half); n != inv) t.invert = n == 1;
-        ImGui::EndGroup();
+        if (const int n = ui::Segmented(ui, "touch-invert", direction, inv, 2, width); n != inv) t.invert = n == 1;
     }
 #if !defined(__APPLE__)
     // macOS tells fingers from a wheel itself; here a smooth wheel is a guess.
