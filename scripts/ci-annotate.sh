@@ -18,6 +18,8 @@ for log in "$@"; do
     grep -E "error:|Error:|undefined reference|cannot find|DSO missing|FAILED:" "$log" | cut -c1-300 | head -40 | emit "$name (errors)"
     grep -E "error|Error|ERROR|FAILED|Failed|failed|FATAL|Assertion|terminate called|Segmentation|Exception|SEGFAULT|TEST CASE|undefined reference|ld: |cannot find|DSO missing" "$log" \
         | grep -v "warning:" | cut -c1-300 | head -60 | emit "$name"
+    # The end of the build log says how it stopped, whatever the words.
+    if [ "$name" = "build.log" ]; then tail -25 "$log" | cut -c1-300 | emit "$name (tail)"; fi
     # A crash prints no check at all: the end of the test log says what ran last.
     if [ "$name" = "test.log" ] && grep -q "tests failed" "$log"; then tail -60 "$log" | emit "$name (tail)"; fi
     # A backtrace, when the crash was run again under gdb.
