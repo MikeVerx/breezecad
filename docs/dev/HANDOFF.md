@@ -6,6 +6,13 @@
 
 ## 0. Старт сессии (≈5 команд)
 
+**Облачная песочница Claude (apt и PyPI закрыты, открыт только GitHub):**
+`bash scripts/dev/cloud-setup.sh` — сама достанет заголовки X11/GL, GLFW и OCCT
+(из релиза `dev-deps`, если он есть, иначе соберёт из исходников ~1 ч), соберёт
+`linux-debug` и прогонит тесты. Затем в каждой оболочке:
+`export LD_LIBRARY_PATH=$HOME/deps/prefix/lib:$LD_LIBRARY_PATH`.
+Результаты аудита 13.10.2026 и порядок исправлений — `docs/audit/README.md`.
+
 ```bash
 cd /home/claude/breezecad && git switch next && git pull -q
 # если контейнер новый (пакеты пропали):
