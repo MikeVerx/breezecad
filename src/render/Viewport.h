@@ -98,6 +98,9 @@ public:
     /// balanced, 2 for weak computers (no smoothing, coarse round faces).
     void SetQuality(int level);
     void SetHoveredBody(ObjectId body);
+    /// Bodies not drawn (and not picked): those of operations the user hid.
+    /// The model keeps them; only the view leaves them out.
+    void SetHiddenBodies(std::vector<ObjectId> bodies);
     /// Both references point at the same face of the shown body `body`.
     bool SameFace(ObjectId body, const doc::FaceReference& a, const doc::FaceReference& b) const;
     /// Colours of bodies and faces of the document `owner` (any pointer that

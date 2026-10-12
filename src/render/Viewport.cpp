@@ -232,6 +232,7 @@ struct Viewport::Impl {
     /// an operation without applying it brings the old shapes back at once.
     std::vector<Shown> spare;
     static constexpr std::size_t kSpare = 4;
+    std::vector<ObjectId> hiddenBodies;   ///< left out of `shown` (SetHiddenBodies)
     /// Cosmetic threads and the like: drawn, never picked.
     std::vector<Handle(AIS_Shape)> decorations;
 
@@ -603,6 +604,7 @@ void Viewport::Sync(const kernel::Model& model) {
     std::vector<Impl::Shown> previous = std::move(m.shown);
     m.shown.clear();
     for (const kernel::Body& body : model.GetImpl().bodies) {
+        if (std::find(m.hiddenBodies.begin(), m.hiddenBodies.end(), body.id) != m.hiddenBodies.end()) continue;
         const auto same = std::find_if(previous.begin(), previous.end(), [&](const Impl::Shown& s) {
             return !s.shape.IsNull() && s.body == body.id && s.shape->Shape().IsEqual(body.shape);
         });
@@ -737,6 +739,13 @@ void Viewport::SetLook(const doc::Look& look, const void* owner, std::uint64_t r
     m.look = look;
     m.textures.clear();   // made again from this look's pictures
     m.ApplyStyleAll();
+}
+
+void Viewport::SetHiddenBodies(std::vector<ObjectId> bodies) {
+    Impl& m = *myImpl;
+    if (bodies == m.hiddenBodies) return;
+    m.hiddenBodies = std::move(bodies);
+    m.syncedRevision = static_cast<std::uint64_t>(-1);   // the next Sync shows or leaves them out
 }
 
 void Viewport::SetHoveredBody(ObjectId body) {

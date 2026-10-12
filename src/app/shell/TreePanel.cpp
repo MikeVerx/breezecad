@@ -45,6 +45,8 @@ struct RowStyle {
     std::string meta;
     const char* statusIcon = nullptr;
     std::string statusText;
+    bool        hideable = false;   ///< has an eye at the right: hide or show it
+    bool        hidden = false;
 };
 
 /// Draws a tree row; returns its interaction.
@@ -52,6 +54,7 @@ struct RowResult {
     bool clicked = false;
     bool doubleClicked = false;
     bool caretClicked = false;
+    bool eyeClicked = false;
     bool hovered = false;
 };
 
@@ -90,8 +93,21 @@ RowResult Row(AppContext& app, const char* id, const std::string& name, const Ro
         x += ui.S(24);
     }
 
-    // Right side: status icon and meta text.
+    // Right side: the eye, status icon and meta text.
     float right = p.x + width - ui.S(8);
+    if (style.hideable) {
+        right -= ui.S(16);
+        // Always there for a hidden item, so it can be found again; else on hover.
+        if (style.hidden || r.hovered)
+            ui.icons.Draw(dl, style.hidden ? "ui-eye-off" : "ui-eye", {right, p.y + (h - ui.S(15)) / 2}, ui.S(15),
+                          style.hidden ? c.textMuted : c.textSecondary);
+        const ImVec2 mouse = ImGui::GetMousePos();
+        if (r.clicked && mouse.x >= right - ui.S(4) && mouse.x <= right + ui.S(20)) {
+            r.eyeClicked = true;
+            r.clicked = false;
+        }
+        right -= ui.S(6);
+    }
     if (style.statusIcon) {
         right -= ui.S(16);
         ui.icons.Draw(dl, style.statusIcon, {right, p.y + (h - ui.S(15)) / 2}, ui.S(15), {1, 1, 1, 1});
@@ -147,6 +163,23 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
     return {};
 }
 
+/// What the eye can hide: a body (of the operation that made it), a sketch,
+/// a work plane, axis or point. Other operations change a body, not own one.
+bool Hideable(const Session& session, const doc::Feature& f) {
+    if (dynamic_cast<const doc::SketchFeature*>(&f) || dynamic_cast<const doc::WorkPlaneFeature*>(&f) ||
+        dynamic_cast<const doc::WorkAxisFeature*>(&f) || dynamic_cast<const doc::WorkPointFeature*>(&f))
+        return true;
+    for (const kernel::BodyInfo& b : session.model.Bodies())
+        if (b.id == f.id) return true;
+    return f.hidden;   // hidden while it made a body: it can always be shown again
+}
+
+void ToggleHidden(Session& session, ObjectId id) {
+    const doc::Feature* f = session.doc.Find(id);
+    if (!f) return;
+    session.Execute(doc::SetHidden(id, !f->hidden, f->hidden ? Trf("Показать {}", f->name) : Trf("Скрыть {}", f->name)));
+}
+
 void ContextMenu(AppContext& app, Session& session, const doc::Feature& f, std::size_t index) {
     ui::Ui& ui = app.ui;
     ui::MenuStyle style(ui);   // before Begin: must outlive the End call
@@ -163,7 +196,10 @@ void ContextMenu(AppContext& app, Session& session, const doc::Feature& f, std::
         app.shell.renameText = f.name;
         app.shell.renameFocus = true;
     }
-    if (ui::MenuItem(ui, f.suppressed ? Tr("Включить") : Tr("Подавить"), nullptr, f.suppressed ? "ui-eye" : "ui-eye-off")) {
+    if (Hideable(session, f) &&
+        ui::MenuItem(ui, f.hidden ? Tr("Показать") : Tr("Скрыть"), nullptr, f.hidden ? "ui-eye" : "ui-eye-off"))
+        app.Later([&session, id] { ToggleHidden(session, id); });
+    if (ui::MenuItem(ui, f.suppressed ? Tr("Включить") : Tr("Подавить"), nullptr, "ui-suppress")) {
         app.Later([&session, id] {
             const doc::Feature* current = session.doc.Find(id);
             if (!current) return;
@@ -277,6 +313,8 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         if (f.status.state == doc::FeatureState::Error) style.statusIcon = "status-error";
         if (f.status.state == doc::FeatureState::Warning) style.statusIcon = "status-warning";
         style.statusText = Tr(f.status.message);
+        style.hideable = Hideable(session, f);
+        style.hidden = f.hidden;
 
         ImGui::PushID(static_cast<int>(f.id.value));
         if (app.shell.renaming == f.id) {
@@ -315,7 +353,11 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
             else app.shell.expanded.insert(f.id);
         }
         if (r.clicked) session.selectedFeature = f.id;
-        if (r.doubleClicked) {
+        if (r.eyeClicked) {
+            const ObjectId id = f.id;
+            app.Later([&session, id] { ToggleHidden(session, id); });
+        }
+        if (r.doubleClicked && !r.eyeClicked) {
             const ObjectId id = f.id;
             app.Later([&app, &session, id] { EditFeature(app, session, id); });
         }

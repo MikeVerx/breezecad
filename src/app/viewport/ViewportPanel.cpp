@@ -36,13 +36,15 @@ void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDra
     const std::vector<ShownPlane> work = WorkPlanes(session);
     planes.insert(planes.end(), work.begin(), work.end());
 
-    // A plane chosen in the tree meanwhile: the sketch goes on it.
-    for (const ShownPlane& p : planes)
-        if (p.id == session.selectedFeature) {
-            const doc::SketchPlacement placement{p.id, p.frame, false, {}};
-            app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
-            return;
-        }
+    // A plane chosen in the tree meanwhile (a hidden one too): the sketch goes on it.
+    std::optional<Frame> chosen = doc::origin::PlaneFrame(session.selectedFeature);
+    if (const auto* wp = session.doc.FindAs<doc::WorkPlaneFeature>(session.selectedFeature); wp && wp->frame && !wp->suppressed)
+        chosen = wp->frame;
+    if (chosen) {
+        const doc::SketchPlacement placement{session.selectedFeature, *chosen, false, {}};
+        app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
+        return;
+    }
 
     const ShownPlane* hot = vf.hovered ? PlaneUnderCursor(vf, mouse, planes) : nullptr;
     // A flat face of the model under the cursor wins over the planes, even
@@ -327,7 +329,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             // (An open sketch operation draws its own sketch.)
             for (std::size_t i = 0; i < session.doc.EndMarker(); ++i) {
                 const auto* sk = dynamic_cast<const doc::SketchFeature*>(session.doc.Features()[i].get());
-                if (!sk || sk->suppressed) continue;
+                if (!sk || sk->suppressed || sk->hidden) continue;
                 bool used = false;
                 for (const auto& f : session.doc.Features())
                     for (ObjectId dep : f->Dependencies()) used = used || dep == sk->id;

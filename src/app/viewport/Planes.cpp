@@ -39,7 +39,7 @@ std::vector<ShownPlane> WorkPlanes(const Session& session, std::size_t before) {
     const std::size_t end = std::min(before, session.doc.EndMarker());
     for (std::size_t i = 0; i < end; ++i) {
         const auto* wp = dynamic_cast<const doc::WorkPlaneFeature*>(session.doc.Features()[i].get());
-        if (!wp || wp->suppressed || !wp->frame) continue;
+        if (!wp || wp->suppressed || wp->hidden || !wp->frame) continue;
         planes.push_back({wp->id, *wp->frame, wp->frame->ToLocal(middle), half, wp->name});
     }
     return planes;
@@ -107,7 +107,7 @@ void DrawWorkAxes(AppContext& app, ImDrawList* dl, const ViewportFrame& vf, cons
     const auto& features = session.doc.Features();
     for (std::size_t i = 0; i < features.size() && i < before; ++i) {
         const auto* wa = dynamic_cast<const doc::WorkAxisFeature*>(features[i].get());
-        if (!wa || wa->suppressed || !wa->line) continue;
+        if (!wa || wa->suppressed || wa->hidden || !wa->line) continue;
         const auto& [point, dir] = *wa->line;
         const ImVec2 a = vf.Project(point - dir * reach), b = vf.Project(point + dir * reach);
         const bool strong = wa->id == hot;
@@ -136,7 +136,7 @@ ObjectId AxisUnderCursor(AppContext& app, const ViewportFrame& vf, ImVec2 mouse,
     float bestDistance = app.ui.S(6);
     for (std::size_t i = 0; i < features.size() && i < before; ++i) {
         const auto* wa = dynamic_cast<const doc::WorkAxisFeature*>(features[i].get());
-        if (!wa || wa->suppressed || !wa->line) continue;
+        if (!wa || wa->suppressed || wa->hidden || !wa->line) continue;
         const auto& [point, dir] = *wa->line;
         const ImVec2 a = vf.Project(point - dir * reach), b = vf.Project(point + dir * reach);
         const float dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
@@ -157,7 +157,7 @@ std::vector<ShownPoint> WorkPoints(const Session& session, std::size_t before) {
     for (std::size_t i = 0; i < features.size() && i < before; ++i) {
         if (!session.doc.IsActive(i)) continue;
         const auto* wp = dynamic_cast<const doc::WorkPointFeature*>(features[i].get());
-        if (wp && !wp->suppressed && wp->position) out.push_back({wp->id, *wp->position, wp->name});
+        if (wp && !wp->suppressed && !wp->hidden && wp->position) out.push_back({wp->id, *wp->position, wp->name});
     }
     return out;
 }
