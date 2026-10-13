@@ -18,6 +18,7 @@ add_executable(bz_tests
     kernel/HoleTests.cpp
     kernel/LoftTests.cpp
     kernel/MeasureTests.cpp
+    kernel/ExtrudeToFaceTests.cpp
     kernel/ModelTests.cpp
     kernel/PatternTests.cpp
     kernel/ProjectionTests.cpp

@@ -106,6 +106,9 @@ public:
     /// balanced, 2 for weak computers (no smoothing, coarse round faces).
     void SetQuality(int level);
     void SetHoveredBody(ObjectId body);
+    /// Bodies not drawn (and not picked): those of operations the user hid.
+    /// The model keeps them; only the view leaves them out.
+    void SetHiddenBodies(std::vector<ObjectId> bodies);
     /// Both references point at the same face of the shown body `body`.
     bool SameFace(ObjectId body, const doc::FaceReference& a, const doc::FaceReference& b) const;
     /// Colours of bodies and faces of the document `owner` (any pointer that
@@ -124,9 +127,10 @@ public:
     CameraState    Camera() const;
     void           SetCamera(const CameraState& camera);
 
-    /// Turntable orbit: `yaw` around world Z, `pitch` around the screen's
-    /// horizontal axis, both in radians, about `pivot`.
-    void Orbit(double yaw, double pitch, Vec3 pivot);
+    /// Orbit about `pivot`, angles in radians: `pitch` around the screen's
+    /// horizontal axis; `yaw` around the screen's vertical axis (free, as in
+    /// Inventor and KOMPAS) or, with `turntable`, around world Z.
+    void Orbit(double yaw, double pitch, Vec3 pivot, bool turntable = false);
     void Pan(double dxPixels, double dyPixels);
     /// Zooms by `factor` (>1 closer) keeping the point under the cursor still.
     void ZoomAt(double factor, Vec2 pixel);

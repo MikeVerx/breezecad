@@ -21,6 +21,7 @@ struct Settings {
     int         newPartLength  = 0;       ///< length unit of new parts: LengthUnit as int (0 = mm)
     double      orbitSpeed     = 1.0;     ///< view rotation sensitivity, 0.5..2
     bool        invertOrbit    = false;   ///< drag up turns the model down
+    bool        turntableOrbit = false;   ///< sideways drag turns about world Z (else about the screen's vertical)
     int         autosaveMinutes = 5;      ///< 0 turns autosave off
     bool        gridSnap       = true;
     bool        pointSnap      = true;

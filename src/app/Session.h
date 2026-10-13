@@ -133,6 +133,7 @@ private:
     int                        myMeshQuality = 1;
     bool                       myBackgroundAllowed = true;
     std::uint64_t myBuiltRevision = static_cast<std::uint64_t>(-1);
+    std::size_t   myBuiltFeatureCount = 0;   ///< operations in the document when the model was last built
     double        myLastRebuildSeconds = 0;   ///< how long the last rebuild took
     double        myLastRebuildAt = 0;        ///< when it finished (ImGui time)
     double        myRebuildBeganAt = 0;       ///< first slice of the rebuild under way (monitor)

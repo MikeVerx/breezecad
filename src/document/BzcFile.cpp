@@ -71,11 +71,12 @@ std::string DocumentToJson(const Document& doc) {
     for (const auto& f : doc.Features()) {
         Json j{{"id", f->id.value}, {"type", f->Type()}, {"name", f->name}};
         if (f->suppressed) j["suppressed"] = true;
+        if (f->hidden) j["hidden"] = true;   // absent in older files: shown
         // A feature's own fields must not reuse the common keys (a hole once
         // wrote its kind as "type" and could not be opened again).
         Json fields = Json::object();
         f->SaveFields(fields);
-        for (const char* reserved : {"id", "type", "name", "suppressed"})
+        for (const char* reserved : {"id", "type", "name", "suppressed", "hidden"})
             assert(!fields.contains(reserved) && "SaveFields wrote a reserved key");
         j.update(fields);
         features.push_back(std::move(j));
@@ -125,7 +126,7 @@ Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
             feature = std::move(unknown);
         }
         if (!ReadMember(j, "id", feature->id) || !feature->id || !ReadMember(j, "name", feature->name) ||
-            !ReadMember(j, "suppressed", feature->suppressed))
+            !ReadMember(j, "suppressed", feature->suppressed) || !ReadMember(j, "hidden", feature->hidden))
             return Error{"Повреждена операция в дереве"};
         if (Status s = feature->LoadFields(j); !s) return s.GetError();
         doc.Insert(std::move(feature), doc.FeatureCount());

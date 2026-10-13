@@ -42,6 +42,7 @@ Settings Settings::Load(const std::filesystem::path& file) {
     s.newPartLength   = std::clamp(j.value("newPartLength", s.newPartLength), 0, 3);
     s.orbitSpeed      = std::clamp(j.value("orbitSpeed", s.orbitSpeed), 0.25, 4.0);
     s.invertOrbit     = j.value("invertOrbit", s.invertOrbit);
+    s.turntableOrbit  = j.value("turntableOrbit", s.turntableOrbit);
     s.autosaveMinutes = std::clamp(j.value("autosaveMinutes", s.autosaveMinutes), 0, 120);
     s.gridSnap        = j.value("gridSnap", s.gridSnap);
     s.pointSnap       = j.value("pointSnap", s.pointSnap);
@@ -112,6 +113,7 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"newPartLength", newPartLength},
         {"orbitSpeed", orbitSpeed},
         {"invertOrbit", invertOrbit},
+        {"turntableOrbit", turntableOrbit},
         {"language", language},
         {"window", {{"x", windowX}, {"y", windowY}, {"width", windowW}, {"height", windowH}, {"maximized", windowMaximized}}},
         {"shortcuts", ShortcutsJson(shortcuts)},

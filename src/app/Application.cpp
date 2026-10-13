@@ -420,6 +420,10 @@ void Application::Frame() {
         }
         {
             prof::Scope scope("sync");
+            std::vector<ObjectId> hidden;   // operations hidden in the tree: their bodies too
+            for (const auto& f : s->doc.Features())
+                if (f->hidden) hidden.push_back(f->id);
+            myViewport.SetHiddenBodies(std::move(hidden));
             myViewport.Sync(s->model);
         }
         if (s->assembly) {

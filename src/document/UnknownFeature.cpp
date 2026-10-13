@@ -26,7 +26,7 @@ void UnknownFeature::SaveFields(nlohmann::json& out) const {
 
 Status UnknownFeature::LoadFields(const nlohmann::json& in) {
     *myFields = in;
-    for (const char* common : {"id", "type", "name", "suppressed"}) myFields->erase(common);
+    for (const char* common : {"id", "type", "name", "suppressed", "hidden"}) myFields->erase(common);
     return Status::Ok();
 }
 
