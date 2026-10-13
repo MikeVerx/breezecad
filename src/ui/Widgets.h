@@ -72,6 +72,14 @@ struct EditState {
 bool CommitInput(Ui& ui, const char* id, const std::string& value, EditState& state, float width, bool mono,
                  const char* hint = nullptr, bool focusNow = false);
 
+/// A field of a tool that picks several things ("Элемент 1: вершина"). A
+/// click on it makes it the one the next pick fills (`active` draws it so);
+/// the cross at its right end empties it (`*cleared` set; the cross is shown
+/// only when there is a value). An empty `value` shows `waiting` in grey.
+/// Returns true when the field itself was clicked.
+bool SelectionSlot(Ui& ui, const char* id, const std::string& caption, const std::string& value, const char* waiting, bool active,
+                   float width, bool* cleared);
+
 /// Small grey caption above a control ("Операция", "Расстояние").
 void FieldLabel(Ui& ui, const char* text);
 

@@ -232,6 +232,34 @@ bool SecondaryButton(Ui& ui, const char* id, const char* label, const char* hint
     return ButtonBody(ui, id, label, hint, size, enabled, false);
 }
 
+bool SelectionSlot(Ui& ui, const char* id, const std::string& caption, const std::string& value, const char* waiting, bool active,
+                   float width, bool* cleared) {
+    const ThemeColors& c = ui.C();
+    ImGui::PushID(id);
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float h = ui.S(34), cross = value.empty() ? 0.0f : ui.S(30);
+    const bool clicked = ImGui::InvisibleButton("##slot", {width - cross, h});
+    const bool hovered = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(p, {p.x + width, p.y + h}, ToU32(active ? c.accentSoft : hovered ? c.hover : c.panel), ui.S(8));
+    dl->AddRect(p, {p.x + width, p.y + h}, ToU32(active ? c.accent : c.fieldBorder), ui.S(8), 0, ui.S(active ? 1.6f : 1.0f));
+    const float ty = p.y + (h - ui.S(13)) / 2 - ui.S(1);
+    const std::string head = caption + ":";
+    dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(12), ty}, ToU32(c.textSecondary), head.c_str());
+    const float hx = p.x + ui.S(12) + ui.fonts.medium->CalcTextSizeA(ui.S(13), FLT_MAX, 0, head.c_str()).x + ui.S(6);
+    const ImVec4 clip{hx, p.y, p.x + width - cross - ui.S(4), p.y + h};
+    dl->AddText(ui.fonts.body, ui.S(13), {hx, ty}, ToU32(value.empty() ? c.textMuted : c.text), value.empty() ? waiting : value.c_str(),
+                nullptr, 0, &clip);
+    if (!value.empty()) {
+        ImGui::SetCursorScreenPos({p.x + width - cross, p.y + (h - ui.S(26)) / 2});
+        if (IconButton(ui, "##clear", "ui-close", 26, 10, nullptr) && cleared) *cleared = true;
+    }
+    ImGui::SetCursorScreenPos({p.x, p.y + h + ui.S(6)});
+    ImGui::Dummy({0, 0});
+    ImGui::PopID();
+    return clicked;
+}
+
 bool LinkButton(Ui& ui, const char* id, const char* label) {
     ImFont* font = ui.fonts.medium;
     const float fs = ui.S(12);

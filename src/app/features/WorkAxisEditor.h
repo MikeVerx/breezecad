@@ -29,6 +29,7 @@ protected:
 private:
     doc::WorkAxisMethod myMethod = doc::WorkAxisMethod::Cylinder;
     int                 mySlot = 0;   ///< two planes: which one the next click sets
+    std::size_t         myPointSlot = 0;   ///< two points: the field the next click fills
 };
 
 } // namespace bz::app
