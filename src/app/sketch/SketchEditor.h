@@ -252,6 +252,8 @@ private:
 
     // dragging in the select tool
     std::unique_ptr<doc::Feature> myDragBefore;
+    ObjectId                      myLabelGrab;          ///< "Размер" tool: the dimension whose text is pressed
+    bool                          myLabelMoved = false; ///< …and dragged (a click without a drag edits the value)
     ObjectId                      myDragEntity;
     Vec2                          myDragStart;
     Vec2                          myDragLabelStart;   ///< dimension label position at drag start
