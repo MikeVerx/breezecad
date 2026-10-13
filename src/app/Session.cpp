@@ -90,6 +90,12 @@ bool Session::FinishBackground() {
     // to, the features themselves stay to be rebuilt again.
     const bool current = job->doc.Revision() == doc.Revision();
     if (current) doc.TakeRebuilt(job->doc);
+    // What is shown now is built for the job's operations. Counted from the
+    // job, not the document: an operation cancelled while the job ran (its
+    // preview) left the document one shorter, and the count compared with
+    // the document's would say "nothing to rebuild" — the cancelled preview
+    // stayed on screen.
+    myBuiltFeatureCount = job->doc.FeatureCount();
     model.Adopt(std::move(job->model), job->start);
     return current;
 }
