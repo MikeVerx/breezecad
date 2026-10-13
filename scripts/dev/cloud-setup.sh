@@ -11,7 +11,9 @@
 #
 # Быстрый путь: если в релизе `dev-deps` репозитория лежит архив
 # bz-deps-linux-x64.tar.xz, он скачивается вместо часовой сборки OCCT.
-# Выложить его: bash scripts/dev/cloud-setup.sh pack (нужен gh с правом пуша).
+# Собрать архив: bash scripts/dev/cloud-setup.sh pack. Сессии Claude создавать
+# релизы GitHub не может — архив загружает автор: GitHub → Releases → Draft a
+# new release → тег dev-deps, «Set as a pre-release» → прикрепить файл.
 #
 # Переменные: BZ_DEPS (по умолчанию $HOME/deps), BZ_JOBS (по умолчанию nproc).
 set -euo pipefail
@@ -64,9 +66,10 @@ ui_tools() {
 # --- 2. Готовый архив зависимостей из релиза (если есть) -------------------
 fetch_prebuilt() {
     [ -f "$DEPS/occt.done" ] && return 0
-    command -v gh >/dev/null || return 1
     log "Пробую готовые зависимости из релиза dev-deps"
-    gh release download dev-deps -R MikeVerx/breezecad -p "$ARCHIVE" -D "$DEPS" --clobber 2>/dev/null || return 1
+    local url="https://github.com/MikeVerx/breezecad/releases/download/dev-deps/$ARCHIVE"
+    { command -v gh >/dev/null && gh release download dev-deps -R MikeVerx/breezecad -p "$ARCHIVE" -D "$DEPS" --clobber 2>/dev/null; } ||
+        curl -fsSL -o "$DEPS/$ARCHIVE" "$url" 2>/dev/null || { rm -f "$DEPS/$ARCHIVE"; return 1; }
     tar -C "$DEPS" -xJf "$DEPS/$ARCHIVE" && rm -f "$DEPS/$ARCHIVE"
     touch "$DEPS/glfw.done" "$DEPS/occt.done"
 }
@@ -107,12 +110,13 @@ build_occt() {
 # --- 5. Архив для релиза dev-deps -------------------------------------------
 pack() {
     log "Упаковка $ARCHIVE"
-    tar -C "$DEPS" -I 'xz -6 -T0' -cf "$DEPS/$ARCHIVE" prefix
-    gh release view dev-deps -R MikeVerx/breezecad >/dev/null 2>&1 ||
-        gh release create dev-deps -R MikeVerx/breezecad --prerelease \
-            --title "Зависимости для облачной сборки (не для пользователей)" \
-            --notes "OCCT $OCCT_TAG + GLFW $GLFW_TAG для Linux x86_64. Берёт scripts/dev/cloud-setup.sh."
-    gh release upload dev-deps -R MikeVerx/breezecad "$DEPS/$ARCHIVE" --clobber
+    tar -C "$DEPS" -I 'xz -6 -T0' -cf "$DEPS/$ARCHIVE" prefix bin pylib
+    if gh release upload dev-deps -R MikeVerx/breezecad "$DEPS/$ARCHIVE" --clobber 2>/dev/null; then
+        echo "Загружено в релиз dev-deps."
+    else
+        echo "Загрузить не удалось (сессии Claude не могут менять релизы)."
+        echo "Архив: $DEPS/$ARCHIVE — передайте автору, он прикрепит его к релизу dev-deps."
+    fi
 }
 
 # --- 6. Сборка BreezeCAD и тесты --------------------------------------------
