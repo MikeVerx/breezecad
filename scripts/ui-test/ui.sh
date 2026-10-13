@@ -22,12 +22,16 @@ case "$1" in
   start)
     pgrep -f "Xvfb $DISPLAY " >/dev/null || (Xvfb "$DISPLAY" -screen 0 "${UI_SCREEN:-1600x1000}x24" >/dev/null 2>&1 &)
     sleep 0.5
-    pkill -x breezecad || true
-    sleep 0.3
-    mkdir -p "$SHOTS"; rm -f "$SHOTS/request"
-    # A UTF-8 locale: zenity (file dialogs) rejects Cyrillic arguments otherwise.
-    (cd "$BIN" && LIBGL_ALWAYS_SOFTWARE=1 LANG=C.UTF-8 BZ_SHOT_DIR="$SHOTS" ./breezecad $2 >/tmp/breezecad-ui.log 2>&1 &)
-    sleep 4
+    # UI_ATTACHED=1: the app is already started by someone else (tools/monitor).
+    if [ -z "$UI_ATTACHED" ]; then
+      pkill -x breezecad || true
+      sleep 0.3
+      mkdir -p "$SHOTS"; rm -f "$SHOTS/request"
+      # A UTF-8 locale: zenity (file dialogs) rejects Cyrillic arguments otherwise.
+      (cd "$BIN" && LIBGL_ALWAYS_SOFTWARE=1 LANG=C.UTF-8 BZ_SHOT_DIR="$SHOTS" ./breezecad $2 >/tmp/breezecad-ui.log 2>&1 &)
+      sleep 4
+    fi
+    for _ in $(seq 40); do xdotool search --name BreezeCAD >/dev/null 2>&1 && break; sleep 0.25; done
     W=$(xdotool search --name BreezeCAD | head -1)
     xdotool windowmove "$W" 0 0
     if [ -n "$UI_SIZE" ]; then xdotool windowsize "$W" $UI_SIZE; sleep 1; fi

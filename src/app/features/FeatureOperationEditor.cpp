@@ -70,11 +70,14 @@ void FeatureOperationEditor::EditExisting(AppContext& app, Session& session, Obj
 bool FeatureOperationEditor::Commit(AppContext& app, Session& session) {
     doc::Feature* f = Edited(session);
     if (!f) return false;
-    session.RebuildIfNeeded();
+    session.RebuildNow();
     if (f->status.state == doc::FeatureState::Error) {
         app.notes.Error(Tr(f->status.message));
         return false;
     }
+    // Turning the preview into an undo step puts the same feature back in
+    // the same place: what is already built stays valid, no second rebuild.
+    const std::size_t built = session.doc.DirtyFrom();
     if (myIsNew) {
         const auto index = static_cast<std::size_t>(session.doc.IndexOf(myFeature));
         std::unique_ptr<doc::Feature> taken = session.doc.Take(myFeature);
@@ -82,6 +85,7 @@ bool FeatureOperationEditor::Commit(AppContext& app, Session& session) {
     } else {
         session.CommitInPlaceEdit(std::move(myOriginal), f->name);
     }
+    session.doc.KeepDirtyFrom(built);
     return true;
 }
 

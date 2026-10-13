@@ -2,9 +2,11 @@
 
 #include "app/Settings.h"
 #include "core/I18n.h"
+#include "core/Folders.h"
 #include "core/Log.h"
 #include "core/PathText.h"
 #include "document/BzcFile.h"
+#include "document/JsonIO.h"
 
 #include <nlohmann/json.hpp>
 
@@ -34,7 +36,7 @@ bool Autosave::Update(Session& session, const Settings& settings, double now, do
     }
     if (session.unsavedSince < 0) session.unsavedSince = now;
     if (settings.autosaveMinutes <= 0) return false;
-    if (session.autosavedRevision == session.doc.Revision()) return false;
+    if (session.autosavedRevision == session.ContentRevision()) return false;
     if (now - session.unsavedSince < settings.autosaveMinutes * 60.0) return false;
     if (idleSeconds < kIdleBeforeWrite) return false;
 
@@ -46,10 +48,12 @@ bool Autosave::Update(Session& session, const Settings& settings, double now, do
     int slot = 1;
     if (std::ifstream in(folder / "info.json"); in) {
         const nlohmann::json info = nlohmann::json::parse(in, nullptr, false);
-        if (!info.is_discarded()) slot = info.value("slot", 0) % kCopies + 1;
+        int last = 0;   // a hand-edited "slot": "2" must not throw (B-11)
+        if (info.is_object() && doc::json_io::ReadMember(info, "slot", last))
+            slot = (last % kCopies + kCopies) % kCopies + 1;
     }
     const std::filesystem::path copy = folder / std::format("copy{}.bzc", slot);
-    const Status status = doc::SaveBzc(session.doc, copy, "BreezeCAD autosave");
+    const Status status = session.WriteFile(copy, "BreezeCAD autosave");
     if (!status) {
         log::Warn("Autosave failed: {}", status.GetError().message);
         session.unsavedSince = now;   // try again after another interval
@@ -59,7 +63,7 @@ bool Autosave::Update(Session& session, const Settings& settings, double now, do
                               {"slot", slot}, {"savedAt", NowText()}};
     std::ofstream(folder / "info.json", std::ios::trunc) << info.dump(1);
 
-    session.autosavedRevision = session.doc.Revision();
+    session.autosavedRevision = session.ContentRevision();
     session.unsavedSince = now;   // next copy after another interval of changes
     log::Info("Autosaved {} to slot {}", session.Title(), slot);
     return true;
@@ -73,18 +77,25 @@ void Autosave::Discard(const Session& session) const {
 std::vector<RecoverableDocument> Autosave::FindRecoverable() const {
     std::vector<RecoverableDocument> found;
     std::error_code ec;
-    for (const auto& entry : std::filesystem::directory_iterator(myRoot, ec)) {
-        if (!entry.is_directory()) continue;
+    for (const auto& entry : FolderEntries(myRoot)) {   // never throws (B-20)
+        if (!IsFolder(entry)) continue;
         std::ifstream in(entry.path() / "info.json");
         if (!in) continue;
         const nlohmann::json info = nlohmann::json::parse(in, nullptr, false);
-        if (info.is_discarded()) continue;
+        if (!info.is_object()) continue;
+        // Fields of another type are skipped, not thrown (B-11): this runs before the window.
+        int slot = 1;
+        std::string original, title = Tr("Без имени"), savedAt;
+        using doc::json_io::ReadMember;
+        if (!ReadMember(info, "slot", slot) || !ReadMember(info, "original", original) ||
+            !ReadMember(info, "title", title) || !ReadMember(info, "savedAt", savedAt))
+            continue;
         RecoverableDocument doc;
         doc.folder = entry.path();
-        doc.copy = entry.path() / std::format("copy{}.bzc", info.value("slot", 1));
-        doc.original = PathFromUtf8(info.value("original", ""));
-        doc.title = info.value("title", Tr("Без имени"));
-        doc.savedAt = info.value("savedAt", "");
+        doc.copy = entry.path() / std::format("copy{}.bzc", slot);
+        doc.original = PathFromUtf8(original);
+        doc.title = title;
+        doc.savedAt = savedAt;
         if (std::filesystem::exists(doc.copy, ec)) found.push_back(std::move(doc));
     }
     return found;

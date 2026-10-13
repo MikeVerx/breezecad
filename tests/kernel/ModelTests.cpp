@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <thread>
 
 using namespace bz;
 using namespace bz::test;
@@ -290,4 +291,83 @@ TEST_CASE("interferences: overlapping bodies are found, touching ones are not") 
     CHECK(found[0].second == 1);
     CHECK(found[0].volume == doctest::Approx(200));
     CHECK(found[0].centre.x == doctest::Approx(9));
+}
+
+TEST_CASE("a forked model rebuilds on another thread and is adopted") {
+    doc::Document d;
+    auto& base = AddSketch(d);
+    AddRect(d, base, {0, 0}, {60, 40});
+    AddExtrude(d, base.id, "10");
+    auto& pocket = AddSketch(d);
+    AddRect(d, pocket, {10, 10}, {20, 20});
+    auto& cut = AddExtrude(d, pocket.id, "4", BooleanOp::Cut);
+
+    kernel::Model model;
+    model.Rebuild(d);
+    const double before = model.Volume();
+    CHECK(before == doctest::Approx(24000.0 - 400.0));
+
+    // Deeper pocket: only the cut has to be rebuilt.
+    cut.distance.expression = "6";
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(cut.id)));
+    const std::size_t start = model.FirstToRebuild(d);
+    CHECK(start == static_cast<std::size_t>(d.IndexOf(cut.id)));
+
+    doc::Document copy = d.Clone();
+    kernel::Model fork = model.Fork(start);
+    std::thread worker([&] { fork.Rebuild(copy); });
+    worker.join();
+    CHECK(model.Volume() == doctest::Approx(before));   // untouched meanwhile
+
+    d.TakeRebuilt(copy);
+    model.Adopt(std::move(fork), start);
+    CHECK(d.DirtyFrom() == d.FeatureCount());
+    CHECK(cut.distance.value == doctest::Approx(6.0));
+    CHECK(cut.status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(24000.0 - 600.0));
+    // Later rebuilds go on from the adopted results.
+    cut.distance.expression = "5";
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(cut.id)));
+    model.Rebuild(d);
+    CHECK(model.Volume() == doctest::Approx(24000.0 - 500.0));
+}
+
+TEST_CASE("extrude up to a curved face") {
+    // A bar lying along Y (radius 20, axis at height 40), a 10x10 post
+    // from the XY plane up to its underside.
+    doc::Document d;
+    auto& barSketch = AddSketch(d, doc::origin::kPlaneXZ);
+    AddCircle(d, barSketch, {0, 40}, 20);
+    auto& bar = AddExtrude(d, barSketch.id, "60");
+    bar.extent = doc::ExtentType::Symmetric;
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(bar.status.state == FeatureState::Ok);
+    const auto box = model.BoundingBox();
+    REQUIRE(box);
+    REQUIRE(std::abs(box->min.z - 20) < 1e-3);   // the circle went where the test means it to
+
+    auto& postSketch = AddSketch(d);
+    AddRect(d, postSketch, {-5, -5}, {5, 5});
+    auto& post = AddExtrude(d, postSketch.id, "1", BooleanOp::NewBody);
+    post.extent = doc::ExtentType::ToPlane;
+    post.toFace = {.normal = {0, 0, -1}, .point = {0, 0, 20}, .curved = true};
+    model.Rebuild(d);
+    REQUIRE(post.status.state == FeatureState::Ok);
+    // Height under the bar: 40 - sqrt(400 - x²), the same along y.
+    double area = 0;
+    constexpr int n = 2000;
+    for (int i = 0; i < n; ++i) {
+        const double x = -5 + 10.0 * (i + 0.5) / n;
+        area += (40 - std::sqrt(400 - x * x)) * 10.0 / n;
+    }
+    const double bars = kPi * 400 * 60;
+    CHECK(model.Volume() - bars == doctest::Approx(area * 10).epsilon(1e-3));
+
+    // A bar narrower than the post: its surface carries on past its ends.
+    bar.distance.expression = "6";
+    d.MarkChanged(static_cast<std::size_t>(d.IndexOf(bar.id)));
+    model.Rebuild(d);
+    REQUIRE(post.status.state == FeatureState::Ok);
+    CHECK(model.Volume() - kPi * 400 * 6 == doctest::Approx(area * 10).epsilon(1e-3));
 }

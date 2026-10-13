@@ -2,7 +2,9 @@
 
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
+#include "app/assembly/AssemblyUi.h"
 #include "core/I18n.h"
+#include "core/Version.h"
 #include "core/PathText.h"
 #include "ui/Widgets.h"
 
@@ -34,13 +36,16 @@ void DrawHomeScreen(AppContext& app, ImVec2 pos, ImVec2 size) {
     const float bw = ui.fonts.display->CalcTextSizeA(ui.S(30), FLT_MAX, 0, "Breeze").x;
     dl->AddText(ui.fonts.display, ui.S(30), {x0 + ui.S(72) + bw, y + ui.S(2)}, ui::ToU32(c.textSecondary), "CAD");
     dl->AddText(ui.fonts.body, ui.S(13), {x0 + ui.S(73), y + ui.S(38)}, ui::ToU32(c.textMuted),
-                Tr("Свободный параметрический САПР  \xC2\xB7  версия 0.2.0"));
+                Trf("Свободный параметрический САПР  \xC2\xB7  версия {}", VersionLine()).c_str());
     y += ui.S(92);
 
     // Main actions.
     ImGui::SetCursorScreenPos({x0, y});
     if (ui::PrimaryButton(ui, "##home-new", Tr("Новая деталь"), "Ctrl+N", {ui.S(200), ui.S(40)})) app.Later([&app] { NewDocument(app); });
     ImGui::SetCursorScreenPos({x0 + ui.S(212), y});
+    if (ui::SecondaryButton(ui, "##home-assembly", Tr("Новая сборка"), nullptr, {ui.S(170), ui.S(40)}))
+        app.Later([&app] { NewAssembly(app); });
+    ImGui::SameLine(0, ui.S(10));
     if (ui::SecondaryButton(ui, "##home-open", Tr("Открыть…"), "Ctrl+O", {ui.S(170), ui.S(40)})) app.Later([&app] { OpenDocument(app); });
     y += ui.S(72);
 

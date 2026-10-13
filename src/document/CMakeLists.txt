@@ -1,9 +1,12 @@
 add_library(bz_document STATIC
+    Appearance.cpp
     BzcFile.cpp
     Commands.cpp
     Document.cpp
+    DocumentTypes.cpp
     CoilFeature.cpp
     SectionFeature.cpp
+    ShellFeature.cpp
     EdgeFeature.cpp
     ExtrudeFeature.cpp
     FeatureRegistry.cpp
@@ -17,10 +20,12 @@ add_library(bz_document STATIC
     RevolveFeature.cpp
     SketchFeature.cpp
     SketchSolidFeature.cpp
+    StandardParts.cpp
     SweepFeature.cpp
     ThreadFeature.cpp
     UnknownFeature.cpp
-    WorkAxisFeature.cpp)
+    WorkAxisFeature.cpp
+    WorkPointFeature.cpp)
 target_link_libraries(bz_document
     PUBLIC  bz::core bz::sketch bz::json
     PRIVATE bz::miniz)

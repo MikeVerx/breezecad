@@ -2,10 +2,13 @@
 
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
+#include "app/sketch/SketchPick.h"
+#include "sketch/Offset.h"
 #include "core/I18n.h"
 #include "document/SketchFeature.h"
 #include "ui/Widgets.h"
 
+#include <algorithm>
 #include <array>
 
 namespace bz::app {
@@ -21,6 +24,23 @@ bool InsideRegion(const kernel::SketchRegion& region, Vec2 p) {
             if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
         }
     return inside;
+}
+
+/// Regions enclosed by the closed contour that curve `curve` belongs to
+/// (as in Inventor: aiming at a rectangle's side takes the whole rectangle,
+/// whatever crosses it). Empty when the curve is not on a closed contour.
+std::vector<int> LoopRegions(const sketch::Sketch& sk, ObjectId curve, const std::vector<kernel::SketchRegion>& regions) {
+    const std::optional<sketch::Chain> chain = sketch::ChainOf(sk, curve);
+    if (!chain || !chain->closed) return {};
+    kernel::SketchRegion outline;
+    outline.loops.emplace_back();
+    for (const std::vector<Vec2>& piece : sketch::OffsetPreview(sk, *chain, 0.0))
+        outline.loops[0].insert(outline.loops[0].end(), piece.begin(), piece.end());
+    if (outline.loops[0].size() < 3) return {};
+    std::vector<int> out;
+    for (std::size_t i = 0; i < regions.size(); ++i)
+        if (InsideRegion(outline, regions[i].sample)) out.push_back(static_cast<int>(i));
+    return out;
 }
 
 /// Index of the region containing a profile sample point, or -1.
@@ -96,6 +116,11 @@ void SketchOperationEditor::StartNew(AppContext& app, Session& session, ObjectId
     std::unique_ptr<doc::SketchSolidFeature> f = Create(session, sketch);
     f->sketch = sketch;
     f->operation = HasSolidBefore(session.doc, session.doc.EndMarker()) ? BooleanOp::Join : BooleanOp::NewBody;
+    // As in Inventor: a lone closed contour is taken at once; with several,
+    // nothing is chosen until the user clicks the ones to use.
+    f->profiles = {false, {}};
+    if (const auto* regions = session.model.Regions(sketch); regions && regions->size() == 1)
+        f->profiles.regions.push_back(regions->front().sample);
     myHoveredRegion = -1;
     OpenNew(app, session, std::move(f));
 }
@@ -155,12 +180,25 @@ void SketchOperationEditor::DrawInViewport(AppContext& app, Session& session, co
     }
 
     myHoveredRegion = -1;
-    if (regions && vf.hovered)
-        if (const auto cursor = view.FromScreen(ImGui::GetMousePos())) myHoveredRegion = RegionOf(*regions, *cursor);
+    // Near a curve of a closed contour: the whole contour; else the region under the cursor.
+    std::vector<int> hoveredLoop;
+    if (regions && vf.hovered) {
+        const SketchHit hit = HitTest(sk->sketch, view, ImGui::GetMousePos(), session.doc.units);
+        const bool curve = hit.kind == sketch::EntityKind::Line || hit.kind == sketch::EntityKind::Arc ||
+                           hit.kind == sketch::EntityKind::Circle || hit.kind == sketch::EntityKind::Spline ||
+                           hit.kind == sketch::EntityKind::Ellipse;
+        if (curve) hoveredLoop = LoopRegions(sk->sketch, hit.id, *regions);
+        if (hoveredLoop.empty())
+            if (const auto cursor = view.FromScreen(ImGui::GetMousePos())) myHoveredRegion = RegionOf(*regions, *cursor);
+    }
+    const auto isHovered = [&](std::size_t i) {
+        return static_cast<int>(i) == myHoveredRegion ||
+               std::find(hoveredLoop.begin(), hoveredLoop.end(), static_cast<int>(i)) != hoveredLoop.end();
+    };
 
     if (regions) {
         for (std::size_t i = 0; i < regions->size(); ++i) {
-            const bool hovered = static_cast<int>(i) == myHoveredRegion;
+            const bool hovered = isHovered(i);
             if (!chosen[i] && !hovered) continue;
             const Color fill = hovered ? c.regionFill.WithAlpha(c.regionFill.a * 1.5f) : c.regionFill;
             FillSketchRegion(dl, view, (*regions)[i], fill, hovered ? c.sketchHover : c.sketchFree,
@@ -177,11 +215,18 @@ void SketchOperationEditor::DrawInViewport(AppContext& app, Session& session, co
         return;
     }
 
-    // Click: pick or drop a region (switches the profile to manual choice).
-    if (regions && vf.hovered && myHoveredRegion >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+    // Click: pick or drop a region, or a whole contour (all of its regions
+    // go in, or all out when they were all in already).
+    if (regions && vf.hovered && (myHoveredRegion >= 0 || !hoveredLoop.empty()) && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        bool allIn = true;
+        for (const int r : hoveredLoop) allIn = allIn && chosen[static_cast<std::size_t>(r)];
         std::vector<Vec2> picks;
-        for (std::size_t i = 0; i < regions->size(); ++i)
-            if (chosen[i] != (static_cast<int>(i) == myHoveredRegion)) picks.push_back((*regions)[i].sample);
+        for (std::size_t i = 0; i < regions->size(); ++i) {
+            bool on = chosen[i];
+            if (static_cast<int>(i) == myHoveredRegion) on = !on;
+            if (std::find(hoveredLoop.begin(), hoveredLoop.end(), static_cast<int>(i)) != hoveredLoop.end()) on = !allIn;
+            if (on) picks.push_back((*regions)[i].sample);
+        }
         f->profiles = {false, std::move(picks)};
         Changed(session);
     }
@@ -217,7 +262,7 @@ void SketchOperationEditor::DrawProfileSection(AppContext& app, Session& session
             f.profiles.automatic ? Tr("Все замкнутые контуры, вложенные стали отверстиями. Щёлкните по контуру, чтобы выбрать вручную.")
                                  : Tr("Щёлкните по контуру на модели, чтобы добавить или убрать его."),
             width);
-    if (!f.profiles.automatic && ui::LinkButton(ui, "##auto-profile", Tr("Выбрать автоматически"))) {
+    if (!f.profiles.automatic && ui::LinkButton(ui, "##auto-profile", Tr("Выбрать все контуры"))) {
         f.profiles = {true, {}};
         Changed(session);
     }

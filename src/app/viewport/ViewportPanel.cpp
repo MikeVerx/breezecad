@@ -1,14 +1,18 @@
 #include "app/viewport/ViewportPanel.h"
+#include "core/Monitor.h"
 
 #include "app/Operations.h"
 #include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
+#include "app/assembly/AssemblyUi.h"
+#include "app/viewport/FaceSelection.h"
 #include "app/viewport/MarkingMenu.h"
 #include "app/viewport/Measure.h"
 #include "app/viewport/Planes.h"
 #include "app/viewport/Section.h"
+#include "app/viewport/TouchGestures.h"
 #include "core/I18n.h"
 #include "document/ExtrudeFeature.h"
 #include "document/Origin.h"
@@ -25,21 +29,41 @@
 namespace bz::app {
 namespace {
 
-constexpr double kOrbitPerPixel = 0.0075;   // radians, KOMPAS-like sensitivity
-
 /// "Начать эскиз": choose an origin plane, a work plane or a flat face.
 void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDrawList* dl) {
     const ImVec2 mouse = ImGui::GetMousePos();
     std::vector<ShownPlane> planes = OriginPlanes(session);
     const std::vector<ShownPlane> work = WorkPlanes(session);
     planes.insert(planes.end(), work.begin(), work.end());
+
+    // A plane chosen in the tree meanwhile (a hidden one too): the sketch goes on it.
+    std::optional<Frame> chosen = doc::origin::PlaneFrame(session.selectedFeature);
+    if (const auto* wp = session.doc.FindAs<doc::WorkPlaneFeature>(session.selectedFeature); wp && wp->frame && !wp->suppressed)
+        chosen = wp->frame;
+    if (chosen) {
+        const doc::SketchPlacement placement{session.selectedFeature, *chosen, false, {}};
+        app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
+        return;
+    }
+
     const ShownPlane* hot = vf.hovered ? PlaneUnderCursor(vf, mouse, planes) : nullptr;
     // A flat face of the model under the cursor wins over the planes, even
     // where a plane sticks out in front of it: pointing at the body means
     // the body (as in Inventor).
     std::optional<render::PickResult> face;
     if (vf.hovered) face = app.viewport.Pick(vf.ToLocal(mouse));
-    if (face && face->plane) hot = nullptr;
+    // A work plane the user made stands in front of that face, though,
+    // wins: it overlaps the body, so otherwise it could hardly be clicked.
+    if (face && face->plane && hot) {
+        const bool workPlane = !doc::origin::IsOriginElement(hot->id);
+        Vec3 eye, dir;
+        vf.projection.Unproject(vf.ToLocal(mouse), eye, dir);
+        const std::optional<double> planeAt = HitPlane(vf, mouse, *hot);
+        const double faceAt = (face->point - eye).Dot(dir) / dir.Dot(dir);
+        if (!workPlane || !planeAt || *planeAt > faceAt - 1e-6) hot = nullptr;
+    } else if (face && face->plane) {
+        hot = nullptr;
+    }
     // With a body in the part the planes step back, so the body stays readable.
     const bool faint = !session.model.Bodies().empty();
     for (const ShownPlane& p : planes) DrawPlane(app, dl, vf, p, &p == hot, faint && &p != hot);
@@ -84,8 +108,10 @@ void ContextMenu(AppContext& app, Session& session) {
         item("sketch.dimension");
         ImGui::Separator();
         item("sketch.construction");
+        item("sketch.centerline");
         item("edit.delete");
     } else {
+        FaceSelectionMenu(app, session);
         if (app.shell.nav.facePlane && ui::MenuItem(ui, Tr("Эскиз на этой грани"), nullptr, "sketch")) {
             const doc::SketchPlacement placement{app.shell.nav.faceBody, *app.shell.nav.facePlane, true,
                                                  {app.shell.nav.facePlane->normal, app.shell.nav.pivot}};
@@ -140,11 +166,7 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
         nav.button = button;
         if (matches(m.orbit)) {
             nav.orbiting = true;
-            // Orbit around the model point under the cursor, else the model centre.
-            const auto hit = app.viewport.Pick(vf.ToLocal(mouse));
-            nav.pivot = hit ? hit->point : app.viewport.ModelCenter();
-            nav.facePlane = hit ? hit->plane : std::nullopt;
-            nav.faceBody = hit ? hit->body : ObjectId{};
+            ChooseOrbitPivot(app, vf, mouse);
         } else if (matches(m.pan)) {
             nav.panning = true;
         } else if (matches(m.zoom)) {
@@ -156,16 +178,25 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
     }
     // In a sketch, a right click that ends a chain is not a menu click.
     const bool sketchBusy = session.mode == EditMode::Sketch && app.sketch.Busy();
+    // The radial menu took this right press: its release opens nothing else.
+    if (nav.button == -2) {
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Right)) nav.button = -1;
+        return false;
+    }
     if (nav.button < 0 && ImGui::IsMouseReleased(ImGuiMouseButton_Right) && sceneHovered && !busy && !sketchBusy &&
         ImGui::GetMouseDragDelta(ImGuiMouseButton_Right).x == 0 && ImGui::GetMouseDragDelta(ImGuiMouseButton_Right).y == 0)
         ImGui::OpenPopup("##viewport-menu");
 
     if (nav.orbiting || nav.panning || nav.zooming) {
-        if (ImGui::IsMouseDragging(nav.button, 3.0f)) nav.moved = true;
+        if (!nav.moved && ImGui::IsMouseDragging(nav.button, 3.0f)) {
+            nav.moved = true;
+            mon::Action("view", nav.orbiting ? "вращение" : nav.panning ? "сдвиг" : "масштаб");
+        }
         if (nav.moved && (io.MouseDelta.x != 0 || io.MouseDelta.y != 0)) {
             if (nav.orbiting) {
                 const double k = kOrbitPerPixel * app.settings.orbitSpeed;
-                app.viewport.Orbit(io.MouseDelta.x * k, io.MouseDelta.y * k * (app.settings.invertOrbit ? -1.0 : 1.0), nav.pivot);
+                app.viewport.Orbit(io.MouseDelta.x * k, io.MouseDelta.y * k * (app.settings.invertOrbit ? -1.0 : 1.0), nav.pivot,
+                                   app.settings.turntableOrbit);
             }
             if (nav.panning) app.viewport.Pan(io.MouseDelta.x, io.MouseDelta.y);
             if (nav.zooming) app.viewport.ZoomAt(std::pow(1.01, static_cast<double>(-io.MouseDelta.y)), vf.ToLocal(nav.zoomAt));
@@ -180,7 +211,12 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
             nav.button = -1;
         }
     }
-    if (sceneHovered && io.MouseWheel != 0.0f) {
+    // Fingers on a touchpad come as a wheel too: their gestures take it.
+    const bool touchTookWheel = NavigateTouch(app, vf, sceneHovered && !busy);
+    if (sceneHovered && io.MouseWheel != 0.0f && !touchTookWheel) {
+        static double lastWheel = -10.0;   // one action per burst of wheel turns
+        if (app.now - lastWheel > 1.0) mon::Action("view", "колесо");
+        lastWheel = app.now;
         const double steps = static_cast<double>(m.invertWheel ? -io.MouseWheel : io.MouseWheel);
         app.viewport.ZoomAt(std::pow(1.15, steps), vf.ToLocal(mouse));
     }
@@ -188,6 +224,14 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
 }
 
 } // namespace
+
+void ChooseOrbitPivot(AppContext& app, const ViewportFrame& vf, ImVec2 at) {
+    ShellState::Navigation& nav = app.shell.nav;
+    const auto hit = app.viewport.Pick(vf.ToLocal(at));
+    nav.pivot = hit ? hit->point : app.viewport.ModelCenter();
+    nav.facePlane = hit ? hit->plane : std::nullopt;
+    nav.faceBody = hit ? hit->body : ObjectId{};
+}
 
 void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     ui::Ui& ui = app.ui;
@@ -221,6 +265,17 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const bool navigating = Navigate(app, session, vf, ImGui::IsItemHovered());
     vf.projection = app.viewport.Projection();
     vf.hovered = ImGui::IsItemHovered() && !navigating;
+    if (navigating && app.shell.nav.orbiting) {
+        // The point the view turns around: under the cursor when the turn
+        // began (or the model centre), so it is clear what stays in place.
+        const ui::ThemeColors& c = ui.C();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const ImVec2 at = vf.Project(app.shell.nav.pivot);
+        const float r = ui.S(5);
+        dl->AddCircleFilled(at, r + ui.S(2), ui::ToU32(c.panel.WithAlpha(0.9f)));
+        dl->AddCircleFilled(at, r, ui::ToU32(c.accent));
+        dl->AddCircle(at, r + ui.S(7), ui::ToU32(c.accent.WithAlpha(0.45f)), 0, ui.S(1.2f));
+    }
     UpdateMarkingMenu(app, session, vf);   // may take the mouse from the overlays
     app.shell.handleHot = false;           // a handle drawn below sets it again for the next frame
 
@@ -237,8 +292,8 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::EdgesAndFaces);
             app.viewport.SetMarkedEdges({});
         }
-    } else if (!pickingOriginal) {
-        app.viewport.EndPickingOriginal();
+    } else {
+        app.viewport.ExpirePickingOriginal();
     }
     // Measuring makes vertices and edges pickable too.
     const bool measuring = app.shell.measuring && session.mode == EditMode::Model && !operation;
@@ -251,6 +306,8 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
         app.viewport.Hover(vf.hovered && hoverMatters ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);
         app.stats.hoverMs = app.stats.hoverMs * 0.9 + (glfwGetTime() - start) * 100.0;   // ms, smoothed
     }
+    // Faces chosen with the left button (a click, Shift/Ctrl, a frame).
+    UpdateFaceSelection(app, session, vf);
 
     // Mode overlays.
     switch (session.mode) {
@@ -261,6 +318,12 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             PickPlane(app, session, vf, dl);
             break;
         case EditMode::Model: {
+            if (session.assembly) {
+                // An operation open on an assembly (Внешний вид) takes the clicks.
+                if (operation) operation->DrawInViewport(app, session, vf);
+                else DrawAssemblyViewport(app, session, vf);
+                break;
+            }
             // Origin planes only when pointed at in the tree (or in an empty
             // part); work planes always, faint unless pointed at.
             const auto pointedAt = [&](ObjectId id) { return app.shell.hoveredTreeItem == id || session.selectedFeature == id; };
@@ -271,11 +334,14 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             }
             DrawWorkAxes(app, dl, vf, session, static_cast<std::size_t>(-1),
                          app.shell.hoveredTreeItem ? app.shell.hoveredTreeItem : session.selectedFeature);
+            if (!operation || !operation->DrawsPoints())
+                DrawWorkPoints(app, dl, vf, WorkPoints(session),
+                               app.shell.hoveredTreeItem ? app.shell.hoveredTreeItem : session.selectedFeature);
             // Sketches not used by an operation stay visible, like in Inventor.
             // (An open sketch operation draws its own sketch.)
             for (std::size_t i = 0; i < session.doc.EndMarker(); ++i) {
                 const auto* sk = dynamic_cast<const doc::SketchFeature*>(session.doc.Features()[i].get());
-                if (!sk || sk->suppressed) continue;
+                if (!sk || sk->suppressed || sk->hidden) continue;
                 bool used = false;
                 for (const auto& f : session.doc.Features())
                     for (ObjectId dep : f->Dependencies()) used = used || dep == sk->id;
@@ -308,6 +374,12 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const bool modelMode = session.mode == EditMode::Model;
     app.viewport.SetSection(modelMode ? SectionFrame(session, app.shell.section) : std::nullopt);
     app.viewport.ShowInterferences(modelMode && app.shell.interference ? &session.model : nullptr);
+    // A pattern or mirror being edited: its sources and copies outlined.
+    {
+        const OperationEditor* op = app.ops.Active();
+        const bool copying = op && (op == &app.ops.pattern || op == &app.ops.mirror);
+        app.viewport.ShowCopyPreview(copying ? &session.model : nullptr, copying ? op->EditedFeature() : ObjectId{});
+    }
     if (modelMode) DrawSectionBar(app, session, vf);
     if (measuring) DrawMeasure(app, session, vf);
     ContextMenu(app, session);
@@ -318,7 +390,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const ui::ViewCubeAction cube = ui::DrawViewCube(ui, vf.projection, pos, {pos.x + size.x, pos.y + size.y}, app.settings.showTriad);
     if (cube.lookFrom) LookFrom(app, cube.lookFrom->first, cube.lookFrom->second);
     if (cube.home) HomeView(app);
-    if (cube.dragYaw != 0 || cube.dragPitch != 0) app.viewport.Orbit(cube.dragYaw, cube.dragPitch, app.viewport.ModelCenter());
+    if (cube.dragYaw != 0 || cube.dragPitch != 0) app.viewport.Orbit(cube.dragYaw, cube.dragPitch, app.viewport.ModelCenter(), app.settings.turntableOrbit);
 
     session.camera = app.viewport.Camera();
     EndArea();

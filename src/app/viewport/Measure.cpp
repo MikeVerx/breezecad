@@ -57,13 +57,20 @@ void DrawMeasure(AppContext& app, Session& session, const ViewportFrame& vf) {
     if (vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) app.viewport.MeasurePick(vf.ToLocal(ImGui::GetMousePos()));
     const render::Viewport::Measured& m = app.viewport.Measurement();
 
-    // The shortest distance, drawn like a dimension.
-    if (m.between && m.between->distance > 1e-9) {
+    // Two flat faces or straight edges at an angle: the angle is the answer
+    // (as in Inventor); the distance between their nearest corners is not.
+    const bool angled = m.between && m.between->angle && *m.between->angle > 1e-6;
+    const auto angleText = [&] { return FormatValue(*m.between->angle, Quantity::Angle, units, 2) + UnitLabel(Quantity::Angle, units); };
+
+    // The shortest distance (or the angle), drawn like a dimension.
+    if (m.between && (m.between->distance > 1e-9 || angled)) {
         const ImVec2 a = vf.Project(m.between->from), b = vf.Project(m.between->to);
-        dl->AddLine(a, b, ui::ToU32(c.dimension), ui.S(1.5f));
-        dl->AddCircleFilled(a, ui.S(3), ui::ToU32(c.dimension));
-        dl->AddCircleFilled(b, ui.S(3), ui::ToU32(c.dimension));
-        const std::string text = Length(m.between->distance, units);
+        if (!angled) {
+            dl->AddLine(a, b, ui::ToU32(c.dimension), ui.S(1.5f));
+            dl->AddCircleFilled(a, ui.S(3), ui::ToU32(c.dimension));
+            dl->AddCircleFilled(b, ui.S(3), ui::ToU32(c.dimension));
+        }
+        const std::string text = angled ? angleText() : Length(m.between->distance, units);
         const ImVec2 ts = ui.fonts.mono->CalcTextSizeA(ui.S(12.5f), FLT_MAX, 0, text.c_str());
         const ImVec2 mid{(a.x + b.x) / 2 - ts.x / 2, (a.y + b.y) / 2 - ts.y - ui.S(6)};
         dl->AddRectFilled({mid.x - ui.S(6), mid.y - ui.S(3)}, {mid.x + ts.x + ui.S(6), mid.y + ts.y + ui.S(3)},
@@ -76,9 +83,13 @@ void DrawMeasure(AppContext& app, Session& session, const ViewportFrame& vf) {
     if (m.first) Describe(rows, Tr("Первый"), *m.first, units);
     if (m.second) Describe(rows, Tr("Второй"), *m.second, units);
     if (m.between) {
-        rows.push_back({Tr("Расстояние"), Length(m.between->distance, units)});
-        if (m.between->angle)
-            rows.push_back({Tr("Угол"), FormatValue(*m.between->angle, Quantity::Angle, units, 2) + UnitLabel(Quantity::Angle, units)});
+        if (angled) {
+            rows.push_back({Tr("Угол"), angleText()});
+            rows.push_back({Tr("Наименьшее расстояние"), Length(m.between->distance, units)});
+        } else {
+            rows.push_back({Tr("Расстояние"), Length(m.between->distance, units)});
+            if (m.between->angle) rows.push_back({Tr("Угол"), angleText()});
+        }
     }
     const float width = ui.S(270), pad = ui.S(14), rowH = ui.S(22);
     const char* hint = !m.first ? Tr("Щёлкните вершину, ребро или грань.") : !m.second ? Tr("Щёлкните второй элемент — покажу расстояние.")

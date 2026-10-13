@@ -21,6 +21,13 @@ std::optional<TopoDS_Face> ResolveFace(const TopoDS_Shape& body, const doc::Face
 /// is not found.
 std::optional<Frame> ResolvePlaneFrame(const TopoDS_Shape& body, const doc::FaceReference& ref);
 
+/// Any face of `body` (curved too) the reference points at: the one nearest
+/// its point whose normal there does not turn away from the stored one.
+std::optional<TopoDS_Face> ResolveAnyFace(const TopoDS_Shape& body, const doc::FaceReference& ref);
+
+/// Outward unit normal of `face` at the point of it nearest `around`.
+std::optional<Vec3> NormalAt(const TopoDS_Face& face, const Vec3& around);
+
 /// Outward unit normal of a flat face (nullopt for a curved one).
 std::optional<Vec3> PlanarNormal(const TopoDS_Face& face);
 

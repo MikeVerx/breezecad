@@ -3,9 +3,11 @@
 #include "core/Id.h"
 #include "core/Parameter.h"
 #include "core/Units.h"
+#include "document/Appearance.h"
 #include "document/Feature.h"
 
 #include <cstddef>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -34,9 +36,17 @@ public:
     Document(const Document&) = delete;
     Document& operator=(const Document&) = delete;
 
+    /// A deep copy (for a rebuild on another thread).
+    Document Clone() const;
+    /// Takes the results of a rebuild done on Clone(), made at the current
+    /// revision: evaluated values, feature statuses and what features
+    /// resolved, and how far the rebuild got.
+    void TakeRebuilt(const Document& rebuilt);
+
     PartInfo               info;
     UnitSystem             units;
     std::vector<Parameter> variables;   ///< the user variables table
+    Look                   look;        ///< colours of bodies and faces (never rebuilt)
 
     // --- features -------------------------------------------------------
     const std::vector<std::unique_ptr<Feature>>& Features() const { return myFeatures; }
@@ -90,17 +100,26 @@ public:
     // --- change tracking ------------------------------------------------
     /// Bumped on every change; used by autosave and the viewport.
     std::uint64_t Revision() const { return myRevision; }
+    /// The look changed (counts as a change for saving, needs no rebuild).
+    void TouchLook() {
+        ++myRevision;
+        ++myLookRevision;
+    }
+    std::uint64_t LookRevision() const { return myLookRevision; }
     /// Marks features from `index` on as needing a rebuild.
     void MarkChanged(std::size_t fromIndex = 0);
     /// First feature index that needs a rebuild (FeatureCount() if none).
     std::size_t DirtyFrom() const { return myDirtyFrom; }
     void        ClearDirty() { myDirtyFrom = myFeatures.size(); }
+    /// Features from `index` on still need a rebuild (a partial one stopped there).
+    void        KeepDirtyFrom(std::size_t index) { myDirtyFrom = std::min(index, myFeatures.size()); }
 
 private:
     std::vector<std::unique_ptr<Feature>> myFeatures;
     IdGenerator                           myIds;
     std::size_t                           myEndMarker = 0;
     std::uint64_t                         myRevision  = 0;
+    std::uint64_t                         myLookRevision = 0;
     std::size_t                           myDirtyFrom = 0;
 };
 

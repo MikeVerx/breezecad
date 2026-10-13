@@ -64,7 +64,7 @@ bool SketchEditor::HasToolPanel() const {
            myTool == SketchTool::Arc || myTool == SketchTool::Move || myTool == SketchTool::Rotate || myTool == SketchTool::Mirror ||
            myTool == SketchTool::Copy || myTool == SketchTool::Scale || myTool == SketchTool::PatternRect ||
            myTool == SketchTool::PatternCircular || myTool == SketchTool::Fillet || myTool == SketchTool::Offset ||
-           myTool == SketchTool::Spline || myTool == SketchTool::Text;
+           myTool == SketchTool::Spline || myTool == SketchTool::Text || myTool == SketchTool::Project;
 }
 
 void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width) {
@@ -95,10 +95,54 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
     ImGui::BeginGroup();
     const float inner = width - ui.S(28);
     const auto restart = [this] { myClicks.clear(); };
+    int fieldIndex = 0;
+    const int fieldCount = myFieldCount;
+    // However the panel returns, remember how many fields it showed.
+    struct CountOnExit {
+        int& out;
+        const int& counted;
+        ~CountOnExit() { out = counted; }
+    } countOnExit{myFieldCount, fieldIndex};
     const auto field = [&](const char* label, const char* id, std::string& text, Quantity q) {
+        const int index = fieldIndex++;
         ui::FieldLabel(ui, label);
         ImGui::Dummy({0, ui.S(2)});
-        ui::ExpressionField(ui, id, text, UnitLabel(q, units), {}, inner, false, false);
+        const bool focus = myFocusField == index;
+        if (focus) myFocusField = -1;
+        // Keys typed in the viewport go straight into the target field's
+        // text (no keyboard focus involved, so none are lost on the way).
+        ImGuiIO& io = ImGui::GetIO();
+        const bool target = mySeedField == index;
+        if (target) {
+            if (myClearOnSeed && (!myFieldSeed.empty() || myBackspaces > 0)) {
+                text.clear();
+                myClearOnSeed = false;
+            }
+            for (; myBackspaces > 0 && !text.empty(); --myBackspaces) text.pop_back();
+            myBackspaces = 0;
+            text += myFieldSeed;
+            myFieldSeed.clear();
+        }
+        const ui::FieldResult r = ui::ExpressionField(ui, id, text, UnitLabel(q, units), {}, inner, focus, false, false);
+        if (r.active && mySeedField >= 0) mySeedField = -1;   // clicked into a field: ordinary editing
+        if (target && !r.active) {   // the field being typed into from the view: marked
+            const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+            ImGui::GetWindowDrawList()->AddRect({lo.x - ui.S(2), lo.y - ui.S(2)}, {hi.x + ui.S(2), hi.y + ui.S(2)},
+                                                ui::ToU32(app.ui.C().accent), ui.S(8), 0, ui.S(2));
+        }
+        // Shift+Up/Down, Shift+W/S: the next or previous field.
+        if (r.active && io.KeyShift && fieldCount > 1) {
+            const bool down = ImGui::IsKeyPressed(ImGuiKey_DownArrow) || ImGui::IsKeyPressed(ImGuiKey_S);
+            const bool up = ImGui::IsKeyPressed(ImGuiKey_UpArrow) || ImGui::IsKeyPressed(ImGuiKey_W);
+            if (down || up) {
+                if (ImGui::IsKeyPressed(ImGuiKey_S) || ImGui::IsKeyPressed(ImGuiKey_W)) {
+                    // The letter itself went into the text: take it back out.
+                    if (!text.empty() && (text.back() == 'S' || text.back() == 'W' || text.back() == 's' || text.back() == 'w'))
+                        text.pop_back();
+                }
+                myFocusField = (index + (down ? 1 : fieldCount - 1)) % fieldCount;
+            }
+        }
         ImGui::Dummy({0, ui.S(8)});
     };
 
@@ -122,6 +166,21 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         const int chosen = ui::Segmented(ui, "line-style", styles, current, 3, inner, lines ? 0 : 0b100);
         if (chosen != current) myOptions.style = static_cast<LineStyle>(chosen);
         ImGui::Dummy({0, ui.S(14)});
+    }
+
+    // Проецирование: linked to the model or a fixed copy.
+    if (myTool == SketchTool::Project) {
+        ui::FieldLabel(ui, Tr("Связь с моделью"));
+        ImGui::Dummy({0, ui.S(2)});
+        static constexpr std::array<const char*, 2> links{N_("Зависимая"), N_("Независимая")};
+        const int current = myOptions.projectLinked ? 0 : 1;
+        if (const int chosen = ui::Segmented(ui, "project-link", links, current, 2, inner); chosen != current)
+            myOptions.projectLinked = chosen == 0;
+        ImGui::Dummy({0, ui.S(4)});
+        Caption(ui, myOptions.projectLinked ? Tr("Проекция следует за моделью: изменится деталь — изменится и эскиз.")
+                                                 : Tr("Проекция становится обычной закреплённой геометрией и за моделью не следует."),
+                    inner);
+        ImGui::Dummy({0, ui.S(8)});
     }
 
     // Ways to draw.

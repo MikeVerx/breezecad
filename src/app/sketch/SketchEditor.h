@@ -44,6 +44,7 @@ enum class LineStyle : unsigned char { Normal, Construction, Centerline };
 /// The tool panel's settings. Typed sizes lock the cursor while drawing
 /// and become dimensions of what is drawn.
 struct DrawOptions {
+    bool projectLinked = true;   ///< Проецирование: follows the model (зависимое) or a fixed copy (независимое)
     LineStyle     style = LineStyle::Normal;
     RectangleMode rectangle = RectangleMode::Corners;
     CircleMode    circle = CircleMode::CentreRadius;
@@ -98,9 +99,9 @@ public:
 
     // --- tools ------------------------------------------------------------
     SketchTool Tool() const { return myTool; }
-    /// Takes back the click a drawing tool took from the current press (the
-    /// radial menu opened on that press instead).
-    void DropPressClick();
+    /// Projection linked to the model (it follows it) or a fixed copy.
+    bool ProjectsLinked() const { return myOptions.projectLinked; }
+    void SetProjectLinked(bool linked) { myOptions.projectLinked = linked; }
     void SetTool(AppContext& app, Session& session, SketchTool tool);
     /// Esc: drops the current step, then the tool, then leaves the sketch.
     void Escape(AppContext& app, Session& session);
@@ -215,7 +216,6 @@ private:
     void DrawShapePreview(AppContext& app, const SketchView& view, const UnitSystem& units) const;
 
     SketchTool myTool = SketchTool::Select;
-    double     myLastClickTime = -1.0;   ///< press time of the last drawing click (see DropPressClick)
 
     // drawing tools
     DrawOptions           myOptions;
@@ -223,6 +223,9 @@ private:
     std::string           mySidesError;          ///< polygon side count that is not a whole number
     double                myMmPerPixel = 0.1;   ///< of the last frame, to place automatic dimension labels
     std::vector<PointRef> myClicks;
+    /// A chain of lines: where it began and where the next line starts. A
+    /// line that ends where the chain began closes it, and the chain stops.
+    ObjectId myChainStart, myChainEnd;
     Snap                  mySnap;
     std::optional<Vec2>   myCursor;
 
@@ -232,7 +235,18 @@ private:
     void UpdateShownGlyphs(const sketch::Sketch& sk, bool all);
 
     // selection, picking
+    // Typing a size while drawing: the first field of the tool panel takes
+    // the keys; Shift+Up/Down (or Shift+W/S) moves between the fields.
+    int         myFocusField = -1;   ///< the field to focus on the next panel frame (Shift+Up/Down)
+    std::string myFieldSeed;         ///< keys typed in the view, not yet added to the field
+    int         myFieldCount = 0;    ///< fields shown on the last panel frame
+    int         mySeedField = -1;    ///< the field the keys typed in the view go to
+    bool        myClearOnSeed = false;   ///< the next typed key replaces the field's text
+    int         myBackspaces = 0;        ///< Backspaces typed in the view, not applied yet
     std::unordered_set<ObjectId> mySelection;
+    std::optional<ImVec2>        myBoxStart;   ///< where a selection box was started (screen)
+    bool                         myBoxing = false;
+    std::vector<Vec2>            myFence;   ///< Обрезка: the path dragged so far (sketch coordinates)
     std::vector<ObjectId>        myPicks;
     SketchHit                    myHover;
 

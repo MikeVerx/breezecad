@@ -28,6 +28,8 @@ private:
     void DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) final;
     void StartNext(AppContext& app, Session& session, const doc::Feature& previous) final;
     bool ShowStatus(const doc::Feature& feature) const final;
+
+    bool myByFace = false;   ///< a click takes every edge of the face under it, not one edge
 };
 
 class FilletEditor final : public EdgeOperationEditor {

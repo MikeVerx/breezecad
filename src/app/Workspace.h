@@ -2,7 +2,11 @@
 
 #include "app/Session.h"
 
+#include "core/Expected.h"
+
 #include <filesystem>
+#include <string>
+#include <string_view>
 #include <memory>
 #include <vector>
 
@@ -28,6 +32,12 @@ public:
 
     /// New empty part, made active.
     Session& NewPart();
+    /// New empty assembly, made active.
+    Session& NewAssembly();
+
+    /// A session for a .bzc file of any kind this version opens (not added).
+    static Expected<std::unique_ptr<Session>> LoadSession(const std::filesystem::path& file,
+                                                          std::vector<std::string>* warnings);
 
     /// Opens a .bzc file (or activates it when already open).
     bool Open(const std::filesystem::path& file, Notifications& notes, Settings& settings);
@@ -35,15 +45,22 @@ public:
     /// Saves to the session's file; asks for a name when it has none or
     /// when `saveAs` is set. Returns false if cancelled or failed.
     bool Save(Session& session, bool saveAs, Notifications& notes, Settings& settings);
+    /// Saves to `target` without asking (the session's file from now on).
+    bool SaveTo(Session& session, const std::filesystem::path& target, Notifications& notes, Settings& settings,
+                std::string* error = nullptr);
 
     /// Asks for a file name and exports the bodies.
     bool Export(Session& session, ExportFormat format, Notifications& notes);
+    /// Exports the bodies to `target` without asking. Errors go to `notes`
+    /// and, when `error` is given, there as well.
+    bool ExportTo(Session& session, ExportFormat format, const std::filesystem::path& target, Notifications& notes,
+                  std::string* error = nullptr);
 
     /// Closes without asking (the caller has dealt with unsaved changes).
     void Close(int index);
 
-    /// Next "ДетальN" name not used by open documents.
-    std::string NextUntitledName() const;
+    /// Next "ДетальN" (or "<base>N") name not used by open documents.
+    std::string NextUntitledName(std::string_view base = "Деталь") const;
 
 private:
     int  myActive   = -1;

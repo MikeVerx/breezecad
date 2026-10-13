@@ -12,8 +12,9 @@
 namespace bz::doc {
 
 struct FaceReference {
-    Vec3 normal;   ///< outward, unit; zero means "not chosen"
+    Vec3 normal;   ///< outward, unit; zero means "not chosen" (for a curved face: at `point`)
     Vec3 point;    ///< a point of the face when it was picked
+    bool curved = false;   ///< any face, found again as the one nearest `point` (kernel::occt::ResolveAnyFace)
 
     bool IsSet() const { return normal.Length() > 0.5; }
     bool operator==(const FaceReference&) const = default;

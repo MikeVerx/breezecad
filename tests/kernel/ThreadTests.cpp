@@ -124,3 +124,39 @@ TEST_CASE("a thread stops short of a shoulder and runs out of a free end") {
     };
     CHECK(cutOf(true) < cutOf(false) - 1);
 }
+
+TEST_CASE("a chosen standard size wins over the shaft, a cosmetic thread cuts nothing") {
+    // An 8.6 mm shaft with M8 chosen: cut down to 8 mm, then threaded, so
+    // it ends up the same as an M8 thread on an 8 mm shaft.
+    const auto threaded = [](double radius, double size, bool cosmetic) {
+        doc::Document d;
+        auto& sk = AddSketch(d);
+        AddCircle(d, sk, {0, 0}, radius);
+        AddExtrude(d, sk.id, "20");
+        auto& thread = AddThread(d, radius, "1.25");
+        thread.size = size;
+        thread.cosmetic = cosmetic;
+        kernel::Model model;
+        model.Rebuild(d);
+        REQUIRE(thread.status.state == FeatureState::Ok);
+        return model.Volume();
+    };
+    const double m8 = threaded(4, 0, false);
+    CHECK(threaded(4.3, 8, false) == doctest::Approx(m8).epsilon(0.01));
+    CHECK(threaded(4, 0, true) == doctest::Approx(kPi * 16 * 20).epsilon(1e-6));
+
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddCircle(d, sk, {0, 0}, 4);
+    AddExtrude(d, sk.id, "20");
+    auto& thread = AddThread(d, 4, "1.25");
+    thread.size = 8;
+    thread.cosmetic = true;
+    const auto loaded = doc::DocumentFromJson(doc::DocumentToJson(d));
+    REQUIRE(loaded);
+    const auto* t = dynamic_cast<const doc::ThreadFeature*>(loaded->Features()[2].get());
+    REQUIRE(t);
+    CHECK(t->size == 8);
+    CHECK(t->cosmetic);
+    CHECK(doc::StandardSizes().size() == 22);
+}

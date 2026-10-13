@@ -31,6 +31,12 @@ const std::pair<double, double>& Nearest(double d) {
 
 double CoarsePitch(double d) { return Nearest(d).second; }
 
+std::vector<double> StandardSizes() {
+    std::vector<double> out;
+    for (const auto& size : kSeries) out.push_back(size.first);
+    return out;
+}
+
 double StandardSize(double d) {
     const double nominal = Nearest(d).first;
     return std::abs(nominal - d) <= 0.05 * nominal ? nominal : d;
@@ -45,6 +51,8 @@ void ThreadFeature::SaveFields(Json& out) const {
     out["length"] = json_io::ToJson(length);
     out["fromOtherEnd"] = fromOtherEnd;
     out["leftHanded"] = leftHanded;
+    if (size > 0) out["size"] = size;
+    if (cosmetic) out["cosmetic"] = true;
 }
 
 Status ThreadFeature::LoadFields(const Json& in) {
@@ -68,6 +76,8 @@ Status ThreadFeature::LoadFields(const Json& in) {
     fullLength = full;
     fromOtherEnd = other;
     leftHanded = left;
+    size = in.value("size", 0.0);
+    cosmetic = in.value("cosmetic", false);
     return Status::Ok();
 }
 

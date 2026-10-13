@@ -1,0 +1,2 @@
+resources/beta/*.txt -text
+resources/beta/*.bat -text

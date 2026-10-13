@@ -30,8 +30,11 @@ bool Read(const Json& j, Vec2& out) {
 }
 
 bool Read(const Json& j, FaceReference& out) {
-    return j.is_object() && j.contains("normal") && j.contains("point") && Read(j["normal"], out.normal) &&
-           Read(j["point"], out.point);
+    if (!j.is_object() || !j.contains("normal") || !j.contains("point") || !Read(j["normal"], out.normal) || !Read(j["point"], out.point))
+        return false;
+    const auto curved = j.find("curved");
+    out.curved = curved != j.end() && curved->is_boolean() && curved->get<bool>();
+    return true;
 }
 
 bool Read(const Json& j, Vec3& out) {
@@ -110,6 +113,44 @@ bool Read(const Json& j, EdgeReference& out) {
             return false;
     }
     out = e;
+    return true;
+}
+
+void SavePointPicks(Json& out, const std::vector<Vec3>& points, const std::vector<std::optional<EdgeReference>>& edges,
+                    const std::vector<ObjectId>& workPoints) {
+    Json pts = Json::array(), es = Json::array(), ws = Json::array();
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        pts.push_back(ToJson(points[i]));
+        es.push_back(i < edges.size() && edges[i] ? ToJson(*edges[i]) : Json());
+        ws.push_back(ToJson(i < workPoints.size() ? workPoints[i] : ObjectId{}));
+    }
+    out["points"] = std::move(pts);
+    out["pointEdges"] = std::move(es);
+    out["pointFeatures"] = std::move(ws);
+}
+
+bool LoadPointPicks(const Json& in, std::vector<Vec3>& points, std::vector<std::optional<EdgeReference>>& edges,
+                    std::vector<ObjectId>& workPoints) {
+    std::vector<Vec3> pts;
+    if (const auto it = in.find("points"); it != in.end()) {
+        if (!it->is_array()) return false;
+        for (const Json& p : *it) {
+            Vec3 v;
+            if (!Read(p, v)) return false;
+            pts.push_back(v);
+        }
+    }
+    std::vector<std::optional<EdgeReference>> es(pts.size());
+    if (const auto it = in.find("pointEdges"); it != in.end() && it->is_array())
+        for (std::size_t i = 0; i < it->size() && i < es.size(); ++i)
+            if (EdgeReference ref; !(*it)[i].is_null() && Read((*it)[i], ref)) es[i] = ref;
+    std::vector<ObjectId> ws(pts.size());
+    if (const auto it = in.find("pointFeatures"); it != in.end() && it->is_array())
+        for (std::size_t i = 0; i < it->size() && i < ws.size(); ++i)
+            if (ObjectId id; Read((*it)[i], id)) ws[i] = id;
+    points = std::move(pts);
+    edges = std::move(es);
+    workPoints = std::move(ws);
     return true;
 }
 

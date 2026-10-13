@@ -16,11 +16,15 @@
 #include "document/PatternFeature.h"
 #include "document/RevolveFeature.h"
 #include "document/SectionFeature.h"
+#include "document/ShellFeature.h"
+#include "document/WorkPointFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
 #include "document/ThreadFeature.h"
 #include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
+#include "app/assembly/AssemblyUi.h"
+#include "assembly/AssemblyFile.h"
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
 
@@ -41,6 +45,8 @@ struct RowStyle {
     std::string meta;
     const char* statusIcon = nullptr;
     std::string statusText;
+    bool        hideable = false;   ///< has an eye at the right: hide or show it
+    bool        hidden = false;
 };
 
 /// Draws a tree row; returns its interaction.
@@ -48,6 +54,7 @@ struct RowResult {
     bool clicked = false;
     bool doubleClicked = false;
     bool caretClicked = false;
+    bool eyeClicked = false;
     bool hovered = false;
 };
 
@@ -86,8 +93,21 @@ RowResult Row(AppContext& app, const char* id, const std::string& name, const Ro
         x += ui.S(24);
     }
 
-    // Right side: status icon and meta text.
+    // Right side: the eye, status icon and meta text.
     float right = p.x + width - ui.S(8);
+    if (style.hideable) {
+        right -= ui.S(16);
+        // Always there for a hidden item, so it can be found again; else on hover.
+        if (style.hidden || r.hovered)
+            ui.icons.Draw(dl, style.hidden ? "ui-eye-off" : "ui-eye", {right, p.y + (h - ui.S(15)) / 2}, ui.S(15),
+                          style.hidden ? c.textMuted : c.textSecondary);
+        const ImVec2 mouse = ImGui::GetMousePos();
+        if (r.clicked && mouse.x >= right - ui.S(4) && mouse.x <= right + ui.S(20)) {
+            r.eyeClicked = true;
+            r.clicked = false;
+        }
+        right -= ui.S(6);
+    }
     if (style.statusIcon) {
         right -= ui.S(16);
         ui.icons.Draw(dl, style.statusIcon, {right, p.y + (h - ui.S(15)) / 2}, ui.S(15), {1, 1, 1, 1});
@@ -117,6 +137,8 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
         return "R" + FormatValue(fillet->radius.value, Quantity::Length, d.units);
     if (const auto* chamfer = dynamic_cast<const doc::ChamferFeature*>(&f))
         return FormatValue(chamfer->distance.value, Quantity::Length, d.units) + "\xC3\x97" + "45\xC2\xB0";
+    if (const auto* shell = dynamic_cast<const doc::ShellFeature*>(&f))
+        return FormatValue(shell->thickness.value, Quantity::Length, d.units) + " " + UnitLabel(Quantity::Length, d.units);
     if (const auto* hole = dynamic_cast<const doc::HoleFeature*>(&f)) {
         std::string meta = "\xC3\x98" + FormatValue(hole->diameter.value, Quantity::Length, d.units);   // Ø6.6
         if (hole->centres.size() > 1) meta += " \xC3\x97" + std::to_string(hole->centres.size());
@@ -141,6 +163,23 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
     return {};
 }
 
+/// What the eye can hide: a body (of the operation that made it), a sketch,
+/// a work plane, axis or point. Other operations change a body, not own one.
+bool Hideable(const Session& session, const doc::Feature& f) {
+    if (dynamic_cast<const doc::SketchFeature*>(&f) || dynamic_cast<const doc::WorkPlaneFeature*>(&f) ||
+        dynamic_cast<const doc::WorkAxisFeature*>(&f) || dynamic_cast<const doc::WorkPointFeature*>(&f))
+        return true;
+    for (const kernel::BodyInfo& b : session.model.Bodies())
+        if (b.id == f.id) return true;
+    return f.hidden;   // hidden while it made a body: it can always be shown again
+}
+
+void ToggleHidden(Session& session, ObjectId id) {
+    const doc::Feature* f = session.doc.Find(id);
+    if (!f) return;
+    session.Execute(doc::SetHidden(id, !f->hidden, f->hidden ? Trf("Показать {}", f->name) : Trf("Скрыть {}", f->name)));
+}
+
 void ContextMenu(AppContext& app, Session& session, const doc::Feature& f, std::size_t index) {
     ui::Ui& ui = app.ui;
     ui::MenuStyle style(ui);   // before Begin: must outlive the End call
@@ -157,7 +196,10 @@ void ContextMenu(AppContext& app, Session& session, const doc::Feature& f, std::
         app.shell.renameText = f.name;
         app.shell.renameFocus = true;
     }
-    if (ui::MenuItem(ui, f.suppressed ? Tr("Включить") : Tr("Подавить"), nullptr, f.suppressed ? "ui-eye" : "ui-eye-off")) {
+    if (Hideable(session, f) &&
+        ui::MenuItem(ui, f.hidden ? Tr("Показать") : Tr("Скрыть"), nullptr, f.hidden ? "ui-eye" : "ui-eye-off"))
+        app.Later([&session, id] { ToggleHidden(session, id); });
+    if (ui::MenuItem(ui, f.suppressed ? Tr("Включить") : Tr("Подавить"), nullptr, "ui-suppress")) {
         app.Later([&session, id] {
             const doc::Feature* current = session.doc.Find(id);
             if (!current) return;
@@ -177,6 +219,10 @@ void ContextMenu(AppContext& app, Session& session, const doc::Feature& f, std::
 } // namespace
 
 void DrawTreePanel(AppContext& app, Session& session, float width) {
+    if (session.assembly) {
+        DrawAssemblyTree(app, session, width);
+        return;
+    }
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     doc::Document& d = session.doc;
@@ -267,6 +313,8 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         if (f.status.state == doc::FeatureState::Error) style.statusIcon = "status-error";
         if (f.status.state == doc::FeatureState::Warning) style.statusIcon = "status-warning";
         style.statusText = Tr(f.status.message);
+        style.hideable = Hideable(session, f);
+        style.hidden = f.hidden;
 
         ImGui::PushID(static_cast<int>(f.id.value));
         if (app.shell.renaming == f.id) {
@@ -305,7 +353,11 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
             else app.shell.expanded.insert(f.id);
         }
         if (r.clicked) session.selectedFeature = f.id;
-        if (r.doubleClicked) {
+        if (r.eyeClicked) {
+            const ObjectId id = f.id;
+            app.Later([&session, id] { ToggleHidden(session, id); });
+        }
+        if (r.doubleClicked && !r.eyeClicked) {
             const ObjectId id = f.id;
             app.Later([&app, &session, id] { EditFeature(app, session, id); });
         }
@@ -376,6 +428,223 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
     ImGui::EndGroup();
 }
 
+// --- assembly -------------------------------------------------------------------
+
+const char* ConstraintIcon(assembly::ConstraintType type) {
+    switch (type) {
+        case assembly::ConstraintType::Mate:     return "a-mate";
+        case assembly::ConstraintType::Insert:   return "a-insert";
+        case assembly::ConstraintType::Angle:    return "a-angle";
+        case assembly::ConstraintType::Tangent:  return "a-tangent";
+        case assembly::ConstraintType::AxisMate: return "a-axis";
+        case assembly::ConstraintType::Rotational:  return "j-rotational";
+        case assembly::ConstraintType::Slider:      return "j-slider";
+        case assembly::ConstraintType::Cylindrical: return "j-cylindrical";
+        case assembly::ConstraintType::Planar:      return "j-planar";
+        case assembly::ConstraintType::Ball:        return "j-ball";
+        case assembly::ConstraintType::Rigid:       return "j-rigid";
+    }
+    return "a-mate";
+}
+
+void DrawAssemblyTree(AppContext& app, Session& session, float width) {
+    if (session.assembly->creating.active) {
+        DrawConstraintPanel(app, session, width);
+        return;
+    }
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    AssemblyState& st = *session.assembly;
+    assembly::Assembly& a = st.assembly;
+    {
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float h = ui.S(40);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddText(ui.fonts.strong, ui.S(13), {p.x + ui.S(14), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text),
+                    Tr("Дерево сборки"));
+        dl->AddLine({p.x, p.y + h - 1}, {p.x + width, p.y + h - 1}, ui::ToU32(c.dividerSoft));
+        ImGui::Dummy({width, h});
+    }
+    const float rowW = width - ui.S(12);
+    ImGui::SetCursorPosX(ui.S(6));
+    ImGui::BeginGroup();
+    ImGui::Dummy({0, ui.S(4)});
+    app.shell.hoveredTreeItem = {};
+    {
+        RowStyle style;
+        style.icon = "tree-assembly";
+        if (Row(app, "##assembly", session.Title(), style, rowW).clicked) st.selected = {};
+    }
+
+    // Components, each with the constraints that tie it.
+    for (const assembly::Component& comp : a.components) {
+        const ObjectId id = comp.id;
+        if (a.PatternOfInstance(id)) continue;   // listed under its pattern
+        RowStyle style;
+        style.depth = 1;
+        style.icon = "tree-component";
+        style.selected = st.selected == id;
+        style.muted = !comp.visible;
+        const auto constraints = a.ConstraintsOf(id);
+        style.caret = !constraints.empty();
+        style.open = app.shell.expanded.contains(id);
+        if (const std::string problem = st.geometry.ProblemOf(id); !problem.empty()) {
+            style.statusIcon = "status-error";
+            style.statusText = Tr(problem);
+        } else if (comp.grounded) {
+            style.meta = Tr("закреплён");
+            style.statusText = Tr("Закреплён: зависимости и перетаскивание его не двигают");
+        } else if (const auto f = st.freedom.find(id); f != st.freedom.end()) {
+            // Remaining degrees of freedom, as Inventor shows them.
+            style.meta = f->second.Total() == 0 ? std::string(Tr("определён")) : Trf("{} ст.св.", f->second.Total());
+            style.statusText = Trf("Свободы: перемещений {}, вращений {}", f->second.translations, f->second.rotations);
+        }
+        ImGui::PushID(static_cast<int>(id.value));
+        const RowResult r = Row(app, "##comp", comp.name, style, rowW);
+        if (r.hovered) app.shell.hoveredTreeItem = id;
+        if (r.caretClicked) {
+            if (style.open) app.shell.expanded.erase(id);
+            else app.shell.expanded.insert(id);
+        }
+        if (r.clicked) st.selected = id;
+        if (r.doubleClicked) {
+            const std::filesystem::path file = assembly::ResolvePartPath(session.path, comp.path);
+            app.Later([&app, file] { OpenDocument(app, file); });
+        }
+        {
+            ui::MenuStyle menu(ui);
+            if (ImGui::BeginPopupContextItem("##comp-menu")) {
+                st.selected = id;
+                if (ui::MenuItem(ui, Tr("Открыть деталь"), nullptr, "ui-open")) {
+                    const std::filesystem::path file = assembly::ResolvePartPath(session.path, comp.path);
+                    app.Later([&app, file] { OpenDocument(app, file); });
+                }
+                if (ui::MenuItem(ui, comp.grounded ? Tr("Освободить") : Tr("Закрепить"), nullptr, "ui-lock"))
+                    app.Later([&app] { ToggleGrounded(app); });
+                if (ui::MenuItem(ui, comp.visible ? Tr("Скрыть") : Tr("Показать"), nullptr, comp.visible ? "ui-eye-off" : "ui-eye"))
+                    app.Later([&st, id] {
+                        if (assembly::Component* cc = st.assembly.FindComponent(id)) {
+                            st.Checkpoint(cc->visible ? N_("Скрыть") : N_("Показать"));
+                            cc->visible = !cc->visible;
+                            st.assembly.Touch();
+                        }
+                    });
+                ImGui::Separator();
+                if (ui::MenuItem(ui, Tr("Удалить"), "Del", "ui-trash")) app.Later([&app, &session] { AssemblyDelete(app, session); });
+                ImGui::EndPopup();
+            }
+        }
+        ImGui::PopID();
+        if (!style.open) continue;
+        for (const assembly::Constraint* con : constraints) {
+            RowStyle cs;
+            cs.depth = 2;
+            cs.icon = ConstraintIcon(con->type);
+            cs.selected = st.selected == con->id;
+            cs.muted = con->suppressed;
+            const ObjectId other = con->first.component == id ? con->second.component : con->first.component;
+            if (const assembly::Component* o = a.FindComponent(other)) cs.meta = o->name;
+            ImGui::PushID(static_cast<int>(con->id.value));
+            if (Row(app, "##in-comp", con->name, cs, rowW).clicked) st.selected = con->id;
+            ImGui::PopID();
+        }
+    }
+
+    // Component patterns: one row each, the instances under it.
+    for (const assembly::ComponentPattern& pat : a.patterns) {
+        const ObjectId id = pat.id;
+        RowStyle style;
+        style.depth = 1;
+        style.icon = pat.kind == assembly::PatternKind::Circular ? "tree-pattern-circular" : "tree-pattern-rect";
+        style.selected = st.selected == id;
+        style.meta = Trf("{} шт.", pat.instances.size() + 1);
+        style.caret = !pat.instances.empty();
+        style.open = app.shell.expanded.contains(id);
+        ImGui::PushID(static_cast<int>(id.value));
+        const RowResult r = Row(app, "##pattern", pat.name, style, rowW);
+        if (r.caretClicked) {
+            if (style.open) app.shell.expanded.erase(id);
+            else app.shell.expanded.insert(id);
+        }
+        if (r.clicked) st.selected = id;
+        {
+            ui::MenuStyle menu(ui);
+            if (ImGui::BeginPopupContextItem("##pattern-menu")) {
+                st.selected = id;
+                if (ui::MenuItem(ui, Tr("Удалить массив"), "Del", "ui-trash"))
+                    app.Later([&app, &session] { AssemblyDelete(app, session); });
+                ImGui::EndPopup();
+            }
+        }
+        if (style.open)
+            for (std::size_t i = 0; i < pat.instances.size(); ++i)
+                for (ObjectId cid : pat.instances[i]) {
+                    const assembly::Component* comp = a.FindComponent(cid);
+                    if (!comp) continue;
+                    RowStyle cs;
+                    cs.depth = 2;
+                    cs.icon = "tree-component";
+                    cs.selected = st.selected == cid;
+                    cs.muted = !comp->visible;
+                    cs.meta = Trf("№ {}", i + 2);
+                    ImGui::PushID(static_cast<int>(cid.value));
+                    const RowResult rr = Row(app, "##instance", comp->name, cs, rowW);
+                    if (rr.hovered) app.shell.hoveredTreeItem = cid;
+                    if (rr.clicked) st.selected = cid;
+                    ImGui::PopID();
+                }
+        ImGui::PopID();
+    }
+
+    // All constraints.
+    if (!a.constraints.empty()) {
+        ImGui::Dummy({0, ui.S(6)});
+        ui::FieldLabel(ui, Tr("Зависимости"));
+        for (assembly::Constraint& con : a.constraints) {
+            RowStyle style;
+            style.depth = 1;
+            style.icon = ConstraintIcon(con.type);
+            style.selected = st.selected == con.id;
+            style.muted = con.suppressed;
+            switch (con.state) {
+                case assembly::ConstraintState::Failed:
+                    style.statusIcon = "status-error";
+                    style.statusText = Tr("Не выполняется: противоречит другим зависимостям или геометрии");
+                    break;
+                case assembly::ConstraintState::Redundant:
+                    style.statusIcon = "status-warning";
+                    style.statusText = Tr("Лишняя: то же уже задано другими зависимостями");
+                    break;
+                default: break;
+            }
+            ImGui::PushID(static_cast<int>(con.id.value));
+            const RowResult r = Row(app, "##con", con.name, style, rowW);
+            if (r.clicked) st.selected = con.id;
+            {
+                ui::MenuStyle menu(ui);
+                if (ImGui::BeginPopupContextItem("##con-menu")) {
+                    st.selected = con.id;
+                    const ObjectId cid = con.id;
+                    if (ui::MenuItem(ui, con.suppressed ? Tr("Включить") : Tr("Подавить"), nullptr,
+                                     con.suppressed ? "ui-eye" : "ui-eye-off"))
+                        app.Later([&st, cid] {
+                            if (assembly::Constraint* cc = st.assembly.FindConstraint(cid)) {
+                                st.Checkpoint(cc->suppressed ? N_("Включить") : N_("Подавить"));
+                                cc->suppressed = !cc->suppressed;
+                                st.assembly.Touch();
+                            }
+                        });
+                    ImGui::Separator();
+                    if (ui::MenuItem(ui, Tr("Удалить"), "Del", "ui-trash")) app.Later([&app, &session] { AssemblyDelete(app, session); });
+                    ImGui::EndPopup();
+                }
+            }
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndGroup();
+}
+
 // Tree icon of a feature, also used by panels that list features.
 const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::SketchFeature*>(&f)) return "tree-sketch";
@@ -386,6 +655,7 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::HoleFeature*>(&f)) return "tree-hole";
     if (dynamic_cast<const doc::WorkPlaneFeature*>(&f)) return "tree-plane";
     if (dynamic_cast<const doc::WorkAxisFeature*>(&f)) return "tree-axis";
+    if (dynamic_cast<const doc::WorkPointFeature*>(&f)) return "tree-point";
     if (const auto* p = dynamic_cast<const doc::PatternFeature*>(&f))
         return p->kind == doc::PatternKind::Circular ? "tree-pattern-circular" : "tree-pattern-rect";
     if (dynamic_cast<const doc::MirrorFeature*>(&f)) return "tree-mirror";
@@ -394,6 +664,7 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::CoilFeature*>(&f)) return "tree-coil";
     if (dynamic_cast<const doc::ThreadFeature*>(&f)) return "tree-thread";
     if (dynamic_cast<const doc::SectionFeature*>(&f)) return "tree-cut-section";
+    if (dynamic_cast<const doc::ShellFeature*>(&f)) return "tree-shell";
     return "tree-unknown";
 }
 

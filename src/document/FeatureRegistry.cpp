@@ -8,11 +8,13 @@
 #include "document/LoftFeature.h"
 #include "document/PatternFeature.h"
 #include "document/RevolveFeature.h"
+#include "document/ShellFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
 #include "document/ThreadFeature.h"
 #include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
+#include "document/WorkPointFeature.h"
 
 namespace bz::doc {
 
@@ -33,6 +35,8 @@ FeatureRegistry& FeatureRegistry::Default() {
         r.Register(std::string(MirrorFeature::kType), [] { return std::make_unique<MirrorFeature>(); });
         r.Register(std::string(WorkPlaneFeature::kType), [] { return std::make_unique<WorkPlaneFeature>(); });
         r.Register(std::string(WorkAxisFeature::kType), [] { return std::make_unique<WorkAxisFeature>(); });
+        r.Register(std::string(ShellFeature::kType), [] { return std::make_unique<ShellFeature>(); });
+        r.Register(std::string(WorkPointFeature::kType), [] { return std::make_unique<WorkPointFeature>(); });
         r.Register(std::string(ThreadFeature::kType), [] { return std::make_unique<ThreadFeature>(); });
         return r;
     }();
@@ -46,6 +50,12 @@ void FeatureRegistry::Register(std::string typeId, Factory factory) {
 std::unique_ptr<Feature> FeatureRegistry::Create(std::string_view typeId) const {
     const auto it = myFactories.find(typeId);
     return it != myFactories.end() ? it->second() : nullptr;
+}
+
+std::vector<std::string> FeatureRegistry::Types() const {
+    std::vector<std::string> out;
+    for (const auto& [id, factory] : myFactories) out.push_back(id);
+    return out;
 }
 
 } // namespace bz::doc

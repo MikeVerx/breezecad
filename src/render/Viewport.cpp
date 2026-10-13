@@ -1,13 +1,24 @@
 #include "render/Viewport.h"
 
 #include "core/Log.h"
+#include "core/Profile.h"
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/FaceMatch.h"
 #include "kernel/occt/Measure.h"
 #include "kernel/occt/ModelImpl.h"
+#include "render/TexturedFaces.h"
+#include "core/Image.h"
 
 #include <AIS_InteractiveContext.hxx>
+#include <BRepLib.hxx>
+#include <BRep_Builder.hxx>
+#include <TopoDS_Compound.hxx>
+#include <TopExp_Explorer.hxx>
+#include <map>
+#include <AIS_ColoredDrawer.hxx>
+#include <AIS_ColoredShape.hxx>
 #include <AIS_Shape.hxx>
+#include <BRepTools.hxx>
 #include <BRep_Tool.hxx>
 #include <gp_Cylinder.hxx>
 #include <Aspect_DisplayConnection.hxx>
@@ -19,6 +30,8 @@
 #include <Bnd_Box.hxx>
 #include <GeomAbs_Shape.hxx>
 #include <Graphic3d_Camera.hxx>
+#include <Image_AlienPixMap.hxx>
+#include <V3d_ImageDumpOptions.hxx>
 #include <Graphic3d_ClipPlane.hxx>
 #include <Graphic3d_Mat4d.hxx>
 #include <Graphic3d_Vec2.hxx>
@@ -31,8 +44,14 @@
 #include <Prs3d_Drawer.hxx>
 #include <Prs3d_IsoAspect.hxx>
 #include <Prs3d_LineAspect.hxx>
+#include <StdPrs_ToolTriangulatedShape.hxx>
 #include <Prs3d_ShadingAspect.hxx>
 #include <SelectMgr_EntityOwner.hxx>
+#include <SelectMgr_Selection.hxx>
+#include <SelectMgr_SensitiveEntity.hxx>
+#include <Select3D_SensitiveEntity.hxx>
+#include <Poly_Triangulation.hxx>
+#include <TopLoc_Location.hxx>
 #include <StdSelect_BRepOwner.hxx>
 #include <StdSelect_ViewerSelector3d.hxx>
 #include <TopoDS.hxx>
@@ -163,11 +182,41 @@ struct Orientation {
 /// Sketch frame on a planar face: normal points out of the material, the
 /// origin is the world origin projected onto the plane, and X follows the
 /// world X axis (or Y when the face faces along X), as users expect.
+/// A reference to `face` found again by a point inside it: the middle of
+/// one of its display triangles (never on an edge shared with a neighbour).
+std::optional<doc::FaceReference> FaceReferenceOf(const TopoDS_Face& face) {
+    TopLoc_Location location;
+    const Handle(Poly_Triangulation) mesh = BRep_Tool::Triangulation(face, location);
+    if (mesh.IsNull() || mesh->NbTriangles() < 1) return std::nullopt;
+    int a = 0, b = 0, c = 0;
+    mesh->Triangle(1).Get(a, b, c);
+    const gp_Trsf toModel = location.Transformation();
+    const gp_XYZ sum = mesh->Node(a).Transformed(toModel).XYZ() + mesh->Node(b).Transformed(toModel).XYZ() +
+                       mesh->Node(c).Transformed(toModel).XYZ();
+    const Vec3 point = ToVec(sum / 3.0);
+    const std::optional<Vec3> normal = kernel::occt::NormalAt(face, point);
+    if (!normal) return std::nullopt;
+    return doc::FaceReference{*normal, point, true};
+}
+
+/// The owner by which the face selection mode of `shape` picks `face`
+/// (null if that mode was never computed or the face is not there).
+Handle(SelectMgr_EntityOwner) FaceOwner(const Handle(AIS_InteractiveObject)& shape, const TopoDS_Face& face) {
+    const int mode = AIS_Shape::SelectionMode(TopAbs_FACE);
+    if (!shape->HasSelection(mode)) return nullptr;
+    for (const Handle(SelectMgr_SensitiveEntity)& entity : shape->Selection(mode)->Entities()) {
+        const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(entity->BaseSensitive()->OwnerId());
+        if (!owner.IsNull() && owner->Shape().IsSame(face)) return Handle(SelectMgr_EntityOwner)(owner);
+    }
+    return nullptr;
+}
+
 std::optional<Frame> PlanarFaceFrame(const TopoDS_Face& face) {
     BRepAdaptor_Surface surface(face);
     if (surface.GetType() != GeomAbs_Plane) return std::nullopt;
     const gp_Pln pln = surface.Plane();
     Vec3 normal = ToVec(pln.Axis().Direction().XYZ());
+    if (!pln.Position().Direct()) normal = -normal;   // a left-handed (mirrored) frame: X × Y is opposite its axis
     if (face.Orientation() == TopAbs_REVERSED) normal = -normal;
 
     const Vec3 location = ToVec(pln.Location().XYZ());
@@ -183,6 +232,23 @@ std::optional<Frame> PlanarFaceFrame(const TopoDS_Face& face) {
 
 // --- Impl -------------------------------------------------------------------
 
+namespace {
+
+/// How finely bodies are meshed for display, by quality level (0 best).
+/// Finer than OCCT's default (20°): round faces look round.
+void SetMeshPrecision(const Handle(Prs3d_Drawer)& drawer, int quality) {
+    static constexpr double kAngle[] = {4.0, 8.0, 15.0}, kCoefficient[] = {0.0005, 0.001, 0.003};
+    drawer->SetDeviationAngle(kAngle[quality] * kPi / 180.0);
+    drawer->SetDeviationCoefficient(kCoefficient[quality]);
+    // Not a "change" for OCCT: a new presentation with its own precision
+    // would otherwise wipe the shape's triangles (ClearOnOwnDeflectionChange)
+    // and mesh it all again. SetQuality cleans them itself when it changes.
+    drawer->UpdatePreviousDeviationAngle();
+    drawer->UpdatePreviousDeviationCoefficient();
+}
+
+} // namespace
+
 struct Viewport::Impl {
     Handle(OpenGl_GraphicDriver)     driver;
     Handle(V3d_Viewer)               viewer;
@@ -195,10 +261,17 @@ struct Viewport::Impl {
     int    fbWidth = 1, fbHeight = 1;
 
     struct Shown {
-        ObjectId           body;
-        Handle(AIS_Shape)  shape;
+        ObjectId                 body;
+        Handle(AIS_ColoredShape) shape;   ///< coloured face by face where the look says so
     };
     std::vector<Shown> shown;
+    /// Bodies shown a moment ago, hidden but kept with their meshes: closing
+    /// an operation without applying it brings the old shapes back at once.
+    std::vector<Shown> spare;
+    static constexpr std::size_t kSpare = 4;
+    std::vector<ObjectId> hiddenBodies;   ///< left out of `shown` (SetHiddenBodies)
+    /// Cosmetic threads and the like: drawn, never picked.
+    std::vector<Handle(AIS_Shape)> decorations;
 
     /// Measuring (see SetMeasuring).
     struct Measuring {
@@ -212,6 +285,13 @@ struct Viewport::Impl {
     void ActivateShown() {
         for (const auto& s : shown) {
             context->Deactivate(s.shape);
+            // Faces covered with a picture are picked on their skin.
+            if (const auto it = textured.find(s.shape.get()); it != textured.end())
+                for (const auto& obj : it->second)
+                    if (!Handle(TexturedFaces)::DownCast(obj).IsNull()) {
+                        context->Deactivate(obj);
+                        if (!original.active) context->Activate(obj, AIS_Shape::SelectionMode(TopAbs_FACE));
+                    }
             if (original.active) continue;
             context->Activate(s.shape, AIS_Shape::SelectionMode(TopAbs_FACE));
             if (measuring.on) {
@@ -219,6 +299,28 @@ struct Viewport::Impl {
                 context->Activate(s.shape, AIS_Shape::SelectionMode(TopAbs_VERTEX));
             }
         }
+        ShowSelected();
+    }
+
+    /// Faces the user chose (Viewport::SetSelectedFaces), highlighted as
+    /// selected on the shown bodies. Not while picking on an original body.
+    std::vector<SelectedFace> selectedFaces;
+    void ShowSelected() {
+        context->ClearSelected(false);
+        dirty = true;
+        if (original.active) return;
+        for (const SelectedFace& f : selectedFaces)
+            for (const auto& s : shown) {
+                if (s.body != f.body) continue;
+                const std::optional<TopoDS_Face> face = kernel::occt::ResolveAnyFace(s.shape->Shape(), f.face);
+                if (!face) break;
+                Handle(SelectMgr_EntityOwner) owner = FaceOwner(s.shape, *face);
+                if (const auto it = textured.find(s.shape.get()); owner.IsNull() && it != textured.end())
+                    for (const auto& obj : it->second)   // a face with a picture: on its skin
+                        if (owner.IsNull()) owner = FaceOwner(obj, *face);
+                if (!owner.IsNull() && !owner->IsSelected()) context->AddOrRemoveSelected(owner, false);
+                break;
+            }
     }
 
     Handle(Graphic3d_ClipPlane) section;        ///< null: no section
@@ -228,6 +330,9 @@ struct Viewport::Impl {
     std::vector<Handle(AIS_Shape)> planeShapes;   ///< their presentations
     std::vector<Handle(AIS_Shape)> overlapShapes;           ///< interferences shown
     std::uint64_t                  overlapRevision = 0;     ///< of the model they were taken from
+    std::vector<Handle(AIS_Shape)> copyShapes;              ///< pattern/mirror preview shown
+    std::uint64_t                  copyRevision = 0;
+    ObjectId                       copyFeature;
     std::uint64_t      syncedRevision = static_cast<std::uint64_t>(-1);
     const kernel::Model* syncedModel = nullptr;
     std::optional<Vec2>  hoverPixel;
@@ -236,12 +341,16 @@ struct Viewport::Impl {
     ViewportColors colors;
     DisplayStyle   style = DisplayStyle::ShadedWithEdges;
     ObjectId       hovered;
+    doc::Look      look;                ///< colours of bodies and faces (Viewport::SetLook)
+    std::uint64_t  lookRevision = ~std::uint64_t{0};
+    const void*    lookOwner = nullptr;
     bool           dirty = true;
 
     /// Picking on the body as it was before an operation (fillet, shell;
     /// see BeginPickingOriginal).
     struct OriginalPicking {
         bool                            active = false;
+        bool                            requested = false;   ///< Begin called since the last ExpirePickingOriginal
         PickTarget                      target = PickTarget::Edges;
         const kernel::Model*            model = nullptr;
         std::uint64_t                   revision = 0;
@@ -294,30 +403,40 @@ struct Viewport::Impl {
 
     Handle(OpenGl_Context) GlContext() const { return driver->GetSharedContext(); }
 
-    void ApplyStyle(const Handle(AIS_Shape)& ais, bool hoveredBody) const {
-        Handle(Prs3d_Drawer) drawer = ais->Attributes();
-        const Color body = hoveredBody ? colors.hover : colors.body;
-        ais->SetColor(ToQuantity(body));
-        // Matte with a faint highlight. The ambient part is the body colour
-        // itself, so faces turned away from the lights stay readable.
+    /// Material for a colour and a finish: matte with a faint highlight,
+    /// metal with a bright one, glass glossy. The ambient part is the colour
+    /// itself, so faces turned away from the lights stay readable.
+    static Graphic3d_MaterialAspect MaterialOf(const Color& colour, doc::Finish finish) {
         Graphic3d_MaterialAspect material(Graphic3d_NameOfMaterial_Plastified);
-        material.SetColor(ToQuantity(body));
-        material.SetAmbientColor(ToQuantity(body));
-        material.SetSpecularColor(Quantity_Color(0.12, 0.12, 0.12, Quantity_TOC_RGB));
-        ais->SetMaterial(material);
+        material.SetColor(ToQuantity(colour));
+        const double ambient = finish == doc::Finish::Metal ? 0.75 : 1.0;
+        material.SetAmbientColor(Quantity_Color(colour.r * ambient, colour.g * ambient, colour.b * ambient, Quantity_TOC_RGB));
+        const double shine = finish == doc::Finish::Metal ? 0.55 : finish == doc::Finish::Glass ? 0.45 : 0.12;
+        material.SetSpecularColor(Quantity_Color(shine, shine, shine, Quantity_TOC_RGB));
+        material.SetShininess(finish == doc::Finish::Matte ? 0.1f : 0.6f);
+        return material;
+    }
+
+    void ApplyStyle(const Handle(AIS_Shape)& ais, bool hoveredBody, const doc::Appearance* appearance = nullptr) const {
+        Handle(Prs3d_Drawer) drawer = ais->Attributes();
+        const Color body = hoveredBody ? colors.hover : appearance ? appearance->face.WithAlpha(1.0f) : colors.body;
+        ais->SetColor(ToQuantity(body));
+        ais->SetMaterial(MaterialOf(body, appearance ? appearance->finish : doc::Finish::Matte));
+        const Color edgeColour = appearance ? appearance->edges : colors.edges;
 
         const bool edges = style == DisplayStyle::ShadedWithEdges || style == DisplayStyle::Transparent;
         drawer->SetFaceBoundaryDraw(edges);
-        // Only sharp edges: no seam line along a cylinder, no lines between
-        // tangent faces (as in Inventor and KOMPAS).
-        drawer->SetFaceBoundaryUpperContinuity(GeomAbs_C0);
-        // Finer tessellation than OCCT's default (20°): round faces look round.
-        drawer->SetDeviationAngle(4.0 * kPi / 180.0);
-        drawer->SetDeviationCoefficient(0.0005);
-        drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(colors.edges), Aspect_TOL_SOLID, 1.0));
+        // Sharp edges and the tangent edges where a fillet starts and ends
+        // (they show its size); not the seam along a cylinder, which is
+        // smooth beyond tangency.
+        drawer->SetFaceBoundaryUpperContinuity(GeomAbs_C1);
+        // Finer tessellation than OCCT's default (20°): round faces look
+        // round; coarser on the lower quality levels.
+        SetMeshPrecision(drawer, quality);
+        drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(edgeColour), Aspect_TOL_SOLID, 1.0));
         // Wireframe and hidden-line styles draw edges in the edge colour (not
         // the body colour SetColor gave them) and no isolines.
-        const Quantity_Color ink = ToQuantity(colors.edges);
+        const Quantity_Color ink = ToQuantity(edgeColour);
         drawer->SetWireAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
         drawer->SetLineAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
         drawer->SetFreeBoundaryAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
@@ -326,17 +445,127 @@ struct Viewport::Impl {
         drawer->SetVIsoAspect(new Prs3d_IsoAspect(ink, Aspect_TOL_SOLID, 1.0, 0));
         // "Скрытые линии": only the visible edges, in the edge colour.
         drawer->SetSeenLineAspect(new Prs3d_LineAspect(ink, Aspect_TOL_SOLID, 1.2));
-        ais->SetTransparency(style == DisplayStyle::Transparent ? 0.55 : 0.0);
+        ais->SetTransparency(style == DisplayStyle::Transparent ? 0.55 : appearance ? 1.0 - appearance->face.a : 0.0);
 
         const bool wire = style == DisplayStyle::Wireframe || style == DisplayStyle::HiddenLines;
         context->SetDisplayMode(ais, wire ? AIS_WireFrame : AIS_Shaded, false);
     }
 
+    int quality = 0;   ///< see Viewport::SetQuality
+
+    /// A body's style with its look: the body's appearance, then the faces
+    /// that have their own.
+    /// Pictures of the look as textures, by picture name.
+    std::map<std::string, Handle(Graphic3d_Texture2D)> textures;
+    /// Faces covered with pictures, by the body presentation they belong to.
+    std::map<const AIS_ColoredShape*, std::vector<Handle(AIS_InteractiveObject)>> textured;
+
+    int textureLimit = 0;   ///< see Viewport::SetTextureLimit
+
+    Handle(Graphic3d_Texture2D) TextureFor(const std::string& picture) {
+        if (const auto it = textures.find(picture); it != textures.end()) return it->second;
+        Handle(Graphic3d_Texture2D) texture;
+        if (const auto bytes = look.pictures.find(picture); bytes != look.pictures.end())
+            if (const auto image = DecodeImage(bytes->second)) {
+                const Image fitted = FitWithin(*image, textureLimit);
+                texture = MakePictureTexture(fitted.width, fitted.height, fitted.rgba);
+            }
+        textures[picture] = texture;
+        return texture;
+    }
+
+    void ClearTextured(const AIS_ColoredShape* ais) {
+        const auto it = textured.find(ais);
+        if (it == textured.end()) return;
+        for (const auto& obj : it->second) context->Remove(obj, false);
+        textured.erase(it);
+    }
+
+    /// The shown body a picked object belongs to: the body itself or the
+    /// skin over its faces with a picture. None for anything else.
+    ObjectId BodyOf(const Handle(SelectMgr_SelectableObject)& picked) const {
+        for (const auto& s : shown) {
+            if (picked.get() == s.shape.get()) return s.body;
+            if (const auto it = textured.find(s.shape.get()); it != textured.end())
+                for (const auto& obj : it->second)
+                    if (picked.get() == obj.get()) return s.body;
+        }
+        return {};
+    }
+
+    /// A body's style with its look: the body's appearance, then the faces
+    /// that have their own; faces with a picture are hidden on the body and
+    /// drawn textured over it (TexturedFaces), with their edges.
+    void ApplyLook(const Shown& s) {
+        ClearTextured(s.shape.get());
+        const doc::Appearance* bodyLook = look.OfBody(s.body);
+        ApplyStyle(s.shape, s.body == hovered, bodyLook);
+        s.shape->ClearCustomAspects();
+        if (style == DisplayStyle::Wireframe || style == DisplayStyle::HiddenLines) return;
+        const TopoDS_Shape& shape = s.shape->Shape();
+
+        std::map<std::string, std::vector<TopoDS_Face>> pictured;   // appearance id -> faces
+        TopTools_IndexedMapOfShape ownLook;
+        for (const doc::Look::FaceLook& f : look.faces) {
+            if (f.body != s.body) continue;
+            const doc::Appearance* a = look.Find(f.appearance);
+            const std::optional<TopoDS_Face> face = a ? kernel::occt::ResolveAnyFace(shape, f.face) : std::nullopt;
+            if (!face) continue;
+            ownLook.Add(*face);
+            if (a->HasPicture()) {
+                pictured[a->id].push_back(*face);
+                continue;
+            }
+            Handle(AIS_ColoredDrawer) aspects = s.shape->CustomAspects(*face);
+            const Color colour = a->face.WithAlpha(1.0f);
+            aspects->SetupOwnShadingAspect();
+            aspects->ShadingAspect()->SetMaterial(MaterialOf(colour, a->finish));
+            aspects->ShadingAspect()->SetColor(ToQuantity(colour));
+            if (style != DisplayStyle::Transparent) aspects->ShadingAspect()->SetTransparency(1.0 - a->face.a);
+        }
+        if (bodyLook && bodyLook->HasPicture())
+            for (TopExp_Explorer e(shape, TopAbs_FACE); e.More(); e.Next())
+                if (!ownLook.Contains(e.Current())) pictured[bodyLook->id].push_back(TopoDS::Face(e.Current()));
+
+        for (const auto& [id, faces] : pictured) {
+            const doc::Appearance* a = look.Find(id);
+            const Handle(Graphic3d_Texture2D) texture = a ? TextureFor(a->picture) : nullptr;
+            if (texture.IsNull()) continue;   // picture missing: the body's colour stays
+            for (const TopoDS_Face& face : faces) s.shape->CustomAspects(face)->SetHidden(true);
+            const double transparency = style == DisplayStyle::Transparent ? 0.55 : 1.0 - a->face.a;
+            Handle(TexturedFaces) skin = new TexturedFaces(faces, texture, a->pictureSize, MaterialOf(Color::Hex(0xFFFFFF), a->finish), transparency);
+            // Picked as the faces it covers (hidden on the body), unless the
+            // original body before an operation is what is picked now.
+            context->Display(skin, 0, original.active ? -1 : AIS_Shape::SelectionMode(TopAbs_FACE), false);
+            textured[s.shape.get()].push_back(skin);
+            // Their edges: the sharp ones (not seams, not between tangent faces).
+            if (style != DisplayStyle::ShadedWithEdges && style != DisplayStyle::Transparent) continue;
+            BRepLib::EncodeRegularity(shape);
+            TopoDS_Compound edges;
+            BRep_Builder builder;
+            builder.MakeCompound(edges);
+            TopTools_IndexedMapOfShape seen;
+            for (const TopoDS_Face& face : faces)
+                for (TopExp_Explorer e(face, TopAbs_EDGE); e.More(); e.Next()) {
+                    const TopoDS_Edge& edge = TopoDS::Edge(e.Current());
+                    if (seen.Contains(edge) || BRep_Tool::IsClosed(edge, face) || BRep_Tool::MaxContinuity(edge) >= GeomAbs_G1) continue;
+                    seen.Add(edge);
+                    builder.Add(edges, edge);
+                }
+            Handle(AIS_Shape) lines = new AIS_Shape(edges);
+            lines->SetColor(ToQuantity(a->edges));
+            lines->SetWidth(1.0);
+            context->Display(lines, AIS_WireFrame, -1, false);
+            textured[s.shape.get()].push_back(lines);
+        }
+    }
+
     void ApplyStyleAll() {
         for (const Shown& s : shown) {
-            ApplyStyle(s.shape, s.body == hovered);
+            ApplyLook(s);
             context->Redisplay(s.shape, false);
         }
+        if (!selectedFaces.empty()) ShowSelected();   // redisplayed shapes come back unselected
         view->SetComputedMode(style == DisplayStyle::HiddenLines);
         dirty = true;
     }
@@ -442,19 +671,67 @@ void Viewport::SetSize(double width, double height, double pixelScale) {
     m.dirty = true;
 }
 
+void Viewport::PrepareMeshes(const kernel::Model& model, int quality) {
+    Handle(Prs3d_Drawer) drawer = new Prs3d_Drawer();
+    SetMeshPrecision(drawer, std::clamp(quality, 0, 2));
+    for (const kernel::Body& body : model.GetImpl().bodies) StdPrs_ToolTriangulatedShape::Tessellate(body.shape, drawer);
+}
+
 void Viewport::Sync(const kernel::Model& model) {
     Impl& m = *myImpl;
     if (&model == m.syncedModel && model.Revision() == m.syncedRevision) return;
     m.syncedModel = &model;
     m.syncedRevision = model.Revision();
 
-    for (const auto& s : m.shown) m.context->Remove(s.shape, false);
+    // A body whose shape did not change keeps its presentation: meshing and
+    // the selection structures are the costly part, and most edits (a
+    // sketch, a later operation) leave most bodies as they were.
+    std::vector<Impl::Shown> previous = std::move(m.shown);
     m.shown.clear();
     for (const kernel::Body& body : model.GetImpl().bodies) {
-        Handle(AIS_Shape) ais = new AIS_Shape(body.shape);
-        m.ApplyStyle(ais, body.id == m.hovered);
+        if (std::find(m.hiddenBodies.begin(), m.hiddenBodies.end(), body.id) != m.hiddenBodies.end()) continue;
+        const auto same = std::find_if(previous.begin(), previous.end(), [&](const Impl::Shown& s) {
+            return !s.shape.IsNull() && s.body == body.id && s.shape->Shape().IsEqual(body.shape);
+        });
+        if (same != previous.end()) {
+            m.shown.push_back(*same);
+            same->shape.Nullify();   // taken: not removed below
+            continue;
+        }
+        const auto kept = std::find_if(m.spare.begin(), m.spare.end(), [&](const Impl::Shown& s) {
+            return s.body == body.id && s.shape->Shape().IsEqual(body.shape);
+        });
+        if (kept != m.spare.end()) {
+            m.ApplyLook(*kept);
+            m.context->Display(kept->shape, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
+            m.shown.push_back(*kept);
+            m.spare.erase(kept);
+            continue;
+        }
+        Handle(AIS_ColoredShape) ais = new AIS_ColoredShape(body.shape);
+        m.ApplyLook({body.id, ais});
         m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
         m.shown.push_back({body.id, ais});
+    }
+    for (const auto& s : previous) {
+        if (s.shape.IsNull()) continue;
+        m.ClearTextured(s.shape.get());
+        m.context->Erase(s.shape, false);
+        m.spare.push_back(s);
+    }
+    while (m.spare.size() > Impl::kSpare) {
+        m.context->Remove(m.spare.front().shape, false);
+        m.spare.erase(m.spare.begin());
+    }
+    for (const auto& d : m.decorations) m.context->Remove(d, false);
+    m.decorations.clear();
+    for (const auto& [id, shape] : model.GetImpl().decorations) {
+        Handle(AIS_Shape) ais = new AIS_Shape(shape);
+        ais->SetColor(ToQuantity(m.colors.edges));
+        ais->SetWidth(1.4);
+        SetMeshPrecision(ais->Attributes(), m.quality);
+        m.context->Display(ais, AIS_WireFrame, -1, false);
+        m.decorations.push_back(ais);
     }
     m.ActivateShown();
     // Picked entities belonged to the old shapes.
@@ -465,6 +742,7 @@ void Viewport::Sync(const kernel::Model& model) {
 }
 
 void Viewport::Hover(std::optional<Vec2> pixel) {
+    prof::Scope profile("hover");
     Impl& m = *myImpl;
     if (pixel == m.hoverPixel) return;
     m.hoverPixel = pixel;
@@ -489,7 +767,7 @@ void Viewport::SetColors(const ViewportColors& colors) {
     Impl& m = *myImpl;
     m.colors = colors;
     m.view->SetBgGradientColors(ToQuantity(colors.backgroundTop), ToQuantity(colors.backgroundBottom),
-                                Aspect_GradientFillMethod_Vertical, false);
+                                colors.radialBackground ? Aspect_GradientFillMethod_Elliptical : Aspect_GradientFillMethod_Vertical, false);
     for (auto type : {Prs3d_TypeOfHighlight_LocalDynamic, Prs3d_TypeOfHighlight_Dynamic})
         m.context->HighlightStyle(type)->SetColor(ToQuantity(colors.hover));
     for (auto type : {Prs3d_TypeOfHighlight_LocalSelected, Prs3d_TypeOfHighlight_Selected})
@@ -501,6 +779,67 @@ void Viewport::SetDisplayStyle(DisplayStyle style) {
     if (myImpl->style == style) return;
     myImpl->style = style;
     myImpl->ApplyStyleAll();
+}
+
+void Viewport::SetQuality(int level) {
+    Impl& m = *myImpl;
+    level = std::clamp(level, 0, 2);
+    if (m.quality == level) return;
+    m.quality = level;
+    static constexpr int kSamples[] = {4, 2, 0};
+    m.view->ChangeRenderingParams().NbMsaaSamples = kSamples[level];
+    // New tessellation: the old triangles stay on the shape until cleaned.
+    for (const auto& s : m.spare) m.context->Remove(s.shape, false);
+    m.spare.clear();
+    for (const auto& s : m.shown) {
+        BRepTools::Clean(s.shape->Shape());
+        s.shape->SetToUpdate();
+    }
+    m.ApplyStyleAll();
+}
+
+bool Viewport::SameFace(ObjectId body, const doc::FaceReference& a, const doc::FaceReference& b) const {
+    for (const auto& s : myImpl->shown) {
+        if (s.body != body) continue;
+        const auto fa = kernel::occt::ResolveAnyFace(s.shape->Shape(), a);
+        const auto fb = kernel::occt::ResolveAnyFace(s.shape->Shape(), b);
+        return fa && fb && fa->IsSame(*fb);
+    }
+    return false;
+}
+
+void Viewport::SetBackgroundPicture(int width, int height, std::span<const std::uint8_t> rgba) {
+    Impl& m = *myImpl;
+    Handle(Graphic3d_Texture2D) texture;
+    if (width > 0 && height > 0) texture = MakePictureTexture(width, height, rgba);
+    m.view->SetBackgroundImage(texture, Aspect_FM_STRETCH, false);
+    m.dirty = true;
+}
+
+void Viewport::SetTextureLimit(int maxSide) {
+    Impl& m = *myImpl;
+    maxSide = std::max(0, maxSide);
+    if (maxSide == m.textureLimit) return;
+    m.textureLimit = maxSide;
+    m.textures.clear();   // made again at the new size
+    m.ApplyStyleAll();
+}
+
+void Viewport::SetLook(const doc::Look& look, const void* owner, std::uint64_t revision) {
+    Impl& m = *myImpl;
+    if (revision == m.lookRevision && owner == m.lookOwner) return;
+    m.lookRevision = revision;
+    m.lookOwner = owner;
+    m.look = look;
+    m.textures.clear();   // made again from this look's pictures
+    m.ApplyStyleAll();
+}
+
+void Viewport::SetHiddenBodies(std::vector<ObjectId> bodies) {
+    Impl& m = *myImpl;
+    if (bodies == m.hiddenBodies) return;
+    m.hiddenBodies = std::move(bodies);
+    m.syncedRevision = static_cast<std::uint64_t>(-1);   // the next Sync shows or leaves them out
 }
 
 void Viewport::SetHoveredBody(ObjectId body) {
@@ -573,16 +912,73 @@ void Viewport::SetCamera(const CameraState& state) {
     myImpl->dirty = true;
 }
 
-void Viewport::Orbit(double yaw, double pitch, Vec3 pivot) {
+std::optional<Image> Viewport::Snapshot(const CameraState& camera, int width, int height) {
+    Impl& m = *myImpl;
+    if (m.GlContext().IsNull()) m.view->Redraw();   // the context comes with the first redraw
+    if (m.GlContext().IsNull() || width < 16 || height < 16) return std::nullopt;
+    const CameraState before = Camera();
+    SetCamera(camera);
+    Image_AlienPixMap pixels;
+    V3d_ImageDumpOptions options;
+    options.Width      = width;
+    options.Height     = height;
+    options.BufferType = Graphic3d_BT_RGBA;
+    bool done = false;
+    try {
+        done = m.view->ToPixMap(pixels, options);
+    } catch (const Standard_Failure& e) {
+        log::Error("Viewport: snapshot failed: {}", e.GetMessageString());
+    }
+    SetCamera(before);
+    if (!done || pixels.IsEmpty()) return std::nullopt;
+    Image out;
+    out.width  = static_cast<int>(pixels.SizeX());
+    out.height = static_cast<int>(pixels.SizeY());
+    out.rgba.resize(static_cast<std::size_t>(out.width) * static_cast<std::size_t>(out.height) * 4);
+    // The bytes as drawn (the window shows the same), rows top to bottom.
+    const bool rgba = pixels.Format() == Image_Format_RGBA;
+    const bool bgra = pixels.Format() == Image_Format_BGRA;
+    if (!rgba && !bgra) return std::nullopt;
+    for (int y = 0; y < out.height; ++y) {
+        // Row(0) is the top row whichever way the bytes lie (Image_PixMap
+        // applies its own top-down order).
+        const std::uint8_t* from = pixels.Row(static_cast<std::size_t>(y));
+        std::uint8_t* to = &out.rgba[static_cast<std::size_t>(y) * static_cast<std::size_t>(out.width) * 4];
+        for (int x = 0; x < out.width; ++x, from += 4, to += 4) {
+            to[0] = bgra ? from[2] : from[0];
+            to[1] = from[1];
+            to[2] = bgra ? from[0] : from[2];
+            to[3] = 255;
+        }
+    }
+    return out;
+}
+
+void Viewport::Orbit(double yaw, double pitch, Vec3 pivot, bool turntable) {
     CameraState c = Camera();
     const Vec3 dir = (c.center - c.eye).Normalized();
     const Vec3 right = dir.Cross(c.up).Normalized();
 
     gp_Trsf pitchRot, yawRot;
     pitchRot.SetRotation(gp_Ax1(ToPnt(pivot), ToDir(right)), -pitch);
-    yawRot.SetRotation(gp_Ax1(ToPnt(pivot), gp::DZ()), -yaw);
+    // Free: sideways drag turns about the screen's vertical, whatever the
+    // view (a model seen from the top no longer spins in its own plane).
+    yawRot.SetRotation(gp_Ax1(ToPnt(pivot), turntable ? gp::DZ() : ToDir(c.up)), -yaw);
     const gp_Trsf t = yawRot.Multiplied(pitchRot);
 
+    const gp_Pnt eye = ToPnt(c.eye).Transformed(t);
+    const gp_Pnt center = ToPnt(c.center).Transformed(t);
+    const gp_Dir up = ToDir(c.up).Transformed(t);
+    SetCamera({ToVec(eye.XYZ()), ToVec(center.XYZ()), ToVec(up.XYZ()), c.scale});
+}
+
+void Viewport::Roll(double angle, Vec3 pivot) {
+    CameraState c = Camera();
+    const Vec3 dir = (c.center - c.eye).Normalized();
+    // The camera turns about its own line of sight (away from the viewer):
+    // a positive turn of the camera is a counter-clockwise turn of the model.
+    gp_Trsf t;
+    t.SetRotation(gp_Ax1(ToPnt(pivot), ToDir(dir)), angle);
     const gp_Pnt eye = ToPnt(c.eye).Transformed(t);
     const gp_Pnt center = ToPnt(c.center).Transformed(t);
     const gp_Dir up = ToDir(c.up).Transformed(t);
@@ -609,7 +1005,7 @@ void Viewport::ZoomAt(double factor, Vec2 pixel) {
     SetCamera({c.eye + shift, c.center + shift, c.up, c.scale});
 }
 
-CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, double margin) const {
+CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, double margin, double aspect) const {
     const Impl& m = *myImpl;
     Box3 box = extra;
     if (m.bounds) {
@@ -632,7 +1028,7 @@ CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, doub
         w = std::max(w, std::abs(d.Dot(right)) * 2);
         h = std::max(h, std::abs(d.Dot(trueUp)) * 2);
     }
-    const double aspect = m.width / m.height;
+    if (aspect <= 0) aspect = m.width / m.height;
     const double scale = std::max({h, w / aspect, 1.0}) * margin;
     const double distance = (hi - lo).Length() * 2 + 100;
     return {center - dir * distance, center, trueUp, scale};
@@ -704,13 +1100,51 @@ std::optional<PickResult> Viewport::Pick(Vec2 pixel) {
     PickResult result;
     result.point = ToVec(selector->PickedPoint(1).XYZ());
     const Handle(SelectMgr_EntityOwner) owner = selector->Picked(1);
-    for (const auto& s : m.shown)
-        if (owner->Selectable() == s.shape) result.body = s.body;
+    result.body = m.BodyOf(owner->Selectable());
 
     if (const Handle(StdSelect_BRepOwner) brep = Handle(StdSelect_BRepOwner)::DownCast(owner);
-        !brep.IsNull() && brep->Shape().ShapeType() == TopAbs_FACE)
+        !brep.IsNull() && brep->Shape().ShapeType() == TopAbs_FACE) {
         result.plane = PlanarFaceFrame(TopoDS::Face(brep->Shape()));
+        if (const auto normal = kernel::occt::NormalAt(TopoDS::Face(brep->Shape()), result.point))
+            result.face = doc::FaceReference{*normal, result.point, true};
+    }
+    // The face was clicked from where the camera is: its normal points
+    // that way (a face's stored orientation is not reliable for this), so
+    // a sketch on it is seen from the front, never from behind the part.
+    if (result.plane) {
+        double ex = 0, ey = 0, ez = 0;
+        m.view->Proj(ex, ey, ez);   // towards the eye
+        if (result.plane->normal.Dot(Vec3{ex, ey, ez}) < 0) result.plane->normal = -result.plane->normal;
+    }
     return result;
+}
+
+// --- faces chosen by the user ----------------------------------------------------
+
+void Viewport::SetSelectedFaces(const std::vector<SelectedFace>& faces) {
+    Impl& m = *myImpl;
+    if (faces == m.selectedFaces) return;
+    m.selectedFaces = faces;
+    m.ShowSelected();
+}
+
+std::vector<SelectedFace> Viewport::FacesInRect(Vec2 a, Vec2 b, bool crossing) {
+    Impl& m = *myImpl;
+    std::vector<SelectedFace> found;
+    if (m.shown.empty() || m.original.active) return found;
+    const auto px = [&](double v) { return static_cast<int>(std::lround(v * m.pixelScale)); };
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->AllowOverlapDetection(crossing);
+    selector->Pick(px(std::min(a.x, b.x)), px(std::min(a.y, b.y)), px(std::max(a.x, b.x)), px(std::max(a.y, b.y)), m.view);
+    selector->AllowOverlapDetection(false);
+    for (int i = 1; i <= selector->NbPicked(); ++i) {
+        const Handle(StdSelect_BRepOwner) brep = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
+        if (brep.IsNull() || brep->Shape().ShapeType() != TopAbs_FACE) continue;
+        const ObjectId body = m.BodyOf(brep->Selectable());
+        if (!body) continue;
+        if (const auto ref = FaceReferenceOf(TopoDS::Face(brep->Shape()))) found.push_back({body, *ref});
+    }
+    return found;
 }
 
 // --- measuring ------------------------------------------------------------------
@@ -789,6 +1223,31 @@ void Viewport::ShowInterferences(const kernel::Model* model) {
     }
 }
 
+void Viewport::ShowCopyPreview(const kernel::Model* model, ObjectId feature) {
+    Impl& m = *myImpl;
+    const std::uint64_t revision = model ? model->Revision() + 1 : 0;
+    if (revision == m.copyRevision && feature == m.copyFeature) return;
+    m.copyRevision = revision;
+    m.copyFeature = feature;
+    for (const auto& s : m.copyShapes) m.context->Remove(s, false);
+    m.copyShapes.clear();
+    m.dirty = true;
+    if (!model) return;
+    const auto& previews = model->GetImpl().copyPreviews;
+    const auto it = previews.find(feature);
+    if (it == previews.end()) return;
+    const auto show = [&](const TopoDS_Shape& shape, const Color& color, double width) {
+        Handle(AIS_Shape) ais = new AIS_Shape(shape);
+        ais->SetColor(ToQuantity(color));
+        ais->SetWidth(width);
+        ais->SetZLayer(Graphic3d_ZLayerId_Topmost);   // seen through the body
+        m.context->Display(ais, AIS_WireFrame, -1, false);
+        m.copyShapes.push_back(ais);
+    };
+    for (const TopoDS_Shape& s : it->second.sources) show(s, m.colors.selection, 2.5);
+    for (const TopoDS_Shape& s : it->second.copies) show(s, m.colors.hover, 1.6);
+}
+
 void Viewport::SetSection(const std::optional<Frame>& plane) {
     Impl& m = *myImpl;
     const bool same = plane.has_value() == m.sectionFrame.has_value() &&
@@ -849,8 +1308,10 @@ void Viewport::SetPlanes(const std::vector<PlaneQuad>& planes) {
 // --- picking on the original body -----------------------------------------
 
 void Viewport::BeginPickingOriginal(const kernel::Model& model, std::size_t featureIndex, PickTarget target) {
+    prof::Scope profile("pick-setup");
     Impl& m = *myImpl;
     Impl::OriginalPicking& o = m.original;
+    o.requested = true;
 
     // The result stays on screen as a live preview, but only the body as it
     // was is pickable: its edges are drawn as lines over the preview, so an
@@ -892,6 +1353,12 @@ void Viewport::BeginPickingOriginal(const kernel::Model& model, std::size_t feat
     o.revision = model.Revision();
     o.featureIndex = featureIndex;
     m.ShowMarked();   // re-resolve against the new bodies
+}
+
+void Viewport::ExpirePickingOriginal() {
+    Impl::OriginalPicking& o = myImpl->original;
+    if (o.active && !o.requested) EndPickingOriginal();
+    o.requested = false;
 }
 
 void Viewport::EndPickingOriginal() {
@@ -971,7 +1438,7 @@ std::optional<Viewport::CylinderPick> Viewport::PickCylinder(Vec2 pixel) {
     return std::nullopt;
 }
 
-std::optional<Vec3> Viewport::PickVertex(Vec2 pixel) {
+std::optional<Viewport::VertexPick> Viewport::PickVertex(Vec2 pixel) {
     Impl& m = *myImpl;
     if (!m.original.active || m.original.target != PickTarget::Vertices) return std::nullopt;
     const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
@@ -981,12 +1448,24 @@ std::optional<Vec3> Viewport::PickVertex(Vec2 pixel) {
     for (int i = 1; i <= selector->NbPicked(); ++i) {
         const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
         if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_VERTEX) continue;
-        return ToVec(BRep_Tool::Pnt(TopoDS::Vertex(owner->Shape())).XYZ());
+        const TopoDS_Vertex& vertex = TopoDS::Vertex(owner->Shape());
+        VertexPick pick{ToVec(BRep_Tool::Pnt(vertex).XYZ()), std::nullopt};
+        for (auto body = m.original.bodies.rbegin(); body != m.original.bodies.rend() && !pick.edge; ++body)
+            pick.edge = kernel::occt::DescribeVertexEdge(vertex, *body);
+        return pick;
     }
     return std::nullopt;
 }
 
-std::optional<doc::FaceReference> Viewport::PickFace(Vec2 pixel) {
+bool Viewport::OriginalUnder(Vec2 pixel) {
+    Impl& m = *myImpl;
+    if (!m.original.active) return false;
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->Pick(static_cast<int>(std::lround(pixel.x * m.pixelScale)), static_cast<int>(std::lround(pixel.y * m.pixelScale)), m.view);
+    return selector->NbPicked() > 0;
+}
+
+std::optional<doc::FaceReference> Viewport::PickFace(Vec2 pixel, bool curvedToo) {
     Impl& m = *myImpl;
     if (!m.original.active) return std::nullopt;
     const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
@@ -996,9 +1475,13 @@ std::optional<doc::FaceReference> Viewport::PickFace(Vec2 pixel) {
     for (int i = 1; i <= selector->NbPicked(); ++i) {
         const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
         if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_FACE) continue;
-        const std::optional<Vec3> normal = kernel::occt::PlanarNormal(TopoDS::Face(owner->Shape()));
-        if (!normal) return std::nullopt;   // the nearest face is curved
-        return doc::FaceReference{*normal, ToVec(selector->PickedPoint(i).XYZ())};
+        const TopoDS_Face& face = TopoDS::Face(owner->Shape());
+        const Vec3 point = ToVec(selector->PickedPoint(i).XYZ());
+        if (const std::optional<Vec3> normal = kernel::occt::PlanarNormal(face)) return doc::FaceReference{*normal, point};
+        if (!curvedToo) return std::nullopt;   // the nearest face is curved
+        const std::optional<Vec3> normal = kernel::occt::NormalAt(face, point);
+        if (!normal) return std::nullopt;
+        return doc::FaceReference{*normal, point, true};
     }
     return std::nullopt;
 }

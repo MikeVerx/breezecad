@@ -2,9 +2,14 @@
 // keyboard shortcuts all run actions from here.
 
 #include "app/Application.h"
+#include "app/BetaTesting.h"
 #include "app/Operations.h"
+#include "app/assembly/AssemblyUi.h"
+#include "app/features/OperationEditors.h"
 #include "core/I18n.h"
 #include "document/Origin.h"
+
+#include <array>
 
 namespace bz::app {
 namespace {
@@ -18,10 +23,67 @@ void RegisterActions(AppContext& app) {
     ActionRegistry& a = app.actions;
     const auto hasDoc = [&app] { return app.Doc() != nullptr && !app.workspace.ShowsHome(); };
     const auto inSketch = [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch; };
-    const auto inModel = [&app] { return app.Doc() && !app.workspace.ShowsHome() && app.Doc()->mode != EditMode::Sketch; };
+    const auto inModel = [&app] {
+        return app.Doc() && !app.workspace.ShowsHome() && app.Doc()->mode != EditMode::Sketch && !app.Doc()->assembly;
+    };
+    // Part commands do nothing in an assembly.
+    const auto partDoc = [&app] { return app.Doc() != nullptr && !app.workspace.ShowsHome() && !app.Doc()->assembly; };
+    const auto asmDoc = [&app] { return InAssembly(app); };
 
     // --- file ---
     a.Add({"file.new", N_("Новая деталь"), "ui-new", Ctrl(ImGuiKey_N), {}, {}, [&app] { NewDocument(app); }});
+    a.Add({"file.newAssembly", N_("Новая сборка"), "assembly", 0, N_("Собрать детали в узел: компоненты и зависимости"), {},
+           [&app] { NewAssembly(app); }});
+    a.Add({"assembly.place", N_("Вставить"), "place-component", ImGuiKey_P, N_("Вставить деталь из файла как компонент (P)"),
+           asmDoc, [&app] { PlaceComponent(app); }});
+    a.Add({"assembly.placeStandard", N_("Стандартное"), "library", 0,
+           N_("Вставить стандартное изделие из библиотеки: болт, гайку, шайбу, подшипник…"), asmDoc,
+           [&app] { app.shell.showLibrary = true; }});
+    a.Add({"assembly.move", N_("Перемещать"), "move-component", 0,
+           N_("Перетаскивание компонента левой кнопкой двигает его в плоскости экрана"), asmDoc,
+           [&app] { app.Doc()->assembly->tool = AssemblyState::Tool::Move; }});
+    a.Add({"assembly.rotate", N_("Вращать"), "rotate-component", 0,
+           N_("Перетаскивание компонента левой кнопкой вращает его вокруг центра"), asmDoc,
+           [&app] { app.Doc()->assembly->tool = AssemblyState::Tool::Rotate; }});
+    a.Add({"assembly.ground", N_("Закрепить"), "ui-lock", 0, N_("Закрепить или освободить выбранный компонент"),
+           [&app] { return InAssembly(app) && app.Doc()->assembly->assembly.FindComponent(app.Doc()->assembly->selected); },
+           [&app] { ToggleGrounded(app); }});
+    a.Add({"assembly.pattern", N_("Массив"), "pattern-rect", 0,
+           N_("Повторить выбранный компонент (с шайбами и гайками) во все такие же отверстия, рядами или по кругу"),
+           [&app] { return CanPattern(app); }, [&app] { StartPattern(app); }});
+    a.Add({"assembly.mate", N_("Совмещение"), "a-mate", ImGuiKey_C,
+           N_("Грань к грани (или заподлицо) с зазором; также две оси на одной линии (C)"), asmDoc,
+           [&app] { StartConstraint(app, assembly::ConstraintType::Mate); }});
+    a.Add({"assembly.insert", N_("Вставка"), "a-insert", ImGuiKey_I,
+           N_("Болт в отверстие: оси совпадают, торцы прилегают — по двум круглым кромкам (I)"), asmDoc,
+           [&app] { StartConstraint(app, assembly::ConstraintType::Insert); }});
+    a.Add({"assembly.angle", N_("Угол"), "a-angle", 0, N_("Угол между двумя гранями или осями"), asmDoc,
+           [&app] { StartConstraint(app, assembly::ConstraintType::Angle); }});
+    a.Add({"assembly.tangent", N_("Касание"), "a-tangent", 0, N_("Цилиндр или сфера касается плоскости, цилиндра или сферы"),
+           asmDoc, [&app] { StartConstraint(app, assembly::ConstraintType::Tangent); }});
+    a.Add({"assembly.axisMate", N_("Совпадение осей"), "a-axis", 0, N_("Оси двух цилиндрических граней на одной линии"),
+           asmDoc, [&app] { StartConstraint(app, assembly::ConstraintType::AxisMate); }});
+    struct JointCommand { const char* id; const char* title; const char* icon; const char* tip; assembly::ConstraintType type; };
+    static constexpr std::array<JointCommand, 6> kJoints{{
+        {"assembly.jointRotational", N_("Вращение"), "j-rotational",
+         N_("Подвижное соединение: компонент вращается вокруг оси круглой кромки (шарнир, вал в подшипнике)"),
+         assembly::ConstraintType::Rotational},
+        {"assembly.jointSlider", N_("Ползун"), "j-slider",
+         N_("Подвижное соединение: компонент скользит вдоль оси или нормали грани, не поворачиваясь"),
+         assembly::ConstraintType::Slider},
+        {"assembly.jointCylindrical", N_("Цилиндрическое"), "j-cylindrical",
+         N_("Подвижное соединение: вращение вокруг оси и скольжение вдоль неё"), assembly::ConstraintType::Cylindrical},
+        {"assembly.jointPlanar", N_("Плоское"), "j-planar",
+         N_("Подвижное соединение: скольжение по плоскости и поворот в ней"), assembly::ConstraintType::Planar},
+        {"assembly.jointBall", N_("Шаровое"), "j-ball",
+         N_("Подвижное соединение: центры совпадают, поворот в любую сторону"), assembly::ConstraintType::Ball},
+        {"assembly.jointRigid", N_("Жёсткое"), "j-rigid", N_("Соединение без подвижности: компоненты как одно целое"),
+         assembly::ConstraintType::Rigid},
+    }};
+    for (const JointCommand& j : kJoints) {
+        const assembly::ConstraintType type = j.type;
+        a.Add({j.id, j.title, j.icon, 0, j.tip, asmDoc, [&app, type] { StartConstraint(app, type); }});
+    }
     a.Add({"file.open", N_("Открыть…"), "ui-open", Ctrl(ImGuiKey_O), {}, {}, [&app] { OpenDocument(app); }});
     a.Add({"file.save", N_("Сохранить"), "ui-save", Ctrl(ImGuiKey_S), {}, hasDoc, [&app] { SaveDocument(app, false); }});
     a.Add({"file.saveAs", N_("Сохранить как…"), "ui-save", CtrlShift(ImGuiKey_S), {}, hasDoc, [&app] { SaveDocument(app, true); }});
@@ -47,6 +109,12 @@ void RegisterActions(AppContext& app) {
     a.Add({"tools.interference", N_("Коллизии"), "interference", 0, N_("Показать красным, где тела детали заходят друг в друга"),
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { ToggleInterference(app); }});
+    a.Add({"view.appearance", N_("Внешний вид"), "appearance", 0,
+           N_("Цвет и материал тел и граней: металлы, пластики, свои цвета с прозрачностью"),
+           [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
+           [&app] { app.ops.appearance.Start(app, *app.Doc()); }});
+    a.Add({"view.background", N_("Фон"), "view-background", 0, N_("Фон рабочей области: градиенты или своя картинка"), {},
+           [&app] { app.shell.backgroundMenu = true; }});
     a.Add({"view.section", N_("Разрез вида"), "section", 0, N_("Разрезать вид плоскостью, чтобы заглянуть внутрь детали"),
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },
            [&app] { app.shell.section.on = !app.shell.section.on; }});
@@ -56,6 +124,12 @@ void RegisterActions(AppContext& app) {
     a.Add({"app.settings", N_("Настройки"), "ui-sliders", 0, N_("Масштаб интерфейса, оформление, сочетания клавиш"), {},
            [&app] { app.shell.showSettings = true; }});
     a.Add({"app.about", N_("О программе"), "ui-info", 0, {}, {}, [&app] { app.shell.showAbout = true; }});
+    // The testers' build: a report of this session, with a few words.
+    a.Add({"app.reportProblem", N_("Сообщить о проблеме…"), "ui-info", 0, N_("Собрать отчёт о том, что сейчас не так, для разработчика"),
+           [] { return beta::Enabled(); },
+           [&app] {
+               app.shell.betaReport = {true, false, beta::SessionDir(), {}, {}, {}};
+           }});
 
     // --- edit ---
     a.Add({"edit.undo", N_("Отменить"), "ui-undo", Ctrl(ImGuiKey_Z), {}, [&app] { return CanUndo(app); }, [&app] { Undo(app); }});
@@ -70,7 +144,7 @@ void RegisterActions(AppContext& app) {
     a.Add({"sketch.start", N_("Начать эскиз"), "sketch", ImGuiKey_S,
            N_("Выберите плоскость или плоскую грань и рисуйте профиль"), inModel, [&app] { StartSketch(app); }});
     a.Add({"feature.extrude", N_("Выдавливание"), "extrude", ImGuiKey_E,
-           N_("Вытянуть замкнутый контур эскиза в тело (E)"), hasDoc, [&app] { StartExtrude(app); }});
+           N_("Вытянуть замкнутый контур эскиза в тело (E)"), partDoc, [&app] { StartExtrude(app); }});
     a.Add({"feature.revolve", N_("Вращение"), "revolve", ImGuiKey_R,
            N_("Повернуть замкнутый контур эскиза вокруг оси (R)"), inModel, [&app] { StartRevolve(app); }});
     a.Add({"feature.fillet", N_("Сопряжение"), "fillet", 0, N_("Скруглить рёбра тела"), inModel, [&app] { StartFillet(app); }});
@@ -82,6 +156,12 @@ void RegisterActions(AppContext& app) {
            [&app] { StartWorkPlane(app); }});
     a.Add({"feature.workAxis", N_("Ось"), "work-axis", 0, N_("Рабочая ось: по оси цилиндра, по ребру или на пересечении плоскостей"), inModel,
            [&app] { StartWorkAxis(app); }});
+    a.Add({"parts.library", N_("Библиотека"), "library", 0,
+           N_("Стандартные изделия: болты, винты, гайки, шайбы, подшипники, стопорные кольца — новой деталью"), {},
+           [&app] { app.shell.showLibrary = true; }});
+    a.Add({"feature.workPoint", N_("Точка"), "work-point", 0,
+           N_("Рабочая точка: вершина, центр окружности или сферы, середина ребра, пересечение с плоскостью, координаты"), inModel,
+           [&app] { StartWorkPoint(app); }});
     a.Add({"feature.patternRect", N_("Прямоугольный"), "pattern-rect", 0, N_("Повторить операции рядами вдоль осей"), inModel,
            [&app] { StartPattern(app, doc::PatternKind::Rectangular); }});
     a.Add({"feature.patternCircular", N_("Круговой"), "pattern-circular", 0, N_("Повторить операции по кругу вокруг оси"), inModel,
@@ -95,6 +175,8 @@ void RegisterActions(AppContext& app) {
            [&app] { StartCoil(app); }});
     a.Add({"feature.section", N_("Сечение"), "cut-section", 0, N_("Отсечь модель плоскостью — операция в дереве, гасится и удаляется как любая"), inModel,
            [&app] { StartSection(app); }});
+    a.Add({"feature.shell", N_("Оболочка"), "shell", 0, N_("Сделать тело полым со стенками заданной толщины; выбранные грани удаляются"),
+           inModel, [&app] { StartShell(app); }});
     a.Add({"feature.chamfer", N_("Фаска"), "chamfer", 0, N_("Срезать рёбра тела под 45°"), inModel, [&app] { StartChamfer(app); }});
 
     // --- sketch ---
@@ -109,8 +191,12 @@ void RegisterActions(AppContext& app) {
            N_("Сделать выбранное вспомогательной геометрией: она не образует контуров (G)"),
            [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasSelection(); },
            [&app] { app.sketch.ToggleConstruction(*app.Doc()); }});
+    a.Add({"sketch.ortho", N_("Орто"), "c-perpendicular", ImGuiKey_F8,
+           N_("Ортогональный режим: отрезки рисуются только горизонтально или вертикально (F8)"),
+           [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch; },
+           [&app] { app.settings.orthoMode = !app.settings.orthoMode; }});
     a.Add({"sketch.centerline", N_("Осевая"), "sk-centerline", 0,
-           N_("Сделать выбранные отрезки осевыми: ось для вращения и пружины, в контуры не входят"),
+           N_("Сделать выбранные отрезки осевыми (штрихпунктир): ось для вращения и пружины, контур ограничивают как обычные"),
            [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasSelection(); },
            [&app] { app.sketch.ToggleCenterline(*app.Doc()); }});
     a.Add({"sketch.showConstraints", N_("Показать все зависимости"), "c-show-all", ImGuiKey_F8,
@@ -153,8 +239,18 @@ void RegisterActions(AppContext& app) {
         const SketchToolInfo& info = InfoOf(t.tool);
         const SketchTool tool = t.tool;
         a.Add({t.id, info.label, info.icon, t.key == ImGuiKey_None ? 0 : static_cast<ImGuiKeyChord>(t.key), info.hint,
-               inSketch, [&app, tool] { app.sketch.SetTool(app, *app.Doc(), tool); }});
+               inSketch, [&app, tool] {
+                   if (tool == SketchTool::Project) app.sketch.SetProjectLinked(true);
+                   app.sketch.SetTool(app, *app.Doc(), tool);
+               }});
     }
+    // The same tool, making a copy that no longer follows the model.
+    a.Add({"sketch.projectFixed", N_("Независимая проекция"), "sk-project-fixed", 0,
+           N_("Щёлкните ребро модели или грань — её контур станет обычной закреплённой геометрией эскиза, за моделью не следует"),
+           inSketch, [&app] {
+               app.sketch.SetProjectLinked(false);
+               app.sketch.SetTool(app, *app.Doc(), SketchTool::Project);
+           }});
 
     // --- view ---
     a.Add({"view.home", N_("Домой (изометрия)"), "view-home", ImGuiKey_Home, {}, hasDoc, [&app] { HomeView(app); }});

@@ -5,8 +5,8 @@
 //   Midplane  half way between two parallel starts;
 //   Angle     through a straight edge, turned from the start by an angle
 //             (the edge must lie parallel to the start);
-//   ThreePoints through three vertices of the body (kept where they were
-//             picked: the plane does not follow later changes of the part);
+//   ThreePoints through three points: vertices of the body (found again by
+//             an edge ending there) or work points;
 //   Tangent   touching a cylindrical face where it was clicked.
 // Sketches placed on it follow it when it moves.
 
@@ -47,8 +47,12 @@ public:
     /// Angle: the edge it turns about, and by how much (reversed: the other way).
     std::optional<EdgeReference> edge;
     Parameter angle{.name = "", .expression = "90", .quantity = Quantity::Angle, .value = kPi / 2, .error = {}};
-    /// ThreePoints: the picked vertices, model space (up to three).
-    std::vector<Vec3> points;
+    /// ThreePoints: the picked vertices, model space (up to three), each with
+    /// an edge it ends (when known) so it is found again after the part
+    /// changes; `points` are updated to where the vertices are now.
+    std::vector<Vec3>                         points;
+    std::vector<std::optional<EdgeReference>> pointEdges;   ///< parallel to `points`
+    std::vector<ObjectId>                     pointFeatures;   ///< parallel: a work point used instead, or none
     /// Tangent: the cylinder.
     std::optional<CylinderTouch> cylinder;
 

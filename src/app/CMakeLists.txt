@@ -2,8 +2,13 @@ add_executable(breezecad WIN32
     main.cpp
     Actions.cpp
     AppActions.cpp
+    AppearanceLibrary.cpp
     Application.cpp
+    AssemblyState.cpp
     Autosave.cpp
+    assembly/AssemblyUi.cpp
+    Backgrounds.cpp
+    BetaTesting.cpp
     Format.cpp
     Language.cpp
     Materials.cpp
@@ -11,7 +16,20 @@ add_executable(breezecad WIN32
     Operations.cpp
     Session.cpp
     Settings.cpp
+    TouchNavigation.cpp
     Workspace.cpp
+    scripting/Scripting.cpp
+    scripting/DocumentCommands.cpp
+    scripting/PartCommands.cpp
+    scripting/SketchCommands.cpp
+    scripting/SolidCommands.cpp
+    scripting/TopologyCommands.cpp
+    scripting/GenericCommands.cpp
+    scripting/FeatureCommands.cpp
+    scripting/WorkCommands.cpp
+    scripting/ViewCommands.cpp
+    scripting/AssemblyCommands.cpp
+    features/AppearanceEditor.cpp
     features/CopyEditors.cpp
     features/CoilEditor.cpp
     features/SketchAxis.cpp
@@ -20,7 +38,10 @@ add_executable(breezecad WIN32
     features/LoftEditor.cpp
     features/SweepEditor.cpp
     features/ThreadEditor.cpp
+    features/PointPick.cpp
+    features/ShellEditor.cpp
     features/WorkAxisEditor.cpp
+    features/WorkPointEditor.cpp
     features/WorkPlaneEditor.cpp
     features/DragArrow.cpp
     features/ExtrudeEditor.cpp
@@ -34,6 +55,8 @@ add_executable(breezecad WIN32
     shell/HomeScreen.cpp
     shell/LeftPanels.cpp
     shell/Ribbon.cpp
+    shell/Splash.cpp
+    shell/TouchpadSettings.cpp
     shell/TreePanel.cpp
     sketch/DimensionLayout.cpp
     MouseNavigation.cpp
@@ -48,8 +71,13 @@ add_executable(breezecad WIN32
     viewport/Measure.cpp
     viewport/Planes.cpp
     viewport/Section.cpp
-    viewport/ViewportPanel.cpp)
+    viewport/TouchGestures.cpp
+    viewport/ViewportPanel.cpp
+    viewport/FaceSelection.cpp)
 if(WIN32)
+    # The icon in the exe (Explorer, a pinned taskbar button). Without the
+    # RC language the .rc file was silently left out.
+    enable_language(RC)
     target_sources(breezecad PRIVATE ${PROJECT_SOURCE_DIR}/resources/app.rc)
     # Keep main() as the entry point for a GUI (no console) application.
     if(MINGW)
@@ -59,8 +87,8 @@ if(WIN32)
     endif()
 endif()
 target_link_libraries(breezecad PRIVATE
-    bz::core bz::document bz::kernel bz::render bz::ui bz::platform
-    bz::imgui lunasvg::lunasvg glfw OpenGL::GL)
+    bz::core bz::document bz::assembly bz::kernel bz::modules bz::render bz::ui bz::platform
+    bz::imgui bz::miniz bz::json lunasvg::lunasvg glfw OpenGL::GL)
 bz_set_warnings(breezecad)
 
 # Assets next to the executable: the portable layout the app looks for first.

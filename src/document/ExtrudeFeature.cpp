@@ -12,7 +12,7 @@ using json_io::ReadMember;
 using json_io::ToJson;
 
 bool ExtentTypeFromId(std::string_view id, ExtentType& out) {
-    for (ExtentType e : {ExtentType::Distance, ExtentType::Symmetric, ExtentType::ThroughAll})
+    for (ExtentType e : {ExtentType::Distance, ExtentType::Symmetric, ExtentType::ThroughAll, ExtentType::ToPlane})
         if (ExtentTypeId(e) == id) {
             out = e;
             return true;
@@ -27,6 +27,7 @@ std::string_view ExtentTypeId(ExtentType extent) {
         case ExtentType::Distance:   return "distance";
         case ExtentType::Symmetric:  return "symmetric";
         case ExtentType::ThroughAll: return "throughAll";
+        case ExtentType::ToPlane:    return "toPlane";
     }
     return "distance";
 }
@@ -42,6 +43,10 @@ void ExtrudeFeature::SaveFields(Json& out) const {
     out["reversed"] = reversed;
     out["distance"] = ToJson(distance);
     out["taper"]    = ToJson(taper);
+    if (extent == ExtentType::ToPlane) {
+        if (toPlane) out["toPlane"] = toPlane.value;
+        if (toFace.IsSet()) out["toFace"] = ToJson(toFace);
+    }
 }
 
 Status ExtrudeFeature::LoadFields(const Json& in) {
@@ -52,6 +57,9 @@ Status ExtrudeFeature::LoadFields(const Json& in) {
         !ReadMember(in, "taper", f.taper))
         return Error{"Выдавливание: повреждены параметры"};
     if (!ExtentTypeFromId(ext, f.extent)) return Error{std::format("Выдавливание: неизвестный способ «{}»", ext)};
+    if (const auto it = in.find("toPlane"); it != in.end() && it->is_number_unsigned()) f.toPlane = ObjectId{it->get<std::uint64_t>()};
+    if (const auto it = in.find("toFace"); it != in.end() && !json_io::Read(*it, f.toFace))
+        return Error{"Выдавливание: повреждена грань «до»"};
 
     sketch    = f.sketch;
     profiles  = std::move(f.profiles);
@@ -60,6 +68,8 @@ Status ExtrudeFeature::LoadFields(const Json& in) {
     reversed  = f.reversed;
     distance  = std::move(f.distance);
     taper     = std::move(f.taper);
+    toPlane   = f.toPlane;
+    toFace    = f.toFace;
     return Status::Ok();
 }
 

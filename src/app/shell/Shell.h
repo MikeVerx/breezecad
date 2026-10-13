@@ -19,6 +19,7 @@ void  DrawDialogs(AppContext& app);
 
 // Panels of the left area (LeftPanels.cpp, TreePanel.cpp).
 void DrawTreePanel(AppContext& app, Session& session, float width);
+void DrawAssemblyTree(AppContext& app, Session& session, float width);
 void DrawPropertiesPanel(AppContext& app, Session& session, float width);
 void DrawVariablesPanel(AppContext& app, Session& session, float width);
 

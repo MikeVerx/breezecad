@@ -24,6 +24,14 @@ void OnGlfwError(int code, const char* message) { log::Error("GLFW {}: {}", code
 
 } // namespace
 
+bool InitGlfw() {
+    glfwSetErrorCallback(OnGlfwError);
+#if defined(__linux__) && (GLFW_VERSION_MAJOR > 3 || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 4))
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+#endif
+    return glfwInit() == GLFW_TRUE;
+}
+
 NativeGlSurface Window::NativeSurface() const {
     NativeGlSurface surface;
     if (!myWindow) return surface;
@@ -47,8 +55,7 @@ Window::~Window() {
 }
 
 bool Window::Create(const WindowConfig& config) {
-    glfwSetErrorCallback(OnGlfwError);
-    if (!glfwInit()) {
+    if (!InitGlfw()) {
         log::Error("GLFW init failed");
         return false;
     }
@@ -78,12 +85,17 @@ bool Window::Create(const WindowConfig& config) {
     }
     const bool remembered = config.x >= 0 && config.y >= 0 && config.x < wx + ww - 100 && config.y < wy + wh - 100;
     glfwSetWindowPos(myWindow, remembered ? config.x : wx + (ww - width) / 2, remembered ? config.y : wy + (wh - height) / 2);
-    if (config.maximized) glfwMaximizeWindow(myWindow);
-    glfwShowWindow(myWindow);
+    // Maximized only once shown: maximizing a hidden window shows it on some systems.
+    myMaximizeOnShow = config.maximized;
+    if (config.visible) Show();
     glfwMakeContextCurrent(myWindow);
     glfwSwapInterval(1);
     glfwSetWindowSizeLimits(myWindow, 800, 500, GLFW_DONT_CARE, GLFW_DONT_CARE);
-    log::Info("Window: OpenGL {}", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+    if (const auto* version = reinterpret_cast<const char*>(glGetString(GL_VERSION))) myGLVersion = version;
+    if (const auto* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR))) myGLVendor = vendor;
+    if (const auto* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER))) myGLRenderer = renderer;
+    log::Info("Window: OpenGL {}", myGLVersion);
+    log::Info("Graphics: {} / {}", myGLVendor, myGLRenderer);
     return true;
 }
 
@@ -129,9 +141,16 @@ void Window::Geometry(int& x, int& y, int& width, int& height, bool& maximized) 
     glfwGetWindowSize(myWindow, &width, &height);
 }
 
+void Window::Show() {
+    if (myMaximizeOnShow) glfwMaximizeWindow(myWindow);
+    myMaximizeOnShow = false;
+    glfwShowWindow(myWindow);
+}
+
 bool Window::IsMinimized() const { return glfwGetWindowAttrib(myWindow, GLFW_ICONIFIED) != 0; }
 
 void Window::WaitEvents(double timeoutSeconds) { glfwWaitEventsTimeout(timeoutSeconds); }
 void Window::PollEvents() { glfwPollEvents(); }
+void Window::PostEmptyEvent() { glfwPostEmptyEvent(); }
 
 } // namespace bz::platform

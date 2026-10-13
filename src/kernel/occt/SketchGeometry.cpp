@@ -54,7 +54,7 @@ std::vector<TopoDS_Edge> MakeEdges(const doc::SketchFeature& feature) {
 
     std::vector<TopoDS_Edge> edges;
     for (const auto& l : sk.lines) {
-        if (l.construction || l.centerline) continue;
+        if (l.construction) continue;   // an осевая bounds profiles too, as in Inventor
         const gp_Pnt a = world(l.start), b = world(l.end);
         if (a.Distance(b) < 1e-6) continue;
         edges.push_back(BRepBuilderAPI_MakeEdge(a, b).Edge());

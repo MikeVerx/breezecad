@@ -64,6 +64,10 @@ std::unique_ptr<Command> RemoveFeature(const Document& doc, ObjectId id);
 /// renaming, suppressing, every step of sketch editing.
 std::unique_ptr<Command> ReplaceFeature(std::unique_ptr<Feature> edited, std::string label);
 
+/// Hides or shows a feature (`hidden`). Nothing is rebuilt: only the view
+/// changes, like a change of the look.
+std::unique_ptr<Command> SetHidden(ObjectId id, bool hidden, std::string label);
+
 /// Moves a feature in the tree.
 std::unique_ptr<Command> MoveFeature(const Document& doc, ObjectId id, std::size_t newIndex);
 
@@ -80,6 +84,9 @@ std::unique_ptr<Command> SetUnits(UnitSystem units);
 std::unique_ptr<Command> SetPartInfo(PartInfo info);
 
 /// Several commands as one undo step.
+/// Replaces the look of the part (colours of bodies and faces).
+std::unique_ptr<Command> SetLook(Look look, std::string label);
+
 std::unique_ptr<Command> Group(std::string label, std::vector<std::unique_ptr<Command>> commands);
 
 } // namespace bz::doc

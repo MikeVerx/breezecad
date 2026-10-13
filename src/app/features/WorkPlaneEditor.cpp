@@ -1,6 +1,7 @@
 #include "app/features/WorkPlaneEditor.h"
 
 #include "app/Format.h"
+#include "app/features/PointPick.h"
 #include "app/viewport/Planes.h"
 #include "core/I18n.h"
 #include "document/Origin.h"
@@ -34,7 +35,7 @@ std::string WorkPlaneEditor::Hint() const {
         case WorkPlaneMethod::Angle:
             return Tr("Щёлкните плоскость или грань, затем прямое ребро на ней, введите угол. Enter — готово, Esc — отмена");
         case WorkPlaneMethod::ThreePoints:
-            return Tr("Щёлкните три вершины тела. Enter — готово, Esc — отмена");
+            return Tr("Щёлкните три точки: вершины тела или рабочие точки. Enter — готово, Esc — отмена");
         case WorkPlaneMethod::Tangent:
             return Tr("Щёлкните цилиндрическую грань там, где плоскость должна её касаться. Enter — готово, Esc — отмена");
         case WorkPlaneMethod::Offset: break;
@@ -89,23 +90,10 @@ void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const Vi
     }
     // Through vertices: only the vertices of the body before this plane.
     if (f->method == WorkPlaneMethod::ThreePoints) {
-        app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Vertices);
-        const ImU32 ink = ui::ToU32(app.ui.C().accent);
-        for (std::size_t i = 0; i < f->points.size(); ++i) {
-            const ImVec2 p = vf.Project(f->points[i]);
-            dl->AddCircleFilled(p, app.ui.S(5), ink);
-            const std::string n = std::to_string(i + 1);
-            dl->AddText(app.ui.fonts.strong, app.ui.S(12), {p.x + app.ui.S(7), p.y - app.ui.S(16)}, ink, n.c_str());
-        }
         for (const ShownPlane& p : WorkPlanes(session, static_cast<std::size_t>(index) + 1))
             if (p.id == f->id) DrawPlane(app, dl, vf, p, true);
         myArrow.Release();
-        if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
-        if (const auto v = app.viewport.PickVertex(local)) {
-            if (f->points.size() >= 3) f->points.clear();   // a fourth click starts over
-            f->points.push_back(*v);
-            Changed(session);
-        }
+        if (PickPoints(app, session, vf, static_cast<std::size_t>(index), 3, f->points, f->pointEdges, f->pointFeatures)) Changed(session);
         return;
     }
     // Through an edge: edges and faces of the body before this plane are picked.
@@ -149,15 +137,28 @@ void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const Vi
         const std::string label = FormatValue(f->offset.value, Quantity::Length, session.doc.units, 2) + " " +
                                   UnitLabel(Quantity::Length, session.doc.units);
         if (auto offset = myArrow.Update(app, vf, tip - dir * f->offset.value, dir, f->offset.value, label)) {
+            const double was = f->reversed ? -f->offset.value : f->offset.value;   // signed, before any flip
             if (*offset < 0) {   // dragged past the start: the other side
                 f->reversed = !f->reversed;
                 *offset = -*offset;
                 myArrow.Flipped();
             }
             myOffset = FormatValue(*offset, Quantity::Length, session.doc.units, 3);
+            // The plane moves at once; the part catches up when the rebuild runs.
+            if (f->frame) {
+                const double now = f->reversed ? -*offset : *offset;
+                f->frame = doc::OffsetFrame(*f->frame, now - was);
+            }
             f->offset.expression = myOffset;
-            Changed(session);
+            f->offset.value = *offset;
+            // The part is rebuilt once, on release: rebuilding everything
+            // after the plane on every frame of the drag made it crawl.
+            myRebuildOnRelease = true;
         }
+    }
+    if (myRebuildOnRelease && !myArrow.Dragging()) {
+        myRebuildOnRelease = false;
+        Changed(session);
     }
     if (!placed || f->offset.HasError() || f->method != WorkPlaneMethod::Offset) myArrow.Release();
     if (myArrow.Hot()) return;
@@ -227,7 +228,7 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
             if (PickChip(ui, "##first", Tr("Плоскость"), first, mySlot == 0, width)) mySlot = 0;
             ImGui::Dummy({0, ui.S(4)});
             if (PickChip(ui, "##edge", Tr("Ребро"), f.edge ? std::string(Tr("выбрано")) : std::string(), mySlot == 1, width)) mySlot = 1;
-            Caption(app, Tr("Прямое ребро, параллельное плоскости: новая плоскость проходит через него под углом к ней."), width);
+            Caption(app, Tr("Прямое ребро: новая плоскость проходит через него под углом к исходной. Ребро не должно быть ей перпендикулярно."), width);
             Gap(app);
             Section(app, Tr("Угол"));
             ParameterField(app, session, "angle", myAngle, f.angle, width, myFocusFirstField);
@@ -238,11 +239,11 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
             Caption(app, Tr("Щёлкните цилиндрическую грань: плоскость коснётся её в этом месте и пойдёт вдоль оси."), width);
             break;
         case WorkPlaneMethod::ThreePoints: {
-            Section(app, Tr("Через вершины"));
+            Section(app, Tr("Через точки"));
             const std::string count = f.points.size() >= 3 ? std::string(Tr("выбраны")) : f.points.empty() ? std::string()
                                                                                             : Trf("{} из 3", f.points.size());
-            PickChip(ui, "##points", Tr("Вершины"), count, true, width);
-            Caption(app, Tr("Щёлкните три вершины тела. Четвёртый щелчок начинает выбор заново. Плоскость остаётся там, где были вершины, и за изменениями детали не следует."), width);
+            PickChip(ui, "##points", Tr("Точки"), count, true, width);
+            Caption(app, Tr("Щёлкните три вершины тела или рабочие точки. Четвёртый щелчок начинает выбор заново. Плоскость следует за ними, когда деталь меняется."), width);
             break;
         }
     }

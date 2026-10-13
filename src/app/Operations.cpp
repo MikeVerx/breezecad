@@ -9,7 +9,11 @@
 #include "document/Commands.h"
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
+#include "app/assembly/AssemblyUi.h"
+#include "document/DocumentTypes.h"
+#include "document/StandardParts.h"
 #include "document/WorkPlaneFeature.h"
+#include "modules/ModuleManager.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
 #include "ui/ViewCube.h"
@@ -35,6 +39,38 @@ void NewDocument(AppContext& app) {
     app.shell.ribbonTab = RibbonTab::Model;
 }
 
+void InstallModule(AppContext& app, std::optional<std::filesystem::path> package) {
+    if (!app.modules) return;
+    if (!package) {
+        if (const std::string problem = platform::FileDialogProblem(); !problem.empty()) {
+            app.notes.Error(problem);
+            return;
+        }
+        package = platform::ShowOpenDialog(Tr("Установить модуль"), {{Tr("Модуль BreezeCAD"), "*.bzmod *.zip"}}, platform::DocumentsDir());
+        if (!package) return;
+    }
+    const Expected<std::string> id = app.modules->Install(*package);
+    if (!id) {
+        app.notes.Error(Trf("Модуль не установлен: {}", Tr(id.GetError().message)));
+        return;
+    }
+    const modules::ModuleEntry* m = app.modules->Find(*id);
+    if (m && m->state == modules::ModuleState::Loaded)
+        app.notes.Success(Trf("Модуль «{}» {} установлен и работает", m->manifest.name, m->manifest.version));
+    else if (m)
+        app.notes.Error(Trf("Модуль «{}» установлен, но не запустился: {}", m->manifest.name, Tr(m->problem)));
+    app.shell.showSettings = true;   // there it is, with its switch
+    app.shell.settingsTab = 6;   // "Модули" (after "Тачпад" was added)
+}
+
+void OpenDropped(AppContext& app, const std::filesystem::path& file) {
+    std::u8string ext = file.extension().u8string();
+    for (char8_t& ch : ext)
+        if (ch >= u8'A' && ch <= u8'Z') ch = static_cast<char8_t>(ch - u8'A' + u8'a');
+    if (ext == u8".bzmod" || ext == u8".zip") InstallModule(app, file);
+    else OpenDocument(app, file);
+}
+
 void OpenDocument(AppContext& app, std::optional<std::filesystem::path> file) {
     if (!file) {
         const Session* s = app.Doc();
@@ -45,7 +81,7 @@ void OpenDocument(AppContext& app, std::optional<std::filesystem::path> file) {
             app.notes.Error(problem);
             return;
         }
-        file = platform::ShowOpenDialog(Tr("Открыть документ"), {{Tr("Документ BreezeCAD"), "*.bzc"}}, folder);
+        file = platform::ShowOpenDialog(Tr("Открыть документ"), {{Tr("Документ BreezeCAD"), doc::DocumentTypeRegistry::Default().OpenPatterns()}}, folder);
         if (!file) return;
     }
     EndEditing(app);
@@ -77,17 +113,20 @@ void RequestClose(AppContext& app, int index) {
 }
 
 void RecoverDocument(AppContext& app, const RecoverableDocument& rec) {
-    Expected<doc::Document> loaded = doc::LoadBzc(rec.copy);
+    Expected<std::unique_ptr<Session>> loaded = Workspace::LoadSession(rec.copy, nullptr);
     if (!loaded) {
         app.notes.Error(Trf("Копию не удалось открыть: {}", Tr(loaded.GetError().message)));
         return;
     }
     EndEditing(app);
-    Session& s = app.workspace.NewPart();
-    s.doc = std::move(*loaded);
+    app.workspace.sessions.push_back(std::move(*loaded));
+    app.workspace.Activate(static_cast<int>(app.workspace.sessions.size()) - 1);
+    Session& s = *app.workspace.sessions.back();
     s.path = rec.original;
     s.untitledName = rec.title;
-    s.history.MarkUnsaved();   // the recovered state is not in the original file
+    // The recovered state is not in the original file.
+    if (s.assembly) s.assembly->MarkUnsaved();
+    else s.history.MarkUnsaved();
     app.autosave.Remove(rec);
     std::erase_if(app.shell.recoverable, [&](const RecoverableDocument& r) { return r.folder == rec.folder; });
     app.notes.Success(Trf("Восстановлено: {}. Сохраните документ.", rec.title));
@@ -95,12 +134,12 @@ void RecoverDocument(AppContext& app, const RecoverableDocument& rec) {
 
 bool CanUndo(AppContext& app) {
     Session* s = app.Doc();
-    return s && !app.ops.Active() && s->history.CanUndo();
+    return s && !app.ops.Active() && s->CanUndo();
 }
 
 bool CanRedo(AppContext& app) {
     Session* s = app.Doc();
-    return s && !app.ops.Active() && s->history.CanRedo();
+    return s && !app.ops.Active() && s->CanRedo();
 }
 
 void Undo(AppContext& app) {
@@ -152,6 +191,36 @@ void StartChamfer(AppContext& app) {
     app.ops.chamfer.StartNew(app, *s);
 }
 
+bool CreateStandardPart(AppContext& app, const doc::parts::Request& request) {
+    Expected<doc::parts::Made> made = doc::parts::MakePart(request);
+    if (!made) {
+        app.notes.Error(Tr(made.GetError().message));
+        return false;
+    }
+    EndEditing(app);
+    Session& s = app.workspace.NewPart();
+    s.untitledName = made->doc.info.designation;
+    s.doc = std::move(made->doc);
+    s.doc.units.length = static_cast<LengthUnit>(app.settings.newPartLength);
+    s.history.MarkUnsaved();
+    app.shell.ribbonTab = RibbonTab::Model;
+    return true;
+}
+
+void StartWorkPoint(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.workPoint.StartNew(app, *s);
+}
+
+void StartShell(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.shell.StartNew(app, *s);
+}
+
 void StartHole(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;
@@ -186,12 +255,12 @@ void ToggleInterference(AppContext& app) {
     if (!app.shell.interference || !s) return;
     const auto& bodies = s->model.Bodies();
     if (bodies.size() < 2) {
-        app.notes.Info(Tr("В детали одно тело — пересекаться не с чем"));
+        app.notes.Info(Tr(s->assembly ? "В сборке один компонент — пересекаться не с чем" : "В детали одно тело — пересекаться не с чем"));
         return;
     }
     const std::vector<kernel::Interference>& found = s->model.Interferences();
     if (found.empty()) {
-        app.notes.Success(Tr("Тела не пересекаются"));
+        app.notes.Success(Tr(s->assembly ? "Компоненты не пересекаются" : "Тела не пересекаются"));
         return;
     }
     const UnitSystem& units = s->doc.units;
@@ -330,6 +399,9 @@ void EscapePressed(AppContext& app) {
         app.sketch.Escape(app, *s);
     } else if (s->mode == EditMode::PickPlane) {
         s->mode = EditMode::Model;
+    } else if (s->assembly && AssemblyEscape(app, *s)) {
+    } else if (!s->selectedFaces.empty()) {
+        s->selectedFaces.clear();   // first the faces chosen in the view, then the tree
     } else {
         s->selectedFeature = {};
     }
@@ -346,6 +418,8 @@ void DeletePressed(AppContext& app) {
     if (!s || app.ops.Active()) return;
     if (s->mode == EditMode::Sketch) {
         app.sketch.DeleteSelection(*s);
+    } else if (s->assembly) {
+        AssemblyDelete(app, *s);
     } else if (s->selectedFeature && s->doc.Find(s->selectedFeature)) {
         DeleteFeature(app, *s, s->selectedFeature);
     }

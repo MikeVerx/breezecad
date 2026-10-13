@@ -87,31 +87,31 @@ bool UpdateMarkingMenu(AppContext& app, Session& session, ViewportFrame& vf) {
     const ImVec2 mouse = ImGui::GetMousePos();
 
     if (!m.open) {
-        if (vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !app.shell.handleHot) {
+        if (vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && !app.shell.handleHot) {
             m.armed = true;
             m.pressAt = mouse;
             m.pressTime = ImGui::GetTime();
         }
         if (!m.armed) return false;
         const float dx = mouse.x - m.pressAt.x, dy = mouse.y - m.pressAt.y;
-        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || dx * dx + dy * dy > kStillPixels * kStillPixels) {
-            m.armed = false;   // a click or a drag: not for the menu
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Right) || dx * dx + dy * dy > kStillPixels * kStillPixels) {
+            m.armed = false;   // a click (context menu) or a drag (orbit): not for the menu
             return false;
         }
-        // The point tool has already made its point on the press: no menu there.
-        if (session.mode == EditMode::Sketch && app.sketch.Tool() == SketchTool::Point) return false;
         if (ImGui::GetTime() - m.pressTime < kHoldSeconds) return false;
         m.open = true;
         m.centre = m.pressAt;
         m.held = true;
-        // A drawing tool took the press as its first click: take it back.
-        if (session.mode == EditMode::Sketch) app.sketch.DropPressClick();
+        // The press is the menu's now, not the start of an orbit.
+        ShellState::Navigation& nav = app.shell.nav;
+        nav.orbiting = nav.panning = nav.zooming = false;
+        nav.button = -2;   // swallow the release: no context menu either
     }
 
     vf.hovered = false;   // the menu owns the mouse now
     const Items items = ItemsFor(app, session);
     const std::optional<int> slot = PointedSlot(ui, m.centre, mouse);
-    if (m.held && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+    if (m.held && ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
         m.held = false;
         if (slot && items[static_cast<std::size_t>(*slot)].action) {   // a flick toward a command
             Run(app, items[static_cast<std::size_t>(*slot)]);
@@ -152,7 +152,9 @@ void DrawMarkingMenu(AppContext& app, Session& session) {
         const bool enabled = a->IsEnabled();
         const bool hot = slot == i && enabled;
         const char* label = item.label ? Tr(item.label) : a->Label();
-        const std::string_view icon = item.icon ? item.icon : a->icon;
+        // Both sides as views: a mixed `?:` would copy a->icon into a temporary
+        // string, and the view would outlive it.
+        const std::string_view icon = item.icon ? std::string_view(item.icon) : std::string_view(a->icon);
 
         const ImVec2 d = SlotDirection(i);
         const ImVec2 p{m.centre.x + d.x * ui.S(kRadius), m.centre.y + d.y * ui.S(kRadius)};

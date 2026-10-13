@@ -8,15 +8,21 @@
 #include "app/Settings.h"
 #include "app/Workspace.h"
 #include "core/ViewProjection.h"
+#include "platform/Touchpad.h"
 #include "render/Viewport.h"
 #include "ui/Ui.h"
 #include "ui/Widgets.h"
 
 #include <functional>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_set>
 #include <vector>
+
+namespace bz::modules {
+class ModuleManager;
+}
 
 namespace bz::app {
 
@@ -41,12 +47,41 @@ struct ShellState {
     std::optional<int> closeRequest;   ///< tab waiting for "save changes?" answer
     bool               quitRequested = false;
     bool               showAbout = false;
+    /// The testers' build: "what happened?" — after a crash (at start) or
+    /// asked from the menu. Packs the session into a zip to send by hand.
+    struct BetaReport {
+        bool                  open = false;
+        bool                  crash = false;
+        std::filesystem::path session;
+        std::string           started;
+        std::string           text;
+        std::filesystem::path packed;   ///< the zip once made
+    } betaReport;
     bool               showSettings = false;
-    int                settingsTab = 0;          ///< 0 interface, 1 keys
+    bool               backgroundMenu = false;   ///< open the "Фон" menu at the cursor
+    int                settingsTab = 0;          ///< 0 interface, 1 keys, 2 mouse, 3 touchpad, 4 general, 5 performance, 6 modules
+    std::string        moduleToRemove;           ///< "Модули": the module whose removal waits for "Да, удалить"
     std::string        captureShortcut;          ///< action whose new shortcut is being pressed
     std::string        shortcutFilter;
     std::string        shortcutNote;             ///< "taken from …" after a reassignment
     bool               showMassProperties = false;   ///< the "МЦХ" window
+    bool               showLibrary = false;          ///< the standard parts window ("Библиотека")
+    /// The standard parts window: what it shows, kept while the program runs
+    /// (not saved: the recent parts are those of this session only).
+    struct Library {
+        struct Pick {
+            std::string standard, size;   ///< doc::parts ids
+            double      length = 0;
+        };
+        int              family = 0;        ///< filter: 0 ГОСТ, 1 ISO, 2 DIN
+        std::set<int>    openGroups;        ///< expanded folders (index in parts::Groups())
+        std::set<int>    openKinds;         ///< expanded varieties (parts::PartKind)
+        Pick             chosen;            ///< empty standard: nothing chosen
+        bool             realThread = false;
+        bool             dropWasher = true, dropNut = true;   ///< AutoDrop: add them with the screw
+        std::string      appearance;        ///< empty: the default of the kind
+        std::vector<Pick> recent;           ///< newest first
+    } library;
 
     render::DisplayStyle displayStyle = render::DisplayStyle::ShadedWithEdges;
 
@@ -59,6 +94,13 @@ struct ShellState {
     } section;
     bool measuring = false;   ///< "Измерить" is on
     bool interference = false;   ///< "Коллизии": overlaps of the bodies shown
+
+    /// Choosing faces with the left button (see viewport/FaceSelection).
+    struct FaceSelecting {
+        bool   pressed = false;    ///< the left button went down over the scene
+        bool   framing = false;    ///< it is dragged: a selection frame
+        ImVec2 from{0, 0};         ///< where it went down
+    } faceSelecting;
 
     /// The radial menu (see viewport/MarkingMenu).
     struct MarkingMenu {
@@ -102,7 +144,10 @@ struct ShellState {
         Vec3                 pivot;
         std::optional<Frame> facePlane;   ///< planar face under the cursor at the right click
         ObjectId             faceBody;    ///< and the body it belongs to
+        double               touchAt = -10.0;   ///< when the last touchpad gesture moved the view
+        int                  touchKind = -1;    ///< what it did (another kind is a new gesture: new pivot)
     } nav;
+    bool           animateUi = false;           ///< something in the interface moves by itself this frame
     const Session* viewportSession = nullptr;   ///< whose camera the viewport shows
     ImVec2         viewportMax{0, 0};           ///< bottom-right of the scene, for notifications
 };
@@ -146,6 +191,8 @@ struct AppContext {
     double            now = 0.0;
     FrameStats        stats;
     std::vector<ImGuiKeyChord> pressedChords;    ///< key chords pressed this frame (for shortcut capture)
+    std::vector<platform::TouchEvent> touch;     ///< touchpad gestures of this frame
+    modules::ModuleManager*    modules = nullptr; ///< set once the modules are loaded
 
     Session* Doc() { return workspace.Active(); }
 

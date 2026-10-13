@@ -1,6 +1,7 @@
 #pragma once
 // Every operation panel of the app. At most one is open at a time.
 
+#include "app/features/AppearanceEditor.h"
 #include "app/features/CoilEditor.h"
 #include "app/features/CopyEditors.h"
 #include "app/features/EdgeOperationEditor.h"
@@ -9,10 +10,12 @@
 #include "app/features/LoftEditor.h"
 #include "app/features/RevolveEditor.h"
 #include "app/features/SectionEditor.h"
+#include "app/features/ShellEditor.h"
 #include "app/features/SweepEditor.h"
 #include "app/features/ThreadEditor.h"
 #include "app/features/WorkAxisEditor.h"
 #include "app/features/WorkPlaneEditor.h"
+#include "app/features/WorkPointEditor.h"
 
 #include <array>
 
@@ -26,6 +29,7 @@ struct OperationEditors {
     HoleEditor    hole;
     WorkPlaneEditor workPlane;
     WorkAxisEditor  workAxis;
+    WorkPointEditor workPoint;
     PatternEditor   pattern;
     MirrorEditor    mirror;
     LoftEditor      loft;
@@ -33,10 +37,12 @@ struct OperationEditors {
     CoilEditor      coil;
     SectionEditor   section;
     ThreadEditor    thread;
+    ShellEditor     shell;
+    AppearanceEditor appearance;
 
-    std::array<OperationEditor*, 14> All() {
-        return {&extrude, &revolve, &fillet,  &chamfer, &hole, &workPlane, &workAxis,
-                &pattern, &mirror,  &loft,    &sweep,   &coil, &section,   &thread};
+    std::array<OperationEditor*, 17> All() {
+        return {&extrude, &revolve, &fillet,  &chamfer, &hole, &workPlane, &workAxis, &workPoint,
+                &pattern, &mirror,  &loft,    &sweep,   &coil, &section,   &thread, &shell, &appearance};
     }
 
     /// The open operation, or nullptr.

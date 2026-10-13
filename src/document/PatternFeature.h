@@ -6,6 +6,7 @@
 
 #include "core/Expected.h"
 #include "core/Math.h"
+#include "document/FaceReference.h"
 #include "document/Feature.h"
 
 #include <vector>
@@ -81,7 +82,9 @@ class MirrorFeature final : public FeatureBase<MirrorFeature, CopyFeature> {
 public:
     static constexpr std::string_view kType = "mirror";
 
-    ObjectId plane;   ///< origin plane or work plane
+    ObjectId      plane;   ///< origin plane or work plane
+    FaceReference face;    ///< or a flat face of the body (when `plane` is not set)
+    bool     wholeBody = false;   ///< mirror the whole most recent body (the sources are not used)
 
     std::string_view Type() const override { return kType; }
     std::vector<ObjectId> Dependencies() const override;

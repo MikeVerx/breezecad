@@ -34,6 +34,10 @@ using NameLookup = std::function<std::optional<NamedValue>(std::string_view)>;
 ///    function calls arguments are separated by ';' or ','.
 ///  - Functions: sin cos tan asin acos atan sqrt abs min max round; constant pi.
 ///
+/// Longer text is refused ("Слишком длинное выражение"), as is nesting
+/// deeper than a couple of hundred levels.
+inline constexpr std::size_t kMaxExpressionLength = 4096;
+
 /// Returns the value in internal units (mm / rad / plain number).
 Expected<double> EvaluateExpression(std::string_view text,
                                     Quantity expected,

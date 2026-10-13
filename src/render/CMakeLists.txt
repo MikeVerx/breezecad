@@ -1,4 +1,5 @@
 add_library(bz_render STATIC
+    TexturedFaces.cpp
     Viewport.cpp)
 target_link_libraries(bz_render
     PUBLIC  bz::core

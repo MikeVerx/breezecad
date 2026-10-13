@@ -1,0 +1,14 @@
+{
+	"id": "hello",
+	"name": "Пример модуля",
+	"version": "1.0.0",
+	"description": "Пишет в журнал число компонентов открытой сборки. Образец для своих модулей.",
+	"abiVersion": 1,
+	"library": "hello",
+	"requirements": {
+		"os": ["windows", "linux", "macos"],
+		"minHostVersion": "0.1.0",
+		"minMemoryMb": 512,
+		"minCpuCores": 1
+	}
+}

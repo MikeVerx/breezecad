@@ -62,6 +62,7 @@ struct ThemeColors {
     Color sketchSelected;
     Color sketchPoint;
     Color sketchGrid;
+    Color sketchHalo;        ///< dark rim under sketch curves so they read over a light body (transparent = none)
     Color sketchGridMajor;
     Color dimension;
     Color constraintGlyph;
@@ -69,6 +70,7 @@ struct ThemeColors {
     Color planeFill;         ///< origin planes while choosing a sketch plane
     Color planeEdge;
     Color axisX, axisY, axisZ;
+    Color planeXY, planeXZ, planeYZ;   ///< origin planes: the axis colours, muted
 
     // view cube and its buttons
     Color cubeLight;         ///< face colour toward the light

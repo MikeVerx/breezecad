@@ -29,7 +29,7 @@ struct Line {
     ObjectId start;
     ObjectId end;
     bool     construction = false;
-    bool     centerline = false;  ///< осевая: an axis for revolve and coil; not part of profiles
+    bool     centerline = false;  ///< осевая: an axis for revolve and coil; still bounds profiles
     bool     projected = false;   ///< a model edge projected into the sketch (see doc::SketchFeature)
 };
 

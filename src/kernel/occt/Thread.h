@@ -20,4 +20,7 @@ Expected<ThreadSite> FindThreadSite(const TopoDS_Shape& body, const doc::Cylinde
 /// The groove of the thread of `feature` on `body` (what is cut out).
 Expected<TopoDS_Shape> ThreadTool(const TopoDS_Shape& body, const doc::ThreadFeature& feature);
 
+/// A cosmetic thread: the helix drawn on the face, nothing cut.
+Expected<TopoDS_Shape> CosmeticThread(const TopoDS_Shape& body, const doc::ThreadFeature& feature);
+
 } // namespace bz::kernel::occt

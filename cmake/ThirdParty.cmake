@@ -19,6 +19,12 @@ target_include_directories(bz_miniz SYSTEM PUBLIC ${BZ_THIRD_PARTY}/miniz)
 set_target_properties(bz_miniz PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(bz::miniz ALIAS bz_miniz)
 
+# stb_image — reading pictures (textures, the splash picture).
+add_library(bz_stb STATIC ${BZ_THIRD_PARTY}/stb/stb_image.c)
+target_include_directories(bz_stb SYSTEM PUBLIC ${BZ_THIRD_PARTY}/stb)
+set_target_properties(bz_stb PROPERTIES POSITION_INDEPENDENT_CODE ON)
+add_library(bz::stb ALIAS bz_stb)
+
 # doctest — unit tests.
 add_library(bz_doctest INTERFACE)
 target_include_directories(bz_doctest SYSTEM INTERFACE ${BZ_THIRD_PARTY}/doctest)

@@ -122,6 +122,37 @@ bool ArcContains(Vec2 centre, Vec2 start, Vec2 end, Vec2 p) {
     return norm(angle(p) - a0) <= norm(angle(end) - a0);
 }
 bool IsCurve(EntityKind k) { return k == EntityKind::Line || IsRound(k); }
+/// Any curve a point can be held on.
+bool IsAnyCurve(EntityKind k) { return IsCurve(k) || k == EntityKind::Spline || k == EntityKind::Ellipse; }
+/// True when an end of spline `spline` is an end of curve `other` (the same
+/// point or tied by Coincident): only there can a spline be made tangent.
+bool SplineMeetsAtEnd(const sketch::Sketch& sk, ObjectId spline, ObjectId other) {
+    const sketch::Spline* s = sk.FindSpline(spline);
+    if (!s || s->points.empty() || s->Closed()) return false;
+    std::vector<ObjectId> ends;
+    if (const sketch::Line* l = sk.FindLine(other)) ends = {l->start, l->end};
+    else if (const sketch::Arc* ar = sk.FindArc(other)) ends = {ar->start, ar->end};
+    else if (const sketch::Spline* o = sk.FindSpline(other); o && !o->points.empty()) ends = {o->points.front(), o->points.back()};
+    const auto tied = [&](ObjectId p, ObjectId q) {
+        if (p == q) return true;
+        for (const sketch::Constraint& c : sk.constraints)
+            if (c.type == ConstraintType::Coincident && ((c.refs[0] == p && c.refs[1] == q) || (c.refs[0] == q && c.refs[1] == p)))
+                return true;
+        return false;
+    };
+    for (const ObjectId e : ends)
+        if (tied(e, s->points.front()) || tied(e, s->points.back())) return true;
+    return false;
+}
+
+/// Pairs the solver can make tangent: line/arc/circle among themselves, a
+/// line and an ellipse, a spline and a line/arc/spline meeting at its end.
+bool CanBeTangent(EntityKind a, EntityKind b) {
+    if ((IsCurve(a) && IsRound(b)) || (IsRound(a) && IsCurve(b))) return true;
+    const auto pair = [&](EntityKind x, EntityKind y) { return (a == x && b == y) || (a == y && b == x); };
+    return pair(EntityKind::Line, EntityKind::Ellipse) || pair(EntityKind::Spline, EntityKind::Line) ||
+           pair(EntityKind::Spline, EntityKind::Arc) || pair(EntityKind::Spline, EntityKind::Spline);
+}
 
 /// The constraint a tool makes from picked entities; nullopt when the picks
 /// do not fit the tool (yet). `complete` says whether more picks could help.
@@ -152,8 +183,8 @@ std::optional<sketch::Constraint> ConstraintFromPicks(SketchTool tool, const ske
         case SketchTool::Coincident:
             if (picks.size() < 2) { needMore = true; return std::nullopt; }
             if (k0 == EntityKind::Point && k1 == EntityKind::Point) return Make(ConstraintType::Coincident, a, b);
-            if (k0 == EntityKind::Point && IsCurve(k1)) return Make(ConstraintType::PointOnCurve, a, b);
-            if (IsCurve(k0) && k1 == EntityKind::Point) return Make(ConstraintType::PointOnCurve, b, a);
+            if (k0 == EntityKind::Point && IsAnyCurve(k1)) return Make(ConstraintType::PointOnCurve, a, b);
+            if (IsAnyCurve(k0) && k1 == EntityKind::Point) return Make(ConstraintType::PointOnCurve, b, a);
             return std::nullopt;
         case SketchTool::Parallel:
         case SketchTool::Perpendicular:
@@ -167,8 +198,10 @@ std::optional<sketch::Constraint> ConstraintFromPicks(SketchTool tool, const ske
                 return Make(ConstraintType::Equal, a, b);
             return std::nullopt;
         case SketchTool::Tangent:
-            if (picks.size() < 2) { needMore = IsCurve(k0); return std::nullopt; }
-            if ((IsCurve(k0) && IsRound(k1)) || (IsRound(k0) && IsCurve(k1))) return Make(ConstraintType::Tangent, a, b);
+            if (picks.size() < 2) { needMore = IsAnyCurve(k0); return std::nullopt; }
+            if (CanBeTangent(k0, k1) && (k0 != EntityKind::Spline || SplineMeetsAtEnd(sk, a, b)) &&
+                (k1 != EntityKind::Spline || SplineMeetsAtEnd(sk, b, a)))
+                return Make(ConstraintType::Tangent, a, b);
             return std::nullopt;
         case SketchTool::Midpoint:
             if (picks.size() < 2) { needMore = k0 == EntityKind::Point || k0 == EntityKind::Line; return std::nullopt; }
@@ -262,7 +295,12 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
     options.points = app.settings.pointSnap;
     options.grid = app.settings.gridSnap;
     options.gridStep = app.settings.gridStep > 0 ? app.settings.gridStep : AdaptiveGridStep(view.MmPerPixel()) / 2;
-    if (!myClicks.empty() && (myTool == SketchTool::Line)) options.from = myClicks.back().pos;
+    if (!myClicks.empty() && (myTool == SketchTool::Line)) {
+        options.from = myClicks.back().pos;
+        options.fromPoint = myClicks.back().id;
+        options.fromCurve = myClicks.back().onCurve;
+        options.ortho = app.settings.orthoMode;
+    }
     mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
     // A typed size wins over snapping: the point lands where the size says.
     if (ApplyTypedSizes(session.doc.units, mySnap.pos)) {
@@ -275,14 +313,8 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && view.vf.hovered) {
         myClicks.push_back(RefFromSnap(mySnap));
-        myLastClickTime = ImGui::GetIO().MouseClickedTime[ImGuiMouseButton_Left];
         FinishDrawingStep(app, session, mySnap);
     }
-}
-
-void SketchEditor::DropPressClick() {
-    // Only a click made by this very press (ImGui keeps the press time).
-    if (!myClicks.empty() && myLastClickTime == ImGui::GetIO().MouseClickedTime[ImGuiMouseButton_Left]) myClicks.pop_back();
 }
 
 void SketchEditor::HandleProject(AppContext& app, Session& session, const SketchView& view) {
@@ -291,12 +323,30 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
     if (index < 0 || !view.vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
     // The viewport picks the bodies before this sketch (ViewportPanel turns
     // that on while this tool is active): an edge near the cursor, else the
-    // whole outline of the face under it.
+    // whole outline of the face under it. A face of a body of revolution
+    // gives the body's axis, outline and cut by the sketch plane instead.
     const Vec2 pixel = view.vf.ToLocal(ImGui::GetMousePos());
     std::vector<doc::EdgeReference> edges;
-    if (const std::optional<doc::EdgeReference> edge = app.viewport.PickEdge(pixel)) edges.push_back(*edge);
-    else edges = app.viewport.PickFaceEdges(pixel);
-    if (edges.empty()) return;
+    const std::optional<doc::EdgeReference> pickedEdge = app.viewport.PickEdge(pixel);
+    if (pickedEdge) edges.push_back(*pickedEdge);
+    std::optional<kernel::RevolvedProjection> revolved;
+    std::string revolvedProblem;
+    const auto tryRevolved = [&] {
+        const std::optional<doc::FaceReference> face = app.viewport.PickFace(pixel, true);
+        if (!face || !face->curved) return;
+        Expected<kernel::RevolvedProjection> r = session.model.ProjectRevolved(*face, f->placement.frame, static_cast<std::size_t>(index));
+        if (r) revolved = std::move(*r);
+        else revolvedProblem = r.GetError().message;
+    };
+    // An edge that does not project on its own (a circle of a turned part
+    // seen from the side) is taken as a click on the body of revolution.
+    if (pickedEdge && !session.model.ProjectEdge(*pickedEdge, f->placement.frame, static_cast<std::size_t>(index))) tryRevolved();
+    if (!pickedEdge) {
+        tryRevolved();
+        if (!revolved) edges = app.viewport.PickFaceEdges(pixel);
+    }
+    if (revolved) edges.clear();
+    if (edges.empty() && !revolved) return;
 
     auto before = f->Clone();
     sketch::Sketch& sk = f->sketch;
@@ -309,6 +359,72 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
         const ObjectId id = sk.AddPoint(ids, at);
         sk.FindPoint(id)->projected = true;
         return id;
+    };
+    // Puts one projected curve into the sketch; `link` makes it follow the
+    // model edge. Returns false when there is nothing to draw.
+    const auto place = [&](const kernel::ProjectedCurve& projected, const doc::EdgeReference* link, bool axis) {
+        ObjectId curve;
+        switch (projected.kind) {
+            case kernel::ProjectedCurve::Kind::Line:
+                // An edge seen end-on projects to a point: nothing to draw.
+                if ((projected.end - projected.start).Length() < tolerance) return false;
+                curve = sk.AddLine(ids, point(projected.start), point(projected.end));
+                sk.FindLine(curve)->projected = true;
+                sk.FindLine(curve)->centerline = axis;
+                break;
+            case kernel::ProjectedCurve::Kind::Circle:
+                curve = sk.AddCircle(ids, point(projected.centre), projected.radius);
+                sk.FindCircle(curve)->projected = true;
+                break;
+            case kernel::ProjectedCurve::Kind::Arc:
+                curve = sk.AddArc(ids, point(projected.centre), point(projected.start), point(projected.end));
+                for (auto& a : sk.arcs)
+                    if (a.id == curve) a.projected = true;
+                break;
+        }
+        if (myOptions.style != LineStyle::Normal && !axis) {   // "Вспомогат." chosen before picking
+            if (sketch::Line* l = sk.FindLine(curve)) l->construction = true;
+            if (sketch::Circle* c = sk.FindCircle(curve)) c->construction = true;
+            for (auto& a : sk.arcs)
+                if (a.id == curve) a.construction = true;
+        }
+        if (myOptions.projectLinked && link) {
+            f->projections.push_back({*link, curve});
+        } else if (!myOptions.projectLinked) {
+            // Независимая: ordinary geometry held where it is.
+            std::vector<ObjectId> own;
+            if (sketch::Line* l = sk.FindLine(curve)) {
+                l->projected = false;
+                own = {l->start, l->end};
+            }
+            if (sketch::Circle* c = sk.FindCircle(curve)) {
+                c->projected = false;
+                own = {c->center};
+                sketch::Constraint size;   // the size held too, as a dimension
+                size.type = sketch::ConstraintType::Diameter;
+                size.refs = {curve, {}, {}};
+                size.parameter.name = session.doc.NextParameterName();
+                size.parameter.expression = FormatValue(2 * c->radius, Quantity::Length, session.doc.units, 4);
+                size.parameter.quantity = Quantity::Length;
+                size.parameter.value = 2 * c->radius;
+                sk.AddConstraint(ids, size);
+            }
+            for (auto& a : sk.arcs)
+                if (a.id == curve) {
+                    a.projected = false;
+                    own = {a.center, a.start, a.end};
+                }
+            for (const ObjectId p : own)
+                if (sketch::Point* pt = sk.FindPoint(p); pt && pt->projected) {
+                    pt->projected = false;
+                    sketch::Constraint fix;
+                    fix.type = sketch::ConstraintType::Fix;
+                    fix.refs = {p, {}, {}};
+                    fix.fixedAt = pt->pos;
+                    sk.AddConstraint(ids, fix);
+                }
+        }
+        return true;
     };
     int added = 0, already = 0;
     std::string problem;
@@ -326,34 +442,32 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
             problem = projected.GetError().message;
             continue;
         }
-        ObjectId curve;
-        switch (projected->kind) {
-            case kernel::ProjectedCurve::Kind::Line:
-                // An edge seen end-on projects to a point: nothing to draw.
-                if ((projected->end - projected->start).Length() < tolerance) continue;
-                curve = sk.AddLine(ids, point(projected->start), point(projected->end));
-                sk.FindLine(curve)->projected = true;
-                break;
-            case kernel::ProjectedCurve::Kind::Circle:
-                curve = sk.AddCircle(ids, point(projected->centre), projected->radius);
-                sk.FindCircle(curve)->projected = true;
-                break;
-            case kernel::ProjectedCurve::Kind::Arc:
-                curve = sk.AddArc(ids, point(projected->centre), point(projected->start), point(projected->end));
-                for (auto& a : sk.arcs)
-                    if (a.id == curve) a.projected = true;
-                break;
+        if (place(*projected, &edge, false)) ++added;
+    }
+    if (revolved) {
+        // Not linked to the model: an outline is not an edge to find again.
+        if (revolved->axis && place(*revolved->axis, nullptr, true)) ++added;
+        if (revolved->centre) {
+            const ObjectId c = point(*revolved->centre);
+            if (!myOptions.projectLinked)
+                if (sketch::Point* pt = sk.FindPoint(c)) pt->projected = false;
+            ++added;
         }
-        f->projections.push_back({edge, curve});
-        ++added;
+        for (const kernel::ProjectedCurve& c : revolved->outline) added += place(c, nullptr, false) ? 1 : 0;
+        for (const kernel::ProjectedCurve& c : revolved->section) added += place(c, nullptr, false) ? 1 : 0;
+        if (revolved->outlineSkipped)
+            app.notes.Info(Tr("Ось тела вращения наклонена к плоскости эскиза: спроецированы только ось и сечение"));
     }
     if (added == 0) {
-        app.notes.Info(!problem.empty() ? problem : already > 0 ? Tr("Это уже спроецировано") : Tr("Здесь нечего проецировать"));
+        if (problem.empty()) problem = revolvedProblem;
+        app.notes.Info(!problem.empty() ? Tr(problem) : already > 0 ? Tr("Это уже спроецировано") : Tr("Здесь нечего проецировать"));
         return;
     }
     if (!problem.empty()) app.notes.Info(Trf("Часть рёбер не спроецирована: {}", Tr(problem)));
     session.doc.MarkChanged(static_cast<std::size_t>(index));
-    session.CommitInPlaceEdit(std::move(before), edges.size() > 1 ? Tr("Проецирование грани") : Tr("Проецирование геометрии"));
+    session.CommitInPlaceEdit(std::move(before), revolved         ? Tr("Проецирование тела вращения")
+                                                 : edges.size() > 1 ? Tr("Проецирование грани")
+                                                                    : Tr("Проецирование геометрии"));
 }
 
 std::size_t SketchEditor::ClicksNeeded() const {
@@ -457,9 +571,83 @@ void SketchEditor::AddTypedDimensions(doc::Document& doc, sketch::Sketch& sk, co
     }
 }
 
+namespace {
+
+/// Where the segment p-q first crosses the drawn curve `id` (sketch coordinates).
+std::optional<Vec2> FenceCrossing(const sketch::Sketch& sk, ObjectId id, Vec2 p, Vec2 q) {
+    const std::vector<Vec2> pts = sketch::SpanPolyline(sk, sketch::TrimSpan{id, std::nullopt, std::nullopt}, 96);
+    const Vec2 d = q - p;
+    std::optional<Vec2> best;
+    double bestT = 2;
+    for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
+        const Vec2 e = pts[i + 1] - pts[i];
+        const double den = d.Cross(e);
+        if (std::abs(den) < 1e-18) continue;
+        const double t = (pts[i] - p).Cross(e) / den, u = (pts[i] - p).Cross(d) / den;
+        if (t < 0 || t > 1 || u < 0 || u > 1 || t >= bestT) continue;
+        bestT = t;
+        best = p + d * t;
+    }
+    return best;
+}
+
+} // namespace
+
 void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchView& view) {
     doc::SketchFeature* f = Active(session);
-    const bool onCurve = myHover && IsCurve(myHover.kind);
+    // Dragging draws a fence: every piece it crosses is trimmed on release
+    // (one undo step), as in KOMPAS and Inventor.
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && view.vf.hovered && myCursor) myFence = {*myCursor};
+    if (!myFence.empty() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && myCursor &&
+        (myFence.size() > 1 || ImGui::IsMouseDragging(ImGuiMouseButton_Left, 4.0f))) {
+        if ((*myCursor - myFence.back()).Length() > view.MmPerPixel() * 3) myFence.push_back(*myCursor);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        for (std::size_t i = 0; i + 1 < myFence.size(); ++i)
+            DrawSketchSegment(app.ui, dl, view, myFence[i], myFence[i + 1], app.ui.C().danger, 1.5f, true);
+        return;
+    }
+    if (myFence.size() > 1 && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        const std::vector<Vec2> fence = std::move(myFence);
+        myFence.clear();
+        auto before = f->Clone();
+        sketch::Sketch trial = f->sketch;
+        int trimmed = 0;
+        for (std::size_t i = 0; i + 1 < fence.size(); ++i) {
+            // The curves change as pieces go: look again after each trim.
+            for (int guard = 0, again = 1; again && guard < 200; ++guard) {
+                again = 0;
+                std::vector<ObjectId> curves;
+                for (const auto& l : trial.lines) if (!l.projected) curves.push_back(l.id);
+                for (const auto& c : trial.circles) if (!c.projected) curves.push_back(c.id);
+                for (const auto& a : trial.arcs) if (!a.projected) curves.push_back(a.id);
+                for (const auto& s : trial.splines) curves.push_back(s.id);
+                for (const auto& e : trial.ellipses) curves.push_back(e.id);
+                for (const ObjectId id : curves) {
+                    const std::optional<Vec2> at = FenceCrossing(trial, id, fence[i], fence[i + 1]);
+                    if (!at) continue;
+                    const auto span = sketch::FindTrimSpan(trial, id, *at);
+                    if (span && sketch::Trim(trial, session.doc.Ids(), *span)) {
+                        ++trimmed;
+                        again = 1;
+                        break;
+                    }
+                }
+            }
+        }
+        if (trimmed == 0) return;
+        if (!sketch::Solve(trial).converged) {
+            app.notes.Error(Tr("После обрезки эскиз не решается — куски оставлены"));
+            return;
+        }
+        f->sketch = std::move(trial);
+        f->PruneProjections();
+        session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+        session.CommitInPlaceEdit(std::move(before), Tr("Обрезка"));
+        myClickUsed = true;
+        return;
+    }
+    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) myFence.clear();
+    const bool onCurve = myHover && IsAnyCurve(myHover.kind);
     if (!onCurve || !myCursor) return;
     // Projected geometry belongs to the model.
     const sketch::Sketch& sk = f->sketch;
@@ -519,7 +707,7 @@ void SketchEditor::HandleOffset(AppContext& app, Session& session, const SketchV
     // First the contour: a click on one of its curves.
     if (myOffsetCurve && !sketch::ChainOf(f->sketch, myOffsetCurve)) myOffsetCurve = {};
     if (!myOffsetCurve) {
-        if (!myHover || !IsCurve(myHover.kind) || !sketch::ChainOf(f->sketch, myHover.id)) return;
+        if (!myHover || !IsAnyCurve(myHover.kind) || !sketch::ChainOf(f->sketch, myHover.id)) return;
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) myOffsetCurve = myHover.id;
         return;
     }
@@ -1131,9 +1319,18 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
             if (snap.horizontal || snap.vertical) {
                 const sketch::Constraint c = Make(snap.horizontal ? ConstraintType::Horizontal : ConstraintType::Vertical, line);
                 if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
+            } else if (snap.perpendicularTo && sk.FindLine(snap.perpendicularTo)) {
+                const sketch::Constraint c = Make(ConstraintType::Perpendicular, snap.perpendicularTo, line);
+                if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
             }
             dims.push_back({Make(ConstraintType::Length, line), myOptions.length, {}});
-            continueFrom = PointRef{b, sk.PositionOf(b), {}, {}};
+            if (!myChainEnd || a != myChainEnd) myChainStart = a;   // a new chain
+            if (b == myChainStart) {   // the contour is closed: the next click starts afresh
+                myChainStart = myChainEnd = {};
+            } else {
+                continueFrom = PointRef{b, sk.PositionOf(b), {}, {}};
+                myChainEnd = b;
+            }
             break;
         }
         case SketchTool::Rectangle: {

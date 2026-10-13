@@ -1,5 +1,6 @@
 #include "app/Settings.h"
 
+#include "core/I18n.h"
 #include "core/Log.h"
 #include "core/PathText.h"
 
@@ -19,27 +20,50 @@ void Settings::RemoveRecent(const std::filesystem::path& file) {
     std::erase_if(recentFiles, [&](const auto& p) { return p == file; });
 }
 
-Settings Settings::Load(const std::filesystem::path& file) {
+int Settings::TextureLimit(int textureQuality) {
+    // High keeps what a usual photo has; low is plenty for a small preview.
+    static constexpr int kLimits[] = {4096, 1024, 256};
+    return kLimits[std::clamp(textureQuality, 0, 2)];
+}
+
+namespace {
+
+/// Defaults for a damaged file, which is kept next to it as "<name>.bak":
+/// the next Save overwrites the original, and the user may want it back.
+Settings Damaged(const std::filesystem::path& file, std::string_view why) {
+    log::Warn("Settings file is damaged ({}), using defaults", why);
+    std::filesystem::path backup = file;
+    backup += ".bak";
+    std::error_code ec;
+    std::filesystem::copy_file(file, backup, std::filesystem::copy_options::overwrite_existing, ec);
     Settings s;
-    std::ifstream in(file);
-    if (!in) return s;
-    const nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
-    if (j.is_discarded() || !j.is_object()) {
-        log::Warn("Settings file is damaged, using defaults");
-        return s;
-    }
+    s.loadProblem = N_("Файл настроек повреждён, настройки сброшены. Прежний файл сохранён как settings.json.bak");
+    return s;
+}
+
+Settings FromJson(const nlohmann::json& j) {
+    Settings s;
     const std::string theme = j.value("theme", "system");
     s.theme = theme == "light" ? ThemeChoice::Light : theme == "dark" ? ThemeChoice::Dark : ThemeChoice::System;
     s.animations      = j.value("animations", s.animations);
+    s.backgroundRebuild = j.value("backgroundRebuild", s.backgroundRebuild);
     s.showTriad       = j.value("showTriad", s.showTriad);
     s.reopenLast      = j.value("reopenLast", s.reopenLast);
-    s.viewBackground  = std::clamp(j.value("viewBackground", s.viewBackground), 0, 2);
+    // "viewBackground" (0..2) from earlier versions.
+    static constexpr const char* kOld[] = {"theme", "light", "dark"};
+    s.background = kOld[std::clamp(j.value("viewBackground", 0), 0, 2)];
+    s.background = j.value("background", s.background);
+    s.backgroundPicture = j.value("backgroundPicture", s.backgroundPicture);
     s.newPartLength   = std::clamp(j.value("newPartLength", s.newPartLength), 0, 3);
     s.orbitSpeed      = std::clamp(j.value("orbitSpeed", s.orbitSpeed), 0.25, 4.0);
     s.invertOrbit     = j.value("invertOrbit", s.invertOrbit);
+    s.turntableOrbit  = j.value("turntableOrbit", s.turntableOrbit);
     s.autosaveMinutes = std::clamp(j.value("autosaveMinutes", s.autosaveMinutes), 0, 120);
     s.gridSnap        = j.value("gridSnap", s.gridSnap);
     s.pointSnap       = j.value("pointSnap", s.pointSnap);
+    s.orthoMode       = j.value("orthoMode", s.orthoMode);
+    s.graphics        = std::clamp(j.value("graphics", s.graphics), 0, 2);
+    s.textureQuality  = std::clamp(j.value("textureQuality", s.textureQuality), 0, 2);
     s.showAllConstraints = j.value("showAllConstraints", s.showAllConstraints);
     s.gridStep        = std::max(0.0, j.value("gridStep", s.gridStep));
     s.uiScale         = j.value("uiScale", s.uiScale);
@@ -67,12 +91,45 @@ Settings Settings::Load(const std::filesystem::path& file) {
         s.mousePreset = m->value("preset", s.mousePreset);
         s.mouseCustom = m->value("custom", false);
     }
+    if (const auto t = j.find("touchpad"); t != j.end() && t->is_object()) {
+        const auto move = [&](const char* key, TouchMove& m) { m = static_cast<TouchMove>(std::clamp(t->value(key, static_cast<int>(m)), 0, 3)); };
+        move("twoFingers", s.touch.twoFingers);
+        move("withShift", s.touch.withShift);
+        move("withCtrl", s.touch.withCtrl);
+        move("withAlt", s.touch.withAlt);
+        s.touch.pinchZooms = t->value("pinchZooms", s.touch.pinchZooms);
+        s.touch.turn = static_cast<TouchTurn>(std::clamp(t->value("turn", static_cast<int>(s.touch.turn)), 0, 2));
+        s.touch.doubleTap = t->value("doubleTap", s.touch.doubleTap);
+        s.touch.forceClick = t->value("forceClick", s.touch.forceClick);
+        s.touch.speed = std::clamp(t->value("speed", s.touch.speed), 0.25, 4.0);
+        s.touch.invert = t->value("invert", s.touch.invert);
+        s.touch.smoothIsTouchpad = t->value("smoothIsTouchpad", s.touch.smoothIsTouchpad);
+    }
     s.shortcutsCustom = j.value("shortcutsCustom", s.shortcutsCustom);
-    for (const auto& [id, chord] : j.value("shortcuts", nlohmann::json::object()).items())
+    // Named: items() of a temporary would outlive it (ASan: stack-use-after-scope).
+    const nlohmann::json shortcuts = j.value("shortcuts", nlohmann::json::object());
+    for (const auto& [id, chord] : shortcuts.items())
         if (chord.is_string()) s.shortcuts.emplace_back(id, chord.get<std::string>());
     for (const auto& r : j.value("recentFiles", nlohmann::json::array()))
         if (r.is_string()) s.recentFiles.push_back(PathFromUtf8(r.get<std::string>()));
     return s;
+}
+
+} // namespace
+
+Settings Settings::Load(const std::filesystem::path& file) {
+    std::ifstream in(file);
+    if (!in) return {};
+    const nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
+    in.close();
+    if (j.is_discarded() || !j.is_object()) return Damaged(file, "not a JSON object");
+    // A field of another type ("uiScale": "1,25") throws inside nlohmann::json;
+    // uncaught, it closed the program before the window on every start (B-11).
+    try {
+        return FromJson(j);
+    } catch (const nlohmann::json::exception& e) {
+        return Damaged(file, e.what());
+    }
 }
 
 namespace {
@@ -92,15 +149,21 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"autosaveMinutes", autosaveMinutes},
         {"gridSnap", gridSnap},
         {"pointSnap", pointSnap},
+        {"orthoMode", orthoMode},
+        {"graphics", graphics},
+        {"textureQuality", textureQuality},
+        {"backgroundRebuild", backgroundRebuild},
         {"showAllConstraints", showAllConstraints},
         {"gridStep", gridStep},
         {"uiScale", uiScale},
         {"showTriad", showTriad},
         {"reopenLast", reopenLast},
-        {"viewBackground", viewBackground},
+        {"background", background},
+        {"backgroundPicture", backgroundPicture},
         {"newPartLength", newPartLength},
         {"orbitSpeed", orbitSpeed},
         {"invertOrbit", invertOrbit},
+        {"turntableOrbit", turntableOrbit},
         {"language", language},
         {"window", {{"x", windowX}, {"y", windowY}, {"width", windowW}, {"height", windowH}, {"maximized", windowMaximized}}},
         {"shortcuts", ShortcutsJson(shortcuts)},
@@ -111,6 +174,17 @@ bool Settings::Save(const std::filesystem::path& file) const {
                    {"invertWheel", mouse.invertWheel},
                    {"preset", mousePreset},
                    {"custom", mouseCustom}}},
+        {"touchpad", {{"twoFingers", static_cast<int>(touch.twoFingers)},
+                      {"withShift", static_cast<int>(touch.withShift)},
+                      {"withCtrl", static_cast<int>(touch.withCtrl)},
+                      {"withAlt", static_cast<int>(touch.withAlt)},
+                      {"pinchZooms", touch.pinchZooms},
+                      {"turn", static_cast<int>(touch.turn)},
+                      {"doubleTap", touch.doubleTap},
+                      {"forceClick", touch.forceClick},
+                      {"speed", touch.speed},
+                      {"invert", touch.invert},
+                      {"smoothIsTouchpad", touch.smoothIsTouchpad}}},
         {"shortcutsCustom", shortcutsCustom},
         {"recentFiles", recent},
     };

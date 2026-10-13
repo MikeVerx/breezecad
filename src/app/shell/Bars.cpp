@@ -6,10 +6,12 @@
 #include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
 #include "core/I18n.h"
+#include "kernel/Model.h"
 #include "document/SketchFeature.h"
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
 
+#include <cmath>
 #include <format>
 
 namespace bz::app {
@@ -99,7 +101,7 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
     }
 
     // Mode and what to do next.
-    std::string mode = Tr("Деталь"), hint;
+    std::string mode = Tr(app.Doc() && app.Doc()->assembly ? "Сборка" : "Деталь"), hint;
     if (const OperationEditor* operation = app.ops.Active()) {
         mode = operation->Title();
         hint = operation->Hint();
@@ -129,7 +131,31 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
     const ObjectId editing = operation ? operation->EditedFeature() : ObjectId{};
     int errors = 0;
     for (const auto& f : s->doc.Features()) errors += f->status.state == doc::FeatureState::Error && f->id != editing ? 1 : 0;
-    rightText(errors ? Trf("Ошибок: {}", errors) : Tr("Готово"), errors ? c.danger : c.success);
+    if (s->Rebuilding()) {
+        // A rebuild under way in slices: a bar with how far it is.
+        const kernel::Model::Progress p = s->RebuildProgress();
+        const float barW = ui.S(90), barH = ui.S(6);
+        const std::string label = Tr("Перестроение");
+        const float lw = font->CalcTextSizeA(fs, FLT_MAX, 0, label.c_str()).x;
+        right -= barW;
+        const float by = pos.y + (h - barH) / 2;
+        dl->AddRectFilled({right, by}, {right + barW, by + barH}, ui::ToU32(c.dividerSoft), barH / 2);
+        if (p.total > 1) {
+            const float share = static_cast<float>(p.done) / static_cast<float>(p.total);
+            dl->AddRectFilled({right, by}, {right + std::max(barH, barW * share), by + barH}, ui::ToU32(c.accent), barH / 2);
+        } else {
+            // One long operation: how far it is is unknown, a part runs back and forth.
+            const float part = barW * 0.3f;
+            const float t = static_cast<float>(std::fmod(ImGui::GetTime() * 0.8, 2.0));
+            const float x0 = right + (barW - part) * (t < 1.0f ? t : 2.0f - t);
+            dl->AddRectFilled({x0, by}, {x0 + part, by + barH}, ui::ToU32(c.accent), barH / 2);
+        }
+        right -= ui.S(8) + lw;
+        dl->AddText(font, fs, {right, ty}, ui::ToU32(c.textSecondary), label.c_str());
+        right -= ui.S(18);
+    } else {
+        rightText(errors ? Trf("Ошибок: {}", errors) : Tr("Готово"), errors ? c.danger : c.success);
+    }
     rightText(UnitLabel(Quantity::Length, s->doc.units), c.textSecondary);
     if (s->mode == EditMode::Sketch) {
         if (const auto* sk = s->doc.FindAs<doc::SketchFeature>(s->activeSketch)) {
@@ -146,7 +172,7 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
             dl->AddText(ui.fonts.mono, fs, {right, ty}, ui::ToU32(c.textSecondary), coords.c_str());
             right -= ui.S(18);
         }
-        const std::string snaps = Trf("Привязки: {}", app.settings.pointSnap && app.settings.gridSnap ? Tr("точки, сетка")
+        const std::string snaps = (app.settings.orthoMode ? std::string(Tr("Орто")) + "  \xC2\xB7  " : std::string()) + Trf("Привязки: {}", app.settings.pointSnap && app.settings.gridSnap ? Tr("точки, сетка")
                                                        : app.settings.pointSnap                       ? Tr("точки")
                                                        : app.settings.gridSnap                        ? Tr("сетка")
                                                                                                       : Tr("выкл"));
@@ -161,6 +187,7 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
             if (ui::MenuItem(ui, Tr("Привязка к точкам и кривым"), nullptr, {}, app.settings.pointSnap))
                 app.settings.pointSnap = !app.settings.pointSnap;
             if (ui::MenuItem(ui, Tr("Привязка к сетке"), nullptr, {}, app.settings.gridSnap)) app.settings.gridSnap = !app.settings.gridSnap;
+            if (ui::MenuItem(ui, Tr("Ортогональный режим"), "F8", {}, app.settings.orthoMode)) app.settings.orthoMode = !app.settings.orthoMode;
             ImGui::EndPopup();
         }
     }

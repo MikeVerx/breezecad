@@ -77,7 +77,11 @@ bool SameFace(const FaceSignature& a, const FaceSignature& b) {
     return a.kind == SurfaceKind::Plane ? cos > kParallel : std::abs(cos) > kParallel;
 }
 
-EdgeReference Describe(const TopoDS_Edge& edge, const TopTools_IndexedDataMapOfShapeListOfShape& edgeFaces) {
+/// Face signatures computed once per face (a face borders many edges).
+using FaceCache = std::vector<std::optional<FaceSignature>>;
+
+EdgeReference Describe(const TopoDS_Edge& edge, const TopTools_IndexedDataMapOfShapeListOfShape& edgeFaces,
+                       const TopTools_IndexedMapOfShape* faceIndex = nullptr, FaceCache* cache = nullptr) {
     EdgeReference ref;
     const BRepAdaptor_Curve curve(edge);
     switch (curve.GetType()) {
@@ -97,7 +101,16 @@ EdgeReference Describe(const TopoDS_Edge& edge, const TopTools_IndexedDataMapOfS
     // The faces on both sides, in a canonical order.
     std::vector<FaceSignature> faces;
     if (const TopTools_ListOfShape* list = edgeFaces.Seek(edge))
-        for (const TopoDS_Shape& f : *list) faces.push_back(DescribeFace(TopoDS::Face(f)));
+        for (const TopoDS_Shape& f : *list) {
+            const int i = faceIndex && cache ? faceIndex->FindIndex(f) : 0;
+            if (i <= 0) {
+                faces.push_back(DescribeFace(TopoDS::Face(f)));
+                continue;
+            }
+            auto& slot = (*cache)[static_cast<std::size_t>(i)];
+            if (!slot) slot = DescribeFace(TopoDS::Face(f));
+            faces.push_back(*slot);
+        }
     while (faces.size() < 2) faces.emplace_back();
     std::sort(faces.begin(), faces.end(), [](const FaceSignature& a, const FaceSignature& b) {
         return std::tie(a.kind, a.direction.x, a.direction.y, a.direction.z) <
@@ -141,12 +154,16 @@ std::vector<std::optional<TopoDS_Edge>> ResolveEdges(const std::vector<doc::Edge
     TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
     TopExp::MapShapesAndAncestors(body, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
 
+    TopTools_IndexedMapOfShape faceIndex;
+    TopExp::MapShapes(body, TopAbs_FACE, faceIndex);
+    FaceCache cache(static_cast<std::size_t>(faceIndex.Extent()) + 1);
+
     std::vector<std::pair<TopoDS_Edge, EdgeReference>> candidates;
     Box3 box;
     for (int i = 1; i <= edgeFaces.Extent(); ++i) {
         const TopoDS_Edge& e = TopoDS::Edge(edgeFaces.FindKey(i));
         if (BRep_Tool::Degenerated(e)) continue;   // the pole of a sphere or cone
-        candidates.emplace_back(e, Describe(e, edgeFaces));
+        candidates.emplace_back(e, Describe(e, edgeFaces, &faceIndex, &cache));
         box.Include(candidates.back().second.middle);
     }
     const double size = box.IsEmpty() ? 1.0 : std::max((box.max - box.min).Length(), 1.0);
@@ -173,6 +190,38 @@ std::optional<std::pair<Vec3, Vec3>> ResolveLine(const doc::EdgeReference& ref, 
     const gp_Pnt mid = curve.Value((curve.FirstParameter() + curve.LastParameter()) / 2);
     const gp_Dir d = curve.Line().Direction();
     return std::make_pair(Vec3{mid.X(), mid.Y(), mid.Z()}, Vec3{d.X(), d.Y(), d.Z()});
+}
+
+std::optional<Vec3> ResolveVertex(doc::EdgeReference& ref, const Vec3& was, const TopoDS_Shape& body) {
+    const std::optional<TopoDS_Edge> edge = ResolveEdges({ref}, body).front();
+    if (!edge) return std::nullopt;
+    TopoDS_Vertex a, b;
+    TopExp::Vertices(*edge, a, b);
+    if (a.IsNull() || b.IsNull()) return std::nullopt;
+    const gp_Pnt pa = BRep_Tool::Pnt(a), pb = BRep_Tool::Pnt(b);
+    const Vec3 va{pa.X(), pa.Y(), pa.Z()}, vb{pb.X(), pb.Y(), pb.Z()};
+    const doc::EdgeReference now = DescribeEdge(*edge, body);
+    const Vec3 offset = was - ref.middle;   // where the vertex was from the old middle
+    const double missA = (va - now.middle - offset).Length(), missB = (vb - now.middle - offset).Length();
+    ref = now;
+    return missA <= missB ? va : vb;
+}
+
+std::optional<doc::EdgeReference> DescribeVertexEdge(const TopoDS_Vertex& vertex, const TopoDS_Shape& body) {
+    TopTools_IndexedDataMapOfShapeListOfShape edgesOf;
+    TopExp::MapShapesAndAncestors(body, TopAbs_VERTEX, TopAbs_EDGE, edgesOf);
+    const int index = edgesOf.FindIndex(vertex);
+    if (index == 0) return std::nullopt;
+    // A straight edge first: its description is the steadiest.
+    std::optional<TopoDS_Edge> chosen;
+    for (const TopoDS_Shape& e : edgesOf.FindFromIndex(index)) {
+        const TopoDS_Edge& edge = TopoDS::Edge(e);
+        if (BRep_Tool::Degenerated(edge)) continue;
+        if (!chosen || BRepAdaptor_Curve(edge).GetType() == GeomAbs_Line) chosen = edge;
+        if (BRepAdaptor_Curve(*chosen).GetType() == GeomAbs_Line) break;
+    }
+    if (!chosen) return std::nullopt;
+    return DescribeEdge(*chosen, body);
 }
 
 } // namespace bz::kernel::occt

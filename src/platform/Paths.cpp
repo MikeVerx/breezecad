@@ -15,7 +15,6 @@
 #endif
 
 namespace bz::platform {
-namespace {
 
 std::filesystem::path ExecutableDir() {
 #if defined(_WIN32)
@@ -33,6 +32,8 @@ std::filesystem::path ExecutableDir() {
     return ec ? std::filesystem::current_path() : exe.parent_path();
 #endif
 }
+
+namespace {
 
 std::filesystem::path EnvPath(const char* name) {
     const char* value = std::getenv(name);

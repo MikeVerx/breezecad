@@ -1,7 +1,9 @@
 // Header row: brand menu, quick access toolbar, document title, command
 // search with its drop-down, and live stats (FPS, memory, objects).
 
+#include "app/BetaTesting.h"
 #include "app/Operations.h"
+#include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
 #include "core/I18n.h"
 #include "ui/Menus.h"
@@ -85,6 +87,7 @@ void MainMenu(AppContext& app) {
     }
     ImGui::Separator();
     MenuAction(app, "file.close");
+    if (beta::Enabled()) MenuAction(app, "app.reportProblem");
     MenuAction(app, "app.about");
     MenuAction(app, "app.quit");
     ImGui::EndPopup();
@@ -223,7 +226,7 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
         ImGui::SetCursorScreenPos({x, cy});
         std::string tip = a->Label();
         if (const std::string sc = ActionRegistry::ChordText(a->chord); !sc.empty()) tip += " (" + sc + ")";
-        if (std::string undo = actionId == std::string("edit.undo") && app.Doc() ? Tr(app.Doc()->history.UndoLabel()) : "";
+        if (std::string undo = actionId == std::string("edit.undo") && app.Doc() ? Tr(app.Doc()->UndoLabel()) : "";
             !undo.empty())
             tip += ": " + undo;
         if (ui::IconButton(ui, actionId, a->icon, 30, 18, tip.c_str(), a->IsEnabled())) {
@@ -251,16 +254,26 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
         DisplayStyleMenu(app);
         x += ui.S(32);
     }
-    ImGui::SetCursorScreenPos({x, cy});
-    ui::IconButton(ui, "##qat-materials", "ui-materials", 30, 18, Tr("Материалы и текстуры — в следующей версии"), false);
-    x += ui.S(32);
+    // The toolbar's own icons for two ribbon commands.
+    const auto qatAs = [&](const char* id, const char* actionId, const char* icon) {
+        const Action* a = app.actions.Find(actionId);
+        ImGui::SetCursorScreenPos({x, cy});
+        if (ui::IconButton(ui, id, icon, 30, 18, a->Label(), a->IsEnabled())) {
+            const std::string action = actionId;
+            app.Later([&app, action] { app.actions.Run(action); });
+        }
+        x += ui.S(32);
+    };
+    qatAs("##qat-materials", "view.appearance", "ui-materials");
     ImGui::SetCursorScreenPos({x, cy});
     if (ui::IconButton(ui, "##qat-fx", "ui-fx", 30, 18, Tr("Переменные (fx)"), app.Doc() != nullptr))
         app.shell.leftTab = LeftTab::Variables;
     x += ui.S(32);
-    ImGui::SetCursorScreenPos({x, cy});
-    ui::IconButton(ui, "##qat-measure", "ui-ruler", 30, 18, Tr("Измерение — в следующей версии"), false);
-    x += ui.S(32);
+    qatAs("##qat-measure", "tools.measure", "ui-ruler");
+    // The part's appearance, as in Inventor's toolbar.
+    x += ui.S(6);
+    app.ops.appearance.DrawToolbarPicker(app, app.workspace.ShowsHome() ? nullptr : app.Doc(), {x, cy}, ui.S(170), ui.S(30));
+    x += ui.S(176);
 
     // Right side: search and stats.
     const float statsWidth = ui.S(190);
@@ -294,7 +307,9 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
             const std::string tip = Trf("Работа над кадром: {:.1f} мс интерфейс (из них {:.2f} мс — поиск под курсором),\n"
                                         "{:.1f} мс модель; вывод на экран {:.1f} мс (включает ожидание монитора)\n"
                                         "Кадров за секунду: {:.0f}, перерисовок модели: {}\n"
-                                        "Кадр рисуется только когда что-то меняется.",
+                                        "Кадр рисуется только когда что-то меняется.\n"
+                                        "Память — занятая программой (как «Память» в диспетчере задач),\n"
+                                        "обновляется раз в секунду.",
                                         st.uiMs, st.hoverMs, st.sceneMs, st.presentMs, st.fps, st.sceneFrames);
             ImGui::SetTooltip("%s", tip.c_str());
         }
@@ -310,14 +325,18 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
         ImFont* f2 = ui.fonts.body;
         const float w1 = f1->CalcTextSizeA(ui.S(13), FLT_MAX, 0, name.c_str()).x;
         const float w2 = f2->CalcTextSizeA(ui.S(13), FLT_MAX, 0, suffix).x;
+        // The testers' build says so (screenshots in bug reports show it).
+        const std::string tag = beta::Enabled() ? std::string(" \xC2\xB7 ") + Tr("для бета-тестеров") : std::string();
+        const float w3 = tag.empty() ? 0 : f1->CalcTextSizeA(ui.S(13), FLT_MAX, 0, tag.c_str()).x;
         const float mid = (x + searchX) / 2;
-        float tx = std::max(x + ui.S(8), mid - (w1 + w2) / 2);
-        if (tx + w1 + w2 < searchX - ui.S(8)) {
+        float tx = std::max(x + ui.S(8), mid - (w1 + w2 + w3) / 2);
+        if (tx + w1 + w2 + w3 < searchX - ui.S(8)) {
             const float ty = pos.y + (h - ui.S(13)) / 2 - ui.S(1);
             dl->AddText(f1, ui.S(13), {tx, ty}, ui::ToU32(c.text), name.c_str());
             dl->AddText(f2, ui.S(13), {tx + w1, ty}, ui::ToU32(c.textMuted), suffix);
+            if (!tag.empty()) dl->AddText(f1, ui.S(13), {tx + w1 + w2, ty}, ui::ToU32(c.warning), tag.c_str());
             if (s && s->IsModified() && !app.workspace.ShowsHome())
-                dl->AddCircleFilled({tx + w1 + w2 + ui.S(8), ty + ui.S(8)}, ui.S(3), ui::ToU32(c.accent));
+                dl->AddCircleFilled({tx + w1 + w2 + w3 + ui.S(8), ty + ui.S(8)}, ui.S(3), ui::ToU32(c.accent));
         }
     }
 

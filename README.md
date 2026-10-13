@@ -1,7 +1,10 @@
 <p align="center"><img src="docs/images/banner.png" alt="BreezeCAD — free parametric CAD" width="100%"></p>
 
 <p align="center">
-  <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-windows.zip"><b>Download for Windows</b></a> ·
+  <b>Download:</b>
+  <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-windows.zip"><b>Windows</b></a> ·
+  <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-macos.zip"><b>macOS</b></a> ·
+  <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-linux.tar.gz"><b>Linux</b></a> ·
   <a href="#build-from-source">Build from source</a> ·
   <a href="docs/ARCHITECTURE.md">Architecture</a> ·
   <a href="README.ru.md">Русский</a>
@@ -60,6 +63,31 @@ catalogs — see [`translations/`](translations/README.md).
 </tr>
 </table>
 
+## Download
+
+The freshest build of the `next` branch, rebuilt after every change that
+passes the tests on all three systems ([all files](https://github.com/MikeVerx/breezecad/releases/tag/next-build)).
+Unpack and run — nothing to install.
+
+| System | Download | Status |
+| --- | --- | --- |
+| Windows 10/11, 64-bit | [BreezeCAD-windows.zip](https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-windows.zip) | main platform, in beta test |
+| macOS 14+ on Apple silicon (M1 and newer) | [BreezeCAD-macos.zip](https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-macos.zip) | new: built and tested in CI, first runs on real Macs now |
+| Linux x86_64 (Ubuntu 20.04+, Debian 10+, Fedora and other distributions from 2019 on) | [BreezeCAD-linux.tar.gz](https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-linux.tar.gz) | built, tested and started in CI |
+
+**macOS, first start:** the app is not signed by a paid Apple certificate
+yet, so macOS stops it once. Right-click `BreezeCAD.app` → **Open** → **Open**;
+on macOS 15 and newer: double-click, then **System Settings → Privacy &
+Security → Open Anyway**.
+
+Beta testers take the `BreezeCAD-beta-*` builds of the same release: they
+keep logs for bug reports (written only on your computer) and come with
+instructions in Russian.
+
+Touchpads work on all three systems: two fingers pan (Shift: orbit), pinch
+zooms; on a Mac also turning two fingers, smart zoom and force click.
+Everything is in **Settings → Тачпад**.
+
 ## Build from source
 
 Requires a C++20 compiler, CMake ≥ 3.24, Ninja, OpenCASCADE (7.6+ or 8), GLFW 3
@@ -67,14 +95,24 @@ and OpenGL 3.3.
 
 ```sh
 # Debian / Ubuntu
-sudo apt install build-essential cmake ninja-build libocct-*-dev libglfw3-dev libgl1-mesa-dev
+sudo apt install build-essential cmake ninja-build libocct-*-dev libglfw3-dev libgl1-mesa-dev libxi-dev
 cmake --preset linux-debug
 cmake --build --preset linux-debug
 ctest --preset linux-debug          # tests
 ./build/linux-debug/bin/breezecad
 ```
 
-Windows builds use MSYS2 / MinGW64 — the exact steps are in
+```sh
+# macOS (Apple silicon), Homebrew
+brew install cmake ninja glfw opencascade
+cmake --preset macos -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+cmake --build --preset macos
+ctest --preset macos
+./build/macos/bin/breezecad
+```
+
+Windows builds use MSYS2 / MinGW64; the packages for all three systems
+(`scripts/package-*.sh`) — the exact steps are in
 [`.github/workflows/build.yml`](.github/workflows/build.yml).
 
 ## Contributing

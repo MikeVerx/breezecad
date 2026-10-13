@@ -6,16 +6,21 @@
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
 
+#include <optional>
 #include <vector>
 
 namespace bz::kernel::occt {
 
 /// The solid swept by an extrusion of `faces` (before any boolean).
-/// `throughAllLength` is used for ExtentType::ThroughAll.
+/// `throughAllLength` is used for ExtentType::ThroughAll; `target` is the
+/// plane of ExtentType::ToPlane, or `untilFace` a curved face to go up to
+/// (found by the caller).
 Expected<TopoDS_Shape> MakeExtrusion(const std::vector<TopoDS_Face>& faces,
                                      const doc::ExtrudeFeature& feature,
                                      const Frame& sketchFrame,
-                                     double throughAllLength);
+                                     double throughAllLength,
+                                     const std::optional<Frame>& target = std::nullopt,
+                                     const std::optional<TopoDS_Face>& untilFace = std::nullopt);
 
 /// Applies a boolean of `tool` to `target`. Returns the new body shape.
 Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const TopoDS_Shape& tool, doc::BooleanOp op);

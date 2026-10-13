@@ -1,6 +1,7 @@
 #include "app/features/ThreadEditor.h"
 
 #include "app/Format.h"
+#include "ui/Menus.h"
 #include "ui/Widgets.h"
 
 #include <array>
@@ -47,10 +48,10 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
     auto& f = static_cast<doc::ThreadFeature&>(feature);
     ui::Ui& ui = app.ui;
 
-    // The standard pitch of the picked size, once the rebuild has measured it.
-    if (myAutoPitch && f.site) {
+    // The standard pitch of the size (chosen, or measured by the rebuild).
+    if (myAutoPitch && (f.site || f.size > 0)) {
         myAutoPitch = false;
-        const double pitch = doc::CoarsePitch(f.site->nominal);
+        const double pitch = doc::CoarsePitch(f.size > 0 ? f.size : f.site->nominal);
         if (std::abs(pitch - f.pitch.value) > 1e-9) {
             myPitch = FormatValue(pitch, Quantity::Length, session.doc.units);
             f.pitch.expression = myPitch;
@@ -58,16 +59,63 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
         }
     }
 
+    const auto mm = [&](double v) { return FormatValue(v, Quantity::Length, session.doc.units); };
     Section(app, Tr("Грань"));
     std::string size;
     if (f.site)
-        size = std::format("M{}\xC3\x97{} {}", FormatValue(f.site->nominal, Quantity::Length, session.doc.units),
-                           FormatValue(f.pitch.value, Quantity::Length, session.doc.units),
+        size = std::format("M{}\xC3\x97{} {}", mm(f.size > 0 ? f.size : f.site->nominal), mm(f.pitch.value),
                            f.site->external ? Tr("наружная") : Tr("внутренняя"));
     else if (f.face)
         size = Tr("выбрана");
     PickChip(ui, "##face", Tr("Цилиндр"), size, true, width);
     Caption(app, Tr("На валу резьба врезается внутрь, в отверстии — в стенку: отверстие считается диаметром под метчик."), width);
+    Gap(app);
+
+    // The standard size: by the face, or chosen from the list.
+    Section(app, Tr("Размер"));
+    const std::string chosen = f.size > 0 ? "M" + mm(f.size) : std::string(Tr("По грани"));
+    if (PickChip(ui, "##size", Tr("Резьба"), chosen, false, width)) ImGui::OpenPopup("##sizes");
+    {
+        ui::MenuStyle style(ui);   // before Begin: must outlive the End call
+        if (ImGui::BeginPopup("##sizes")) {
+            if (ui::MenuItem(ui, Tr("По грани"), nullptr, {}, f.size <= 0)) {
+                f.size = 0;
+                myAutoPitch = true;
+                Changed(session);
+            }
+            for (double d : doc::StandardSizes()) {
+                const std::string label = std::format("M{}\xC3\x97{}", mm(d), mm(doc::CoarsePitch(d)));
+                if (ui::MenuItem(ui, label.c_str(), nullptr, {}, std::abs(f.size - d) < 1e-9)) {
+                    f.size = d;
+                    myAutoPitch = true;
+                    Changed(session);
+                }
+            }
+            ImGui::EndPopup();
+        }
+    }
+    if (f.size > 0 && f.site && std::abs(f.site->nominal - f.size) > 1e-6) {
+        const std::string note = f.site->external
+                                     ? Trf("Вал под M{}, выбрана M{}: лишнее снаружи срежется, резьба будет M{}.", mm(f.site->nominal), mm(f.size), mm(f.size))
+                                     : Trf("Отверстие под M{}, выбрана M{}: оно будет расточено под M{}.", mm(f.site->nominal), mm(f.size), mm(f.size));
+        Caption(app, note.c_str(), width);
+    }
+    Gap(app);
+
+    Section(app, Tr("Вид"));
+    {
+        static constexpr std::array<const char*, 2> kinds{N_("Настоящая"), N_("Условная")};
+        const int current = f.cosmetic ? 1 : 0;
+        if (const int picked = ui::Segmented(ui, "kind", kinds, current, 2, width); picked != current) {
+            f.cosmetic = picked == 1;
+            Changed(session);
+        }
+        Caption(app, f.cosmetic ? Tr("Резьба только нарисована на грани: модель легче и быстрее. В файлы STEP, STL и 3MF она "
+                                     "будет вырезана настоящей. Проверка коллизий, масса и сечения считают гладкий цилиндр.")
+                                : Tr("Витки вырезаются в теле. Две настоящие резьбы, вкрученные друг в друга, проверка "
+                                     "коллизий может показать как пересечение — для сборок удобнее условная."),
+                width);
+    }
     Gap(app);
 
     Section(app, Tr("Шаг"));

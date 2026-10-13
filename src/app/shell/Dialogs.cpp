@@ -1,19 +1,30 @@
 // Windows on top of the work: "save changes?", "МЦХ" and "about". All close
 // with Esc.
 
+#include "app/BetaTesting.h"
 #include "app/Format.h"
 #include "app/Language.h"
 #include "app/Materials.h"
 #include "app/Operations.h"
 #include "app/ShortcutPresets.h"
+#include "app/Backgrounds.h"
 #include "app/shell/Shell.h"
+#include "app/shell/TouchpadSettings.h"
 #include "core/I18n.h"
+#include "core/Version.h"
 #include "document/Commands.h"
+#include "app/assembly/AssemblyUi.h"
+#include "document/StandardParts.h"
+#include "core/PathText.h"
+#include "modules/ModuleManager.h"
 #include "platform/FileDialogs.h"
+#include "platform/Paths.h"
+#include "ui/Menus.h"
 #include "platform/Launch.h"
 #include "ui/Widgets.h"
 
 #include <array>
+#include <imgui_stdlib.h>
 #include <cmath>
 #include <format>
 #include <nlohmann/json.hpp>
@@ -47,6 +58,39 @@ void ValueRow(ui::Ui& ui, const char* label, const std::string& value) {
     const ImVec2 vs = ui.fonts.mono->CalcTextSizeA(ui.S(13), FLT_MAX, 0, value.c_str());
     dl->AddText(ui.fonts.mono, ui.S(13), {p.x + width - vs.x, p.y + ui.S(5)}, ui::ToU32(ui.C().text), value.c_str());
     ImGui::Dummy({width, h});
+}
+
+/// "Фон": the view's background, from the presets or a picture of one's own.
+void DrawBackgroundMenu(AppContext& app) {
+    ui::Ui& ui = app.ui;
+    if (app.shell.backgroundMenu) {
+        ImGui::OpenPopup("##backgrounds");
+        app.shell.backgroundMenu = false;
+    }
+    ui::MenuStyle style(ui);   // before Begin: must outlive the End call
+    if (!ImGui::BeginPopup("##backgrounds")) return;
+    const ui::ThemeColors& c = ui.C();
+    for (const BackgroundPreset& preset : BackgroundPresets()) {
+        const bool current = app.settings.background == preset.id;
+        // A small sample before the name.
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        if (ui::MenuItem(ui, ("          " + std::string(Tr(preset.name))).c_str(), nullptr, {}, current)) app.settings.background = preset.id;
+        const BackgroundColours bg = ColoursOf(preset, c);
+        const float h = ImGui::GetItemRectSize().y, s = ui.S(16);
+        const ImVec2 a{p.x + ui.S(34), p.y + (h - s) / 2}, b{a.x + s, a.y + s};
+        ImGui::GetWindowDrawList()->AddRectFilledMultiColor(a, b, ui::ToU32(bg.top), ui::ToU32(bg.top), ui::ToU32(bg.bottom), ui::ToU32(bg.bottom));
+        ImGui::GetWindowDrawList()->AddRect(a, b, ui::ToU32(c.fieldBorder), ui.S(3));
+    }
+    ImGui::Separator();
+    const bool picture = app.settings.background == kPictureBackground;
+    if (ui::MenuItem(ui, Tr("Своя картинка…"), nullptr, "ui-open", picture)) {
+        if (const auto file = platform::ShowOpenDialog(Tr("Картинка для фона"), {{Tr("Картинки"), "*.png *.jpg *.jpeg *.bmp *.tga"}},
+                                                       platform::DocumentsDir())) {
+            app.settings.backgroundPicture = ToUtf8(*file);
+            app.settings.background = std::string(kPictureBackground);
+        }
+    }
+    ImGui::EndPopup();
 }
 
 /// The "МЦХ" window: mass from the part's material, volume, area, centre of
@@ -137,6 +181,350 @@ void DrawMassProperties(AppContext& app) {
     ImGui::EndPopup();
 }
 
+// --- "Библиотека": the standard parts window -----------------------------------
+
+namespace parts = doc::parts;
+
+/// Chooses a standard part (and remembers it among the recent ones).
+void PickPart(AppContext& app, const ShellState::Library::Pick& pick) {
+    auto& lib = app.shell.library;
+    const parts::StandardInfo* before = parts::FindStandard(lib.chosen.standard);
+    const parts::StandardInfo* s = parts::FindStandard(pick.standard);
+    if (!s) return;
+    if (!before || before->kind != s->kind) lib.appearance.clear();   // another kind: its own default look
+    lib.chosen = pick;
+    lib.family = static_cast<int>(parts::FamilyOf(*s));
+    // Show where it is in the tree.
+    for (int g = 0; g < static_cast<int>(parts::Groups().size()); ++g)
+        for (parts::PartKind k : parts::Groups()[static_cast<std::size_t>(g)].kinds)
+            if (k == s->kind) lib.openGroups.insert(g);
+    lib.openKinds.insert(static_cast<int>(s->kind));
+    std::erase_if(lib.recent, [&](const auto& r) { return r.standard == pick.standard; });
+    lib.recent.insert(lib.recent.begin(), pick);
+    if (lib.recent.size() > 8) lib.recent.resize(8);
+}
+
+/// The pick for a standard keeping the current size and length where it has them.
+ShellState::Library::Pick PickFor(const parts::StandardInfo& s, const ShellState::Library::Pick& from) {
+    ShellState::Library::Pick p{std::string(s.id), {}, 0};
+    const parts::StandardInfo* old = parts::FindStandard(from.standard);
+    p.size = old ? parts::MatchingSize(*old, from.size, s) : parts::Sizes(s).front();
+    const std::vector<double> lengths = parts::Lengths(s, p.size);
+    if (!lengths.empty()) {
+        p.length = lengths[lengths.size() / 2];
+        for (double l : lengths)
+            if (std::abs(l - from.length) < 1e-9) p.length = l;
+    }
+    return p;
+}
+
+/// A row of the tree: indent, optional chevron and icon, text. True when clicked.
+bool TreeRow(ui::Ui& ui, const char* id, int indent, const char* chevron, const char* icon, const std::string& text,
+             const char* note, bool selected, bool muted, float width) {
+    const ui::ThemeColors& c = ui.C();
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const float h = ui.S(28);
+    const bool clicked = ImGui::InvisibleButton(id, {width, h});
+    const bool hovered = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (selected || hovered) dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(selected ? c.accentSoft : c.hover), ui.S(6));
+    float x = p.x + ui.S(6) + ui.S(16) * static_cast<float>(indent);
+    if (chevron) ui.icons.Draw(dl, chevron, {x, p.y + (h - ui.S(12)) / 2}, ui.S(12), c.textMuted);
+    x += ui.S(16);
+    if (icon) {
+        ui.icons.Draw(dl, icon, {x, p.y + (h - ui.S(15)) / 2}, ui.S(15), c.textSecondary);
+        x += ui.S(21);
+    }
+    const ImVec4 clip{p.x, p.y, p.x + width - ui.S(4), p.y + h};
+    ImFont* font = selected ? ui.fonts.medium : ui.fonts.body;
+    dl->AddText(font, ui.S(13), {x, p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(muted ? c.textDisabled : c.text), text.c_str(),
+                nullptr, 0, &clip);
+    if (note && *note) {
+        const float tw = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, text.c_str()).x;
+        dl->AddText(ui.fonts.caption, ui.S(11), {x + tw + ui.S(6), p.y + (h - ui.S(11)) / 2}, ui::ToU32(c.textMuted), note, nullptr, 0,
+                    &clip);
+    }
+    return clicked;
+}
+
+/// Section caption in the main part of the window.
+void LibraryHeading(ui::Ui& ui, const char* text) {
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, text);
+}
+
+/// Wrapped muted text.
+void LibraryNote(ui::Ui& ui, const char* text) {
+    ui::FontScope font(ui.fonts.caption);
+    ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
+    ImGui::PushTextWrapPos(0);
+    ImGui::TextUnformatted(text);
+    ImGui::PopTextWrapPos();
+    ImGui::PopStyleColor();
+}
+
+/// The chosen part: name, parameters, look, analogues, thread.
+void DrawLibraryPart(AppContext& app, const parts::StandardInfo& standard, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    auto& lib = app.shell.library;
+    const parts::KindInfo& kind = parts::KindOf(standard.kind);
+    {
+        ui::FontScope font(ui.fonts.display);
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(Trf("{} {}", Tr(kind.title.data()), standard.title).c_str());
+        ImGui::PopTextWrapPos();
+    }
+    if (!standard.note.empty()) LibraryNote(ui, Tr(standard.note.data()));
+
+    // Parameters.
+    const std::vector<std::string> sizes = parts::Sizes(standard);
+    if (std::ranges::find(sizes, lib.chosen.size) == sizes.end()) lib.chosen.size = sizes.front();
+    LibraryHeading(ui, standard.kind == parts::PartKind::BallBearing    ? Tr("Подшипник")
+                       : standard.kind == parts::PartKind::RingExternal ? Tr("Диаметр вала, мм")
+                       : standard.kind == parts::PartKind::RingInternal ? Tr("Диаметр отверстия, мм")
+                       : parts::HasThread(standard.kind)                ? Tr("Резьба")
+                                                                        : Tr("Диаметр, мм"));
+    {
+        std::vector<const char*> labels;
+        for (const std::string& s : sizes) labels.push_back(s.c_str());
+        const int current = static_cast<int>(std::ranges::find(sizes, lib.chosen.size) - sizes.begin());
+        if (const int chosen = ui::Segmented(ui, "size", labels, current, 6, width); chosen != current && chosen >= 0)
+            lib.chosen.size = sizes[static_cast<std::size_t>(chosen)];
+    }
+    const std::vector<double> lengths = parts::Lengths(standard, lib.chosen.size);
+    if (!lengths.empty()) {
+        LibraryHeading(ui, Tr("Длина, мм"));
+        int current = -1;
+        for (std::size_t i = 0; i < lengths.size(); ++i)
+            if (std::abs(lengths[i] - lib.chosen.length) < 1e-9) current = static_cast<int>(i);
+        if (current < 0) {
+            current = static_cast<int>(lengths.size() / 2);
+            lib.chosen.length = lengths[static_cast<std::size_t>(current)];
+        }
+        std::vector<std::string> texts;
+        for (double l : lengths) texts.push_back(std::format("{:g}", l));
+        std::vector<const char*> labels;
+        for (const std::string& t : texts) labels.push_back(t.c_str());
+        if (const int chosen = ui::Segmented(ui, "length", labels, current, 8, width); chosen != current && chosen >= 0)
+            lib.chosen.length = lengths[static_cast<std::size_t>(chosen)];
+    } else {
+        lib.chosen.length = 0;
+    }
+
+    // Look: the metals of the standard appearances.
+    LibraryHeading(ui, Tr("Стиль отображения"));
+    {
+        const std::string current = lib.appearance.empty() ? std::string(parts::DefaultAppearance(standard.kind)) : lib.appearance;
+        const float box = ui.S(30), gap = ui.S(6);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        std::string name;
+        int n = 0;
+        for (const doc::Appearance& a : doc::StandardAppearances()) {
+            if (a.finish != doc::Finish::Metal) continue;
+            if (n++ > 0) ImGui::SameLine(0, gap);
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            ImGui::PushID(a.id.c_str());
+            if (ImGui::InvisibleButton("##look", {box, box})) lib.appearance = a.id;
+            if (ImGui::IsItemHovered()) ui::ItemTooltip(ui, Tr(a.name.c_str()));
+            ImGui::PopID();
+            const bool on = a.id == current;
+            dl->AddRectFilled({p.x + ui.S(3), p.y + ui.S(3)}, {p.x + box - ui.S(3), p.y + box - ui.S(3)}, ui::ToU32(a.face), ui.S(5));
+            dl->AddRect({p.x + ui.S(3), p.y + ui.S(3)}, {p.x + box - ui.S(3), p.y + box - ui.S(3)}, ui::ToU32(a.edges), ui.S(5), 0,
+                        ui.S(1));
+            if (on) {
+                dl->AddRect(p, {p.x + box, p.y + box}, ui::ToU32(c.accent), ui.S(7), 0, ui.S(2));
+                name = Tr(a.name.c_str());
+            }
+        }
+        if (current == parts::DefaultAppearance(standard.kind)) name = Trf("{} (по умолчанию)", name);
+        LibraryNote(ui, name.c_str());
+    }
+
+    // Analogues: other standards of the same kind.
+    const std::vector<const parts::StandardInfo*> analogues = parts::Analogues(standard);
+    if (!analogues.empty()) {
+        LibraryHeading(ui, Tr("Аналоги из других стандартов"));
+        float x = 0;
+        for (const parts::StandardInfo* a : analogues) {
+            const std::string label(a->title);
+            const float w = ui.fonts.medium->CalcTextSizeA(ui.S(13), FLT_MAX, 0, label.c_str()).x + ui.S(28);
+            if (x > 0 && x + w > width) x = 0;
+            else if (x > 0) ImGui::SameLine(0, ui.S(6));
+            x += w + ui.S(6);
+            ImGui::PushID(a->id.data());
+            const bool clicked = ui::SecondaryButton(ui, "##analogue", label.c_str(), nullptr, {w, ui.S(30)});
+            if (ImGui::IsItemHovered() && !a->note.empty()) ui::ItemTooltip(ui, Tr(a->note.data()));
+            ImGui::PopID();
+            if (clicked) {
+                PickPart(app, PickFor(*a, lib.chosen));
+                return;   // the window shows the other standard from the next frame
+            }
+        }
+    }
+
+    // Thread: drawn by default.
+    if (parts::HasThread(standard.kind)) {
+        LibraryHeading(ui, Tr("Вид резьбы"));
+        static constexpr std::array<const char*, 2> kinds{N_("Условная (нарисованная)"), N_("Настоящая (вырезанная)")};
+        const int current = lib.realThread ? 1 : 0;
+        if (const int chosen = ui::Segmented(ui, "thread", kinds, current, 2, width); chosen != current && chosen >= 0)
+            lib.realThread = chosen == 1;
+        LibraryNote(ui, lib.realThread ? Tr("Резьба вырезается в модели: тяжелее, и её грани мешают позиционировать деталь в сборке.")
+                                       : Tr("Резьба рисуется на гладком цилиндре; при экспорте в STEP/STL вырезается настоящая."));
+    }
+}
+
+/// "Выбор стандартного изделия": recent parts, the standards filter, the
+/// folders on the left, the chosen part on the right; makes a new part.
+void DrawLibrary(AppContext& app) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    if (!BeginDialog(ui, "##library", app.shell.showLibrary, ui.S(1000))) return;
+    auto& lib = app.shell.library;
+    const auto close = [&] {
+        app.shell.showLibrary = false;
+        ImGui::CloseCurrentPopup();
+    };
+    {
+        ui::FontScope font(ui.fonts.title);
+        ImGui::TextUnformatted(Tr("Выбор стандартного изделия"));
+    }
+    ImGui::Dummy({0, ui.S(2)});
+
+    // Hotbar: home (nothing chosen) and the parts chosen in this session.
+    if (ui::IconButton(ui, "##library-home", "ui-home", ui.S(30), ui.S(16), Tr("К началу: ничего не выбрано"), true, lib.chosen.standard.empty()))
+        lib.chosen = {};
+    for (std::size_t i = 0; i < lib.recent.size(); ++i) {
+        const parts::StandardInfo* s = parts::FindStandard(lib.recent[i].standard);
+        if (!s) continue;
+        ImGui::SameLine(0, ui.S(6));
+        const std::string label = parts::ShortName(*s);
+        const bool on = lib.chosen.standard == lib.recent[i].standard;
+        const float w = ui.fonts.body->CalcTextSizeA(ui.S(12), FLT_MAX, 0, label.c_str()).x + ui.S(20);
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::PushID(static_cast<int>(i));
+        const bool clicked = ImGui::InvisibleButton("##recent", {w, ui.S(30)});
+        const bool hovered = ImGui::IsItemHovered();
+        ImGui::PopID();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(p, {p.x + w, p.y + ui.S(30)}, ui::ToU32(on ? c.accentSoft : hovered ? c.hover : c.field), ui.S(15));
+        dl->AddRect(p, {p.x + w, p.y + ui.S(30)}, ui::ToU32(on ? c.accentSoftBorder : c.fieldBorder), ui.S(15));
+        dl->AddText(ui.fonts.body, ui.S(12), {p.x + ui.S(10), p.y + ui.S(8)}, ui::ToU32(c.text), label.c_str());
+        if (clicked) {
+            const auto pick = lib.recent[i];
+            PickPart(app, pick);
+            break;
+        }
+    }
+    ImGui::Dummy({0, ui.S(4)});
+
+    const float left = ui.S(300), gap = ui.S(20), height = ui.S(500);
+    // The standards filter, over the folders.
+    {
+        static constexpr std::array<const char*, 3> families{"ГОСТ", "ISO", "DIN"};
+        if (const int chosen = ui::Segmented(ui, "family", families, lib.family, 3, left); chosen != lib.family && chosen >= 0)
+            lib.family = chosen;
+    }
+    ImGui::Dummy({0, ui.S(2)});
+
+    // Left: folders -> varieties -> standard parts of the chosen standards body.
+    ImGui::BeginChild("##library-tree", {left, height - ui.S(40)}, ImGuiChildFlags_None);
+    const float treeWidth = ImGui::GetContentRegionAvail().x;
+    const auto groups = parts::Groups();
+    for (int g = 0; g < static_cast<int>(groups.size()); ++g) {
+        const parts::GroupInfo& group = groups[static_cast<std::size_t>(g)];
+        const bool open = lib.openGroups.contains(g);
+        ImGui::PushID(g);
+        if (TreeRow(ui, "##group", 0, open ? "ui-chevron-down" : "ui-chevron-right", "ui-folder", Tr(group.name.data()), nullptr,
+                    false, false, treeWidth)) {
+            if (open) lib.openGroups.erase(g);
+            else lib.openGroups.insert(g);
+        }
+        if (open)
+            for (parts::PartKind k : group.kinds) {
+                const parts::KindInfo& kind = parts::KindOf(k);
+                std::vector<const parts::StandardInfo*> items;
+                for (const parts::StandardInfo* s : parts::StandardsOf(k))
+                    if (static_cast<int>(parts::FamilyOf(*s)) == lib.family) items.push_back(s);
+                const bool kindOpen = lib.openKinds.contains(static_cast<int>(k));
+                ImGui::PushID(static_cast<int>(k));
+                if (TreeRow(ui, "##kind", 1, kindOpen ? "ui-chevron-down" : "ui-chevron-right", nullptr, Tr(kind.variety.data()), nullptr,
+                            false, items.empty(), treeWidth)) {
+                    if (kindOpen) lib.openKinds.erase(static_cast<int>(k));
+                    else lib.openKinds.insert(static_cast<int>(k));
+                }
+                if (kindOpen) {
+                    if (items.empty()) {
+                        static constexpr std::array<const char*, 3> none{N_("Нет изделий по ГОСТ"), N_("Нет изделий по ISO"),
+                                                                         N_("Нет изделий по DIN")};
+                        TreeRow(ui, "##none", 2, nullptr, nullptr, Tr(none[static_cast<std::size_t>(lib.family)]), nullptr, false, true,
+                                treeWidth);
+                    }
+                    for (const parts::StandardInfo* s : items) {
+                        ImGui::PushID(s->id.data());
+                        if (TreeRow(ui, "##item", 2, nullptr, nullptr, std::string(s->title), Tr(s->note.data()),
+                                    lib.chosen.standard == s->id, false, treeWidth))
+                            PickPart(app, PickFor(*s, lib.chosen));
+                        ImGui::PopID();
+                    }
+                }
+                ImGui::PopID();
+            }
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    if (ui::SecondaryButton(ui, "##library-pack", Tr("Добавить пакет стандартных изделий"), nullptr, {left, ui.S(34)}))
+        app.notes.Info(Tr("Пакеты стандартных изделий появятся в следующих версиях"));
+
+    // Right: the chosen part, or nothing.
+    const parts::StandardInfo* standard = parts::FindStandard(lib.chosen.standard);
+    ImGui::SameLine(0, gap);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - (height - ui.S(40)) - ImGui::GetStyle().ItemSpacing.y);
+    ImGui::BeginChild("##library-part", {0, height}, ImGuiChildFlags_None);
+    if (standard) DrawLibraryPart(app, *standard, ImGui::GetContentRegionAvail().x - ui.S(8));
+    ImGui::EndChild();
+
+    // Footer.
+    ui::Divider(ui, c.dividerSoft);
+    standard = parts::FindStandard(lib.chosen.standard);
+    const parts::Request request{lib.chosen.standard, lib.chosen.size, lib.chosen.length, lib.realThread, lib.appearance};
+    if (standard) ValueRow(ui, Tr("Обозначение"), parts::Designation(request));
+    else ImGui::Dummy({0, ui.S(26)});
+    ImGui::Dummy({0, ui.S(4)});
+    const float bw = ui.S(170);
+    const bool intoAssembly = InAssembly(app);
+    // AutoDrop: a screw goes onto a hole picked in the view; size and length by it.
+    const bool canDrop = intoAssembly && standard && CanAutoDrop(*standard);
+    const float rowY = ImGui::GetCursorPosY(), rowX = ImGui::GetCursorPosX(), rowW = ImGui::GetContentRegionAvail().x;
+    if (canDrop) {
+        ImGui::SetCursorPosY(rowY + ui.S(8));
+        ImGui::Checkbox(std::format("{}##drop-washer", Tr("С шайбой")).c_str(), &lib.dropWasher);
+        ImGui::SameLine(0, ui.S(12));
+        ImGui::Checkbox(std::format("{}##drop-nut", Tr("С гайкой")).c_str(), &lib.dropNut);
+        ImGui::SameLine(0, ui.S(12));
+        ImGui::SetCursorPosY(rowY);
+        if (ui::SecondaryButton(ui, "##library-drop", Tr("По отверстию…"), nullptr, {bw, ui.S(36)}) &&
+            StartAutoDrop(app, request, lib.dropWasher, lib.dropNut))
+            close();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", Tr("Щёлкните по кромке отверстия в сборке: диаметр — по отверстию, длина — по пакету деталей"));
+        ImGui::SameLine(0, ui.S(8));
+    }
+    ImGui::SetCursorPosY(rowY);
+    ImGui::SetCursorPosX(rowX + rowW - 2 * bw - ui.S(8));
+    if (ui::SecondaryButton(ui, "##library-cancel", Tr("Закрыть"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        close();
+    ImGui::SameLine(0, ui.S(8));
+    // In an assembly the part goes into it (its file next to the assembly).
+    if ((ui::PrimaryButton(ui, "##library-create", intoAssembly ? Tr("Вставить в сборку") : Tr("Создать деталь"), "Enter",
+                           {bw, ui.S(36)}, standard != nullptr) ||
+         (standard && ImGui::IsKeyPressed(ImGuiKey_Enter))) &&
+        standard && (intoAssembly ? PlaceStandardPart(app, request) : CreateStandardPart(app, request)))
+        close();
+    ImGui::EndPopup();
+}
+
 } // namespace
 
 /// Remembers the shortcuts that differ from the shipped ones.
@@ -174,6 +562,162 @@ void DrawLanguageSettings(AppContext& app, float width) {
         if (!platform::OpenFolder(LanguagePackDir())) app.notes.Error(Tr("Не удалось открыть папку"));
         languages.clear();
     }
+}
+
+/// The "Оптимизация" tab: what costs time on a weak computer.
+void DrawOptimizationSettings(AppContext& app, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    const auto caption = [&](const std::string& text) {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(text.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+        ImGui::Dummy({0, ui.S(6)});
+    };
+    ui::FieldLabel(ui, Tr("Качество графики"));
+    static constexpr std::array<const char*, 3> quality{N_("Высокое"), N_("Среднее"), N_("Слабый компьютер")};
+    if (const int n = ui::Segmented(ui, "graphics", quality, app.settings.graphics, 3, width); n != app.settings.graphics)
+        app.settings.graphics = n;
+    caption(Tr("Сглаживание краёв и точность сетки круглых граней. Ниже качество — быстрее показ больших деталей."));
+
+    ui::FieldLabel(ui, Tr("Качество текстур"));
+    static constexpr std::array<const char*, 3> textures{N_("Высокое"), N_("Среднее"), N_("Низкое")};
+    if (const int n = ui::Segmented(ui, "textures", textures, app.settings.textureQuality, 3, width); n != app.settings.textureQuality)
+        app.settings.textureQuality = n;
+    caption(Trf("Картинки на гранях хранятся в видеокарте не крупнее {} точек по большей стороне; больше — уменьшаются. "
+                "Ниже качество — меньше памяти и быстрее, но картинка грубее. Файл детали не меняется.",
+                Settings::TextureLimit(app.settings.textureQuality)));
+
+    ui::FieldLabel(ui, Tr("Анимации камеры"));
+    static constexpr std::array<const char*, 2> anim{N_("Плавные повороты"), N_("Без анимации")};
+    const int a = app.settings.animations ? 0 : 1;
+    if (const int n = ui::Segmented(ui, "anim", anim, a, 2, width); n != a) app.settings.animations = n == 0;
+    caption(Tr("Переходы к видам, «Показать всё», вход в эскиз. Без анимации камера переходит сразу."));
+
+    ui::FieldLabel(ui, Tr("Долгое перестроение"));
+    static constexpr std::array<const char*, 2> rebuild{N_("В фоне"), N_("Сразу, окно ждёт")};
+    const int r = app.settings.backgroundRebuild ? 0 : 1;
+    if (const int n = ui::Segmented(ui, "rebuild", rebuild, r, 2, width); n != r) app.settings.backgroundRebuild = n == 0;
+    caption(Tr("В фоне окно не замирает, пока считается тяжёлая операция: модель обновится, когда расчёт закончится. "
+               "«Сразу» — по-старому, на случай если фоновый расчёт ведёт себя странно."));
+}
+
+/// The "Модули" tab: install a package; the modules in a list that scrolls,
+/// one compact row each — a check box to switch it on and off, its name and
+/// version, "Удалить" for the ones the user installed; what it is and how it
+/// runs under it.
+void DrawModuleSettings(AppContext& app, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    const auto caption = [&](const std::string& text, const Color& color) {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(color));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(text.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    };
+    const std::filesystem::path folder =
+        app.modules && !app.modules->InstallDir().empty() ? app.modules->InstallDir() : platform::ConfigDir() / "modules";
+
+    if (ui::SecondaryButton(ui, "##module-install", Tr("Установить модуль…"), nullptr, {ui.S(190), ui.S(30)}, app.modules != nullptr))
+        app.Later([&app] { InstallModule(app); });
+    ui::ItemTooltip(ui, Tr("Файл .bzmod — или просто перетащите его в окно"));
+    ImGui::SameLine(0, ui.S(16));
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ui.S(6));
+    if (ui::LinkButton(ui, "##modules-folder", Tr("Папка модулей"))) {
+        std::error_code ec;
+        std::filesystem::create_directories(folder, ec);
+        if (!platform::OpenFolder(folder)) app.notes.Error(Tr("Не удалось открыть папку"));
+    }
+    caption(Tr("Модуль — файл .bzmod для вашей системы. Установите его кнопкой или перетащите в окно программы: "
+               "он заработает сразу, без перезапуска."),
+            c.textMuted);
+    ImGui::Dummy({0, ui.S(6)});
+
+    if (!app.modules || app.modules->Modules().empty()) {
+        caption(Tr("Модули не установлены."), c.textMuted);
+        return;
+    }
+    // Grows with the list up to a height, then scrolls.
+    ImGui::SetNextWindowSizeConstraints({width, 0}, {width, ui.S(330)});
+    ImGui::BeginChild("##modules-list", {width, 0}, ImGuiChildFlags_AutoResizeY);
+    const float box = ImGui::GetFrameHeight();
+    const float indent = box + ImGui::GetStyle().ItemInnerSpacing.x;
+    using modules::ModuleState;
+    for (const modules::ModuleEntry& m : app.modules->Modules()) {
+        const std::string moduleId = m.manifest.id;   // the list may change: act after the frame
+        ImGui::PushID(moduleId.c_str());
+
+        // The row: [x] Name 1.0.0                                   Удалить
+        const float rowRight = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+        bool on = m.state == ModuleState::Loaded;
+        ImGui::BeginDisabled(m.state == ModuleState::Unsupported);   // nothing to switch: the computer lacks something
+        if (ImGui::Checkbox("##on", &on))
+            app.Later([&app, moduleId, on] {
+                const bool done = on ? app.modules->TurnOn(moduleId) : app.modules->TurnOff(moduleId);
+                if (!done && on) app.notes.Error(Tr("Модуль не запустился — причина в списке модулей"));
+            });
+        ImGui::EndDisabled();
+        if (m.state != ModuleState::Unsupported) ui::ItemTooltip(ui, on ? Tr("Выключить модуль") : Tr("Включить модуль"));
+        ImGui::SameLine(0, ImGui::GetStyle().ItemInnerSpacing.x);
+        {
+            ui::FontScope font(ui.fonts.strong);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(m.manifest.name.c_str());
+        }
+        if (!m.manifest.version.empty()) {
+            ImGui::SameLine(0, ui.S(6));
+            ui::FontScope font(ui.fonts.caption);
+            ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(m.manifest.version.c_str());
+            ImGui::PopStyleColor();
+        }
+        const bool removable = app.modules->Removable(m);
+        if (removable && app.shell.moduleToRemove != moduleId) {
+            // As LinkButton measures itself: its font, 8 px on each side; centred on the row.
+            const float w = ui.fonts.medium->CalcTextSizeA(ui.S(12), FLT_MAX, 0, Tr("Удалить")).x + ui.S(16);
+            ImGui::SameLine(rowRight - w);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (box - ui.S(26)) / 2);
+            if (ui::LinkButton(ui, "##remove", Tr("Удалить"))) app.shell.moduleToRemove = moduleId;
+        }
+
+        // Under the name: what it is, how it runs.
+        ImGui::Indent(indent);
+        if (!m.manifest.description.empty()) caption(m.manifest.description, c.textMuted);
+        const char* state = N_("Найден");
+        switch (m.state) {
+            case ModuleState::Found: state = N_("Не загружен"); break;
+            case ModuleState::Loaded: state = N_("Работает"); break;
+            case ModuleState::Off: state = N_("Выключен"); break;
+            case ModuleState::Unsupported: state = N_("Не подходит для этого компьютера"); break;
+            case ModuleState::Failed: state = N_("Не запустился"); break;
+            case ModuleState::Crashed: state = N_("Отключён после сбоя"); break;
+        }
+        const bool bad = m.state == ModuleState::Unsupported || m.state == ModuleState::Failed || m.state == ModuleState::Crashed;
+        caption(m.problem.empty() ? std::string(Tr(state)) : Trf("{}: {}", Tr(state), Tr(m.problem)),
+                bad ? c.danger : m.state == ModuleState::Loaded ? c.success : c.textMuted);
+        if (removable && app.shell.moduleToRemove == moduleId) {   // asked once more: its files go
+            caption(Tr("Удалить модуль вместе с его файлами?"), c.text);
+            if (ui::SecondaryButton(ui, "##remove-yes", Tr("Да, удалить"), nullptr, {ui.S(120), ui.S(26)}))
+                app.Later([&app, moduleId] {
+                    app.shell.moduleToRemove.clear();
+                    const Status removed = app.modules->Uninstall(moduleId);
+                    if (!removed) app.notes.Error(Trf("Модуль не удалён: {}", Tr(removed.GetError().message)));
+                });
+            ImGui::SameLine(0, ui.S(12));
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ui.S(4));
+            if (ui::LinkButton(ui, "##remove-no", Tr("Отмена"))) app.shell.moduleToRemove.clear();
+        }
+        ImGui::Unindent(indent);
+        ImGui::Dummy({0, ui.S(8)});
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
 }
 
 /// The "Мышь" tab: a ready-made set of view gestures, or each one by hand.
@@ -249,6 +793,10 @@ void DrawMouseSettings(AppContext& app, float width) {
         const int inv = s.invertOrbit ? 1 : 0;
         ui::FieldLabel(ui, Tr("Вращение по вертикали"));
         if (const int n = ui::Segmented(ui, "orbit-invert", vertical, inv, 2, width); n != inv) s.invertOrbit = n == 1;
+        static constexpr std::array<const char*, 2> sideways{N_("Свободное"), N_("Поворотный стол")};
+        const int table = s.turntableOrbit ? 1 : 0;
+        ui::FieldLabel(ui, Tr("Вращение вбок"));
+        if (const int n = ui::Segmented(ui, "orbit-turntable", sideways, table, 2, width); n != table) s.turntableOrbit = n == 1;
     }
     {
         ui::FontScope font(ui.fonts.caption);
@@ -264,14 +812,15 @@ void DrawMouseSettings(AppContext& app, float width) {
 void DrawSettings(AppContext& app) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
-    if (!BeginDialog(ui, "##settings", app.shell.showSettings, ui.S(620))) return;
+    if (!BeginDialog(ui, "##settings", app.shell.showSettings, ui.S(700))) return;
     {
         ui::FontScope font(ui.fonts.title);
         ImGui::TextUnformatted(Tr("Настройки"));
     }
     const float width = ImGui::GetContentRegionAvail().x;
-    static constexpr std::array<const char*, 4> tabs{N_("Интерфейс"), N_("Клавиши"), N_("Мышь"), N_("Общие")};
-    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 4, width);
+    static constexpr std::array<const char*, 7> tabs{N_("Интерфейс"), N_("Клавиши"), N_("Мышь"), N_("Тачпад"), N_("Общие"),
+                                                     N_("Оптимизация"), N_("Модули")};
+    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 7, width);
     ImGui::Dummy({0, ui.S(6)});
 
     if (app.shell.settingsTab == 0) {
@@ -299,11 +848,7 @@ void DrawSettings(AppContext& app) {
         static constexpr std::array<const char*, 3> themes{N_("Как в системе"), N_("Светлая"), N_("Тёмная")};
         const int theme = static_cast<int>(app.settings.theme);
         if (const int t = ui::Segmented(ui, "theme", themes, theme, 3, width); t != theme) SetTheme(app, static_cast<ThemeChoice>(t));
-        ImGui::Dummy({0, ui.S(6)});
-        ui::FieldLabel(ui, Tr("Камера"));
-        static constexpr std::array<const char*, 2> anim{N_("Плавные повороты"), N_("Без анимации")};
-        const int a = app.settings.animations ? 0 : 1;
-        if (const int n = ui::Segmented(ui, "anim", anim, a, 2, width); n != a) app.settings.animations = n == 0;
+
         ImGui::Dummy({0, ui.S(6)});
         ui::FieldLabel(ui, Tr("Оси в углу вида"));
         static constexpr std::array<const char*, 2> triad{N_("Показывать"), N_("Скрыть")};
@@ -311,13 +856,16 @@ void DrawSettings(AppContext& app) {
         if (const int n = ui::Segmented(ui, "triad", triad, t, 2, width); n != t) app.settings.showTriad = n == 0;
         ImGui::Dummy({0, ui.S(6)});
         ui::FieldLabel(ui, Tr("Фон вида"));
-        static constexpr std::array<const char*, 3> backgrounds{N_("Градиент"), N_("Светлый ровный"), N_("Тёмный ровный")};
-        if (const int n = ui::Segmented(ui, "background", backgrounds, app.settings.viewBackground, 3, width); n != app.settings.viewBackground)
-            app.settings.viewBackground = n;
-
+        if (ui::LinkButton(ui, "##open-backgrounds", Tr("Выбрать на вкладке «Вид» → «Фон»…"))) app.shell.backgroundMenu = true;
+    } else if (app.shell.settingsTab == 5) {
+        DrawOptimizationSettings(app, width);
+    } else if (app.shell.settingsTab == 6) {
+        DrawModuleSettings(app, width);
     } else if (app.shell.settingsTab == 2) {
         DrawMouseSettings(app, width);
     } else if (app.shell.settingsTab == 3) {
+        DrawTouchpadSettings(app, width);
+    } else if (app.shell.settingsTab == 4) {
         ui::FieldLabel(ui, Tr("При запуске"));
         static constexpr std::array<const char*, 2> start{N_("Главная страница"), N_("Последний файл")};
         const int st = app.settings.reopenLast ? 1 : 0;
@@ -472,6 +1020,72 @@ void DrawSettings(AppContext& app) {
     ImGui::EndPopup();
 }
 
+/// The testers' build: what happened, packed into one zip to send.
+void DrawBetaReport(AppContext& app) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    ShellState::BetaReport& r = app.shell.betaReport;
+    if (!BeginDialog(ui, "##beta-report", r.open, ui.S(560))) return;
+    const auto paragraph = [&](const std::string& text, Color colour) {
+        ui::FontScope font(ui.fonts.body);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(colour));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(text.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    };
+    const auto close = [&] {
+        r = {};
+        ImGui::CloseCurrentPopup();
+    };
+    const float width = ImGui::GetContentRegionAvail().x;
+    {
+        ui::FontScope font(ui.fonts.title);
+        ImGui::TextUnformatted(r.crash ? Tr("BreezeCAD закрылся с ошибкой") : Tr("Сообщить о проблеме"));
+    }
+    ImGui::Dummy({0, ui.S(2)});
+    if (!r.packed.empty()) {
+        paragraph(Tr("Спасибо! Отчёт сохранён в файл:"), c.textSecondary);
+        paragraph(ToUtf8(r.packed.filename()), c.text);
+        ImGui::Dummy({0, ui.S(2)});
+        paragraph(Tr("Отправьте этот файл в чат тестеров. Кнопка ниже откроет папку, где он лежит."), c.textSecondary);
+        ImGui::Dummy({0, ui.S(8)});
+        const float bw = (width - ui.S(8)) / 2;
+        if (ui::PrimaryButton(ui, "##beta-show", Tr("Открыть папку с отчётом"), nullptr, {bw, ui.S(36)}))
+            if (!platform::OpenFolder(r.packed.parent_path())) app.notes.Error(Tr("Не удалось открыть папку"));
+        ImGui::SameLine(0, ui.S(8));
+        if (ui::SecondaryButton(ui, "##beta-done", Tr("Закрыть"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape)) close();
+        ImGui::EndPopup();
+        return;
+    }
+    if (r.crash)
+        paragraph(Trf("Это случилось в прошлый раз ({}). Программа записала, что происходило перед этим. Напишите в двух-трёх "
+                      "предложениях, что вы делали — например: «сделал вращение эскиза, потом зеркало, и программа закрылась».",
+                      r.started),
+                  c.textSecondary);
+    else
+        paragraph(Tr("Опишите, что не так: что вы делали, что ожидали и что получилось. В отчёт попадёт всё, что программа "
+                     "записала за этот запуск (действия, ошибки, скорость работы) и описание компьютера."),
+                  c.textSecondary);
+    ImGui::Dummy({0, ui.S(4)});
+    ImGui::SetNextItemWidth(width);
+    if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+    ImGui::InputTextMultiline("##beta-text", &r.text, {width, ui.S(120)});
+    ImGui::Dummy({0, ui.S(8)});
+    const float bw = (width - ui.S(8)) / 2;
+    if (ui::PrimaryButton(ui, "##beta-pack", Tr("Сохранить отчёт"), nullptr, {bw, ui.S(36)})) {
+        if (const auto zip = beta::Pack(r.session, r.text, r.crash)) r.packed = *zip;
+        else app.notes.Error(Tr(zip.GetError().message));
+    }
+    ImGui::SameLine(0, ui.S(8));
+    if (ui::SecondaryButton(ui, "##beta-skip", r.crash ? Tr("Не сейчас") : Tr("Отмена"), "Esc", {bw, ui.S(36)}) ||
+        ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        if (r.crash) beta::Dismiss(r.session);
+        close();
+    }
+    ImGui::EndPopup();
+}
+
 void DrawDialogs(AppContext& app) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
@@ -528,18 +1142,26 @@ void DrawDialogs(AppContext& app) {
     }
 
     DrawMassProperties(app);
+    DrawLibrary(app);
+    DrawBackgroundMenu(app);
 
     DrawSettings(app);
+    DrawBetaReport(app);
 
     // --- About ---
     if (BeginDialog(ui, "##about", app.shell.showAbout, ui.S(480))) {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ui.icons.Draw(dl, "brand-mark", p, ui.S(48), {1, 1, 1, 1});
-        dl->AddText(ui.fonts.display, ui.S(24), {p.x + ui.S(62), p.y + ui.S(2)}, ui::ToU32(c.text), "BreezeCAD 0.2.0");
+        const std::string title = std::string("BreezeCAD ") + Version();
+        dl->AddText(ui.fonts.display, ui.S(24), {p.x + ui.S(62), p.y + ui.S(2)}, ui::ToU32(c.text), title.c_str());
         dl->AddText(ui.fonts.body, ui.S(13), {p.x + ui.S(63), p.y + ui.S(32)}, ui::ToU32(c.textMuted),
                     Tr("Свободный параметрический САПР"));
-        ImGui::Dummy({0, ui.S(60)});
+        // Exactly which build: the commit names it on GitHub.
+        const std::string build = *Commit() ? Trf("Сборка {} {} от {}", Branch(), Commit(), BuildDate())
+                                            : Trf("Сборка от {}", BuildDate());
+        dl->AddText(ui.fonts.mono, ui.S(11), {p.x + ui.S(63), p.y + ui.S(52)}, ui::ToU32(c.textMuted), build.c_str());
+        ImGui::Dummy({0, ui.S(74)});
         {
             ui::FontScope font(ui.fonts.bodySmall);
             ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textSecondary));
@@ -548,7 +1170,7 @@ void DrawDialogs(AppContext& app) {
             ImGui::TextUnformatted(Tr("Лицензия MPL-2.0. Файлы .bzc — открытый формат (ZIP + JSON)."));
             ImGui::Dummy({0, ui.S(4)});
             ImGui::TextUnformatted(Tr("Использует: Open CASCADE Technology (LGPL 2.1), Dear ImGui, GLFW, lunasvg, "
-                                   "nlohmann/json, miniz, portable-file-dialogs (MIT/zlib), шрифты IBM Plex (OFL)."));
+                                   "nlohmann/json, miniz, portable-file-dialogs (MIT/zlib), stb_image (public domain), шрифты IBM Plex (OFL)."));
             ImGui::PopTextWrapPos();
             ImGui::PopStyleColor();
         }

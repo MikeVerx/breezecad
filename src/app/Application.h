@@ -43,6 +43,7 @@ public:
     struct InputTap {
         bool                       seen = false;   ///< any input: draw frames
         std::vector<ImGuiKeyChord> chords;         ///< key presses with the modifiers held at that moment
+        std::vector<std::filesystem::path> dropped;   ///< files dropped on the window, handled between frames
     };
 
 private:
@@ -56,6 +57,9 @@ private:
     void UpdateTitle();
     void HandleCloseRequests();
     bool NeedsAnotherFrame() const;
+    /// A document rebuilds on another thread: frames at a calm pace.
+    bool WaitsForBackground() const;
+    double myMemoryReadAt = -10.0;   ///< when the memory figure was last read
     void TakeScreenshot(const std::filesystem::path& file) const;
     void PollShotRequest();
 
@@ -66,7 +70,7 @@ private:
     ui::Icons        myIcons;
     float            myScale = 1.0f;
     bool             myDarkApplied = false;
-    int              myBackgroundApplied = -1;   ///< Settings::viewBackground in use
+    std::string      myBackgroundApplied;        ///< Settings::background (and picture) in use
     double           mySystemThemeCheck = 0.0;
 
     Workspace        myWorkspace;
@@ -81,6 +85,8 @@ private:
 
     std::unique_ptr<ui::Ui>     myUi;
     std::unique_ptr<AppContext> myContext;
+    std::unique_ptr<modules::ModuleManager> myModules;   ///< unloaded first in ~Application
+    void StartModules();
 
     InputTap myInput;
     int    myFramesToDraw = 3;

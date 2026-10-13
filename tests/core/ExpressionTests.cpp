@@ -95,3 +95,22 @@ TEST_CASE("variable names") {
     CHECK_FALSE(IsValidVariableName("sin"));
     CHECK_FALSE(IsValidVariableName("a b"));
 }
+
+TEST_CASE("B-10: absurdly nested or long expressions are refused, not a stack overflow") {
+    // Audit 2026-10-13: these overflowed the stack of the recursive parser.
+    const std::size_t n = 4000;   // within kMaxExpressionLength once doubled
+    CHECK(Fails(std::string(n / 2, '(') + "1" + std::string(n / 2, ')')));
+    CHECK(Fails(std::string(n, '-') + "1"));
+    std::string power = "2";
+    for (int i = 0; i < 1000; ++i) power += "^1";
+    CHECK(Fails(power));
+    CHECK(Fails(std::string(200000, '(') + "1" + std::string(200000, ')')));
+    CHECK(Fails(std::string(kMaxExpressionLength + 1, '1')));
+    CHECK(ReferencedNames(std::string(200000, '(') + "a" + std::string(200000, ')')) ==
+          std::vector<std::string>{"a"});
+
+    // Ordinary nesting still works.
+    CHECK(Eval(std::string(50, '(') + "1" + std::string(50, ')')) == doctest::Approx(1.0));
+    CHECK(Eval("--2") == doctest::Approx(2.0));
+    CHECK(Eval("2^3^2") == doctest::Approx(512.0));
+}

@@ -67,10 +67,50 @@ public:
     /// Sets every feature's status. Never throws.
     void Rebuild(doc::Document& doc);
 
+    /// What a partial rebuild shows when it stops early.
+    enum class Stopped { KeepShown, ShowAtStop };
+    /// Rebuilds only up to feature number `last` (included); the features
+    /// after it stay to be rebuilt later (Document::DirtyFrom). While a
+    /// sketch is edited the part shown is kept as it was (KeepShown); while
+    /// an operation is edited it is shown as it is right after it
+    /// (ShowAtStop). Editing then waits for nothing that comes after.
+    void RebuildUpTo(doc::Document& doc, std::size_t last, Stopped shown);
+
+    /// As RebuildUpTo, but returns after about `budgetMs` (at least one
+    /// operation): the window stays alive while a large part rebuilds, a
+    /// slice per frame. True when it got to the end (or to `last`); the
+    /// part shown changes only then.
+    bool RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, double budgetMs);
+
+    /// How far the rebuild in progress is: operations done and to do.
+    struct Progress {
+        std::size_t done = 0, total = 0;
+    };
+    Progress RebuildProgress() const;
+
+    /// The first feature a rebuild of `doc` has to compute.
+    std::size_t FirstToRebuild(const doc::Document& doc) const;
+
+    /// About how long rebuilding from `doc.DirtyFrom()` up to feature `last`
+    /// will take, from the time each operation took last time. Operations
+    /// never built count as slow.
+    double EstimateRebuildMs(const doc::Document& doc, std::size_t last) const;
+
+    /// For a rebuild on another thread: a model that computes the features
+    /// from `start` on by itself. It shares no OCCT shape with this one (the
+    /// shapes it starts from are copied), so the two can be used at the same
+    /// time from different threads.
+    Model Fork(std::size_t start) const;
+    /// Takes the results of a Fork(start) that has rebuilt a copy of the document.
+    void Adopt(Model&& fork, std::size_t start);
+
     /// Bumped whenever the geometry changes (the viewport re-syncs on it).
     std::uint64_t Revision() const;
 
     const std::vector<BodyInfo>& Bodies() const;
+    /// The body nearest `point` (a point picked on one of its faces); none
+    /// when there are no bodies.
+    ObjectId BodyNearest(Vec3 point) const;
     std::optional<Bounds>        BoundingBox() const;
 
     /// Regions of a sketch feature, or nullptr when it has none yet.
@@ -87,18 +127,31 @@ public:
     /// Every pair of bodies that share material (touching does not count).
     /// Computed on demand and kept until the geometry changes.
     const std::vector<Interference>& Interferences() const;
+
+    /// The operation (before feature number `beforeIndex`) whose added or
+    /// cut material has its surface at `point`: what a click on the model
+    /// picked, for choosing what a pattern or mirror copies. Latest first.
+    ObjectId FeatureAt(Vec3 point, const doc::Document& doc, std::size_t beforeIndex) const;
     /// A model edge as it would appear on `plane`, taken from the bodies as
     /// they were before feature number `featureIndex` (a sketch projecting it).
     Expected<ProjectedCurve> ProjectEdge(const doc::EdgeReference& edge, const Frame& plane, std::size_t featureIndex) const;
+    /// The body of revolution with the face `face` (of the body before
+    /// feature `featureIndex`) on `plane`: axis, outline and cut by the plane.
+    Expected<RevolvedProjection> ProjectRevolved(const doc::FaceReference& face, const Frame& plane, std::size_t featureIndex) const;
 
     /// Volume, area, centre and exact size of all bodies; nullopt without bodies.
     std::optional<MassProperties> Properties() const;
 
     struct Impl;
     const Impl& GetImpl() const { return *myImpl; }
+    /// For kernel code that fills a model itself (AssemblyModel).
+    Impl& EditImpl() { return *myImpl; }
 
 private:
     std::unique_ptr<Impl> myImpl;
 };
+
+/// "OpenCASCADE 7.9.3": the geometry kernel the program was built with (for reports).
+std::string GeometryKernelVersion();
 
 } // namespace bz::kernel

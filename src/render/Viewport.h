@@ -7,12 +7,16 @@
 #include "core/Id.h"
 #include "core/Math.h"
 #include "core/NativeSurface.h"
+#include "core/Image.h"
 #include "core/ViewProjection.h"
 #include "document/EdgeReference.h"
+#include "document/Appearance.h"
 #include "document/FaceReference.h"
 #include "kernel/Measure.h"
 
 #include <array>
+#include <cstdint>
+#include <span>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -41,6 +45,7 @@ struct ViewportColors {
     Color hover            = Color::Hex(0x38A9E8);
     Color selection        = Color::Hex(0x1D4ED8);
     Color interference     = Color::Hex(0xE5484D);
+    bool  radialBackground = false;   ///< backgroundTop in the middle, backgroundBottom at the edges
 };
 
 /// A translucent square drawn in the scene, hidden where the body is in
@@ -62,6 +67,15 @@ struct PickResult {
     Vec3                 point;
     ObjectId             body;
     std::optional<Frame> plane;   ///< set when the picked face is planar
+    std::optional<doc::FaceReference> face;   ///< the face clicked (curved too), found again by its point
+};
+
+/// A face of a shown body chosen by the user in the view (Viewport::SetSelectedFaces).
+struct SelectedFace {
+    ObjectId           body;
+    doc::FaceReference face;   ///< any face, found again by its point (FaceReference::curved)
+
+    bool operator==(const SelectedFace&) const = default;
 };
 
 class Viewport {
@@ -79,11 +93,32 @@ public:
 
     /// Re-creates displayed bodies if the model (or which model) changed.
     void Sync(const kernel::Model& model);
+    /// Meshes the model's bodies as Sync would at this quality level. Safe
+    /// on another thread for a model no viewport shows yet: Sync then finds
+    /// the triangles ready.
+    static void PrepareMeshes(const kernel::Model& model, int quality);
     /// Pre-highlights the face under the cursor (nullopt: nothing).
     void Hover(std::optional<Vec2> pixel);
     void SetColors(const ViewportColors& colors);
+    /// A static picture behind the model (stretched to the view); 0x0 removes it.
+    void SetBackgroundPicture(int width, int height, std::span<const std::uint8_t> rgba);
     void SetDisplayStyle(DisplayStyle style);
+    /// Graphics quality: 0 high (smooth edges, fine round faces), 1
+    /// balanced, 2 for weak computers (no smoothing, coarse round faces).
+    void SetQuality(int level);
     void SetHoveredBody(ObjectId body);
+    /// Bodies not drawn (and not picked): those of operations the user hid.
+    /// The model keeps them; only the view leaves them out.
+    void SetHiddenBodies(std::vector<ObjectId> bodies);
+    /// Both references point at the same face of the shown body `body`.
+    bool SameFace(ObjectId body, const doc::FaceReference& a, const doc::FaceReference& b) const;
+    /// Pictures on faces: the largest side a picture may keep on the graphics
+    /// card, in pixels (a bigger one is made smaller first); 0 = as it is.
+    /// The weaker the computer, the smaller: less memory, coarser texture.
+    void SetTextureLimit(int maxSide);
+    /// Colours of bodies and faces of the document `owner` (any pointer that
+    /// tells documents apart); applied when it or `revision` changes.
+    void SetLook(const doc::Look& look, const void* owner, std::uint64_t revision);
 
     /// Renders into the texture. Cheap when nothing changed.
     void Render();
@@ -96,17 +131,26 @@ public:
     ViewProjection Projection() const;
     CameraState    Camera() const;
     void           SetCamera(const CameraState& camera);
+    /// The model drawn with `camera` into a width x height picture, off
+    /// screen (the window's view is not touched). nullopt when the graphics
+    /// cannot (no OpenGL context yet).
+    std::optional<Image> Snapshot(const CameraState& camera, int width, int height);
 
-    /// Turntable orbit: `yaw` around world Z, `pitch` around the screen's
-    /// horizontal axis, both in radians, about `pivot`.
-    void Orbit(double yaw, double pitch, Vec3 pivot);
+    /// Orbit about `pivot`, angles in radians: `pitch` around the screen's
+    /// horizontal axis; `yaw` around the screen's vertical axis (free, as in
+    /// Inventor and KOMPAS) or, with `turntable`, around world Z.
+    void Orbit(double yaw, double pitch, Vec3 pivot, bool turntable = false);
+    /// Turns the view in the screen's plane about `pivot` (radians; the
+    /// model turns counter-clockwise for a positive angle).
+    void Roll(double angle, Vec3 pivot);
     void Pan(double dxPixels, double dyPixels);
     /// Zooms by `factor` (>1 closer) keeping the point under the cursor still.
     void ZoomAt(double factor, Vec2 pixel);
 
     /// Camera looking along `direction` with `up`, fitted to the model and
     /// to `extra` (things the UI draws itself, e.g. the sketch being edited).
-    CameraState FitCamera(Vec3 direction, Vec3 up, const Box3& extra = {}, double margin = 1.15) const;
+    /// `aspect` — width/height of the picture the camera is for; 0: the window's.
+    CameraState FitCamera(Vec3 direction, Vec3 up, const Box3& extra = {}, double margin = 1.15, double aspect = 0) const;
     /// Centre of the model's bounding box (origin when empty).
     Vec3 ModelCenter() const;
     /// Bounding box of the shown model (empty when there are no bodies).
@@ -119,9 +163,23 @@ public:
 
     std::optional<PickResult> Pick(Vec2 pixel);
 
+    // --- faces chosen by the user ---------------------------------------------
+    /// Faces drawn in the selection colour on the shown bodies (a face that
+    /// is no longer there is skipped). Cheap when unchanged.
+    void SetSelectedFaces(const std::vector<SelectedFace>& faces);
+    /// Faces of the shown bodies inside a screen rectangle (corners in any
+    /// order, logical pixels): wholly inside it, or with `crossing` every
+    /// face it touches, as Inventor's window and crossing selection.
+    std::vector<SelectedFace> FacesInRect(Vec2 a, Vec2 b, bool crossing);
+
     /// Shows where the bodies of `model` overlap (Model::Interferences),
     /// over everything else; nullptr hides it. Cheap when unchanged.
     void ShowInterferences(const kernel::Model* model);
+
+    /// Outlines of a pattern's or mirror's sources (selection colour) and
+    /// copies (hover colour) over the model while its panel is open;
+    /// nullptr hides them. Cheap when unchanged.
+    void ShowCopyPreview(const kernel::Model* model, ObjectId feature);
 
     // --- measuring ---------------------------------------------------------
     /// While on, vertices, edges and faces of the shown bodies are hovered
@@ -153,6 +211,10 @@ public:
     /// every frame.
     void BeginPickingOriginal(const kernel::Model& model, std::size_t featureIndex, PickTarget target);
     void EndPickingOriginal();
+    /// Once a frame, before the editors draw: ends the picking nobody asked
+    /// for since the last call. (Ending it whenever an editor does not say
+    /// it picks would rebuild the targets every frame for one that does.)
+    void ExpirePickingOriginal();
     /// Edge under the cursor (PickTarget::Edges), described for storing.
     std::optional<doc::EdgeReference> PickEdge(Vec2 pixel);
     /// Every edge of the face under the cursor (PickTarget::EdgesAndFaces,
@@ -165,10 +227,19 @@ public:
         double radius = 0;
     };
     std::optional<CylinderPick> PickCylinder(Vec2 pixel);
-    /// Vertex under the cursor (PickTarget::Vertices), model space.
-    std::optional<Vec3> PickVertex(Vec2 pixel);
+    /// Vertex under the cursor (PickTarget::Vertices), model space, with an
+    /// edge ending there (to find the vertex again after a rebuild).
+    struct VertexPick {
+        Vec3                              point;
+        std::optional<doc::EdgeReference> edge;
+    };
+    std::optional<VertexPick> PickVertex(Vec2 pixel);
     /// Flat face under the cursor (PickTarget::Faces); nullopt for a curved one.
-    std::optional<doc::FaceReference> PickFace(Vec2 pixel);
+    /// The flat face under `pixel` (or, with `curvedToo`, any face: a curved
+    /// one comes as FaceReference::curved).
+    std::optional<doc::FaceReference> PickFace(Vec2 pixel, bool curvedToo = false);
+    /// Some part of the body being picked on (BeginPickingOriginal) is under `pixel`.
+    bool OriginalUnder(Vec2 pixel);
     /// True when both references point at the same face of the original
     /// body (a second click on a face drops it).
     bool SameOriginalFace(const doc::FaceReference& a, const doc::FaceReference& b) const;

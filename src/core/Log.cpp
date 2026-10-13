@@ -1,5 +1,7 @@
 #include "core/Log.h"
 
+#include "core/Monitor.h"
+
 #include <chrono>
 #include <cstdio>
 #include <fstream>
@@ -55,12 +57,14 @@ void Write(Level level, std::string_view message) {
     const std::string line = std::format("{:%H:%M:%S} {} {}\n", time, Tag(level), message);
 
     Sink& sink = GetSink();
-    std::lock_guard lock(sink.mutex);
+    std::unique_lock lock(sink.mutex);
     std::fputs(line.c_str(), stderr);
     if (sink.file.is_open()) {
         sink.file << line;
         sink.file.flush();   // keep the tail on disk if the process dies
     }
+    lock.unlock();
+    if (level >= Level::Warning) mon::LogLine(level == Level::Error, message);
 }
 
 } // namespace bz::log

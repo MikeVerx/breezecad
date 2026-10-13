@@ -1,6 +1,7 @@
 #include "document/BzcFile.h"
 
 #include "core/PathText.h"
+#include "document/DocumentTypes.h"
 #include "document/FeatureRegistry.h"
 #include "document/JsonIO.h"
 #include "document/UnknownFeature.h"
@@ -11,6 +12,7 @@
 
 #include <chrono>
 #include <format>
+#include <map>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -29,11 +31,11 @@ std::string NowIso() {
     return std::format("{:%Y-%m-%dT%H:%M:%SZ}", now);
 }
 
-Json Manifest(std::string_view generator) {
+Json Manifest(std::string_view documentType, std::string_view generator) {
     return Json{
         {"format", "bzc"},
         {"formatVersion", kBzcFormatVersion},
-        {"documentType", "part"},
+        {"documentType", documentType},
         {"generator", generator},
         {"modified", NowIso()},
         {"internalUnits", {{"length", "mm"}, {"angle", "rad"}}},
@@ -69,11 +71,12 @@ std::string DocumentToJson(const Document& doc) {
     for (const auto& f : doc.Features()) {
         Json j{{"id", f->id.value}, {"type", f->Type()}, {"name", f->name}};
         if (f->suppressed) j["suppressed"] = true;
+        if (f->hidden) j["hidden"] = true;   // absent in older files: shown
         // A feature's own fields must not reuse the common keys (a hole once
         // wrote its kind as "type" and could not be opened again).
         Json fields = Json::object();
         f->SaveFields(fields);
-        for (const char* reserved : {"id", "type", "name", "suppressed"})
+        for (const char* reserved : {"id", "type", "name", "suppressed", "hidden"})
             assert(!fields.contains(reserved) && "SaveFields wrote a reserved key");
         j.update(fields);
         features.push_back(std::move(j));
@@ -87,10 +90,13 @@ std::string DocumentToJson(const Document& doc) {
         {"features", std::move(features)},
     };
     if (doc.EndMarker() < doc.FeatureCount()) root["endMarker"] = doc.EndMarker();
+    if (!doc.look.Empty()) root["look"] = ToJson(doc.look);
     return root.dump(1, '\t');
 }
 
-Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
+namespace {
+
+Expected<Document> DocumentFromJsonUnguarded(std::string_view text, LoadReport* report) {
     const Json root = Json::parse(text, nullptr, false);
     if (root.is_discarded() || !root.is_object()) return Error{"Содержимое документа повреждено (не JSON)"};
 
@@ -122,7 +128,7 @@ Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
             feature = std::move(unknown);
         }
         if (!ReadMember(j, "id", feature->id) || !feature->id || !ReadMember(j, "name", feature->name) ||
-            !ReadMember(j, "suppressed", feature->suppressed))
+            !ReadMember(j, "suppressed", feature->suppressed) || !ReadMember(j, "hidden", feature->hidden))
             return Error{"Повреждена операция в дереве"};
         if (Status s = feature->LoadFields(j); !s) return s.GetError();
         doc.Insert(std::move(feature), doc.FeatureCount());
@@ -135,20 +141,37 @@ Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
     if (const auto marker = root.find("endMarker"); marker != root.end() && marker->is_number_unsigned())
         doc.SetEndMarker(marker->get<std::size_t>());
 
+    if (const auto look = root.find("look"); look != root.end()) doc.look = LookFromJson(*look);
+
     doc.ClearDirty();
     doc.MarkChanged(0);   // everything needs a first rebuild
     return doc;
 }
 
-Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::string_view generator) {
-    const std::string manifest = Manifest(generator).dump(1, '\t');
-    const std::string document = DocumentToJson(doc);
+} // namespace
+
+// nlohmann::json throws type_error when a field exists but has another type ("name": 5);
+// a damaged or hand-edited file must come back as an error, not as std::terminate.
+Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
+    try {
+        return DocumentFromJsonUnguarded(text, report);
+    } catch (const Json::exception& e) {
+        return Error{std::format("Содержимое документа повреждено: {}", e.what())};
+    }
+}
+
+Status WriteBzcArchive(const std::filesystem::path& path, std::string_view documentType, std::string_view generator,
+                       const std::string& document, const std::map<std::string, std::vector<std::uint8_t>>& pictures) {
+    const std::string manifest = Manifest(documentType, generator).dump(1, '\t');
 
     mz_zip_archive zip{};
     if (!mz_zip_writer_init_heap(&zip, 0, 64 * 1024)) return Error{"Не удалось подготовить архив"};
-    const bool added =
+    bool added =
         mz_zip_writer_add_mem(&zip, kManifestName, manifest.data(), manifest.size(), MZ_BEST_COMPRESSION) &&
         mz_zip_writer_add_mem(&zip, kDocumentName, document.data(), document.size(), MZ_BEST_COMPRESSION);
+    // Pictures of the appearances (already compressed formats: stored as they are).
+    for (const auto& [name, data] : pictures)
+        added = added && mz_zip_writer_add_mem(&zip, ("pictures/" + name).c_str(), data.data(), data.size(), MZ_NO_COMPRESSION);
     void* buffer = nullptr;
     std::size_t size = 0;
     const bool finalized = added && mz_zip_writer_finalize_heap_archive(&zip, &buffer, &size);
@@ -160,7 +183,12 @@ Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::stri
     temp += ".saving";
     {
         std::ofstream out(temp, std::ios::binary | std::ios::trunc);
-        if (!out) return Error{std::format("Нет доступа к папке: {}", ToUtf8(path.parent_path()))};
+        if (!out) {
+            std::error_code missing;
+            const bool exists = path.parent_path().empty() || std::filesystem::is_directory(path.parent_path(), missing);
+            const std::string folder = ToUtf8(path.parent_path());
+            return Error{exists ? std::format("Нет доступа к папке: {}", folder) : std::format("Папки нет: {}", folder)};
+        }
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
         out.flush();
         if (!out) return Error{"Не удалось записать файл (диск заполнен?)"};
@@ -174,7 +202,7 @@ Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::stri
     return Status::Ok();
 }
 
-Expected<Document> LoadBzc(const std::filesystem::path& path, LoadReport* report) {
+Expected<BzcArchive> ReadBzcArchive(const std::filesystem::path& path) {
     Expected<std::string> bytes = ReadWholeFile(path);
     if (!bytes) return bytes.GetError();
 
@@ -184,18 +212,62 @@ Expected<Document> LoadBzc(const std::filesystem::path& path, LoadReport* report
 
     Expected<std::string> manifestText = ExtractEntry(zip, kManifestName);
     Expected<std::string> documentText = ExtractEntry(zip, kDocumentName);
+    BzcArchive archive;
+    for (mz_uint i = 0; i < mz_zip_reader_get_num_files(&zip); ++i) {
+        char name[512];
+        mz_zip_reader_get_filename(&zip, i, name, sizeof(name));
+        const std::string entry = name;
+        if (!entry.starts_with("pictures/") || entry.size() <= 9) continue;
+        std::size_t size = 0;
+        void* data = mz_zip_reader_extract_to_heap(&zip, i, &size, 0);
+        if (!data) continue;
+        const auto* bytesOf = static_cast<const std::uint8_t*>(data);
+        archive.pictures[entry.substr(9)] = std::vector<std::uint8_t>(bytesOf, bytesOf + size);
+        mz_free(data);
+    }
     mz_zip_reader_end(&zip);
     if (!manifestText) return manifestText.GetError();
     if (!documentText) return documentText.GetError();
 
     const Json manifest = Json::parse(*manifestText, nullptr, false);
-    if (manifest.is_discarded() || manifest.value("format", "") != "bzc")
+    try {
+        if (!manifest.is_object() || manifest.value("format", "") != "bzc")
+            return Error{"Файл не является документом BreezeCAD (.bzc)"};
+        archive.formatVersion = manifest.value("formatVersion", 0);
+        archive.documentType  = manifest.value("documentType", std::string(kPartType));
+    } catch (const Json::exception&) {   // a field of the wrong type
         return Error{"Файл не является документом BreezeCAD (.bzc)"};
-    const int version = manifest.value("formatVersion", 0);
-    if (version > kBzcFormatVersion && report)
+    }
+    archive.documentJson  = std::move(*documentText);
+    return archive;
+}
+
+Expected<std::string> ReadDocumentType(const std::filesystem::path& path) {
+    Expected<BzcArchive> archive = ReadBzcArchive(path);
+    if (!archive) return archive.GetError();
+    return archive->documentType;
+}
+
+Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::string_view generator) {
+    return WriteBzcArchive(path, kPartType, generator, DocumentToJson(doc), doc.look.pictures);
+}
+
+Expected<Document> LoadBzc(const std::filesystem::path& path, LoadReport* report) {
+    Expected<BzcArchive> archive = ReadBzcArchive(path);
+    if (!archive) return archive.GetError();
+    if (archive->documentType != kPartType) {
+        const DocumentTypeInfo* type = DocumentTypeRegistry::Default().Find(archive->documentType);
+        return Error{std::format("Это не деталь, а документ «{}»", type ? type->title : archive->documentType)};
+    }
+    if (archive->formatVersion > kBzcFormatVersion && report)
         report->warnings.push_back("Файл создан более новой версией BreezeCAD. Новые возможности могут не открыться.");
 
-    return DocumentFromJson(*documentText, report);
+    Expected<Document> doc = DocumentFromJson(archive->documentJson, report);
+    if (doc) {
+        doc->look.pictures = std::move(archive->pictures);
+        doc->look.Prune();   // pictures nothing refers to
+    }
+    return doc;
 }
 
 } // namespace bz::doc

@@ -1,10 +1,20 @@
 #include "app/Application.h"
+#include "app/BetaTesting.h"
 
 #include "app/Language.h"
+#include "core/Monitor.h"
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
+#include "app/shell/Splash.h"
+#include "app/Backgrounds.h"
+#include "modules/ModuleHost.h"
+#include "modules/ModuleManager.h"
+#include "app/scripting/Scripting.h"
+#include "core/Image.h"
 #include "app/viewport/ViewportPanel.h"
 #include "core/Log.h"
+#include "core/Version.h"
+#include "core/Profile.h"
 #include "core/PathText.h"
 #include "kernel/TextGeometry.h"
 #include "platform/Paths.h"
@@ -18,6 +28,7 @@
 #include <lunasvg.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 
 // Defined (non-static) in imgui_impl_glfw.cpp but not declared in its header.
@@ -63,6 +74,9 @@ void OnKey(GLFWwindow* window, int key, int scancode, int action, int mods) {
 Application::Application() = default;
 
 Application::~Application() {
+    platform::StopTouchpad();   // before ImGui puts its window procedure back (Windows)
+    myModules.reset();   // modules shut down while everything they may touch is still there
+    modules::SetCommandHandler({});
     if (myUi) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
@@ -74,17 +88,32 @@ Application::~Application() {
 
 bool Application::Init(const std::vector<std::filesystem::path>& files) {
     const std::filesystem::path config = platform::ConfigDir();
-    log::OpenFile(config / "logs" / "breezecad.log");
-    log::Info("BreezeCAD 0.2.0 starting");
+    // The testers' build logs into its session folder (packed into reports).
+    log::OpenFile(beta::SessionDir().empty() ? config / "logs" / "breezecad.log" : beta::SessionDir() / "output.log");
+    log::Info("BreezeCAD {} starting", VersionLine());
 
     // A lock file left from the last run means it did not exit normally.
     myShell.crashedLastTime = std::filesystem::exists(config / "running.lock");
     std::ofstream(config / "running.lock") << "running";
 
     mySettings = Settings::Load(config / "settings.json");
+    if (!mySettings.loadProblem.empty()) myNotes.Error(Tr(mySettings.loadProblem));
     if (const std::string problem = ApplyLanguage(mySettings); !problem.empty())
         myNotes.Error(Tr(problem));
+    // The splash while the rest starts; the main window appears when ready.
+    const std::filesystem::path assets = platform::AssetsDir();
+    Splash splash;
+    const bool dark = mySettings.theme == ThemeChoice::Dark ||
+                      (mySettings.theme == ThemeChoice::System && platform::SystemPrefersDark());
+    // After a run that did not end normally, no splash: should the splash
+    // itself be what failed, the next start still works.
+    const bool splashShown = !myShell.crashedLastTime && splash.Open(assets, dark);
+    const int steps = 4 + static_cast<int>(files.size());
+    int step = 0;
+    const auto progress = [&](const std::string& status) { splash.Step(status, static_cast<float>(++step) / static_cast<float>(steps)); };
+
     platform::WindowConfig windowConfig;
+    windowConfig.visible = !splashShown;
     if (mySettings.windowW > 0 && mySettings.windowH > 0) {
         windowConfig.width = mySettings.windowW;
         windowConfig.height = mySettings.windowH;
@@ -92,7 +121,9 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
         windowConfig.y = mySettings.windowY;
     }
     windowConfig.maximized = mySettings.windowMaximized;
+    progress(Tr("Создание окна…"));
     if (!myWindow.Create(windowConfig)) return false;
+    beta::WriteSystemInfo(myWindow, mySettings.language.empty() ? std::string("system") : mySettings.language);
 
     glfwSetWindowUserPointer(myWindow.Handle(), &myInput);
     glfwSetCursorPosCallback(myWindow.Handle(), [](GLFWwindow* w, double, double) { OnAnyInput(w); });
@@ -103,8 +134,16 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     glfwSetWindowSizeCallback(myWindow.Handle(), [](GLFWwindow* w, int, int) { OnAnyInput(w); });
     glfwSetWindowFocusCallback(myWindow.Handle(), [](GLFWwindow* w, int) { OnAnyInput(w); });
     glfwSetWindowRefreshCallback(myWindow.Handle(), [](GLFWwindow* w) { OnAnyInput(w); });
+    glfwSetDropCallback(myWindow.Handle(), [](GLFWwindow* w, int count, const char** paths) {   // UTF-8 paths
+        auto* tap = TapOf(w);
+        if (!tap) return;
+        for (int i = 0; i < count; ++i) {
+            const std::string_view p(paths[i]);
+            tap->dropped.emplace_back(std::u8string(p.begin(), p.end()));
+        }
+        tap->seen = true;
+    });
 
-    const std::filesystem::path assets = platform::AssetsDir();
     kernel::SetTextFont(assets / "fonts" / "IBMPlexSans-Medium.ttf", assets / "fonts" / "IBMPlexSans-SemiBold.ttf");   // sketch text
     log::Info("Assets: {}", ToUtf8(assets));
 
@@ -122,6 +161,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     io.ConfigWindowsMoveFromTitleBarOnly = true;
     ImGui_ImplGlfw_InitForOpenGL(myWindow.Handle(), true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
+    platform::StartTouchpad(myWindow.Handle());   // after ImGui: it hooks the window too (Windows)
 
     // HiDPI: on macOS the framebuffer is 2x the window; elsewhere the UI scales.
     int winW = 1, fbW = 1, h = 1;
@@ -132,11 +172,13 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myAssets = assets;
     myScale = ChooseScale();
     myAppliedScaleSetting = mySettings.uiScale;
+    progress(Tr("Шрифты и значки…"));
     myFonts.Load(assets, myScale * framebufferScale);
     io.FontGlobalScale = 1.0f / framebufferScale;
     myIcons.SetDirectory(assets / "icons");
     myIcons.SetScale(framebufferScale);
 
+    progress(Tr("Загрузка ядра геометрии…"));
     if (!myViewport.Init(myWindow.NativeSurface())) return false;
 
     myUi = std::make_unique<ui::Ui>(ui::Ui{myTheme, myFonts, myIcons, myScale});
@@ -146,46 +188,86 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myShell.recoverable = myAutosave->FindRecoverable();
 
     myContext = std::make_unique<AppContext>(AppContext{*myUi, mySettings, myWorkspace, myActions, myNotes, *myAutosave,
-                                                        myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}});
+                                                        myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}, {}});
     RegisterActions(*myContext);
+    StartModules();
     for (const auto& [id, chord] : mySettings.shortcuts) myActions.SetChord(id, ActionRegistry::ParseChord(chord));
 
-    for (const auto& file : files) myWorkspace.Open(file, myNotes, mySettings);
+    for (const auto& file : files) {
+        progress(Trf("Открытие {}…", ToUtf8(file.filename())));
+        myWorkspace.Open(file, myNotes, mySettings);
+    }
     // Nothing asked for: the last file, if the user wants it (and it is still there).
     if (files.empty() && mySettings.reopenLast && !mySettings.recentFiles.empty()) {
         std::error_code ec;
         const std::filesystem::path last = mySettings.recentFiles.front();
         if (std::filesystem::exists(last, ec)) myWorkspace.Open(last, myNotes, mySettings);
     }
+    progress(Tr("Готово"));
+    splash.Close();
+    myWindow.Show();
+    // The testers' build: a crash last time — ask what happened (newest first).
+    if (const std::vector<beta::PastSession> crashes = beta::UnreportedCrashes(); !crashes.empty()) {
+        for (std::size_t i = 1; i < crashes.size(); ++i) beta::Dismiss(crashes[i].dir);   // only the last one is asked about
+        myShell.betaReport = {true, true, crashes.front().dir, crashes.front().started, {}, {}};
+    }
     if (myShell.crashedLastTime && !myShell.recoverable.empty())
         myNotes.Info(Tr("Прошлый сеанс завершился неожиданно. Несохранённую работу можно восстановить на главной странице."));
+    // Test hook (screenshots of the settings in CI): BZ_SETTINGS_TAB=<tab>.
+    if (const char* tab = std::getenv("BZ_SETTINGS_TAB")) {
+        myShell.showSettings = true;
+        myShell.settingsTab = std::clamp(std::atoi(tab), 0, 6);
+    }
     return true;
 }
 
 void Application::ApplyTheme(bool force) {
     const bool dark = mySettings.theme == ThemeChoice::Dark ||
                       (mySettings.theme == ThemeChoice::System && platform::SystemPrefersDark());
-    if (!force && dark == myDarkApplied && mySettings.viewBackground == myBackgroundApplied) return;
+    const std::string background = mySettings.background + "|" + mySettings.backgroundPicture;
+    if (!force && dark == myDarkApplied && background == myBackgroundApplied) return;
     myDarkApplied = dark;
-    myBackgroundApplied = mySettings.viewBackground;
+    const bool pictureChanged = background != myBackgroundApplied;
+    myBackgroundApplied = background;
     myTheme = dark ? ui::Theme::Dark() : ui::Theme::Light();
     ui::ApplyToImGui(myTheme, myScale);
     const ui::ThemeColors& c = myTheme.colors;
-    // The view background: the theme's gradient, or one of its two ends.
-    const Color top = mySettings.viewBackground == 2 ? c.viewportBottom : c.viewportTop;
-    const Color bottom = mySettings.viewBackground == 1 ? c.viewportTop : c.viewportBottom;
-    myViewport.SetColors({top, bottom, c.body, c.bodyEdges, c.hoverHighlight, c.selection, c.danger});
+    // The view background: a preset (under a picture, if there is one).
+    const BackgroundColours bg = ColoursOf(FindBackground(mySettings.background), c);
+    Color top = bg.top, bottom = bg.bottom;
+    // Test hook: a flat background of a given colour (renders keyed out
+    // against black and white for the splash picture, scripts/splash).
+    if (const char* bg = std::getenv("BZ_VIEW_BG")) top = bottom = Color::Hex(static_cast<std::uint32_t>(std::strtoul(bg, nullptr, 16)));
+    myViewport.SetColors({top, bottom, c.body, c.bodyEdges, c.hoverHighlight, c.selection, c.danger, bg.radial});
+    if (pictureChanged) {
+        if (mySettings.background == kPictureBackground && !mySettings.backgroundPicture.empty()) {
+            if (const auto image = ReadImageFile(PathFromUtf8(mySettings.backgroundPicture))) {
+                myViewport.SetBackgroundPicture(image->width, image->height, image->rgba);
+            } else {
+                myNotes.Error(Tr(image.GetError().message));
+                myViewport.SetBackgroundPicture(0, 0, {});
+            }
+        } else {
+            myViewport.SetBackgroundPicture(0, 0, {});
+        }
+    }
     myFramesToDraw = 3;
 }
 
 int Application::Run() {
     while (true) {
+        mon::Beat();
         if (NeedsAnotherFrame()) {
             platform::Window::PollEvents();
         } else {
-            platform::Window::WaitEvents(1.0);   // wakes up for autosave and theme checks
+            // Wakes up for autosave and theme checks; often enough to show
+            // a rebuild running on another thread.
+            platform::Window::WaitEvents(WaitsForBackground() ? 1.0 / 30.0 : 1.0);
         }
         const double now = glfwGetTime();
+        platform::SetSmoothScrollIsTouchpad(mySettings.touch.smoothIsTouchpad);
+        myContext->touch = platform::TakeTouchEvents();
+        if (!myContext->touch.empty()) myInput.seen = true;
         if (myInput.seen) {
             myInput.seen = false;
             myFramesToDraw = std::max(myFramesToDraw, 3);
@@ -199,10 +281,16 @@ int Application::Run() {
             myFramesToDraw = std::max(myFramesToDraw, 3);
         }
         PollShotRequest();
+        if (!myInput.dropped.empty()) {   // a module package or documents dragged in
+            const std::vector<std::filesystem::path> files = std::move(myInput.dropped);
+            myInput.dropped.clear();
+            for (const std::filesystem::path& f : files) OpenDropped(*myContext, f);
+        }
+        if (myModules && myModules->Tick()) myFramesToDraw = std::max(myFramesToDraw, 3);   // show what they changed
         HandleCloseRequests();
         if (myShell.quitRequested && myWorkspace.sessions.empty()) break;
 
-        if (mySettings.viewBackground != myBackgroundApplied) ApplyTheme(true);   // chosen in the settings: at once
+        if (mySettings.background + "|" + mySettings.backgroundPicture != myBackgroundApplied) ApplyTheme(true);   // chosen: at once
         if (now - mySystemThemeCheck > 2.0) {
             mySystemThemeCheck = now;
             ApplyTheme(false);
@@ -210,7 +298,7 @@ int Application::Run() {
         for (auto& s : myWorkspace.sessions)
             if (myAutosave->Update(*s, mySettings, now, now - myShell.lastInputTime)) myFramesToDraw = std::max(myFramesToDraw, 1);
 
-        if (myFramesToDraw > 0 || NeedsAnotherFrame()) {
+        if (myFramesToDraw > 0 || NeedsAnotherFrame() || WaitsForBackground()) {
             Frame();
             if (myFramesToDraw > 0) --myFramesToDraw;
         }
@@ -222,13 +310,45 @@ int Application::Run() {
     return 0;
 }
 
+/// Modules from the folder next to the program (shipped) and from the user's
+/// config folder (installed by the user); see src/modules/ModuleManager.h.
+void Application::StartModules() {
+    const std::filesystem::path config = platform::ConfigDir();
+    myModules = std::make_unique<modules::ModuleManager>(config / "modules.json", modules::HostApi());
+    // Modules' own threads wake the loop up; their commands run here, between frames.
+    modules::SetWakeHandler(&platform::Window::PostEmptyEvent);
+    const std::u8string generic = config.generic_u8string();
+    modules::SetConfigDir(std::string(generic.begin(), generic.end()));
+    modules::SetCommandHandler([this](std::string_view request) { return scripting::Run(*myContext, request); });
+    modules::HostInfo host = modules::HostInfo::Detect();
+    host.openGL            = myWindow.OpenGLVersion();
+    myModules->Discover(platform::AssetsDir().parent_path() / "modules", host);
+    myModules->SetInstallDir(config / "modules");
+    myModules->Discover(config / "modules", host);
+    myModules->LoadAll();
+    myContext->modules = myModules.get();
+    if (const std::string& id = myModules->CrashedLastRun(); !id.empty()) {
+        const modules::ModuleEntry* m = myModules->Find(id);
+        myNotes.Error(Trf("Модуль «{}» аварийно закрыл BreezeCAD в прошлый раз и отключён. Включить снова: Настройки → Модули.",
+                          m ? m->manifest.name : id));
+    }
+}
+
 bool Application::NeedsAnotherFrame() const {
     if (myBusy || myViewport.NeedsRender() || !myDeferred.empty()) return true;
+    for (const auto& s : myWorkspace.sessions)
+        if (s->Rebuilding() && !s->RebuildingInBackground()) return true;   // the next slice of a rebuild
     if (myScreenshotFrame >= 0) return true;
     const ImGuiIO& io = ImGui::GetIO();
     for (bool down : io.MouseDown)
         if (down) return true;
     return false;
+}
+
+bool Application::WaitsForBackground() const {
+    // Only the document on screen: another one takes its result when shown.
+    const int i = myWorkspace.ActiveIndex();
+    return i >= 0 && i < static_cast<int>(myWorkspace.sessions.size()) && myWorkspace.sessions[static_cast<std::size_t>(i)]->RebuildingInBackground();
 }
 
 void Application::HandleCloseRequests() {
@@ -248,9 +368,11 @@ void Application::HandleCloseRequests() {
 }
 
 void Application::UpdateTitle() {
-    std::string title = "BreezeCAD";
+    // The testers' build says so in the title (and in screenshots of it).
+    const std::string program = beta::Enabled() ? std::string("BreezeCAD ") + Version() + " \xE2\x80\x94 " + Tr("для бета-тестеров") : "BreezeCAD";
+    std::string title = program;
     if (Session* s = myWorkspace.Active(); s && !myWorkspace.ShowsHome())
-        title = s->Title() + (s->IsModified() ? " \xE2\x80\xA2" : "") + " \xE2\x80\x94 BreezeCAD";
+        title = s->Title() + (s->IsModified() ? " \xE2\x80\xA2" : "") + " \xE2\x80\x94 " + program;
     if (title != myTitle) {
         myTitle = title;
         myWindow.SetTitle(title);
@@ -269,10 +391,23 @@ float Application::ChooseScale() const {
 }
 
 void Application::ApplyScaleIfChanged() {
-    if (mySettings.uiScale == myAppliedScaleSetting) return;
+    // The window moved to a screen of another density (a Retina laptop and an
+    // external monitor on macOS): text and icons are rasterised for its pixels.
+    int winW = 0, fbW = 0, h = 0;
+    glfwGetWindowSize(myWindow.Handle(), &winW, &h);
+    glfwGetFramebufferSize(myWindow.Handle(), &fbW, &h);
+    const float density = winW > 0 && fbW > 0 ? static_cast<float>(fbW) / static_cast<float>(winW) : myFramebufferScale;
+    const bool densityChanged = std::abs(density - myFramebufferScale) > 0.01f;
+    if (mySettings.uiScale == myAppliedScaleSetting && !densityChanged) return;
     myAppliedScaleSetting = mySettings.uiScale;
+    if (densityChanged) {
+        log::Info("Screen density {:.2f} -> {:.2f}: text and icons again", myFramebufferScale, density);
+        myFramebufferScale = density;
+        ImGui::GetIO().FontGlobalScale = 1.0f / density;
+        myIcons.SetScale(density);
+    }
     const float scale = ChooseScale();
-    if (std::abs(scale - myScale) < 1e-3f) return;
+    if (!densityChanged && std::abs(scale - myScale) < 1e-3f) return;
     // Fonts are rasterised for one size: build them again, then the texture.
     myScale = scale;
     myFonts.Load(myAssets, myScale * myFramebufferScale);
@@ -297,7 +432,11 @@ void Application::Frame() {
     AppContext& app = *myContext;
     app.now = now;
     myStats.fps = myFps;
-    if (myFrameIndex % 30 == 0) myStats.memoryMb = platform::ResidentMemoryMb();
+    if (now - myMemoryReadAt >= 1.0) {   // a system call: once a second is enough
+        myStats.memoryMb = platform::ResidentMemoryMb();
+        mon::Memory(myStats.memoryMb);
+        myMemoryReadAt = now;
+    }
     myStats.hoverMs = app.stats.hoverMs;
     app.stats = myStats;
 
@@ -305,13 +444,44 @@ void Application::Frame() {
     if (myShell.captureShortcut.empty()) myActions.HandleShortcuts(myInput.chords);
     myInput.chords.clear();
     if (Session* s = myWorkspace.Active()) {
-        if (s->RebuildIfNeeded()) {
+        // Editing a sketch or an operation waits only for the part up to it;
+        // what comes after is rebuilt once editing ends.
+        if (s->mode == EditMode::Sketch && s->doc.IndexOf(s->activeSketch) >= 0) {
+            s->LimitRebuild(static_cast<std::size_t>(s->doc.IndexOf(s->activeSketch)), false);
+        } else if (const OperationEditor* op = myOps.Active(); op && s->doc.IndexOf(op->EditedFeature()) >= 0) {
+            s->LimitRebuild(static_cast<std::size_t>(s->doc.IndexOf(op->EditedFeature())), true);
+        } else {
+            s->LimitRebuild(std::nullopt, false);
+        }
+        bool rebuilt = false;
+        s->SetMeshQuality(mySettings.graphics);
+        s->AllowBackground(mySettings.backgroundRebuild);
+        {
+            prof::Scope scope("rebuild");
+            rebuilt = s->RebuildIfNeeded();
+        }
+        if (rebuilt) {
             myFramesToDraw = std::max(myFramesToDraw, 2);
             // A changed variable, undo or redo may push the body off screen.
             if (s->mode == EditMode::Model && !myOps.Active()) myShell.keepModelInView = true;
         }
-        myViewport.Sync(s->model);
+        {
+            prof::Scope scope("sync");
+            std::vector<ObjectId> hidden;   // operations hidden in the tree: their bodies too
+            for (const auto& f : s->doc.Features())
+                if (f->hidden) hidden.push_back(f->id);
+            myViewport.SetHiddenBodies(std::move(hidden));
+            myViewport.Sync(s->model);
+        }
+        if (s->assembly) {
+            const doc::Look& look = s->assembly->ShownLook();
+            myViewport.SetLook(look, s, s->assembly->ShownLookRevision());
+        } else {
+            myViewport.SetLook(s->doc.look, s, s->doc.LookRevision());
+        }
         myViewport.SetDisplayStyle(myShell.displayStyle);
+        myViewport.SetQuality(mySettings.graphics);
+        myViewport.SetTextureLimit(Settings::TextureLimit(mySettings.textureQuality));
         if (myShell.keepModelInView) {   // the model was rebuilt and synced above
             myShell.keepModelInView = false;
             KeepInView(app, myViewport.ModelBounds());
@@ -322,16 +492,23 @@ void Application::Frame() {
     const auto smooth = [](double& into, double ms) { into = into * 0.9 + ms * 0.1; };
     const auto msSince = [](double t) { return (glfwGetTime() - t) * 1000.0; };
     const double uiStart = glfwGetTime();
-    DrawRoot();
-    DrawDialogs(app);
+    {
+        prof::Scope scope("interface");
+        myShell.animateUi = false;
+        DrawRoot();
+        DrawDialogs(app);
+    }
     const ImVec2 corner = myShell.viewportMax.x > 0 && !myWorkspace.ShowsHome() ? myShell.viewportMax : ImGui::GetIO().DisplaySize;
-    myBusy = myNotes.Draw(*myUi, corner, now) || myBusy;
+    myBusy = myNotes.Draw(*myUi, corner, now) || myBusy || myShell.animateUi;
 
     ImGui::Render();
     smooth(myStats.uiMs, msSince(uiStart));
     if (myWorkspace.Active() && !myWorkspace.ShowsHome() && myViewport.NeedsRender()) {
         const double sceneStart = glfwGetTime();
-        myViewport.Render();
+        {
+            prof::Scope scope("scene");
+            myViewport.Render();
+        }
         smooth(myStats.sceneMs, msSince(sceneStart));
         ++mySceneFramesThisSecond;
     }
@@ -355,6 +532,7 @@ void Application::Frame() {
     }
     myWindow.SwapBuffers();
     smooth(myStats.presentMs, msSince(presentStart));
+    prof::Add("present", msSince(presentStart));   // drawing the interface and the swap
     ++myFrameIndex;
     if (now - mySecondStart >= 1.0) {
         myStats.sceneFrames = mySceneFramesThisSecond;
@@ -365,8 +543,18 @@ void Application::Frame() {
     // Work requested by panels during the frame, now that nobody iterates.
     std::vector<std::function<void()>> work;
     work.swap(myDeferred);
-    for (auto& w : work) w();
+    {
+        prof::Scope scope("commands");
+        for (auto& w : work) w();
+    }
     if (!work.empty()) myFramesToDraw = std::max(myFramesToDraw, 2);
+
+    // A frame long enough to be felt: say in the log where the time went.
+    const double frameMs = (glfwGetTime() - now) * 1000.0;
+    const std::vector<prof::Part> parts = prof::TakeFrame();
+    if (frameMs > 80.0) log::Info("Slow frame {:.0f} ms: {}", frameMs, prof::Describe(parts));
+    mon::Frame(frameMs, parts);
+    mon::Beat();
 
     UpdateTitle();
 }

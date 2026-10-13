@@ -94,9 +94,21 @@ const char* GlyphIcon(ConstraintType t) {
 
 } // namespace
 
+namespace {
+
+/// A curve with the theme's halo under it (dark theme: a dark rim, so the
+/// line stays visible where it crosses the light body).
+void InkedPolyline(ui::Ui& ui, ImDrawList* dl, const std::vector<ImVec2>& pts, Color color, float width, LinePattern pattern) {
+    const Color halo = ui.C().sketchHalo;
+    if (halo.a > 0.01f) Polyline(dl, pts, ui::ToU32(halo.WithAlpha(halo.a * color.a)), ui.S(width + 2.5f), pattern);
+    Polyline(dl, pts, ui::ToU32(color), ui.S(width), pattern);
+}
+
+} // namespace
+
 void DrawSketchSegment(ui::Ui& ui, ImDrawList* dl, const SketchView& view, Vec2 a, Vec2 b, Color color, float width,
                        LinePattern pattern) {
-    Polyline(dl, {view.ToScreen(a), view.ToScreen(b)}, ui::ToU32(color), ui.S(width), pattern);
+    InkedPolyline(ui, dl, {view.ToScreen(a), view.ToScreen(b)}, color, width, pattern);
 }
 
 void DrawSketchSegment(ui::Ui& ui, ImDrawList* dl, const SketchView& view, Vec2 a, Vec2 b, Color color, float width,
@@ -106,8 +118,7 @@ void DrawSketchSegment(ui::Ui& ui, ImDrawList* dl, const SketchView& view, Vec2 
 
 void DrawSketchArc(ui::Ui& ui, ImDrawList* dl, const SketchView& view, Vec2 center, double radius, double a0, double a1,
                    Color color, float width, bool dashed) {
-    Polyline(dl, ArcPoints(view, center, radius, a0, a1), ui::ToU32(color), ui.S(width),
-             dashed ? LinePattern::Dashed : LinePattern::Solid);
+    InkedPolyline(ui, dl, ArcPoints(view, center, radius, a0, a1), color, width, dashed ? LinePattern::Dashed : LinePattern::Solid);
 }
 
 void DrawSketchGrid(ui::Ui& ui, ImDrawList* dl, const SketchView& view, double step) {
@@ -201,8 +212,9 @@ void DrawSnapMarker(ui::Ui& ui, ImDrawList* dl, ImVec2 at, const Snap& snap) {
             dl->AddCircleFilled(at, ui.S(2.5f), ui::ToU32(c.sketchHover));
             break;
     }
-    if (snap.horizontal || snap.vertical)
-        ui.icons.Draw(dl, snap.horizontal ? "c-horizontal" : "c-vertical", {at.x + ui.S(10), at.y + ui.S(8)}, ui.S(16), {1, 1, 1, 1});
+    if (snap.horizontal || snap.vertical || snap.perpendicularTo)
+        ui.icons.Draw(dl, snap.horizontal ? "c-horizontal" : snap.vertical ? "c-vertical" : "c-perpendicular",
+                      {at.x + ui.S(10), at.y + ui.S(8)}, ui.S(16), {1, 1, 1, 1});
 }
 
 void DrawSnapGuides(ui::Ui& ui, ImDrawList* dl, const SketchView& view, const Snap& snap) {
@@ -271,6 +283,20 @@ std::vector<GlyphPlacement> LayoutGlyphs(const sketch::Sketch& sk, const SketchV
         }
         if (sk.FindPoint(entity)) {
             const ImVec2 p = view.ToScreen(sk.PositionOf(entity));
+            return ImVec2{p.x + offset + static_cast<float>(n) * spacing, p.y - offset};
+        }
+        // Splines and ellipses: beside a point on the curve.
+        std::optional<Vec2> onCurve;
+        if (const sketch::Spline* s = sk.FindSpline(entity)) {
+            const std::vector<Vec2> pts = sketch::SampleSpline(sketch::SplineShape(sk, *s), 8);
+            if (!pts.empty()) onCurve = pts[pts.size() / 2];
+        }
+        if (const sketch::Ellipse* e = sk.FindEllipse(entity)) {
+            const std::vector<Vec2> pts = sketch::SampleEllipse(sk, *e, 8);
+            if (!pts.empty()) onCurve = pts[1];
+        }
+        if (onCurve) {
+            const ImVec2 p = view.ToScreen(*onCurve);
             return ImVec2{p.x + offset + static_cast<float>(n) * spacing, p.y - offset};
         }
         ObjectId center;

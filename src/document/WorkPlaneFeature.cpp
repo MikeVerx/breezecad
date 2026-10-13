@@ -34,6 +34,9 @@ std::vector<ObjectId> WorkPlaneFeature::Dependencies() const {
     std::vector<ObjectId> out;
     if (!face.IsSet() && base && !origin::IsOriginElement(base)) out.push_back(base);
     if (method == WorkPlaneMethod::Midplane && !face2.IsSet() && base2 && !origin::IsOriginElement(base2)) out.push_back(base2);
+    if (method == WorkPlaneMethod::ThreePoints)
+        for (const ObjectId w : pointFeatures)
+            if (w) out.push_back(w);
     return out;
 }
 
@@ -53,9 +56,7 @@ void WorkPlaneFeature::SaveFields(Json& out) const {
                            {"radial", v(cylinder->radial)}};
     }
     if (method == WorkPlaneMethod::ThreePoints) {
-        Json pts = Json::array();
-        for (const Vec3& p : points) pts.push_back({p.x, p.y, p.z});
-        out["points"] = std::move(pts);
+        json_io::SavePointPicks(out, points, pointEdges, pointFeatures);
     }
     if (method == WorkPlaneMethod::Angle) {
         if (edge) out["edge"] = json_io::ToJson(*edge);
@@ -84,12 +85,9 @@ Status WorkPlaneFeature::LoadFields(const Json& in) {
         !ReadMember(in, "face2", fr2) || !ReadMember(in, "angle", ang))
         return Error{"Рабочая плоскость: повреждены параметры"};
     std::vector<Vec3> pts;
-    if (const auto it = in.find("points"); it != in.end() && it->is_array())
-        for (const Json& p : *it) {
-            if (!p.is_array() || p.size() != 3 || !p[0].is_number() || !p[1].is_number() || !p[2].is_number())
-                return Error{"Рабочая плоскость: повреждены точки"};
-            pts.push_back({p[0].get<double>(), p[1].get<double>(), p[2].get<double>()});
-        }
+    std::vector<std::optional<EdgeReference>> ptEdges;
+    std::vector<ObjectId> ptFeatures;
+    if (!json_io::LoadPointPicks(in, pts, ptEdges, ptFeatures)) return Error{"Рабочая плоскость: повреждены точки"};
     std::optional<CylinderTouch> cyl;
     if (const auto it = in.find("cylinder"); it != in.end()) {
         const auto vec = [&](const char* key, Vec3& out) {
@@ -120,6 +118,8 @@ Status WorkPlaneFeature::LoadFields(const Json& in) {
     angle = std::move(ang);
     edge = e;
     points = std::move(pts);
+    pointEdges = std::move(ptEdges);
+    pointFeatures = std::move(ptFeatures);
     cylinder = cyl;
     return Status::Ok();
 }

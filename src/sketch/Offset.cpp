@@ -1,5 +1,7 @@
 #include "sketch/Offset.h"
 
+#include "sketch/SplineGeometry.h"
+
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -130,6 +132,38 @@ std::optional<std::vector<Seg>> Build(const Sketch& sk, const Chain& chain, doub
     return segs;
 }
 
+/// A lone spline or ellipse: its dense points in travel order; empty for others.
+std::vector<Vec2> FreeformPoints(const Sketch& sk, const Chain& chain, bool* closed = nullptr) {
+    if (chain.pieces.size() != 1) return {};
+    const ObjectId id = chain.pieces[0].curve;
+    if (const Spline* sp = sk.FindSpline(id)) {
+        if (closed) *closed = sp->Closed();
+        return SampleSpline(SplineShape(sk, *sp), 48);
+    }
+    if (const Ellipse* e = sk.FindEllipse(id)) {
+        if (closed) *closed = true;
+        return SampleEllipse(sk, *e, 360);
+    }
+    return {};
+}
+
+/// Points moved `d` to the left of the travel direction; empty when the
+/// copy would fold over itself (the distance beats the curvature).
+std::vector<Vec2> ShiftPolyline(const std::vector<Vec2>& pts, double d, bool closed) {
+    const std::size_t n = pts.size();
+    if (n < 2) return {};
+    std::vector<Vec2> out(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        const Vec2 prev = i > 0 ? pts[i - 1] : (closed ? pts[n - 2] : pts[0]);
+        const Vec2 next = i + 1 < n ? pts[i + 1] : (closed ? pts[1] : pts[n - 1]);
+        const Vec2 t = (next - prev).Normalized();
+        out[i] = pts[i] + Vec2{-t.y, t.x} * d;
+    }
+    for (std::size_t i = 0; i + 1 < n; ++i)
+        if ((out[i + 1] - out[i]).Dot(pts[i + 1] - pts[i]) <= 0) return {};
+    return out;
+}
+
 double DistanceTo(const Seg& s, Vec2 p) {
     if (s.line) {
         const Vec2 d = s.b - s.a;
@@ -142,7 +176,8 @@ double DistanceTo(const Seg& s, Vec2 p) {
 } // namespace
 
 std::optional<Chain> ChainOf(const Sketch& sk, ObjectId curve) {
-    if (sk.FindCircle(curve)) return Chain{{{curve, false}}, true};
+    if (sk.FindCircle(curve) || sk.FindEllipse(curve)) return Chain{{{curve, false}}, true};
+    if (const Spline* sp = sk.FindSpline(curve)) return Chain{{{curve, false}}, sp->Closed()};
     if (!EndsOf(sk, curve)) return std::nullopt;
     // Curves ending at each point.
     std::map<ObjectId, std::vector<ObjectId>> at;
@@ -190,6 +225,20 @@ std::optional<Chain> ChainOf(const Sketch& sk, ObjectId curve) {
 }
 
 int SideOf(const Sketch& sk, const Chain& chain, Vec2 p) {
+    if (const std::vector<Vec2> pts = FreeformPoints(sk, chain); !pts.empty()) {
+        double best = 1e300;
+        int side = 1;
+        for (std::size_t k = 0; k + 1 < pts.size(); ++k) {
+            const Vec2 a = pts[k], d = pts[k + 1] - a;
+            const double u = std::clamp((p - a).Dot(d) / std::max(d.Dot(d), 1e-18), 0.0, 1.0);
+            const double dist = (p - (a + d * u)).Length();
+            if (dist < best) {
+                best = dist;
+                side = d.Cross(p - a) >= 0 ? 1 : -1;
+            }
+        }
+        return side;
+    }
     double best = 1e300;
     int side = 1;
     for (const Chain::Piece& piece : chain.pieces) {
@@ -205,6 +254,11 @@ int SideOf(const Sketch& sk, const Chain& chain, Vec2 p) {
 
 std::vector<std::vector<Vec2>> OffsetPreview(const Sketch& sk, const Chain& chain, double distance) {
     std::vector<std::vector<Vec2>> out;
+    bool closed = false;
+    if (const std::vector<Vec2> pts = FreeformPoints(sk, chain, &closed); !pts.empty()) {
+        if (std::vector<Vec2> shifted = ShiftPolyline(pts, distance, closed); !shifted.empty()) out.push_back(std::move(shifted));
+        return out;
+    }
     const auto segs = Build(sk, chain, distance);
     if (!segs) return out;
     for (const Seg& s : *segs) {
@@ -231,6 +285,25 @@ std::vector<std::vector<Vec2>> OffsetPreview(const Sketch& sk, const Chain& chai
 
 std::optional<OffsetCurves> OffsetChain(Sketch& sk, IdGenerator& ids, const Chain& chain, double distance) {
     if (std::abs(distance) < kEps) return std::nullopt;
+    // A spline or an ellipse: a spline through points of the shifted curve
+    // (the offset of either is not the same kind of curve).
+    bool closed = false;
+    if (const std::vector<Vec2> pts = FreeformPoints(sk, chain, &closed); !pts.empty()) {
+        const std::vector<Vec2> shifted = ShiftPolyline(pts, distance, closed);
+        if (shifted.empty()) return std::nullopt;
+        const Spline* sp = sk.FindSpline(chain.pieces[0].curve);
+        const std::size_t count = std::clamp<std::size_t>(sp ? sp->points.size() * 4 : 16, 8, 48);
+        std::vector<ObjectId> pointIds;
+        const std::size_t last = closed ? count : count + 1;
+        for (std::size_t k = 0; k < last; ++k) {
+            const std::size_t at = std::min(k * (shifted.size() - 1) / count, shifted.size() - 1);
+            pointIds.push_back(sk.AddPoint(ids, shifted[at]));
+        }
+        if (closed) pointIds.push_back(pointIds.front());
+        OffsetCurves out;
+        out.curves.push_back(sk.AddSpline(ids, pointIds, true, sp ? sp->construction : false));
+        return out;
+    }
     const auto built = Build(sk, chain, distance);
     if (!built) return std::nullopt;
     const std::vector<Seg>& segs = *built;

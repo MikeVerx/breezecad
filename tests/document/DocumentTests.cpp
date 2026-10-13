@@ -3,6 +3,8 @@
 #include "document/Commands.h"
 #include "document/CoilFeature.h"
 #include "document/SectionFeature.h"
+#include "document/ShellFeature.h"
+#include "document/WorkPointFeature.h"
 #include "document/EdgeFeature.h"
 #include "document/ExtrudeFeature.h"
 #include "document/HoleFeature.h"
@@ -233,6 +235,8 @@ TEST_CASE("every feature type survives a file round trip") {
     made.push_back(std::make_unique<doc::SweepFeature>());
     made.push_back(std::make_unique<doc::CoilFeature>());
     made.push_back(std::make_unique<doc::SectionFeature>());
+    made.push_back(std::make_unique<doc::ShellFeature>());
+    made.push_back(std::make_unique<doc::WorkPointFeature>());
     std::vector<std::pair<ObjectId, std::string_view>> expected;
     for (auto& f : made) {
         f->id = d.Ids().Next();
@@ -254,4 +258,33 @@ TEST_CASE("every feature type survives a file round trip") {
         REQUIRE(f);
         CHECK(f->Type() == type);
     }
+}
+
+// Б4/Б5: «Скрыть» is not «Подавить»: it is saved, undone, and rebuilds nothing.
+TEST_CASE("hiding a feature is saved, undone and needs no rebuild") {
+    Plate plate;
+    plate.doc.ClearDirty();
+    const std::uint64_t revision = plate.doc.Revision();
+    History history;
+    history.Execute(plate.doc, SetHidden(plate.extrudeId, true, "Скрыть Выдавливание1"));
+    CHECK(plate.doc.Find(plate.extrudeId)->hidden);
+    CHECK_FALSE(plate.doc.Find(plate.extrudeId)->suppressed);
+    CHECK(plate.doc.Revision() > revision);                     // the view and the saved state see it
+    CHECK(plate.doc.DirtyFrom() == plate.doc.FeatureCount());   // nothing to rebuild
+    CHECK(history.IsModified());
+
+    // Saved only when set; older files without it open as shown.
+    const std::string text = DocumentToJson(plate.doc);
+    CHECK(text.find("\"hidden\"") != std::string::npos);
+    Expected<Document> loaded = DocumentFromJson(text);
+    REQUIRE(loaded.HasValue());
+    CHECK(loaded->Find(plate.extrudeId)->hidden);
+    CHECK_FALSE(loaded->Find(plate.sketchId)->hidden);
+
+    history.Undo(plate.doc);
+    CHECK_FALSE(plate.doc.Find(plate.extrudeId)->hidden);
+    CHECK_FALSE(history.IsModified());
+    CHECK(DocumentToJson(plate.doc).find("\"hidden\"") == std::string::npos);
+    history.Redo(plate.doc);
+    CHECK(plate.doc.Find(plate.extrudeId)->hidden);
 }
