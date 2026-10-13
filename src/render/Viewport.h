@@ -7,6 +7,7 @@
 #include "core/Id.h"
 #include "core/Math.h"
 #include "core/NativeSurface.h"
+#include "core/Image.h"
 #include "core/ViewProjection.h"
 #include "document/EdgeReference.h"
 #include "document/Appearance.h"
@@ -106,8 +107,15 @@ public:
     /// balanced, 2 for weak computers (no smoothing, coarse round faces).
     void SetQuality(int level);
     void SetHoveredBody(ObjectId body);
+    /// Bodies not drawn (and not picked): those of operations the user hid.
+    /// The model keeps them; only the view leaves them out.
+    void SetHiddenBodies(std::vector<ObjectId> bodies);
     /// Both references point at the same face of the shown body `body`.
     bool SameFace(ObjectId body, const doc::FaceReference& a, const doc::FaceReference& b) const;
+    /// Pictures on faces: the largest side a picture may keep on the graphics
+    /// card, in pixels (a bigger one is made smaller first); 0 = as it is.
+    /// The weaker the computer, the smaller: less memory, coarser texture.
+    void SetTextureLimit(int maxSide);
     /// Colours of bodies and faces of the document `owner` (any pointer that
     /// tells documents apart); applied when it or `revision` changes.
     void SetLook(const doc::Look& look, const void* owner, std::uint64_t revision);
@@ -123,17 +131,26 @@ public:
     ViewProjection Projection() const;
     CameraState    Camera() const;
     void           SetCamera(const CameraState& camera);
+    /// The model drawn with `camera` into a width x height picture, off
+    /// screen (the window's view is not touched). nullopt when the graphics
+    /// cannot (no OpenGL context yet).
+    std::optional<Image> Snapshot(const CameraState& camera, int width, int height);
 
-    /// Turntable orbit: `yaw` around world Z, `pitch` around the screen's
-    /// horizontal axis, both in radians, about `pivot`.
-    void Orbit(double yaw, double pitch, Vec3 pivot);
+    /// Orbit about `pivot`, angles in radians: `pitch` around the screen's
+    /// horizontal axis; `yaw` around the screen's vertical axis (free, as in
+    /// Inventor and KOMPAS) or, with `turntable`, around world Z.
+    void Orbit(double yaw, double pitch, Vec3 pivot, bool turntable = false);
+    /// Turns the view in the screen's plane about `pivot` (radians; the
+    /// model turns counter-clockwise for a positive angle).
+    void Roll(double angle, Vec3 pivot);
     void Pan(double dxPixels, double dyPixels);
     /// Zooms by `factor` (>1 closer) keeping the point under the cursor still.
     void ZoomAt(double factor, Vec2 pixel);
 
     /// Camera looking along `direction` with `up`, fitted to the model and
     /// to `extra` (things the UI draws itself, e.g. the sketch being edited).
-    CameraState FitCamera(Vec3 direction, Vec3 up, const Box3& extra = {}, double margin = 1.15) const;
+    /// `aspect` — width/height of the picture the camera is for; 0: the window's.
+    CameraState FitCamera(Vec3 direction, Vec3 up, const Box3& extra = {}, double margin = 1.15, double aspect = 0) const;
     /// Centre of the model's bounding box (origin when empty).
     Vec3 ModelCenter() const;
     /// Bounding box of the shown model (empty when there are no bodies).

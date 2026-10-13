@@ -183,6 +183,33 @@ private:
     std::string myLabel;
 };
 
+class SetHiddenCommand final : public Command {
+public:
+    SetHiddenCommand(ObjectId id, bool hidden, std::string label) : myId(id), myHidden(hidden), myLabel(std::move(label)) {}
+
+    std::string Label() const override { return myLabel; }
+    void Do(Document& doc) override {
+        if (Feature* f = doc.Find(myId)) {
+            myBefore = f->hidden;
+            Set(doc, *f, myHidden);
+        }
+    }
+    void Undo(Document& doc) override {
+        if (Feature* f = doc.Find(myId)) Set(doc, *f, myBefore);
+    }
+
+private:
+    static void Set(Document& doc, Feature& f, bool hidden) {
+        f.hidden = hidden;
+        doc.TouchLook();   // a new revision (saved state, view), no rebuild
+    }
+
+    ObjectId    myId;
+    bool        myHidden;
+    bool        myBefore = false;
+    std::string myLabel;
+};
+
 class GroupCommand final : public Command {
 public:
     GroupCommand(std::string label, std::vector<std::unique_ptr<Command>> commands)
@@ -243,6 +270,10 @@ std::unique_ptr<Command> SetPartInfo(PartInfo info) {
 
 std::unique_ptr<Command> SetLook(Look look, std::string label) {
     return std::make_unique<SetLookCommand>(std::move(look), std::move(label));
+}
+
+std::unique_ptr<Command> SetHidden(ObjectId id, bool hidden, std::string label) {
+    return std::make_unique<SetHiddenCommand>(id, hidden, std::move(label));
 }
 
 std::unique_ptr<Command> Group(std::string label, std::vector<std::unique_ptr<Command>> commands) {

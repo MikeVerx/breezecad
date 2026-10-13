@@ -407,6 +407,12 @@ void JointMotionOptions(AppContext& app, AssemblyState& st, assembly::Constraint
 
 } // namespace
 
+kernel::AssemblyPick ConstraintPick(assembly::ConstraintType type) { return PickFor(type); }
+
+const char* ConstraintUnfit(assembly::ConstraintType type, const assembly::GeometryRef& g, const assembly::GeometryRef* first) {
+    return Unfit(type, g, first);
+}
+
 bool InAssembly(AppContext& app) { return ActiveAssembly(app) != nullptr; }
 
 void NewAssembly(AppContext& app) {
@@ -418,7 +424,7 @@ void NewAssembly(AppContext& app) {
 
 ObjectId PlaceFile(AppContext& app, Session& session, const std::filesystem::path& file, bool checkpoint) {
     AssemblyState& st = *session.assembly;
-    if (!session.path.empty() && std::filesystem::equivalent(session.path, file)) {
+    if (!session.path.empty() && SameFile(session.path, file)) {
         app.notes.Error(Tr("Сборку нельзя вставить в саму себя"));
         return {};
     }
@@ -765,6 +771,10 @@ void DrawOffer(AppContext& app, Session& session, const ViewportFrame& vf) {
 }
 
 } // namespace
+
+std::optional<std::filesystem::path> StandardPartFileOf(AppContext& app, const Session& session, const doc::parts::Request& request) {
+    return StandardPartFile(app, session, request);
+}
 
 bool CanPattern(AppContext& app) {
     Session* s = ActiveAssembly(app);

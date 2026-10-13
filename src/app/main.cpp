@@ -4,7 +4,8 @@
 // Test hooks:
 //   BZ_SCREENSHOT=out.ppm[:frame]  saves one frame and exits;
 //   BZ_SHOT_DIR=dir                saves a frame whenever dir/request appears;
-//   BZ_MONITOR=events.jsonl        monitoring for tools/monitor (core/Monitor.h).
+//   BZ_MONITOR=events.jsonl        monitoring for tools/monitor (core/Monitor.h);
+//   BZ_SETTINGS_TAB=n              starts with the settings open on tab n.
 
 #include "app/Application.h"
 #include "app/BetaTesting.h"
@@ -88,11 +89,25 @@ LONG WINAPI OnCrash(EXCEPTION_POINTERS* info) {
 #elif defined(__linux__) || defined(__APPLE__)
 #include <csignal>
 #include <execinfo.h>
+#include <fcntl.h>
 #include <unistd.h>
 
 namespace {
 
-void Say(const char* text) { (void)!::write(2, text, std::strlen(text)); }
+/// The testers' build: the same trace also into crash.txt of the session
+/// (stderr reaches no report). Set before the handler is, read only by it.
+char gCrashFile[2048] = "";
+
+void Say(int fd, const char* text) { (void)!::write(fd, text, std::strlen(text)); }
+
+void Trace(int fd, const char* name, void* const* frames, int count) {
+    Say(fd, "Crash: ");
+    Say(fd, name);
+    Say(fd, "\nLast action: ");
+    Say(fd, bz::mon::LastAction().data());
+    Say(fd, "\nStack:\n");
+    backtrace_symbols_fd(frames, count, fd);
+}
 
 /// A crash leaves its trace on stderr (the monitor and a terminal see it):
 /// only calls that are safe in a signal handler, then the default action
@@ -101,18 +116,23 @@ void OnSignal(int signal) {
     const char* name = signal == SIGSEGV ? "SIGSEGV" : signal == SIGABRT ? "SIGABRT" : signal == SIGFPE ? "SIGFPE"
                      : signal == SIGBUS  ? "SIGBUS"  : signal == SIGILL  ? "SIGILL"  : "signal";
     bz::mon::CrashNote(name);
-    Say("Crash: ");
-    Say(name);
-    Say("\nLast action: ");
-    Say(bz::mon::LastAction().data());
-    Say("\nStack:\n");
     void* frames[64];
-    backtrace_symbols_fd(frames, backtrace(frames, 64), 2);
+    const int count = backtrace(frames, 64);
+    Trace(2, name, frames, count);
+    if (gCrashFile[0]) {
+        const int fd = ::open(gCrashFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd >= 0) {
+            Trace(fd, name, frames, count);
+            ::close(fd);
+        }
+    }
     std::signal(signal, SIG_DFL);
     std::raise(signal);
 }
 
 void CatchCrashes() {
+    if (const std::filesystem::path& session = bz::app::beta::SessionDir(); !session.empty())
+        std::snprintf(gCrashFile, sizeof gCrashFile, "%s", (session / "crash.txt").string().c_str());
     void* warmUp[1];
     backtrace(warmUp, 1);   // loads what backtrace needs now, not in the handler
     // Its own stack, so that a stack overflow is reported too.

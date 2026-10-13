@@ -73,6 +73,7 @@ public:
     bool CanUndo() const { return assembly ? assembly->CanUndo() : history.CanUndo(); }
     bool CanRedo() const { return assembly ? assembly->CanRedo() : history.CanRedo(); }
     std::string UndoLabel() const { return assembly ? assembly->UndoLabel() : history.UndoLabel(); }
+    std::string RedoLabel() const { return assembly ? assembly->RedoLabel() : history.RedoLabel(); }
     /// After saving to `path` (the session's file from now on).
     void MarkSaved();
 
@@ -133,6 +134,7 @@ private:
     int                        myMeshQuality = 1;
     bool                       myBackgroundAllowed = true;
     std::uint64_t myBuiltRevision = static_cast<std::uint64_t>(-1);
+    std::size_t   myBuiltFeatureCount = 0;   ///< operations in the document when the model was last built
     double        myLastRebuildSeconds = 0;   ///< how long the last rebuild took
     double        myLastRebuildAt = 0;        ///< when it finished (ImGui time)
     double        myRebuildBeganAt = 0;       ///< first slice of the rebuild under way (monitor)

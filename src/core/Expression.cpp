@@ -102,6 +102,20 @@ public:
     }
 
 private:
+    /// The parser is recursive: nested brackets, unary signs and powers each
+    /// take stack, and a pasted "((((…" of thousands overflowed it (audit
+    /// B-10). A real expression never nests this deep.
+    static constexpr int kMaxDepth = 200;
+
+    struct DepthGuard {
+        int& depth;
+        explicit DepthGuard(int& d) : depth(++d) {}
+        ~DepthGuard() { --depth; }
+        DepthGuard(const DepthGuard&) = delete;
+        DepthGuard& operator=(const DepthGuard&) = delete;
+        bool TooDeep() const { return depth > kMaxDepth; }
+    };
+
     Expected<Value> ParseExpr() {
         Expected<Value> lhs = ParseTerm();
         if (!lhs) return lhs;
@@ -147,6 +161,8 @@ private:
     }
 
     Expected<Value> ParsePower() {
+        const DepthGuard guard(myDepth);
+        if (guard.TooDeep()) return Error{"Слишком сложное выражение"};
         Expected<Value> base = ParseUnary();
         if (!base) return base;
         SkipSpaces();
@@ -166,6 +182,8 @@ private:
     }
 
     Expected<Value> ParseUnary() {
+        const DepthGuard guard(myDepth);
+        if (guard.TooDeep()) return Error{"Слишком сложное выражение"};
         SkipSpaces();
         if (Peek() == '-' || Peek() == '+') {
             const bool negate = Peek() == '-';
@@ -335,6 +353,7 @@ private:
     const UnitSystem&  myUnits;
     const NameLookup&  myLookup;
     std::size_t        myPos       = 0;
+    int                myDepth     = 0;
     int                myCallDepth = 0;
 };
 
@@ -342,6 +361,7 @@ private:
 
 Expected<double> EvaluateExpression(std::string_view text, Quantity expected,
                                     const UnitSystem& units, const NameLookup& lookup) {
+    if (text.size() > kMaxExpressionLength) return Error{"Слишком длинное выражение"};
     Parser parser(text, units, lookup);
     Expected<Value> result = parser.ParseAll();
     if (!result) return result.GetError();

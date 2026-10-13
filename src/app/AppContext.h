@@ -8,6 +8,7 @@
 #include "app/Settings.h"
 #include "app/Workspace.h"
 #include "core/ViewProjection.h"
+#include "platform/Touchpad.h"
 #include "render/Viewport.h"
 #include "ui/Ui.h"
 #include "ui/Widgets.h"
@@ -58,7 +59,8 @@ struct ShellState {
     } betaReport;
     bool               showSettings = false;
     bool               backgroundMenu = false;   ///< open the "Фон" menu at the cursor
-    int                settingsTab = 0;          ///< 0 interface, 1 keys, 2 mouse, 3 general, 4 performance, 5 modules
+    int                settingsTab = 0;          ///< 0 interface, 1 keys, 2 mouse, 3 touchpad, 4 general, 5 performance, 6 modules
+    std::string        moduleToRemove;           ///< "Модули": the module whose removal waits for "Да, удалить"
     std::string        captureShortcut;          ///< action whose new shortcut is being pressed
     std::string        shortcutFilter;
     std::string        shortcutNote;             ///< "taken from …" after a reassignment
@@ -142,7 +144,10 @@ struct ShellState {
         Vec3                 pivot;
         std::optional<Frame> facePlane;   ///< planar face under the cursor at the right click
         ObjectId             faceBody;    ///< and the body it belongs to
+        double               touchAt = -10.0;   ///< when the last touchpad gesture moved the view
+        int                  touchKind = -1;    ///< what it did (another kind is a new gesture: new pivot)
     } nav;
+    bool           animateUi = false;           ///< something in the interface moves by itself this frame
     const Session* viewportSession = nullptr;   ///< whose camera the viewport shows
     ImVec2         viewportMax{0, 0};           ///< bottom-right of the scene, for notifications
 };
@@ -186,6 +191,7 @@ struct AppContext {
     double            now = 0.0;
     FrameStats        stats;
     std::vector<ImGuiKeyChord> pressedChords;    ///< key chords pressed this frame (for shortcut capture)
+    std::vector<platform::TouchEvent> touch;     ///< touchpad gestures of this frame
     modules::ModuleManager*    modules = nullptr; ///< set once the modules are loaded
 
     Session* Doc() { return workspace.Active(); }

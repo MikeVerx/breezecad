@@ -10,9 +10,11 @@ namespace {
 
 constexpr double kEps = 1e-7;
 
+/// To [0; 2 pi) in constant time (see WrapAngle in EquationSystem.cpp).
 double Normalize(double a) {
-    while (a < 0) a += 2 * kPi;
-    while (a >= 2 * kPi) a -= 2 * kPi;
+    a = std::fmod(a, 2 * kPi);
+    if (a < 0) a += 2 * kPi;
+    if (a >= 2 * kPi) a = 0;   // -tiny + 2 pi rounds to 2 pi
     return a;
 }
 

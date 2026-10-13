@@ -4,6 +4,7 @@
 #include "core/Version.h"
 #include "kernel/AssemblyReadApi.h"
 
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,11 @@ namespace bz::modules {
 namespace {
 
 const kernel::AssemblyReader* gReader = nullptr;
+CommandHandler                gCommands;
+std::function<void()>         gWake;
+std::atomic<bool>             gMainRequested{false};
+std::string                   gReply;   ///< what execute() handed out last
+std::string                   gConfigDir;
 /// Strings handed out by component_at live here until the next call.
 std::vector<kernel::ComponentRecord> gComponents;
 bool gComponentsFresh = false;
@@ -92,6 +98,24 @@ int32_t ComponentBounds(uint64_t id, double minXyz[3], double maxXyz[3]) {
     return BZ_OK;
 }
 
+void RequestMain() {
+    gMainRequested.store(true);
+    if (gWake) gWake();
+}
+
+int32_t Execute(const char* request, const char** reply) {
+    if (!request || !reply) return BZ_EARGUMENT;
+    if (gCommands) {
+        gReply = gCommands(request);
+    } else {
+        gReply = R"({"ok":false,"error":"Команды недоступны: программа ещё не готова"})";
+    }
+    *reply = gReply.c_str();
+    return BZ_OK;
+}
+
+const char* ConfigDir() { return gConfigDir.c_str(); }
+
 const BzHostApi kHost{
     BZ_MODULE_ABI_VERSION,
     sizeof(BzHostApi),
@@ -101,11 +125,22 @@ const BzHostApi kHost{
     &ComponentCount,
     &ComponentAt,
     &ComponentBounds,
+    &RequestMain,
+    &Execute,
+    &ConfigDir,
 };
 
 } // namespace
 
 const BzHostApi* HostApi() { return &kHost; }
+
+void SetCommandHandler(CommandHandler handler) { gCommands = std::move(handler); }
+
+void SetWakeHandler(std::function<void()> wake) { gWake = std::move(wake); }
+
+void SetConfigDir(std::string utf8) { gConfigDir = std::move(utf8); }
+
+bool TakeMainRequest() { return gMainRequested.exchange(false); }
 
 void SetActiveAssembly(const kernel::AssemblyReader* reader) {
     gReader          = reader;

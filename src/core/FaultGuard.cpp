@@ -120,23 +120,33 @@ struct Restore {
     ~Restore() { tlLanding = previous; }
 };
 
-} // namespace
-
-__attribute__((noinline)) bool RunGuarded(const std::function<void()>& work, std::string* what) {
-    Install();
+/// The frame a fault jumps back into. After the jump only "return false"
+/// runs here, nothing else: code placed after the landing is fragile. GCC 16
+/// (MSYS2) compiled the std::format that used to sit here with null pointers
+/// for its buffer and arguments (the 0xC0000005 reading 0x18 from the beta
+/// reports, see DEBUG-PATCH-1 Б1), so a caught fault became a crash. Anything
+/// the caller needs is made after this frame has returned, in plain code.
+/// noipa: must stay a real call, never merged into RunGuarded.
+__attribute__((noinline, noipa)) bool RunLanded(const std::function<void()>& work) {
     Landing landing;
     const Restore restore{tlLanding};
 #if defined(_WIN32)
-    if (__builtin_setjmp(landing.buffer)) {
+    if (__builtin_setjmp(landing.buffer)) return false;
 #else
-    if (sigsetjmp(landing.buffer, 1)) {
+    if (sigsetjmp(landing.buffer, 1)) return false;
 #endif
-        if (what) *what = Describe();
-        return false;
-    }
     tlLanding = &landing;
     work();
     return true;
+}
+
+} // namespace
+
+bool RunGuarded(const std::function<void()>& work, std::string* what) {
+    Install();
+    if (RunLanded(work)) return true;
+    if (what) *what = Describe();   // the fault code is in tlCode / tlSignal
+    return false;
 }
 
 } // namespace bz::guard

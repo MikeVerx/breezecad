@@ -43,6 +43,7 @@ public:
     struct InputTap {
         bool                       seen = false;   ///< any input: draw frames
         std::vector<ImGuiKeyChord> chords;         ///< key presses with the modifiers held at that moment
+        std::vector<std::filesystem::path> dropped;   ///< files dropped on the window, handled between frames
     };
 
 private:

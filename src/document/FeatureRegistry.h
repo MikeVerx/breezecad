@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 #include <string_view>
 
 namespace bz::doc {
@@ -23,6 +24,8 @@ public:
 
     /// A new feature of `typeId`, or nullptr when the type is unknown.
     std::unique_ptr<Feature> Create(std::string_view typeId) const;
+    /// Every registered type id, sorted.
+    std::vector<std::string> Types() const;
 
 private:
     std::map<std::string, Factory, std::less<>> myFactories;

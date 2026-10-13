@@ -3,6 +3,7 @@
 
 #include <doctest.h>
 
+#include <chrono>
 #include <cmath>
 
 using namespace bz;
@@ -330,4 +331,20 @@ TEST_CASE("removing a constraint removes only the constraint") {
     CHECK(sk.points.size() == 6);
     CHECK(sk.FindLine(left)->centerline);
     CHECK(sk.FindConstraint(perp) == nullptr);
+}
+
+TEST_CASE("B-03: a huge angle dimension does not hang the solver") {
+    // Audit 2026-10-13: 1e9 deg took a second, 1e15 deg never finished.
+    for (const double degrees : {1e9, 1e15, 1e300}) {
+        CAPTURE(degrees);
+        Sketch sk;
+        IdGenerator ids;
+        const ObjectId a = sk.AddPoint(ids, {0, 0}), b = sk.AddPoint(ids, {10, 0});
+        const ObjectId c = sk.AddPoint(ids, {0, 0.1}), d = sk.AddPoint(ids, {10, 5});
+        const ObjectId l1 = sk.AddLine(ids, a, b), l2 = sk.AddLine(ids, c, d);
+        sk.AddConstraint(ids, Dim(ConstraintType::Angle, degrees * kPi / 180.0, l1, l2));
+        const auto start = std::chrono::steady_clock::now();
+        (void)Solve(sk);
+        CHECK(std::chrono::steady_clock::now() - start < std::chrono::seconds(2));
+    }
 }

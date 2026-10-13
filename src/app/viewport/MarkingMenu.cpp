@@ -152,7 +152,9 @@ void DrawMarkingMenu(AppContext& app, Session& session) {
         const bool enabled = a->IsEnabled();
         const bool hot = slot == i && enabled;
         const char* label = item.label ? Tr(item.label) : a->Label();
-        const std::string_view icon = item.icon ? item.icon : a->icon;
+        // Both sides as views: a mixed `?:` would copy a->icon into a temporary
+        // string, and the view would outlive it.
+        const std::string_view icon = item.icon ? std::string_view(item.icon) : std::string_view(a->icon);
 
         const ImVec2 d = SlotDirection(i);
         const ImVec2 p{m.centre.x + d.x * ui.S(kRadius), m.centre.y + d.y * ui.S(kRadius)};

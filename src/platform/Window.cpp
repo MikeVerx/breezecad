@@ -24,6 +24,14 @@ void OnGlfwError(int code, const char* message) { log::Error("GLFW {}: {}", code
 
 } // namespace
 
+bool InitGlfw() {
+    glfwSetErrorCallback(OnGlfwError);
+#if defined(__linux__) && (GLFW_VERSION_MAJOR > 3 || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 4))
+    glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+#endif
+    return glfwInit() == GLFW_TRUE;
+}
+
 NativeGlSurface Window::NativeSurface() const {
     NativeGlSurface surface;
     if (!myWindow) return surface;
@@ -47,8 +55,7 @@ Window::~Window() {
 }
 
 bool Window::Create(const WindowConfig& config) {
-    glfwSetErrorCallback(OnGlfwError);
-    if (!glfwInit()) {
+    if (!InitGlfw()) {
         log::Error("GLFW init failed");
         return false;
     }
@@ -144,5 +151,6 @@ bool Window::IsMinimized() const { return glfwGetWindowAttrib(myWindow, GLFW_ICO
 
 void Window::WaitEvents(double timeoutSeconds) { glfwWaitEventsTimeout(timeoutSeconds); }
 void Window::PollEvents() { glfwPollEvents(); }
+void Window::PostEmptyEvent() { glfwPostEmptyEvent(); }
 
 } // namespace bz::platform

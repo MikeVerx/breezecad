@@ -31,6 +31,10 @@ namespace {
 
 bool ValidId(std::string_view id) {
     if (id.empty() || id.size() > 64) return false;
+    // The id names the module's folder when it is installed: no "." or ".."
+    // (or anything starting with a dot) that would point outside it.
+    const char first = id.front();
+    if (!((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || (first >= '0' && first <= '9'))) return false;
     return std::all_of(id.begin(), id.end(), [](char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
                c == '.';
@@ -87,11 +91,15 @@ Expected<Manifest> ParseManifest(std::string_view json, std::string_view os) {
 
     Manifest m;
     if (!ReadString(root, "id", m.id) || !ValidId(m.id))
-        return Error{"В описании модуля нет правильного «id» (латиница, цифры, «-», «_», «.»)"};
+        return Error{"В описании модуля нет правильного «id» (латиница, цифры, «-», «_», «.»; начинается с буквы или цифры)"};
     if (!ReadString(root, "name", m.name) || !ReadString(root, "version", m.version) ||
         !ReadString(root, "description", m.description) || !ReadUnsigned(root, "abiVersion", m.abiVersion))
         return Error{std::format("Описание модуля «{}» повреждено", m.id)};
     if (m.name.empty()) m.name = m.id;
+    if (const auto on = root.find("enabledByDefault"); on != root.end()) {
+        if (!on->is_boolean()) return Error{std::format("Описание модуля «{}»: «enabledByDefault» — не true/false", m.id)};
+        m.enabledByDefault = on->get<bool>();
+    }
     if (m.abiVersion == 0) return Error{std::format("В описании модуля «{}» нет «abiVersion»", m.id)};
 
     const auto lib = root.find("library");
@@ -100,7 +108,7 @@ Expected<Manifest> ParseManifest(std::string_view json, std::string_view os) {
     } else if (lib != root.end() && lib->is_object()) {
         if (const auto it = lib->find(std::string(os)); it != lib->end() && it->is_string()) m.library = it->get<std::string>();
     }
-    if (m.library.empty() || m.library.find_first_of("/\\") != std::string::npos)
+    if (m.library.empty() || m.library.find_first_of("/\\") != std::string::npos || m.library == "." || m.library == "..")
         return Error{std::format("Модуль «{}»: не указан файл библиотеки для этой системы", m.name)};
 
     if (const auto req = root.find("requirements"); req != root.end()) {

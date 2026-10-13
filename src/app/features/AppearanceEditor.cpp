@@ -760,6 +760,68 @@ void AppearanceEditor::DrawToolbarPicker(AppContext& app, Session* session, ImVe
     ImGui::EndPopup();
 }
 
+namespace {
+
+// The size slider runs from 1 mm to 2 m, evenly in ratio (log scale): a
+// small and a big picture are equally easy to set.
+constexpr double kMinSize = 1.0, kMaxSize = 2000.0;
+float SizeToSlider(double mm) {
+    return static_cast<float>(std::log(std::clamp(mm, kMinSize, kMaxSize) / kMinSize) / std::log(kMaxSize / kMinSize));
+}
+double SliderToSize(float t) { return kMinSize * std::pow(kMaxSize / kMinSize, static_cast<double>(t)); }
+/// Rounded to what a person would type: 3 significant digits.
+double Tidy(double mm) {
+    const double step = std::pow(10.0, std::floor(std::log10(mm)) - 2);
+    return std::round(mm / step) * step;
+}
+
+} // namespace
+
+void AppearanceEditor::DrawPictureSize(AppContext& app, Session& session, float width) {
+    const doc::Appearance* chosen = Chosen();
+    if (!chosen || !chosen->HasPicture()) return;
+    ui::Ui& ui = app.ui;
+    // The copy in the look being edited may be newer than the library's while the slider moves.
+    doc::Look& look = LookOf(session);
+    const doc::Appearance* inLook = look.Find(chosen->id);
+    doc::Appearance a = inLook ? *inLook : *chosen;
+    if (mySizeFor != a.id) {   // another appearance chosen: start from its size
+        mySizeFor  = a.id;
+        mySize     = a.pictureSize;
+        mySizeText = std::format("{:g}", mySize);
+    }
+    a.pictureSize = mySize;
+    ImGui::Dummy({0, ui.S(8)});
+    Section(app, Tr("Размер текстуры: одна копия картинки, мм"));
+    bool changed = false;
+    float t = SizeToSlider(a.pictureSize);
+    const float fieldW = ui.S(72);
+    if (ui::Slider(ui, "##picture-size-slider", t, width - fieldW - ui.S(8))) {
+        a.pictureSize = Tidy(SliderToSize(t));
+        mySizeText = std::format("{:g}", a.pictureSize);
+        changed = true;
+    }
+    bool finished = ImGui::IsItemDeactivated();
+    ImGui::SameLine(0, ui.S(8));
+    if (ui::TextField(ui, "##picture-size-field", mySizeText, fieldW)) {
+        double value = 0;
+        if (std::sscanf(mySizeText.c_str(), "%lf", &value) == 1 && value >= 0.01 && value <= 100000) {
+            a.pictureSize = value;
+            changed = true;
+        }
+    }
+    finished = finished || ImGui::IsItemDeactivatedAfterEdit();
+    Caption(app, Tr("Меньше — картинка мельче и повторяется сеткой чаще; крупнее — растягивается. "
+                    "Разрешение файла не меняется: мелкая копия просто занимает меньше точек на экране."),
+            width);
+    mySize = a.pictureSize;
+    if (changed && look.Refresh(a)) Touch(session);   // live on the part (or the assembly)
+    // Kept in «Мои» when the slider is let go or the number typed in.
+    if ((changed || finished) && a.id.starts_with("user.") && a.pictureSize != chosen->pictureSize && (finished || !ImGui::IsAnyItemActive())) {
+        if (const auto saved = myLibrary.Save(a); !saved) app.notes.Error(Tr(saved.GetError().message));
+    }
+}
+
 void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
@@ -827,6 +889,7 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
         dl->AddText(ui.fonts.medium, ui.S(13), {p.x + h + ui.S(4), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), name.c_str());
         ImGui::Dummy({inner, h});
     }
+    DrawPictureSize(app, session, inner);
     ImGui::Dummy({0, ui.S(10)});
 
     DrawLibrary(app, inner);

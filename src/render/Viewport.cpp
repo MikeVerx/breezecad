@@ -30,6 +30,8 @@
 #include <Bnd_Box.hxx>
 #include <GeomAbs_Shape.hxx>
 #include <Graphic3d_Camera.hxx>
+#include <Image_AlienPixMap.hxx>
+#include <V3d_ImageDumpOptions.hxx>
 #include <Graphic3d_ClipPlane.hxx>
 #include <Graphic3d_Mat4d.hxx>
 #include <Graphic3d_Vec2.hxx>
@@ -214,6 +216,7 @@ std::optional<Frame> PlanarFaceFrame(const TopoDS_Face& face) {
     if (surface.GetType() != GeomAbs_Plane) return std::nullopt;
     const gp_Pln pln = surface.Plane();
     Vec3 normal = ToVec(pln.Axis().Direction().XYZ());
+    if (!pln.Position().Direct()) normal = -normal;   // a left-handed (mirrored) frame: X × Y is opposite its axis
     if (face.Orientation() == TopAbs_REVERSED) normal = -normal;
 
     const Vec3 location = ToVec(pln.Location().XYZ());
@@ -266,6 +269,7 @@ struct Viewport::Impl {
     /// an operation without applying it brings the old shapes back at once.
     std::vector<Shown> spare;
     static constexpr std::size_t kSpare = 4;
+    std::vector<ObjectId> hiddenBodies;   ///< left out of `shown` (SetHiddenBodies)
     /// Cosmetic threads and the like: drawn, never picked.
     std::vector<Handle(AIS_Shape)> decorations;
 
@@ -456,12 +460,16 @@ struct Viewport::Impl {
     /// Faces covered with pictures, by the body presentation they belong to.
     std::map<const AIS_ColoredShape*, std::vector<Handle(AIS_InteractiveObject)>> textured;
 
+    int textureLimit = 0;   ///< see Viewport::SetTextureLimit
+
     Handle(Graphic3d_Texture2D) TextureFor(const std::string& picture) {
         if (const auto it = textures.find(picture); it != textures.end()) return it->second;
         Handle(Graphic3d_Texture2D) texture;
         if (const auto bytes = look.pictures.find(picture); bytes != look.pictures.end())
-            if (const auto image = DecodeImage(bytes->second))
-                texture = MakePictureTexture(image->width, image->height, image->rgba);
+            if (const auto image = DecodeImage(bytes->second)) {
+                const Image fitted = FitWithin(*image, textureLimit);
+                texture = MakePictureTexture(fitted.width, fitted.height, fitted.rgba);
+            }
         textures[picture] = texture;
         return texture;
     }
@@ -681,6 +689,7 @@ void Viewport::Sync(const kernel::Model& model) {
     std::vector<Impl::Shown> previous = std::move(m.shown);
     m.shown.clear();
     for (const kernel::Body& body : model.GetImpl().bodies) {
+        if (std::find(m.hiddenBodies.begin(), m.hiddenBodies.end(), body.id) != m.hiddenBodies.end()) continue;
         const auto same = std::find_if(previous.begin(), previous.end(), [&](const Impl::Shown& s) {
             return !s.shape.IsNull() && s.body == body.id && s.shape->Shape().IsEqual(body.shape);
         });
@@ -807,6 +816,15 @@ void Viewport::SetBackgroundPicture(int width, int height, std::span<const std::
     m.dirty = true;
 }
 
+void Viewport::SetTextureLimit(int maxSide) {
+    Impl& m = *myImpl;
+    maxSide = std::max(0, maxSide);
+    if (maxSide == m.textureLimit) return;
+    m.textureLimit = maxSide;
+    m.textures.clear();   // made again at the new size
+    m.ApplyStyleAll();
+}
+
 void Viewport::SetLook(const doc::Look& look, const void* owner, std::uint64_t revision) {
     Impl& m = *myImpl;
     if (revision == m.lookRevision && owner == m.lookOwner) return;
@@ -815,6 +833,13 @@ void Viewport::SetLook(const doc::Look& look, const void* owner, std::uint64_t r
     m.look = look;
     m.textures.clear();   // made again from this look's pictures
     m.ApplyStyleAll();
+}
+
+void Viewport::SetHiddenBodies(std::vector<ObjectId> bodies) {
+    Impl& m = *myImpl;
+    if (bodies == m.hiddenBodies) return;
+    m.hiddenBodies = std::move(bodies);
+    m.syncedRevision = static_cast<std::uint64_t>(-1);   // the next Sync shows or leaves them out
 }
 
 void Viewport::SetHoveredBody(ObjectId body) {
@@ -887,16 +912,73 @@ void Viewport::SetCamera(const CameraState& state) {
     myImpl->dirty = true;
 }
 
-void Viewport::Orbit(double yaw, double pitch, Vec3 pivot) {
+std::optional<Image> Viewport::Snapshot(const CameraState& camera, int width, int height) {
+    Impl& m = *myImpl;
+    if (m.GlContext().IsNull()) m.view->Redraw();   // the context comes with the first redraw
+    if (m.GlContext().IsNull() || width < 16 || height < 16) return std::nullopt;
+    const CameraState before = Camera();
+    SetCamera(camera);
+    Image_AlienPixMap pixels;
+    V3d_ImageDumpOptions options;
+    options.Width      = width;
+    options.Height     = height;
+    options.BufferType = Graphic3d_BT_RGBA;
+    bool done = false;
+    try {
+        done = m.view->ToPixMap(pixels, options);
+    } catch (const Standard_Failure& e) {
+        log::Error("Viewport: snapshot failed: {}", e.GetMessageString());
+    }
+    SetCamera(before);
+    if (!done || pixels.IsEmpty()) return std::nullopt;
+    Image out;
+    out.width  = static_cast<int>(pixels.SizeX());
+    out.height = static_cast<int>(pixels.SizeY());
+    out.rgba.resize(static_cast<std::size_t>(out.width) * static_cast<std::size_t>(out.height) * 4);
+    // The bytes as drawn (the window shows the same), rows top to bottom.
+    const bool rgba = pixels.Format() == Image_Format_RGBA;
+    const bool bgra = pixels.Format() == Image_Format_BGRA;
+    if (!rgba && !bgra) return std::nullopt;
+    for (int y = 0; y < out.height; ++y) {
+        // Row(0) is the top row whichever way the bytes lie (Image_PixMap
+        // applies its own top-down order).
+        const std::uint8_t* from = pixels.Row(static_cast<std::size_t>(y));
+        std::uint8_t* to = &out.rgba[static_cast<std::size_t>(y) * static_cast<std::size_t>(out.width) * 4];
+        for (int x = 0; x < out.width; ++x, from += 4, to += 4) {
+            to[0] = bgra ? from[2] : from[0];
+            to[1] = from[1];
+            to[2] = bgra ? from[0] : from[2];
+            to[3] = 255;
+        }
+    }
+    return out;
+}
+
+void Viewport::Orbit(double yaw, double pitch, Vec3 pivot, bool turntable) {
     CameraState c = Camera();
     const Vec3 dir = (c.center - c.eye).Normalized();
     const Vec3 right = dir.Cross(c.up).Normalized();
 
     gp_Trsf pitchRot, yawRot;
     pitchRot.SetRotation(gp_Ax1(ToPnt(pivot), ToDir(right)), -pitch);
-    yawRot.SetRotation(gp_Ax1(ToPnt(pivot), gp::DZ()), -yaw);
+    // Free: sideways drag turns about the screen's vertical, whatever the
+    // view (a model seen from the top no longer spins in its own plane).
+    yawRot.SetRotation(gp_Ax1(ToPnt(pivot), turntable ? gp::DZ() : ToDir(c.up)), -yaw);
     const gp_Trsf t = yawRot.Multiplied(pitchRot);
 
+    const gp_Pnt eye = ToPnt(c.eye).Transformed(t);
+    const gp_Pnt center = ToPnt(c.center).Transformed(t);
+    const gp_Dir up = ToDir(c.up).Transformed(t);
+    SetCamera({ToVec(eye.XYZ()), ToVec(center.XYZ()), ToVec(up.XYZ()), c.scale});
+}
+
+void Viewport::Roll(double angle, Vec3 pivot) {
+    CameraState c = Camera();
+    const Vec3 dir = (c.center - c.eye).Normalized();
+    // The camera turns about its own line of sight (away from the viewer):
+    // a positive turn of the camera is a counter-clockwise turn of the model.
+    gp_Trsf t;
+    t.SetRotation(gp_Ax1(ToPnt(pivot), ToDir(dir)), angle);
     const gp_Pnt eye = ToPnt(c.eye).Transformed(t);
     const gp_Pnt center = ToPnt(c.center).Transformed(t);
     const gp_Dir up = ToDir(c.up).Transformed(t);
@@ -923,7 +1005,7 @@ void Viewport::ZoomAt(double factor, Vec2 pixel) {
     SetCamera({c.eye + shift, c.center + shift, c.up, c.scale});
 }
 
-CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, double margin) const {
+CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, double margin, double aspect) const {
     const Impl& m = *myImpl;
     Box3 box = extra;
     if (m.bounds) {
@@ -946,7 +1028,7 @@ CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, doub
         w = std::max(w, std::abs(d.Dot(right)) * 2);
         h = std::max(h, std::abs(d.Dot(trueUp)) * 2);
     }
-    const double aspect = m.width / m.height;
+    if (aspect <= 0) aspect = m.width / m.height;
     const double scale = std::max({h, w / aspect, 1.0}) * margin;
     const double distance = (hi - lo).Length() * 2 + 100;
     return {center - dir * distance, center, trueUp, scale};

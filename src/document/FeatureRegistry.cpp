@@ -52,4 +52,10 @@ std::unique_ptr<Feature> FeatureRegistry::Create(std::string_view typeId) const 
     return it != myFactories.end() ? it->second() : nullptr;
 }
 
+std::vector<std::string> FeatureRegistry::Types() const {
+    std::vector<std::string> out;
+    for (const auto& [id, factory] : myFactories) out.push_back(id);
+    return out;
+}
+
 } // namespace bz::doc

@@ -669,7 +669,14 @@ void SketchEditor::HandleInlineEdit(AppContext& app, Session& session, const Ske
     if (IsFirstDimension(trial, *c)) {
         if (const std::optional<double> measured = MeasureDimension(trial, *c); measured && *measured > 1e-9) {
             const double factor = c->parameter.value / *measured;
-            if (factor > 0) trial.ScaleAbout({0, 0}, factor);
+            // A circle or arc grows from its own centre, not from the sketch
+            // origin: otherwise the centre slid towards or away from it.
+            Vec2 about{0, 0};
+            if (c->type == sketch::ConstraintType::Diameter || c->type == sketch::ConstraintType::Radius) {
+                if (const sketch::Circle* circle = trial.FindCircle(c->refs[0])) about = trial.PositionOf(circle->center);
+                else if (const sketch::Arc* arc = trial.FindArc(c->refs[0])) about = trial.PositionOf(arc->center);
+            }
+            if (factor > 0) trial.ScaleAbout(about, factor);
         }
     }
     if (!sketch::Solve(trial).converged) {

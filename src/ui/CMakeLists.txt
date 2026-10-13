@@ -1,5 +1,6 @@
 add_library(bz_ui STATIC
     Fonts.cpp
+    GestureArt.cpp
     Icons.cpp
     Theme.cpp
     ViewCube.cpp

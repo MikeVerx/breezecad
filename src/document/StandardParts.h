@@ -85,6 +85,10 @@ const StandardInfo* FindStandard(std::string_view id);
 
 /// Sizes of a standard as shown: "M10", "6204", "30".
 std::vector<std::string> Sizes(const StandardInfo& standard);
+/// The size as `standard` writes it for what was typed: "M6" or "М6" (Latin
+/// or Cyrillic М) or "6" for a washer listed as "6", "М6" for a screw typed
+/// as "6". `given` itself when nothing matches (MakePart names the error).
+std::string MatchSize(const StandardInfo& standard, std::string_view given);
 /// Lengths available for a size, mm; empty when the part has no length.
 std::vector<double> Lengths(const StandardInfo& standard, std::string_view size);
 

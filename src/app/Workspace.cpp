@@ -24,6 +24,12 @@ namespace {
 
 const std::string kGenerator = std::string("BreezeCAD ") + Version();
 
+/// Why there is nothing to export; empty when there is something.
+std::string NothingToExport(const Session& session) {
+    if (!session.model.Bodies().empty()) return {};
+    return session.assembly ? "В сборке ещё нет компонентов для экспорта" : "В детали ещё нет тел для экспорта";
+}
+
 } // namespace
 
 Session* Workspace::Active() {
@@ -87,7 +93,7 @@ Expected<std::unique_ptr<Session>> Workspace::LoadSession(const std::filesystem:
 
 bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Settings& settings) {
     for (std::size_t i = 0; i < sessions.size(); ++i) {
-        if (!sessions[i]->path.empty() && std::filesystem::equivalent(sessions[i]->path, file)) {
+        if (!sessions[i]->path.empty() && SameFile(sessions[i]->path, file)) {
             Activate(static_cast<int>(i));
             return true;
         }
@@ -129,8 +135,14 @@ bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settin
         if (!chosen) return false;
         target = *chosen;
     }
+    return SaveTo(session, target, notes, settings);
+}
+
+bool Workspace::SaveTo(Session& session, const std::filesystem::path& target, Notifications& notes, Settings& settings,
+                       std::string* error) {
     const Status status = session.WriteFile(target, kGenerator);
     if (!status) {
+        if (error) *error = status.GetError().message;
         notes.Error(Trf("Не удалось сохранить: {}", Tr(status.GetError().message)));
         return false;
     }
@@ -154,8 +166,8 @@ bool Workspace::Export(Session& session, ExportFormat format, Notifications& not
     const Info info = format == ExportFormat::Step ? Info{"STEP AP214", "*.step", ".step"}
                     : format == ExportFormat::Stl  ? Info{"STL", "*.stl", ".stl"}
                                                    : Info{Tr("3MF для 3D-печати"), "*.3mf", ".3mf"};
-    if (session.model.Bodies().empty()) {
-        notes.Info(Tr(session.assembly ? "В сборке ещё нет компонентов для экспорта" : "В детали ещё нет тел для экспорта"));
+    if (const std::string empty = NothingToExport(session); !empty.empty()) {
+        notes.Info(Tr(empty));
         return false;
     }
     if (const std::string problem = platform::FileDialogProblem(); !problem.empty()) {
@@ -166,6 +178,16 @@ bool Workspace::Export(Session& session, ExportFormat format, Notifications& not
     const auto chosen = platform::ShowSaveDialog(Trf("Экспорт в {}", info.name),
                                                  folder / (session.Title() + info.ext), {{info.name, info.pattern}}, info.ext);
     if (!chosen) return false;
+    return ExportTo(session, format, *chosen, notes);
+}
+
+bool Workspace::ExportTo(Session& session, ExportFormat format, const std::filesystem::path& target, Notifications& notes,
+                         std::string* error) {
+    if (const std::string empty = NothingToExport(session); !empty.empty()) {
+        if (error) *error = empty;
+        notes.Info(Tr(empty));
+        return false;
+    }
     session.RebuildNow();   // a rebuild may still be under way in slices
     // Cosmetic threads are only drawn in the model; a file gets them cut.
     std::optional<kernel::Model> real;
@@ -184,14 +206,15 @@ bool Workspace::Export(Session& session, ExportFormat format, Notifications& not
                 notes.Error(Trf("{}: резьба для файла не построилась — {}", f->name, Tr(f->status.message)));
     }
     const kernel::Model& model = real ? *real : session.model;
-    const Status status = format == ExportFormat::Step ? model.ExportStep(*chosen)
-                        : format == ExportFormat::Stl  ? model.ExportStl(*chosen)
-                                                       : model.Export3mf(*chosen);
+    const Status status = format == ExportFormat::Step ? model.ExportStep(target)
+                        : format == ExportFormat::Stl  ? model.ExportStl(target)
+                                                       : model.Export3mf(target);
     if (!status) {
+        if (error) *error = status.GetError().message;
         notes.Error(Tr(status.GetError().message));
         return false;
     }
-    notes.Success(Trf("Экспортировано: {}", ToUtf8(chosen->filename())));
+    notes.Success(Trf("Экспортировано: {}", ToUtf8(target.filename())));
     return true;
 }
 

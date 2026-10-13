@@ -168,7 +168,10 @@ bool Session::Rebuild(double budgetMs) {
     bool adopted = false;
     if (myBackground) {
         if (budgetMs >= 0 && !myBackground->finished) return false;   // still at it; the window goes on
-        if (FinishBackground()) myBuiltRevision = doc.Revision();
+        if (FinishBackground()) {
+            myBuiltRevision = doc.Revision();
+            myBuiltFeatureCount = doc.FeatureCount();
+        }
         myRebuilding = false;
         adopted = true;
     }
@@ -176,8 +179,10 @@ bool Session::Rebuild(double budgetMs) {
     const std::size_t limit = myRebuildLimit ? *myRebuildLimit : static_cast<std::size_t>(-1);
     const bool leftOver = doc.DirtyFrom() < doc.FeatureCount() && doc.DirtyFrom() <= limit;
     if (doc.Revision() == myBuiltRevision && !leftOver) return adopted;
-    // A change that needs no rebuild (the look of the part).
-    if (doc.DirtyFrom() >= doc.FeatureCount() && !leftOver && model.Revision() > 0) {
+    // A change that needs no rebuild (the look of the part). Not when the
+    // last operation went away (undo, delete): nothing after it is dirty,
+    // yet the part shown still has it.
+    if (doc.DirtyFrom() >= doc.FeatureCount() && !leftOver && model.Revision() > 0 && doc.FeatureCount() == myBuiltFeatureCount) {
         myBuiltRevision = doc.Revision();
         return adopted;
     }
@@ -207,6 +212,7 @@ bool Session::Rebuild(double budgetMs) {
     myLastRebuildSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     myLastRebuildAt = ImGui::GetTime();
     myBuiltRevision = doc.Revision();
+    myBuiltFeatureCount = doc.FeatureCount();
     myRebuilding = !done;
     myRebuildWorkMs += myLastRebuildSeconds * 1000.0;
     if (done && mon::Enabled())

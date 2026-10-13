@@ -43,6 +43,9 @@ public:
     ObjectId    id;
     std::string name;               ///< shown in the tree, e.g. "Эскиз1"
     bool        suppressed = false;
+    /// Not drawn (a body, sketch, work plane, axis or point). Unlike
+    /// `suppressed` it changes nothing else: geometry, mass and export stay.
+    bool        hidden = false;
 
     /// Runtime state, never saved.
     FeatureStatus status;

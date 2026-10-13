@@ -71,11 +71,12 @@ std::string DocumentToJson(const Document& doc) {
     for (const auto& f : doc.Features()) {
         Json j{{"id", f->id.value}, {"type", f->Type()}, {"name", f->name}};
         if (f->suppressed) j["suppressed"] = true;
+        if (f->hidden) j["hidden"] = true;   // absent in older files: shown
         // A feature's own fields must not reuse the common keys (a hole once
         // wrote its kind as "type" and could not be opened again).
         Json fields = Json::object();
         f->SaveFields(fields);
-        for (const char* reserved : {"id", "type", "name", "suppressed"})
+        for (const char* reserved : {"id", "type", "name", "suppressed", "hidden"})
             assert(!fields.contains(reserved) && "SaveFields wrote a reserved key");
         j.update(fields);
         features.push_back(std::move(j));
@@ -93,7 +94,9 @@ std::string DocumentToJson(const Document& doc) {
     return root.dump(1, '\t');
 }
 
-Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
+namespace {
+
+Expected<Document> DocumentFromJsonUnguarded(std::string_view text, LoadReport* report) {
     const Json root = Json::parse(text, nullptr, false);
     if (root.is_discarded() || !root.is_object()) return Error{"Содержимое документа повреждено (не JSON)"};
 
@@ -125,7 +128,7 @@ Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
             feature = std::move(unknown);
         }
         if (!ReadMember(j, "id", feature->id) || !feature->id || !ReadMember(j, "name", feature->name) ||
-            !ReadMember(j, "suppressed", feature->suppressed))
+            !ReadMember(j, "suppressed", feature->suppressed) || !ReadMember(j, "hidden", feature->hidden))
             return Error{"Повреждена операция в дереве"};
         if (Status s = feature->LoadFields(j); !s) return s.GetError();
         doc.Insert(std::move(feature), doc.FeatureCount());
@@ -143,6 +146,18 @@ Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
     doc.ClearDirty();
     doc.MarkChanged(0);   // everything needs a first rebuild
     return doc;
+}
+
+} // namespace
+
+// nlohmann::json throws type_error when a field exists but has another type ("name": 5);
+// a damaged or hand-edited file must come back as an error, not as std::terminate.
+Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
+    try {
+        return DocumentFromJsonUnguarded(text, report);
+    } catch (const Json::exception& e) {
+        return Error{std::format("Содержимое документа повреждено: {}", e.what())};
+    }
 }
 
 Status WriteBzcArchive(const std::filesystem::path& path, std::string_view documentType, std::string_view generator,
@@ -168,7 +183,12 @@ Status WriteBzcArchive(const std::filesystem::path& path, std::string_view docum
     temp += ".saving";
     {
         std::ofstream out(temp, std::ios::binary | std::ios::trunc);
-        if (!out) return Error{std::format("Нет доступа к папке: {}", ToUtf8(path.parent_path()))};
+        if (!out) {
+            std::error_code missing;
+            const bool exists = path.parent_path().empty() || std::filesystem::is_directory(path.parent_path(), missing);
+            const std::string folder = ToUtf8(path.parent_path());
+            return Error{exists ? std::format("Нет доступа к папке: {}", folder) : std::format("Папки нет: {}", folder)};
+        }
         out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
         out.flush();
         if (!out) return Error{"Не удалось записать файл (диск заполнен?)"};
@@ -210,10 +230,14 @@ Expected<BzcArchive> ReadBzcArchive(const std::filesystem::path& path) {
     if (!documentText) return documentText.GetError();
 
     const Json manifest = Json::parse(*manifestText, nullptr, false);
-    if (manifest.is_discarded() || manifest.value("format", "") != "bzc")
+    try {
+        if (!manifest.is_object() || manifest.value("format", "") != "bzc")
+            return Error{"Файл не является документом BreezeCAD (.bzc)"};
+        archive.formatVersion = manifest.value("formatVersion", 0);
+        archive.documentType  = manifest.value("documentType", std::string(kPartType));
+    } catch (const Json::exception&) {   // a field of the wrong type
         return Error{"Файл не является документом BreezeCAD (.bzc)"};
-    archive.formatVersion = manifest.value("formatVersion", 0);
-    archive.documentType  = manifest.value("documentType", std::string(kPartType));
+    }
     archive.documentJson  = std::move(*documentText);
     return archive;
 }
