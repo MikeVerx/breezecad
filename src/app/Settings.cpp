@@ -49,6 +49,7 @@ Settings FromJson(const nlohmann::json& j) {
     s.backgroundRebuild = j.value("backgroundRebuild", s.backgroundRebuild);
     s.showTriad       = j.value("showTriad", s.showTriad);
     s.reopenLast      = j.value("reopenLast", s.reopenLast);
+    s.lastNewTemplate = j.value("lastNewTemplate", s.lastNewTemplate);
     // "viewBackground" (0..2) from earlier versions.
     static constexpr const char* kOld[] = {"theme", "light", "dark"};
     s.background = kOld[std::clamp(j.value("viewBackground", 0), 0, 2)];
@@ -158,6 +159,7 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"uiScale", uiScale},
         {"showTriad", showTriad},
         {"reopenLast", reopenLast},
+        {"lastNewTemplate", lastNewTemplate},
         {"background", background},
         {"backgroundPicture", backgroundPicture},
         {"newPartLength", newPartLength},

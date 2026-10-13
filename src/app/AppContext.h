@@ -66,6 +66,12 @@ struct ShellState {
     std::string        shortcutNote;             ///< "taken from …" after a reassignment
     bool               showMassProperties = false;   ///< the "МЦХ" window
     bool               showLibrary = false;          ///< the standard parts window ("Библиотека")
+    /// The "Создать" window: the folder shown and the template chosen in it.
+    struct NewDocument {
+        bool        open = false;
+        std::string group;      ///< DocumentTypeInfo::group
+        std::string chosen;     ///< template id (NewTemplates)
+    } newDocument;
     /// The standard parts window: what it shows, kept while the program runs
     /// (not saved: the recent parts are those of this session only).
     struct Library {

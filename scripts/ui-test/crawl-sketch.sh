@@ -7,7 +7,7 @@ cd /home/claude/breezecad
 U=scripts/ui-test/ui.sh
 export SHOTS=${SHOTS:-/tmp/shots}
 fresh() {
-  $U start >/dev/null 2>&1; $U clk 460 224; sleep 1; $U clk 52 115; $U clk 1060 507; sleep 1.5
+  $U start >/dev/null 2>&1; $U clk 599 224; sleep 1; $U clk 52 115; $U clk 1060 507; sleep 1.5
   $U key r; $U clk 800 350; $U mousemove 900 450; sleep 0.2; $U clk 1100 650; $U key Escape
 }
 tools="51,115 125,115 199,115 273,115 357,95 357,119 436,115 557,95 557,119 540,143 666,95 666,119 752,95 746,119 840,95 845,119 936,95 941,119 1031,95 1031,119 1087,95 1113,95 1139,95 1165,95 1191,95 1087,119 1113,119 1139,119 1165,119 1191,119 1087,143 1113,143 1139,143 1258,115 1380,95 1358,119"

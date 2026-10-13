@@ -1089,6 +1089,7 @@ void DrawBetaReport(AppContext& app) {
 void DrawDialogs(AppContext& app) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
+    DrawNewDocumentDialog(app);
 
     // --- Save changes? ---
     bool unsavedOpen = app.shell.closeRequest.has_value();

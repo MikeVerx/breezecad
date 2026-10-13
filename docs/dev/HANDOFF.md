@@ -64,7 +64,7 @@ https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-win
 `scripts/ui-test/ui.sh start [file]`, `clk X Y`, `key r`, `shot NAME [delay]`, `stop`;
 `SHOTS=<scratchpad>/shots`. Экран 1600×1000, окно 1440×900 в (0,0).
 Ctrl через xdotool не доходит — использовать Shift/клавиши/ленту.
-Новая деталь: `clk 460 224`; Начать эскиз `clk 52 115` → плоскость XY `clk 1060 507`.
+Новая деталь: `clk 599 224` (кнопка «Деталь»; «Создать…» — `clk 445 224`); Начать эскиз `clk 52 115` → плоскость XY `clk 1060 507`.
 В эскизе: `r` прямоугольник, `l` отрезок, `o` эквидистанта, Esc ×3–4 — выход.
 Двойной щелчок в дереве: `mousemove x y; click --repeat 2 --delay 80 1`.
 Тестовые детали: `tests/data/кронштейн.bzc` (плита+бобышка+отверстия+Плоскость1).

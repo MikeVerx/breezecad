@@ -20,6 +20,7 @@ struct Settings {
     std::string backgroundPicture;        ///< the user's picture for "picture" (UTF-8 path)
     bool        reopenLast     = false;   ///< open the most recent file at start
     int         newPartLength  = 0;       ///< length unit of new parts: LengthUnit as int (0 = mm)
+    std::string lastNewTemplate;          ///< the template last created from in the "Создать" window (empty: none yet)
     double      orbitSpeed     = 1.0;     ///< view rotation sensitivity, 0.5..2
     bool        invertOrbit    = false;   ///< drag up turns the model down
     bool        turntableOrbit = false;   ///< sideways drag turns about world Z (else about the screen's vertical)

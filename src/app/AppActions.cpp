@@ -31,7 +31,9 @@ void RegisterActions(AppContext& app) {
     const auto asmDoc = [&app] { return InAssembly(app); };
 
     // --- file ---
-    a.Add({"file.new", N_("Новая деталь"), "ui-new", Ctrl(ImGuiKey_N), {}, {}, [&app] { NewDocument(app); }});
+    a.Add({"file.new", N_("Создать…"), "ui-new", Ctrl(ImGuiKey_N), N_("Деталь, сборка или другой документ — по шаблону"), {},
+           [&app] { OpenNewDocumentDialog(app); }});
+    a.Add({"file.newPart", N_("Новая деталь"), "tree-part", 0, {}, {}, [&app] { NewDocument(app); }});
     a.Add({"file.newAssembly", N_("Новая сборка"), "assembly", 0, N_("Собрать детали в узел: компоненты и зависимости"), {},
            [&app] { NewAssembly(app); }});
     a.Add({"assembly.place", N_("Вставить"), "place-component", ImGuiKey_P, N_("Вставить деталь из файла как компонент (P)"),

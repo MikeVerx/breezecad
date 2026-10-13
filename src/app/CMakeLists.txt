@@ -10,6 +10,7 @@ add_executable(breezecad WIN32
     Backgrounds.cpp
     BetaTesting.cpp
     Format.cpp
+    NewTemplates.cpp
     Language.cpp
     Materials.cpp
     Notifications.cpp
@@ -51,6 +52,7 @@ add_executable(breezecad WIN32
     features/SketchOperationEditor.cpp
     shell/Bars.cpp
     shell/Dialogs.cpp
+    shell/NewDocumentDialog.cpp
     shell/Header.cpp
     shell/HomeScreen.cpp
     shell/LeftPanels.cpp
