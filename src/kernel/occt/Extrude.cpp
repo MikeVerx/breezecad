@@ -198,16 +198,23 @@ Expected<TopoDS_Shape> MakeExtrusion(const std::vector<TopoDS_Face>& faces, cons
     }
     if (length <= 1e-6) return Error{"Расстояние должно быть больше нуля"};
 
-    // Symmetric (and through-all both ways) start half a length behind the plane.
-    const bool symmetric = f.extent == doc::ExtentType::Symmetric;
+    // Symmetric starts half the length behind the sketch plane; asymmetric
+    // starts `distance2` behind it and goes `distance` beyond it.
+    double behind = 0.0;
+    if (f.extent == doc::ExtentType::Symmetric) behind = length / 2.0;
+    if (f.extent == doc::ExtentType::Asymmetric) {
+        if (f.distance2.value <= 1e-6) return Error{"Расстояние должно быть больше нуля"};
+        behind = f.distance2.value;
+        length += behind;
+    }
     gp_Trsf shift;
-    if (symmetric) shift.SetTranslation(dir * (-length / 2.0));
+    if (behind > 0.0) shift.SetTranslation(dir * (-behind));
 
     try {
         TopoDS_Shape result;
         for (const TopoDS_Face& face : faces) {
             const TopoDS_Face start =
-                symmetric ? TopoDS::Face(BRepBuilderAPI_Transform(face, shift, true).Shape()) : face;
+                behind > 0.0 ? TopoDS::Face(BRepBuilderAPI_Transform(face, shift, true).Shape()) : face;
             TopoDS_Shape piece = Sweep(start, dir, length, f.taper.value);
             if (IsEmpty(piece)) return Error{"Не удалось построить выдавливание (уклон слишком большой?)"};
             result = result.IsNull() ? piece : BRepAlgoAPI_Fuse(result, piece).Shape();
