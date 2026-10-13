@@ -6,6 +6,7 @@ add_executable(bz_tests
     core/FaultGuardTests.cpp
     core/I18nTests.cpp
     core/ImageTests.cpp
+    core/PathTextTests.cpp
     core/SourceRulesTests.cpp
     document/AppearanceTests.cpp
     document/CorruptFileTests.cpp

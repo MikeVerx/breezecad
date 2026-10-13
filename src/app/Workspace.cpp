@@ -87,7 +87,7 @@ Expected<std::unique_ptr<Session>> Workspace::LoadSession(const std::filesystem:
 
 bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Settings& settings) {
     for (std::size_t i = 0; i < sessions.size(); ++i) {
-        if (!sessions[i]->path.empty() && std::filesystem::equivalent(sessions[i]->path, file)) {
+        if (!sessions[i]->path.empty() && SameFile(sessions[i]->path, file)) {
             Activate(static_cast<int>(i));
             return true;
         }
