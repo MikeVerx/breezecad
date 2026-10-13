@@ -1,9 +1,14 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(BreezeCAD
-    VERSION 0.2.0
+    VERSION 0.2.1
     DESCRIPTION "Free offline parametric CAD"
     LANGUAGES C CXX)
+# What the program calls itself: the number above plus a stage ("-Beta";
+# empty for a stable release). Releases from main are tagged after it
+# (v0.2.1-beta) and their notes are docs/releases/<label in lower case>.md.
+set(BZ_VERSION_SUFFIX "-Beta")
+set(BZ_VERSION_LABEL "${PROJECT_VERSION}${BZ_VERSION_SUFFIX}")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

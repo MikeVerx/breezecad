@@ -5,7 +5,7 @@
 
 namespace bz {
 
-/// "0.2.0".
+/// "0.2.1-Beta" (the number and the stage, see the top CMakeLists.txt).
 const char* Version();
 /// Short git commit ("3b9256a"); empty when built outside git.
 const char* Commit();
@@ -13,7 +13,7 @@ const char* Commit();
 const char* Branch();
 /// Build date, "2026-10-10" (UTC).
 const char* BuildDate();
-/// "0.2.0 (next 3b9256a, 2026-10-10)", or "0.2.0" when nothing more is known.
+/// "0.2.1-Beta (next 3b9256a, 2026-10-10)", or "0.2.1-Beta" when nothing more is known.
 std::string VersionLine();
 
 } // namespace bz
