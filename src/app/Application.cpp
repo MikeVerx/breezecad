@@ -434,6 +434,7 @@ void Application::Frame() {
         }
         myViewport.SetDisplayStyle(myShell.displayStyle);
         myViewport.SetQuality(mySettings.graphics);
+        myViewport.SetTextureLimit(Settings::TextureLimit(mySettings.textureQuality));
         if (myShell.keepModelInView) {   // the model was rebuilt and synced above
             myShell.keepModelInView = false;
             KeepInView(app, myViewport.ModelBounds());
