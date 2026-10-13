@@ -2,6 +2,7 @@
 
 #include "app/Settings.h"
 #include "core/I18n.h"
+#include "core/Folders.h"
 #include "core/Log.h"
 #include "core/PathText.h"
 #include "document/BzcFile.h"
@@ -76,8 +77,8 @@ void Autosave::Discard(const Session& session) const {
 std::vector<RecoverableDocument> Autosave::FindRecoverable() const {
     std::vector<RecoverableDocument> found;
     std::error_code ec;
-    for (const auto& entry : std::filesystem::directory_iterator(myRoot, ec)) {
-        if (!entry.is_directory()) continue;
+    for (const auto& entry : FolderEntries(myRoot)) {   // never throws (B-20)
+        if (!IsFolder(entry)) continue;
         std::ifstream in(entry.path() / "info.json");
         if (!in) continue;
         const nlohmann::json info = nlohmann::json::parse(in, nullptr, false);

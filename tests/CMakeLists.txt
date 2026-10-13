@@ -7,6 +7,7 @@ add_executable(bz_tests
     assembly/SolverTests.cpp
     core/ExpressionTests.cpp
     core/FaultGuardTests.cpp
+    core/FoldersTests.cpp
     core/I18nTests.cpp
     core/ImageTests.cpp
     core/PathTextTests.cpp
