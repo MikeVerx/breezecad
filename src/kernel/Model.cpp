@@ -993,6 +993,10 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                                      return occt::MakeExtrusion(faces, *ex, frame, ThroughAllLength(bodies, frame), target, until);
                                  });
             } else if (auto* rev = dynamic_cast<doc::RevolveFeature*>(&f)) {
+                // On this thread only: OCCT 7.9.3 faulted inside its worker pool
+                // building a revolve (tester report), where FaultGuard cannot
+                // catch it. Here a fault costs this operation, not the program.
+                const occt::SerialBooleans serial;
                 ApplySketchSolid(*rev, impl, bodies, rev->status, doc,
                                  [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature& profile, const Frame& frame) {
                                      return occt::MakeRevolution(faces, *rev, profile.sketch, frame);

@@ -94,7 +94,7 @@ Expected<TopoDS_Shape> MakeRevolution(const std::vector<TopoDS_Face>& faces, con
             const TopoDS_Shape start = symmetric ? BRepBuilderAPI_Transform(face, back, true).Shape() : TopoDS_Shape(face);
             BRepPrimAPI_MakeRevol revol(start, turnAxis, angle, true);
             if (!revol.IsDone()) return Error{"Не удалось построить вращение"};
-            result = result.IsNull() ? revol.Shape() : BRepAlgoAPI_Fuse(result, revol.Shape()).Shape();
+            result = result.IsNull() ? revol.Shape() : Fuse(result, revol.Shape());
         }
         result = Clean(result);
         if (!BRepCheck_Analyzer(result).IsValid()) return Error{"Вращение дало некорректное тело"};

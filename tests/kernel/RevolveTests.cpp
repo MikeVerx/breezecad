@@ -1,6 +1,7 @@
 #include "../Fixtures.h"
 #include "document/BzcFile.h"
 #include "kernel/Model.h"
+#include "kernel/occt/Extrude.h"
 
 #include <doctest.h>
 
@@ -114,4 +115,18 @@ TEST_CASE("revolve survives a json round trip") {
     CHECK(back->axis.kind == RevolveAxisKind::SketchX);
     CHECK(back->extent == RevolveExtent::Symmetric);
     CHECK(back->reversed);
+}
+
+TEST_CASE("serial booleans: the scope nests and ends") {
+    using kernel::occt::BooleansSerial;
+    CHECK_FALSE(BooleansSerial());
+    {
+        const kernel::occt::SerialBooleans outer;
+        {
+            const kernel::occt::SerialBooleans inner;
+            CHECK(BooleansSerial());
+        }
+        CHECK(BooleansSerial());
+    }
+    CHECK_FALSE(BooleansSerial());
 }
