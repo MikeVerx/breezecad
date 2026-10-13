@@ -5,6 +5,7 @@
 #include "app/assembly/AssemblyUi.h"
 #include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
+#include "app/viewport/Measure.h"
 #include "app/sketch/SketchEditor.h"
 #include "core/Expression.h"
 #include "core/I18n.h"
@@ -252,6 +253,7 @@ void DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             const bool active = app.shell.leftTab == t.tab && !app.ops.Active();
             if (ui::IconButton(ui, t.id, t.icon, 36, 20, t.tip, true, active)) {
                 if (app.ops.Active()) app.Later([&app, &session] { app.ops.Close(app, session); });
+                app.shell.measuring = false;   // its panel gives way to the one asked for
                 app.shell.leftTab = t.tab;
             }
             y += ui.S(40);
@@ -268,6 +270,8 @@ void DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const float width = panelSize.x - 1;
     if (OperationEditor* operation = app.ops.Active()) {
         operation->DrawPanel(app, session);
+    } else if (app.shell.measuring && session.mode == EditMode::Model) {
+        DrawMeasurePanel(app, session, width);
     } else if (session.activeSketch && app.sketch.HasToolPanel()) {
         app.sketch.DrawToolPanel(app, session, width);
     } else {

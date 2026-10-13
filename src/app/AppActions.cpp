@@ -107,6 +107,7 @@ void RegisterActions(AppContext& app) {
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); }, [&app] {
                if (Session* s = app.Doc()) app.ops.Close(app, *s);
                app.shell.measuring = !app.shell.measuring;
+               app.shell.measureSlot = 0;
            }});
     a.Add({"tools.interference", N_("Коллизии"), "interference", 0, N_("Показать красным, где тела детали заходят друг в друга"),
            [&app] { return app.Doc() && !app.workspace.ShowsHome() && !app.Doc()->model.Bodies().empty(); },

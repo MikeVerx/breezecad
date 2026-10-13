@@ -100,6 +100,7 @@ struct ShellState {
         bool  flipped = false;     ///< keep the other half
     } section;
     bool measuring = false;   ///< "Измерить" is on
+    int  measureSlot = 0;     ///< which of its two fields the next click fills
     bool interference = false;   ///< "Коллизии": overlaps of the bodies shown
 
     /// Choosing faces with the left button (see viewport/FaceSelection).

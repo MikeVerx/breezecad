@@ -185,9 +185,12 @@ public:
     /// While on, vertices, edges and faces of the shown bodies are hovered
     /// and picked for measuring (not while picking on an original body).
     void SetMeasuring(bool on);
-    /// Picks the entity under the cursor: the first one, then the second,
-    /// then the first again. Returns false when nothing is there.
-    bool MeasurePick(Vec2 pixel);
+    /// Picks the entity under the cursor into `slot` (0 the first, 1 the
+    /// second), replacing what was there. Returns false when nothing is
+    /// there (a miss changes nothing).
+    bool MeasurePick(Vec2 pixel, int slot);
+    /// Empties one slot (0, 1), or both.
+    void ClearMeasure(int slot);
     void ClearMeasure();
     struct Measured {
         std::optional<kernel::EntityInfo>  first, second;

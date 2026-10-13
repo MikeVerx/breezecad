@@ -276,8 +276,8 @@ struct Viewport::Impl {
     /// Measuring (see SetMeasuring).
     struct Measuring {
         bool                           on = false;
-        std::vector<TopoDS_Shape>      picked;   ///< at most two
-        std::vector<Handle(AIS_Shape)> marks;    ///< the picked entities, highlighted
+        std::array<TopoDS_Shape, 2>      picked;   ///< null: that slot is empty
+        std::array<Handle(AIS_Shape), 2> marks;    ///< the picked entities, highlighted
         Viewport::Measured             result;
     } measuring;
 
@@ -735,7 +735,7 @@ void Viewport::Sync(const kernel::Model& model) {
     }
     m.ActivateShown();
     // Picked entities belonged to the old shapes.
-    if (!m.measuring.picked.empty()) ClearMeasure();
+    if (!m.measuring.picked[0].IsNull() || !m.measuring.picked[1].IsNull()) ClearMeasure();
     m.bounds = model.BoundingBox();
     m.view->SetComputedMode(m.style == DisplayStyle::HiddenLines);
     m.dirty = true;
@@ -1159,7 +1159,7 @@ void Viewport::SetMeasuring(bool on) {
     m.dirty = true;
 }
 
-bool Viewport::MeasurePick(Vec2 pixel) {
+bool Viewport::MeasurePick(Vec2 pixel, int slot) {
     Impl& m = *myImpl;
     Impl::Measuring& ms = m.measuring;
     if (!ms.on) return false;
@@ -1170,13 +1170,14 @@ bool Viewport::MeasurePick(Vec2 pixel) {
     if (selector->NbPicked() < 1) return false;
     const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(1));
     if (owner.IsNull()) return false;
-    if (ms.picked.size() >= 2) ClearMeasure();   // a third click starts over
+    const auto s = static_cast<std::size_t>(std::clamp(slot, 0, 1));
+    ClearMeasure(static_cast<int>(s));
 
     const TopoDS_Shape entity = owner->Shape();
     const kernel::EntityInfo info = kernel::occt::Describe(entity, ToVec(selector->PickedPoint(1).XYZ()));
-    ms.picked.push_back(entity);
-    (ms.picked.size() == 1 ? ms.result.first : ms.result.second) = info;
-    if (ms.picked.size() == 2) ms.result.between = kernel::occt::Measure(ms.picked[0], ms.picked[1]);
+    ms.picked[s] = entity;
+    (s == 0 ? ms.result.first : ms.result.second) = info;
+    if (!ms.picked[0].IsNull() && !ms.picked[1].IsNull()) ms.result.between = kernel::occt::Measure(ms.picked[0], ms.picked[1]);
 
     Handle(AIS_Shape) mark = new AIS_Shape(entity);
     mark->SetColor(ToQuantity(m.colors.selection));
@@ -1185,18 +1186,26 @@ bool Viewport::MeasurePick(Vec2 pixel) {
     mark->Attributes()->SetFaceBoundaryDraw(false);
     mark->SetZLayer(Graphic3d_ZLayerId_Topmost);
     m.context->Display(mark, entity.ShapeType() == TopAbs_FACE ? AIS_Shaded : AIS_WireFrame, -1, false);
-    ms.marks.push_back(mark);
+    ms.marks[s] = mark;
     m.dirty = true;
     return true;
 }
 
-void Viewport::ClearMeasure() {
+void Viewport::ClearMeasure(int slot) {
     Impl& m = *myImpl;
-    for (const auto& mark : m.measuring.marks) m.context->Remove(mark, false);
-    m.measuring.marks.clear();
-    m.measuring.picked.clear();
-    m.measuring.result = {};
+    Impl::Measuring& ms = m.measuring;
+    const auto s = static_cast<std::size_t>(std::clamp(slot, 0, 1));
+    if (!ms.marks[s].IsNull()) m.context->Remove(ms.marks[s], false);
+    ms.marks[s].Nullify();
+    ms.picked[s].Nullify();
+    (s == 0 ? ms.result.first : ms.result.second).reset();
+    ms.result.between.reset();
     m.dirty = true;
+}
+
+void Viewport::ClearMeasure() {
+    ClearMeasure(0);
+    ClearMeasure(1);
 }
 
 const Viewport::Measured& Viewport::Measurement() const { return myImpl->measuring.result; }
