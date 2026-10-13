@@ -192,7 +192,7 @@ void OnMotion(const XIDeviceEvent& e) {
     detail::PushTouch(t);
 }
 
-#if defined(XI_GesturePinchBegin)
+#if defined(BZ_XI_GESTURES)
 void OnPinch(const XIGesturePinchEvent& e) {
     if (e.scale > 0.0 && gX.pinchScale > 0.0 && e.scale != gX.pinchScale) {
         TouchEvent t;
@@ -222,7 +222,7 @@ void Pump() {
             case XI_HierarchyChanged: FindDevices(); break;
             case XI_Enter: gX.last.clear(); break;   // valuators may jump while the pointer is elsewhere
             case XI_Motion: OnMotion(*static_cast<const XIDeviceEvent*>(cookie->data)); break;
-#if defined(XI_GesturePinchBegin)
+#if defined(BZ_XI_GESTURES)
             case XI_GesturePinchBegin: gX.pinchScale = 1.0; break;
             case XI_GesturePinchUpdate: OnPinch(*static_cast<const XIGesturePinchEvent*>(cookie->data)); break;
 #endif
@@ -305,7 +305,7 @@ void StartTouchpad(GLFWwindow* window) {
         CloseX11();
         return;
     }
-#if defined(XI_GesturePinchBegin)
+#if defined(BZ_XI_GESTURES)
     gX.gestures = major > 2 || minor >= 4;
 #endif
     FindDevices();
@@ -313,7 +313,7 @@ void StartTouchpad(GLFWwindow* window) {
     unsigned char bits[XIMaskLen(XI_LASTEVENT)] = {};
     SetBit(bits, XI_Motion);
     SetBit(bits, XI_Enter);
-#if defined(XI_GesturePinchBegin)
+#if defined(BZ_XI_GESTURES)
     if (gX.gestures) {
         SetBit(bits, XI_GesturePinchBegin);
         SetBit(bits, XI_GesturePinchUpdate);
