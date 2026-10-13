@@ -30,6 +30,8 @@
 #include <Bnd_Box.hxx>
 #include <GeomAbs_Shape.hxx>
 #include <Graphic3d_Camera.hxx>
+#include <Image_AlienPixMap.hxx>
+#include <V3d_ImageDumpOptions.hxx>
 #include <Graphic3d_ClipPlane.hxx>
 #include <Graphic3d_Mat4d.hxx>
 #include <Graphic3d_Vec2.hxx>
@@ -214,6 +216,7 @@ std::optional<Frame> PlanarFaceFrame(const TopoDS_Face& face) {
     if (surface.GetType() != GeomAbs_Plane) return std::nullopt;
     const gp_Pln pln = surface.Plane();
     Vec3 normal = ToVec(pln.Axis().Direction().XYZ());
+    if (!pln.Position().Direct()) normal = -normal;   // a left-handed (mirrored) frame: X × Y is opposite its axis
     if (face.Orientation() == TopAbs_REVERSED) normal = -normal;
 
     const Vec3 location = ToVec(pln.Location().XYZ());
@@ -909,6 +912,48 @@ void Viewport::SetCamera(const CameraState& state) {
     myImpl->dirty = true;
 }
 
+std::optional<Image> Viewport::Snapshot(const CameraState& camera, int width, int height) {
+    Impl& m = *myImpl;
+    if (m.GlContext().IsNull()) m.view->Redraw();   // the context comes with the first redraw
+    if (m.GlContext().IsNull() || width < 16 || height < 16) return std::nullopt;
+    const CameraState before = Camera();
+    SetCamera(camera);
+    Image_AlienPixMap pixels;
+    V3d_ImageDumpOptions options;
+    options.Width      = width;
+    options.Height     = height;
+    options.BufferType = Graphic3d_BT_RGBA;
+    bool done = false;
+    try {
+        done = m.view->ToPixMap(pixels, options);
+    } catch (const Standard_Failure& e) {
+        log::Error("Viewport: snapshot failed: {}", e.GetMessageString());
+    }
+    SetCamera(before);
+    if (!done || pixels.IsEmpty()) return std::nullopt;
+    Image out;
+    out.width  = static_cast<int>(pixels.SizeX());
+    out.height = static_cast<int>(pixels.SizeY());
+    out.rgba.resize(static_cast<std::size_t>(out.width) * static_cast<std::size_t>(out.height) * 4);
+    // The bytes as drawn (the window shows the same), rows top to bottom.
+    const bool rgba = pixels.Format() == Image_Format_RGBA;
+    const bool bgra = pixels.Format() == Image_Format_BGRA;
+    if (!rgba && !bgra) return std::nullopt;
+    for (int y = 0; y < out.height; ++y) {
+        // Row(0) is the top row whichever way the bytes lie (Image_PixMap
+        // applies its own top-down order).
+        const std::uint8_t* from = pixels.Row(static_cast<std::size_t>(y));
+        std::uint8_t* to = &out.rgba[static_cast<std::size_t>(y) * static_cast<std::size_t>(out.width) * 4];
+        for (int x = 0; x < out.width; ++x, from += 4, to += 4) {
+            to[0] = bgra ? from[2] : from[0];
+            to[1] = from[1];
+            to[2] = bgra ? from[0] : from[2];
+            to[3] = 255;
+        }
+    }
+    return out;
+}
+
 void Viewport::Orbit(double yaw, double pitch, Vec3 pivot, bool turntable) {
     CameraState c = Camera();
     const Vec3 dir = (c.center - c.eye).Normalized();
@@ -960,7 +1005,7 @@ void Viewport::ZoomAt(double factor, Vec2 pixel) {
     SetCamera({c.eye + shift, c.center + shift, c.up, c.scale});
 }
 
-CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, double margin) const {
+CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, double margin, double aspect) const {
     const Impl& m = *myImpl;
     Box3 box = extra;
     if (m.bounds) {
@@ -983,7 +1028,7 @@ CameraState Viewport::FitCamera(Vec3 direction, Vec3 up, const Box3& extra, doub
         w = std::max(w, std::abs(d.Dot(right)) * 2);
         h = std::max(h, std::abs(d.Dot(trueUp)) * 2);
     }
-    const double aspect = m.width / m.height;
+    if (aspect <= 0) aspect = m.width / m.height;
     const double scale = std::max({h, w / aspect, 1.0}) * margin;
     const double distance = (hi - lo).Length() * 2 + 100;
     return {center - dir * distance, center, trueUp, scale};

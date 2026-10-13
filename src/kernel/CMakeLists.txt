@@ -21,7 +21,8 @@ add_library(bz_kernel STATIC
     occt/SketchGeometry.cpp
     occt/Sweep.cpp
     occt/Text.cpp
-    occt/Thread.cpp)
+    occt/Thread.cpp
+    occt/Topology.cpp)
 target_link_libraries(bz_kernel
     PUBLIC  bz::document bz::assembly bz::occt_modeling
     PRIVATE bz::occt_exchange bz::miniz TKService TKV3d)   # TKV3d: text outlines on OCCT 7.x

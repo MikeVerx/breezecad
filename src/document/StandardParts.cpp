@@ -666,6 +666,20 @@ std::string MatchingSize(const StandardInfo& from, std::string_view size, const 
     return sizes.front();
 }
 
+std::string MatchSize(const StandardInfo& standard, std::string_view given) {
+    const std::vector<std::string> sizes = Sizes(standard);
+    if (std::ranges::find(sizes, given) != sizes.end()) return std::string(given);
+    if (given.starts_with("M") || given.starts_with("m")) {   // a Latin M typed for «М»
+        const std::string cyrillic = "\xD0\x9C" + std::string(given.substr(1));
+        if (std::ranges::find(sizes, cyrillic) != sizes.end()) return cyrillic;
+    }
+    // By the number: "M6" for a washer "6", "6" for a screw "М6".
+    if (const auto d = SizeNumber(given))
+        for (const std::string& s : sizes)
+            if (const auto e = SizeNumber(s); e && std::abs(*e - *d) < 1e-9) return s;
+    return std::string(given);
+}
+
 std::vector<double> Lengths(const StandardInfo& s, std::string_view size) {
     const std::optional<double> d = SizeNumber(size);
     if (!d) return {};
@@ -751,9 +765,11 @@ std::string DesignationOf(const Request& q) {
 }
 } // namespace
 
-Expected<Made> MakePart(const Request& q) {
-    const StandardInfo* s = FindStandard(q.standard);
-    if (!s) return Error{std::format("Неизвестный стандарт «{}»", q.standard)};
+Expected<Made> MakePart(const Request& asked) {
+    const StandardInfo* s = FindStandard(asked.standard);
+    if (!s) return Error{std::format("Неизвестный стандарт «{}»", asked.standard)};
+    Request q = asked;
+    q.size = MatchSize(*s, asked.size);
     const std::vector<std::string> sizes = Sizes(*s);
     if (std::ranges::find(sizes, q.size) == sizes.end())
         return Error{std::format("{}: нет размера «{}»", s->title, q.size)};

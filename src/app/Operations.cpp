@@ -13,6 +13,7 @@
 #include "document/DocumentTypes.h"
 #include "document/StandardParts.h"
 #include "document/WorkPlaneFeature.h"
+#include "modules/ModuleManager.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
 #include "ui/ViewCube.h"
@@ -36,6 +37,38 @@ void NewDocument(AppContext& app) {
     Session& s = app.workspace.NewPart();
     s.doc.units.length = static_cast<LengthUnit>(app.settings.newPartLength);
     app.shell.ribbonTab = RibbonTab::Model;
+}
+
+void InstallModule(AppContext& app, std::optional<std::filesystem::path> package) {
+    if (!app.modules) return;
+    if (!package) {
+        if (const std::string problem = platform::FileDialogProblem(); !problem.empty()) {
+            app.notes.Error(problem);
+            return;
+        }
+        package = platform::ShowOpenDialog(Tr("Установить модуль"), {{Tr("Модуль BreezeCAD"), "*.bzmod *.zip"}}, platform::DocumentsDir());
+        if (!package) return;
+    }
+    const Expected<std::string> id = app.modules->Install(*package);
+    if (!id) {
+        app.notes.Error(Trf("Модуль не установлен: {}", Tr(id.GetError().message)));
+        return;
+    }
+    const modules::ModuleEntry* m = app.modules->Find(*id);
+    if (m && m->state == modules::ModuleState::Loaded)
+        app.notes.Success(Trf("Модуль «{}» {} установлен и работает", m->manifest.name, m->manifest.version));
+    else if (m)
+        app.notes.Error(Trf("Модуль «{}» установлен, но не запустился: {}", m->manifest.name, Tr(m->problem)));
+    app.shell.showSettings = true;   // there it is, with its switch
+    app.shell.settingsTab = 6;   // "Модули" (after "Тачпад" was added)
+}
+
+void OpenDropped(AppContext& app, const std::filesystem::path& file) {
+    std::u8string ext = file.extension().u8string();
+    for (char8_t& ch : ext)
+        if (ch >= u8'A' && ch <= u8'Z') ch = static_cast<char8_t>(ch - u8'A' + u8'a');
+    if (ext == u8".bzmod" || ext == u8".zip") InstallModule(app, file);
+    else OpenDocument(app, file);
 }
 
 void OpenDocument(AppContext& app, std::optional<std::filesystem::path> file) {

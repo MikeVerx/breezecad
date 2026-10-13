@@ -60,6 +60,7 @@ struct ShellState {
     bool               showSettings = false;
     bool               backgroundMenu = false;   ///< open the "Фон" menu at the cursor
     int                settingsTab = 0;          ///< 0 interface, 1 keys, 2 mouse, 3 touchpad, 4 general, 5 performance, 6 modules
+    std::string        moduleToRemove;           ///< "Модули": the module whose removal waits for "Да, удалить"
     std::string        captureShortcut;          ///< action whose new shortcut is being pressed
     std::string        shortcutFilter;
     std::string        shortcutNote;             ///< "taken from …" after a reassignment

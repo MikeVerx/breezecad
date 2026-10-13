@@ -25,9 +25,12 @@ std::vector<std::optional<TopoDS_Edge>> ResolveEdges(const std::vector<doc::Edge
 /// unit direction. nullopt when it is gone or not straight.
 std::optional<std::pair<Vec3, Vec3>> ResolveLine(const doc::EdgeReference& ref, const TopoDS_Shape& body);
 
-/// The end of the edge `ref` on `body` now that is nearest to `was` (where
-/// the vertex was). nullopt when the edge is gone.
-std::optional<Vec3> ResolveVertex(const doc::EdgeReference& ref, const Vec3& was, const TopoDS_Shape& body);
+/// The end of the edge `ref` on `body` now that was the vertex at `was`:
+/// the end that sits where `was` sat relative to the edge's middle (so a
+/// moved or resized edge keeps the same end, not the one that happens to be
+/// nearer the old place). `ref` is updated to the edge as it is now, to keep
+/// it and the new place a pair for the next time. nullopt when the edge is gone.
+std::optional<Vec3> ResolveVertex(doc::EdgeReference& ref, const Vec3& was, const TopoDS_Shape& body);
 
 /// An edge of `body` that ends at `vertex`, described; nullopt for a lone vertex.
 std::optional<doc::EdgeReference> DescribeVertexEdge(const TopoDS_Vertex& vertex, const TopoDS_Shape& body);

@@ -73,6 +73,7 @@ public:
     bool CanUndo() const { return assembly ? assembly->CanUndo() : history.CanUndo(); }
     bool CanRedo() const { return assembly ? assembly->CanRedo() : history.CanRedo(); }
     std::string UndoLabel() const { return assembly ? assembly->UndoLabel() : history.UndoLabel(); }
+    std::string RedoLabel() const { return assembly ? assembly->RedoLabel() : history.RedoLabel(); }
     /// After saving to `path` (the session's file from now on).
     void MarkSaved();
 

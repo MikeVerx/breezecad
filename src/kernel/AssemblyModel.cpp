@@ -11,6 +11,7 @@
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepClass3d_SolidClassifier.hxx>
 #include <IntCurvesFace_ShapeIntersector.hxx>
+#include <gp_Pln.hxx>
 #include <gp_Lin.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRep_Builder.hxx>
@@ -60,7 +61,9 @@ double DistanceTo(const TopoDS_Shape& shape, const gp_Pnt& p) {
 std::optional<Vec3> PlaneNormal(const TopoDS_Face& face) {
     const BRepAdaptor_Surface s(face);
     if (s.GetType() != GeomAbs_Plane) return std::nullopt;
-    Vec3 n = ToVec(s.Plane().Axis().Direction().XYZ()).Normalized();
+    const gp_Pln plane = s.Plane();
+    Vec3 n = ToVec(plane.Axis().Direction().XYZ()).Normalized();
+    if (!plane.Position().Direct()) n = -n;   // a left-handed (mirrored) frame: X × Y is opposite its axis
     if (face.Orientation() == TopAbs_REVERSED) n = -n;
     return n;
 }

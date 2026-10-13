@@ -151,5 +151,6 @@ bool Window::IsMinimized() const { return glfwGetWindowAttrib(myWindow, GLFW_ICO
 
 void Window::WaitEvents(double timeoutSeconds) { glfwWaitEventsTimeout(timeoutSeconds); }
 void Window::PollEvents() { glfwPollEvents(); }
+void Window::PostEmptyEvent() { glfwPostEmptyEvent(); }
 
 } // namespace bz::platform

@@ -7,6 +7,7 @@
 #include "core/Id.h"
 #include "core/Math.h"
 #include "core/NativeSurface.h"
+#include "core/Image.h"
 #include "core/ViewProjection.h"
 #include "document/EdgeReference.h"
 #include "document/Appearance.h"
@@ -130,6 +131,10 @@ public:
     ViewProjection Projection() const;
     CameraState    Camera() const;
     void           SetCamera(const CameraState& camera);
+    /// The model drawn with `camera` into a width x height picture, off
+    /// screen (the window's view is not touched). nullopt when the graphics
+    /// cannot (no OpenGL context yet).
+    std::optional<Image> Snapshot(const CameraState& camera, int width, int height);
 
     /// Orbit about `pivot`, angles in radians: `pitch` around the screen's
     /// horizontal axis; `yaw` around the screen's vertical axis (free, as in
@@ -144,7 +149,8 @@ public:
 
     /// Camera looking along `direction` with `up`, fitted to the model and
     /// to `extra` (things the UI draws itself, e.g. the sketch being edited).
-    CameraState FitCamera(Vec3 direction, Vec3 up, const Box3& extra = {}, double margin = 1.15) const;
+    /// `aspect` — width/height of the picture the camera is for; 0: the window's.
+    CameraState FitCamera(Vec3 direction, Vec3 up, const Box3& extra = {}, double margin = 1.15, double aspect = 0) const;
     /// Centre of the model's bounding box (origin when empty).
     Vec3 ModelCenter() const;
     /// Bounding box of the shown model (empty when there are no bodies).

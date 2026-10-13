@@ -5,6 +5,6 @@ add_library(bz_modules STATIC
     ModuleHost.cpp
     ModuleManager.cpp
     ModuleManifest.cpp)
-target_link_libraries(bz_modules PUBLIC bz::core bz::kernel PRIVATE bz::json ${CMAKE_DL_LIBS})
+target_link_libraries(bz_modules PUBLIC bz::core bz::kernel PRIVATE bz::json bz::miniz ${CMAKE_DL_LIBS})
 bz_set_warnings(bz_modules)
 add_library(bz::modules ALIAS bz_modules)

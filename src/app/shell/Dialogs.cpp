@@ -605,7 +605,10 @@ void DrawOptimizationSettings(AppContext& app, float width) {
                "«Сразу» — по-старому, на случай если фоновый расчёт ведёт себя странно."));
 }
 
-/// The "Модули" tab: what was found, whether it runs, why not; on/off.
+/// The "Модули" tab: install a package; the modules in a list that scrolls,
+/// one compact row each — a check box to switch it on and off, its name and
+/// version, "Удалить" for the ones the user installed; what it is and how it
+/// runs under it.
 void DrawModuleSettings(AppContext& app, float width) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
@@ -617,52 +620,104 @@ void DrawModuleSettings(AppContext& app, float width) {
         ImGui::PopTextWrapPos();
         ImGui::PopStyleColor();
     };
-    const std::filesystem::path folder = platform::ConfigDir() / "modules";
-    if (!app.modules || app.modules->Modules().empty())
-        caption(Tr("Модули не найдены. Модуль — папка с module.json и библиотекой; положите её в папку модулей "
-                   "и перезапустите BreezeCAD."),
-                c.textMuted);
-    if (app.modules) {
-        for (const modules::ModuleEntry& m : app.modules->Modules()) {
-            ImGui::Dummy({0, ui.S(4)});
-            {
-                ui::FontScope font(ui.fonts.strong);
-                ImGui::TextUnformatted(m.manifest.version.empty() ? m.manifest.name.c_str()
-                                                                  : std::format("{} {}", m.manifest.name, m.manifest.version).c_str());
-            }
-            if (!m.manifest.description.empty()) caption(m.manifest.description, c.textMuted);
-            using modules::ModuleState;
-            const char* state = N_("Найден");
-            switch (m.state) {
-                case ModuleState::Found: state = N_("Не загружен"); break;
-                case ModuleState::Loaded: state = N_("Работает"); break;
-                case ModuleState::Off: state = N_("Выключен"); break;
-                case ModuleState::Unsupported: state = N_("Не подходит для этого компьютера"); break;
-                case ModuleState::Failed: state = N_("Не запустился"); break;
-                case ModuleState::Crashed: state = N_("Отключён после сбоя"); break;
-            }
-            const bool bad = m.state == ModuleState::Unsupported || m.state == ModuleState::Failed || m.state == ModuleState::Crashed;
-            caption(m.problem.empty() ? std::string(Tr(state)) : Trf("{}: {}", Tr(state), Tr(m.problem)),
-                    bad ? c.danger : m.state == ModuleState::Loaded ? c.success : c.textMuted);
-            if (m.state == ModuleState::Unsupported) continue;   // nothing to switch: the computer lacks something
-            static constexpr std::array<const char*, 2> onOff{N_("Включён"), N_("Выключен")};
-            const int now = m.state == ModuleState::Loaded ? 0 : 1;
-            const std::string id = "module-" + m.manifest.id;
-            if (const int n = ui::Segmented(ui, id.c_str(), onOff, now, 2, width); n != now) {
-                const std::string moduleId = m.manifest.id;   // the list may change: act after the frame
-                app.Later([&app, moduleId, n] {
-                    const bool done = n == 0 ? app.modules->TurnOn(moduleId) : app.modules->TurnOff(moduleId);
-                    if (!done && n == 0) app.notes.Error(Tr("Модуль не запустился — причина в списке модулей"));
-                });
-            }
-        }
-    }
-    ImGui::Dummy({0, ui.S(6)});
+    const std::filesystem::path folder =
+        app.modules && !app.modules->InstallDir().empty() ? app.modules->InstallDir() : platform::ConfigDir() / "modules";
+
+    if (ui::SecondaryButton(ui, "##module-install", Tr("Установить модуль…"), nullptr, {ui.S(190), ui.S(30)}, app.modules != nullptr))
+        app.Later([&app] { InstallModule(app); });
+    ui::ItemTooltip(ui, Tr("Файл .bzmod — или просто перетащите его в окно"));
+    ImGui::SameLine(0, ui.S(16));
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ui.S(6));
     if (ui::LinkButton(ui, "##modules-folder", Tr("Папка модулей"))) {
         std::error_code ec;
         std::filesystem::create_directories(folder, ec);
         if (!platform::OpenFolder(folder)) app.notes.Error(Tr("Не удалось открыть папку"));
     }
+    caption(Tr("Модуль — файл .bzmod для вашей системы. Установите его кнопкой или перетащите в окно программы: "
+               "он заработает сразу, без перезапуска."),
+            c.textMuted);
+    ImGui::Dummy({0, ui.S(6)});
+
+    if (!app.modules || app.modules->Modules().empty()) {
+        caption(Tr("Модули не установлены."), c.textMuted);
+        return;
+    }
+    // Grows with the list up to a height, then scrolls.
+    ImGui::SetNextWindowSizeConstraints({width, 0}, {width, ui.S(330)});
+    ImGui::BeginChild("##modules-list", {width, 0}, ImGuiChildFlags_AutoResizeY);
+    const float box = ImGui::GetFrameHeight();
+    const float indent = box + ImGui::GetStyle().ItemInnerSpacing.x;
+    using modules::ModuleState;
+    for (const modules::ModuleEntry& m : app.modules->Modules()) {
+        const std::string moduleId = m.manifest.id;   // the list may change: act after the frame
+        ImGui::PushID(moduleId.c_str());
+
+        // The row: [x] Name 1.0.0                                   Удалить
+        const float rowRight = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+        bool on = m.state == ModuleState::Loaded;
+        ImGui::BeginDisabled(m.state == ModuleState::Unsupported);   // nothing to switch: the computer lacks something
+        if (ImGui::Checkbox("##on", &on))
+            app.Later([&app, moduleId, on] {
+                const bool done = on ? app.modules->TurnOn(moduleId) : app.modules->TurnOff(moduleId);
+                if (!done && on) app.notes.Error(Tr("Модуль не запустился — причина в списке модулей"));
+            });
+        ImGui::EndDisabled();
+        if (m.state != ModuleState::Unsupported) ui::ItemTooltip(ui, on ? Tr("Выключить модуль") : Tr("Включить модуль"));
+        ImGui::SameLine(0, ImGui::GetStyle().ItemInnerSpacing.x);
+        {
+            ui::FontScope font(ui.fonts.strong);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(m.manifest.name.c_str());
+        }
+        if (!m.manifest.version.empty()) {
+            ImGui::SameLine(0, ui.S(6));
+            ui::FontScope font(ui.fonts.caption);
+            ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(m.manifest.version.c_str());
+            ImGui::PopStyleColor();
+        }
+        const bool removable = app.modules->Removable(m);
+        if (removable && app.shell.moduleToRemove != moduleId) {
+            // As LinkButton measures itself: its font, 8 px on each side; centred on the row.
+            const float w = ui.fonts.medium->CalcTextSizeA(ui.S(12), FLT_MAX, 0, Tr("Удалить")).x + ui.S(16);
+            ImGui::SameLine(rowRight - w);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (box - ui.S(26)) / 2);
+            if (ui::LinkButton(ui, "##remove", Tr("Удалить"))) app.shell.moduleToRemove = moduleId;
+        }
+
+        // Under the name: what it is, how it runs.
+        ImGui::Indent(indent);
+        if (!m.manifest.description.empty()) caption(m.manifest.description, c.textMuted);
+        const char* state = N_("Найден");
+        switch (m.state) {
+            case ModuleState::Found: state = N_("Не загружен"); break;
+            case ModuleState::Loaded: state = N_("Работает"); break;
+            case ModuleState::Off: state = N_("Выключен"); break;
+            case ModuleState::Unsupported: state = N_("Не подходит для этого компьютера"); break;
+            case ModuleState::Failed: state = N_("Не запустился"); break;
+            case ModuleState::Crashed: state = N_("Отключён после сбоя"); break;
+        }
+        const bool bad = m.state == ModuleState::Unsupported || m.state == ModuleState::Failed || m.state == ModuleState::Crashed;
+        caption(m.problem.empty() ? std::string(Tr(state)) : Trf("{}: {}", Tr(state), Tr(m.problem)),
+                bad ? c.danger : m.state == ModuleState::Loaded ? c.success : c.textMuted);
+        if (removable && app.shell.moduleToRemove == moduleId) {   // asked once more: its files go
+            caption(Tr("Удалить модуль вместе с его файлами?"), c.text);
+            if (ui::SecondaryButton(ui, "##remove-yes", Tr("Да, удалить"), nullptr, {ui.S(120), ui.S(26)}))
+                app.Later([&app, moduleId] {
+                    app.shell.moduleToRemove.clear();
+                    const Status removed = app.modules->Uninstall(moduleId);
+                    if (!removed) app.notes.Error(Trf("Модуль не удалён: {}", Tr(removed.GetError().message)));
+                });
+            ImGui::SameLine(0, ui.S(12));
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ui.S(4));
+            if (ui::LinkButton(ui, "##remove-no", Tr("Отмена"))) app.shell.moduleToRemove.clear();
+        }
+        ImGui::Unindent(indent);
+        ImGui::Dummy({0, ui.S(8)});
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
 }
 
 /// The "Мышь" tab: a ready-made set of view gestures, or each one by hand.
