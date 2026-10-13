@@ -35,7 +35,18 @@ const char* CurveName(doc::CurveKind k) {
 
 double Round(double x) { return std::abs(x) < 5e-7 ? 0.0 : std::round(x * 1e4) / 1e4; }
 
-Json FaceJson(const kernel::FaceInfo& f, const doc::Document& d) {
+/// brief — only what is needed to pick an entry (no box, edge list, ref):
+/// several times shorter, for scanning a big part.
+Json FaceJson(const kernel::FaceInfo& f, const doc::Document& d, bool brief) {
+    if (brief) {
+        Json j = {{"face", f.index}, {"kind", SurfaceName(f.kind)}, {"area_mm2", Round(f.area)},
+                  {"point", ToJson3(f.point)}, {"normal", ToJson3(f.normal)}};
+        if (f.axis) {
+            j["radius"] = Round(f.axis->radius);
+            if (f.kind == doc::SurfaceKind::Cylinder) j["hole"] = f.hole;
+        }
+        return j;
+    }
     Json j = {{"face", f.index},
               {"body", f.body.value},
               {"kind", SurfaceName(f.kind)},
@@ -55,7 +66,13 @@ Json FaceJson(const kernel::FaceInfo& f, const doc::Document& d) {
     return j;
 }
 
-Json EdgeJson(const kernel::EdgeInfo& e) {
+Json EdgeJson(const kernel::EdgeInfo& e, bool brief) {
+    if (brief) {
+        Json j = {{"edge", e.index}, {"kind", CurveName(e.kind)}, {"length", Round(e.length)},
+                  {"middle", ToJson3(e.middle)}, {"faces", e.faces}};
+        if (e.centre) j["radius"] = Round(e.radius);
+        return j;
+    }
     Json j = {{"edge", e.index},
               {"body", e.body.value},
               {"kind", CurveName(e.kind)},
@@ -112,7 +129,7 @@ Json Faces(AppContext& app, const Json& args) {
         return kernel::BoxDistance(f.boxMin, f.boxMax, p) * 1e6 + (f.point - p).Length();
     });
     Json out = Json::array();
-    for (const auto* f : list) out.push_back(FaceJson(*f, s.doc));
+    for (const auto* f : list) out.push_back(FaceJson(*f, s.doc, Flag(args, "brief", false)));
     return {{"total_faces", t.faces.size()}, {"matching", found}, {"faces", std::move(out)},
             {"note", "Номера действуют до следующего изменения детали."}};
 }
@@ -136,7 +153,7 @@ Json Edges(AppContext& app, const Json& args) {
     const std::size_t found = list.size();
     list = Pick<kernel::EdgeInfo>(list, args, [](const kernel::EdgeInfo& e, const Vec3& p) { return kernel::EdgeDistance(e, p); });
     Json out = Json::array();
-    for (const auto* e : list) out.push_back(EdgeJson(*e));
+    for (const auto* e : list) out.push_back(EdgeJson(*e, Flag(args, "brief", false)));
     return {{"total_edges", t.edges.size()}, {"matching", found}, {"edges", std::move(out)},
             {"note", "Номера действуют до следующего изменения детали."}};
 }
@@ -166,7 +183,8 @@ Json FilterSchema(bool faces) {
               {"radius", NumberArg("Только с этим радиусом, мм (цилиндры, окружности).")},
               {"body", IdArg("Только тело с этим id (part.tree → bodies).")},
               {"near", Point3Arg("Сначала ближайшие к этой точке.")},
-              {"limit", IntegerArg("Сколько вернуть (по умолчанию 60; 0 — все).")}};
+              {"limit", IntegerArg("Сколько вернуть (по умолчанию 60; 0 — все).")},
+              {"brief", BoolArg("Коротко: только номер, тип, размер и положение — в разы короче. Для обзора большой детали.")}};
     if (faces) {
         p["normal"]     = Point3Arg("Только плоские грани с этой внешней нормалью (например [0,0,1] — смотрят вверх).");
         p["axis"]       = Point3Arg("Только цилиндры/конусы с осью вдоль этого направления.");
