@@ -14,6 +14,7 @@ get_filename_component(R ${CMAKE_CURRENT_SOURCE_DIR}/../.. ABSOLUTE)
 set(PROJECT_SOURCE_DIR ${R})
 function(bz_set_warnings t)
 endfunction()
+find_package(Threads REQUIRED)   # bz_core links Threads::Threads
 include(${R}/cmake/ThirdParty.cmake)
 
 set(SAN -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined)
