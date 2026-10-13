@@ -44,12 +44,21 @@ system_headers() {
     cp -r --update=none "$SRC/libglvnd/include/GL" "$SRC/libglvnd/include/EGL" \
         "$SRC/libglvnd/include/KHR" /usr/include/
     local L=/usr/lib/x86_64-linux-gnu
-    for l in GL EGL GLX Xrandr Xinerama Xcursor Xi Xfixes; do
+    for l in GL EGL GLX Xrandr Xinerama Xcursor Xi Xfixes Xtst; do
         [ -e "$L/lib$l.so" ] && continue
         local f; f=$(ls "$L"/lib$l.so.* 2>/dev/null | sort | head -1 || true)
         [ -n "$f" ] && ln -s "$f" "$L/lib$l.so"
     done
     touch "$DEPS/headers.done"
+}
+
+# --- 1а. Инструменты UI-тестов: xdotool и Pillow недоступны -> свои заменители
+ui_tools() {
+    [ -x "$DEPS/bin/xdotool" ] && return 0
+    log "UI-тесты: mini-xdotool и заменитель PIL"
+    mkdir -p "$DEPS/bin" "$DEPS/pylib"
+    cc -O2 "$REPO/scripts/dev/mini-xdotool.c" -o "$DEPS/bin/xdotool" -lX11 -lXtst
+    cp -r "$REPO/scripts/dev/pil-shim/PIL" "$DEPS/pylib/"
 }
 
 # --- 2. Готовый архив зависимостей из релиза (если есть) -------------------
@@ -120,15 +129,16 @@ build_app() {
 env_hint() {
     cat <<EOF
 
-Готово. В каждой новой оболочке для запуска программы:
+Готово. В каждой новой оболочке для запуска программы и UI-тестов:
   export LD_LIBRARY_PATH=$PREFIX/lib:\$LD_LIBRARY_PATH
+  export PATH=$DEPS/bin:\$PATH PYTHONPATH=$DEPS/pylib
 UI-сценарии: scripts/ui-test/ui.sh (Xvfb уже стоит в образе).
 EOF
 }
 
 case "${1:-all}" in
-    deps) system_headers; fetch_prebuilt || { build_glfw; build_occt; }; env_hint ;;
+    deps) system_headers; ui_tools; fetch_prebuilt || { build_glfw; build_occt; }; env_hint ;;
     pack) pack ;;
-    all)  system_headers; fetch_prebuilt || { build_glfw; build_occt; }; build_app; env_hint ;;
+    all)  system_headers; ui_tools; fetch_prebuilt || { build_glfw; build_occt; }; build_app; env_hint ;;
     *)    echo "usage: $0 [all|deps|pack]"; exit 2 ;;
 esac
