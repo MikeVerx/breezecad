@@ -94,7 +94,9 @@ std::string DocumentToJson(const Document& doc) {
     return root.dump(1, '\t');
 }
 
-Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
+namespace {
+
+Expected<Document> DocumentFromJsonUnguarded(std::string_view text, LoadReport* report) {
     const Json root = Json::parse(text, nullptr, false);
     if (root.is_discarded() || !root.is_object()) return Error{"Содержимое документа повреждено (не JSON)"};
 
@@ -144,6 +146,18 @@ Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
     doc.ClearDirty();
     doc.MarkChanged(0);   // everything needs a first rebuild
     return doc;
+}
+
+} // namespace
+
+// nlohmann::json throws type_error when a field exists but has another type ("name": 5);
+// a damaged or hand-edited file must come back as an error, not as std::terminate.
+Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
+    try {
+        return DocumentFromJsonUnguarded(text, report);
+    } catch (const Json::exception& e) {
+        return Error{std::format("Содержимое документа повреждено: {}", e.what())};
+    }
 }
 
 Status WriteBzcArchive(const std::filesystem::path& path, std::string_view documentType, std::string_view generator,
@@ -211,10 +225,14 @@ Expected<BzcArchive> ReadBzcArchive(const std::filesystem::path& path) {
     if (!documentText) return documentText.GetError();
 
     const Json manifest = Json::parse(*manifestText, nullptr, false);
-    if (manifest.is_discarded() || manifest.value("format", "") != "bzc")
+    try {
+        if (!manifest.is_object() || manifest.value("format", "") != "bzc")
+            return Error{"Файл не является документом BreezeCAD (.bzc)"};
+        archive.formatVersion = manifest.value("formatVersion", 0);
+        archive.documentType  = manifest.value("documentType", std::string(kPartType));
+    } catch (const Json::exception&) {   // a field of the wrong type
         return Error{"Файл не является документом BreezeCAD (.bzc)"};
-    archive.formatVersion = manifest.value("formatVersion", 0);
-    archive.documentType  = manifest.value("documentType", std::string(kPartType));
+    }
     archive.documentJson  = std::move(*documentText);
     return archive;
 }

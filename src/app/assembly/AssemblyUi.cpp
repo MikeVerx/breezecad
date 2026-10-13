@@ -418,7 +418,7 @@ void NewAssembly(AppContext& app) {
 
 ObjectId PlaceFile(AppContext& app, Session& session, const std::filesystem::path& file, bool checkpoint) {
     AssemblyState& st = *session.assembly;
-    if (!session.path.empty() && std::filesystem::equivalent(session.path, file)) {
+    if (!session.path.empty() && SameFile(session.path, file)) {
         app.notes.Error(Tr("Сборку нельзя вставить в саму себя"));
         return {};
     }

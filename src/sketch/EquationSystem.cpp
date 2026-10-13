@@ -15,9 +15,11 @@ constexpr double kTiny = 1e-12;
 
 double SignOf(double v) { return v < 0.0 ? -1.0 : 1.0; }
 
+/// To (-pi; pi] in constant time: a loop of "minus 2 pi" never ends for a huge
+/// angle (a - 2 pi == a), and the solver calls this on every residual.
 double WrapAngle(double a) {
-    while (a > kPi) a -= 2.0 * kPi;
-    while (a <= -kPi) a += 2.0 * kPi;
+    a = std::remainder(a, 2.0 * kPi);   // [-pi; pi]
+    if (a <= -kPi) a += 2.0 * kPi;
     return a;
 }
 
