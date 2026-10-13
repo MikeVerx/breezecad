@@ -353,11 +353,16 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
     IdGenerator& ids = session.doc.Ids();
     // Neighbouring edges share their ends: one projected point for both.
     const double tolerance = std::max(view.MmPerPixel(), 1e-6) * 1e-3;
+    // An independent projection unmarks its points as soon as a curve is
+    // placed, so they are also remembered here: otherwise every corner of a
+    // projected face got two loose points, one per edge, each fixed apart.
+    std::vector<ObjectId> placed;
     const auto point = [&](Vec2 at) {
         for (const sketch::Point& p : sk.points)
-            if (p.projected && (p.pos - at).Length() < tolerance) return p.id;
+            if ((p.projected || std::ranges::find(placed, p.id) != placed.end()) && (p.pos - at).Length() < tolerance) return p.id;
         const ObjectId id = sk.AddPoint(ids, at);
         sk.FindPoint(id)->projected = true;
+        placed.push_back(id);
         return id;
     };
     // Puts one projected curve into the sketch; `link` makes it follow the
