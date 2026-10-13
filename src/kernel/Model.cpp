@@ -1007,7 +1007,9 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                 });
             } else if (auto* chamfer = dynamic_cast<doc::ChamferFeature*>(&f)) {
                 ApplyEdgeFeature(*chamfer, bodies, chamfer->status, [&](const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges) {
-                    return occt::MakeChamfer(body, edges, chamfer->distance.value);
+                    return occt::MakeChamfer(body, edges,
+                                             occt::ChamferSize{chamfer->mode, chamfer->distance.value, chamfer->distance2.value,
+                                                               chamfer->angle.value, chamfer->flipped});
                 });
             } else if (auto* hole = dynamic_cast<doc::HoleFeature*>(&f)) {
                 ApplyToBody(bodies, hole->status, "Нет тела, в котором делать отверстие",
