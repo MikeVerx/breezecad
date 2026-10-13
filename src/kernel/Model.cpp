@@ -993,6 +993,10 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                                      return occt::MakeExtrusion(faces, *ex, frame, ThroughAllLength(bodies, frame), target, until);
                                  });
             } else if (auto* rev = dynamic_cast<doc::RevolveFeature*>(&f)) {
+                // On this thread only: OCCT 7.9.3 faulted inside its worker pool
+                // building a revolve (tester report), where FaultGuard cannot
+                // catch it. Here a fault costs this operation, not the program.
+                const occt::SerialBooleans serial;
                 ApplySketchSolid(*rev, impl, bodies, rev->status, doc,
                                  [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature& profile, const Frame& frame) {
                                      return occt::MakeRevolution(faces, *rev, profile.sketch, frame);
@@ -1003,7 +1007,9 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                 });
             } else if (auto* chamfer = dynamic_cast<doc::ChamferFeature*>(&f)) {
                 ApplyEdgeFeature(*chamfer, bodies, chamfer->status, [&](const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges) {
-                    return occt::MakeChamfer(body, edges, chamfer->distance.value);
+                    return occt::MakeChamfer(body, edges,
+                                             occt::ChamferSize{chamfer->mode, chamfer->distance.value, chamfer->distance2.value,
+                                                               chamfer->angle.value, chamfer->flipped});
                 });
             } else if (auto* hole = dynamic_cast<doc::HoleFeature*>(&f)) {
                 ApplyToBody(bodies, hole->status, "Нет тела, в котором делать отверстие",
@@ -1015,6 +1021,10 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                                         const Vec3 n = hole->face.normal;
                                         hole->face.point = hole->face.point + n * (plane->origin - hole->face.point).Dot(n);
                                     }
+                                    // Centres held coaxial with a round edge or a cylinder go
+                                    // where that axis is now.
+                                    if (occt::FollowAxes(body, *hole) > 0)
+                                        return Error{"Кромка или цилиндр, с которыми отверстие соосно, не найдены: укажите их заново"};
                                     const Expected<TopoDS_Shape> tools = occt::HoleTools(body, *hole);
                                     if (!tools) return tools.GetError();
                                     impl.tools[hole->id] = {*tools, doc::BooleanOp::Cut, {}};

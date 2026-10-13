@@ -1,6 +1,7 @@
 #include "../Fixtures.h"
 #include "document/BzcFile.h"
 #include "kernel/Model.h"
+#include "kernel/occt/Extrude.h"
 
 #include <doctest.h>
 
@@ -114,4 +115,69 @@ TEST_CASE("revolve survives a json round trip") {
     CHECK(back->axis.kind == RevolveAxisKind::SketchX);
     CHECK(back->extent == RevolveExtent::Symmetric);
     CHECK(back->reversed);
+}
+
+namespace {
+
+/// A closed polygon through `points`; returns the line ids in order.
+std::vector<ObjectId> AddPolygon(doc::Document& d, doc::SketchFeature& sk, const std::vector<Vec2>& points) {
+    std::vector<ObjectId> ids, lines;
+    for (const Vec2 p : points) ids.push_back(sk.sketch.AddPoint(d.Ids(), p));
+    for (std::size_t i = 0; i < ids.size(); ++i) lines.push_back(sk.sketch.AddLine(d.Ids(), ids[i], ids[(i + 1) % ids.size()]));
+    return lines;
+}
+
+} // namespace
+
+TEST_CASE("a profile touching the axis at a corner is an error, not a pinched solid") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    // A diamond whose left corner sits on the Y axis.
+    AddPolygon(d, sk, {{0, 10}, {10, 0}, {20, 10}, {10, 20}});
+    auto& rev = AddRevolve(d, sk.id, {RevolveAxisKind::SketchY, {}});
+    kernel::Model model;
+    model.Rebuild(d);
+    CHECK(rev.status.state == FeatureState::Error);
+    CHECK(rev.status.message.find("касается оси") != std::string::npos);
+}
+
+TEST_CASE("a side of the closed profile made the осевая turns the rest around it") {
+    // The tester's case: a closed contour, one of its own sides switched to
+    // an осевая and used as the axis. The side lies on the axis: allowed.
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    const std::vector<ObjectId> lines = AddPolygon(d, sk, {{0, 0}, {10, 0}, {10, 30}, {0, 30}});
+    sketch::Line* side = sk.sketch.FindLine(lines.back());   // x = 0, from (0,30) to (0,0)
+    REQUIRE(side);
+    side->centerline = true;
+    auto& rev = AddRevolve(d, sk.id, {RevolveAxisKind::SketchLine, side->id});
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(rev.status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(kPi * 10.0 * 10.0 * 30.0).epsilon(1e-4));
+}
+
+TEST_CASE("a triangle with a side on the axis makes a cone") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddPolygon(d, sk, {{0, 0}, {10, 0}, {0, 30}});
+    auto& rev = AddRevolve(d, sk.id, {RevolveAxisKind::SketchY, {}});
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(rev.status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(kPi * 10.0 * 10.0 * 30.0 / 3).epsilon(1e-4));
+}
+
+TEST_CASE("serial booleans: the scope nests and ends") {
+    using kernel::occt::BooleansSerial;
+    CHECK_FALSE(BooleansSerial());
+    {
+        const kernel::occt::SerialBooleans outer;
+        {
+            const kernel::occt::SerialBooleans inner;
+            CHECK(BooleansSerial());
+        }
+        CHECK(BooleansSerial());
+    }
+    CHECK_FALSE(BooleansSerial());
 }

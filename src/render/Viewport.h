@@ -220,7 +220,7 @@ public:
     /// Every edge of the face under the cursor (PickTarget::EdgesAndFaces,
     /// when no edge is nearer), described for storing.
     std::vector<doc::EdgeReference> PickFaceEdges(Vec2 pixel);
-    /// A cylindrical face under the cursor (PickTarget::Faces): its axis,
+    /// A cylindrical face under the cursor (PickTarget::Faces or EdgesAndFaces): its axis,
     /// radius and the direction from the axis to the picked point.
     struct CylinderPick {
         Vec3   axisPoint, axisDir, radial;

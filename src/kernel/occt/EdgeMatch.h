@@ -25,6 +25,11 @@ std::vector<std::optional<TopoDS_Edge>> ResolveEdges(const std::vector<doc::Edge
 /// unit direction. nullopt when it is gone or not straight.
 std::optional<std::pair<Vec3, Vec3>> ResolveLine(const doc::EdgeReference& ref, const TopoDS_Shape& body);
 
+/// A circular edge as it is on `body` now: its centre and unit axis. `ref`
+/// is updated to the edge as it is now (it is found again from there next
+/// time). nullopt when it is gone or not a circle.
+std::optional<std::pair<Vec3, Vec3>> ResolveCircle(doc::EdgeReference& ref, const TopoDS_Shape& body);
+
 /// The end of the edge `ref` on `body` now that was the vertex at `was`:
 /// the end that sits where `was` sat relative to the edge's middle (so a
 /// moved or resized edge keeps the same end, not the one that happens to be

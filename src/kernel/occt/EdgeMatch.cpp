@@ -192,6 +192,18 @@ std::optional<std::pair<Vec3, Vec3>> ResolveLine(const doc::EdgeReference& ref, 
     return std::make_pair(Vec3{mid.X(), mid.Y(), mid.Z()}, Vec3{d.X(), d.Y(), d.Z()});
 }
 
+std::optional<std::pair<Vec3, Vec3>> ResolveCircle(doc::EdgeReference& ref, const TopoDS_Shape& body) {
+    const auto found = ResolveEdges({ref}, body);
+    if (found.empty() || !found.front()) return std::nullopt;
+    const BRepAdaptor_Curve curve(*found.front());
+    if (curve.GetType() != GeomAbs_Circle) return std::nullopt;
+    const gp_Circ c = curve.Circle();
+    ref = DescribeEdge(*found.front(), body);
+    const gp_Pnt o = c.Location();
+    const gp_Dir d = c.Axis().Direction();
+    return std::make_pair(Vec3{o.X(), o.Y(), o.Z()}, Vec3{d.X(), d.Y(), d.Z()});
+}
+
 std::optional<Vec3> ResolveVertex(doc::EdgeReference& ref, const Vec3& was, const TopoDS_Shape& body) {
     const std::optional<TopoDS_Edge> edge = ResolveEdges({ref}, body).front();
     if (!edge) return std::nullopt;

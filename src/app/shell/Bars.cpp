@@ -40,8 +40,15 @@ void DrawProjectTabs(AppContext& app, ImVec2 pos, float width) {
         const float w = tw + ui.S(48);
         ImGui::SetCursorScreenPos({x, pos.y});
         ImGui::PushID(static_cast<int>(i));
+        // The close cross is drawn over the tab, and only while the tab is
+        // hovered. Pressing the cross made it the active item, the tab stopped
+        // counting as hovered, the cross vanished before the release and the
+        // click was lost (Ctrl+W worked). Keep the tab hovered under its cross
+        // and while the cross is held.
+        ImGui::SetNextItemAllowOverlap();
         const bool clicked = ImGui::InvisibleButton("##doc-tab", {w, h}, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle);
-        const bool hovered = ImGui::IsItemHovered();
+        const bool hovered =
+            ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenOverlappedByItem | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
         if (clicked && ImGui::IsMouseReleased(ImGuiMouseButton_Middle)) {
             const int index = static_cast<int>(i);
             app.Later([&app, index] { RequestClose(app, index); });

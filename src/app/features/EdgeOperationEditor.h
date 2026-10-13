@@ -59,7 +59,7 @@ protected:
     void DrawSize(AppContext& app, Session& session, doc::EdgeFeature& feature, float width) override;
 
 private:
-    std::string myDistance;
+    std::string myDistance, myDistance2, myAngle;
 };
 
 } // namespace bz::app

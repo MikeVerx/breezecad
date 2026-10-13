@@ -138,6 +138,43 @@ TEST_CASE("symmetric, reversed and tapered extrusions") {
     CHECK(model.Volume() > 3000.0);
 }
 
+TEST_CASE("asymmetric extrusion: a distance each way from the sketch") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddRect(d, sk, {0, 0}, {20, 20});
+    auto& ex = AddExtrude(d, sk.id, "10");
+    ex.extent = doc::ExtentType::Asymmetric;
+    ex.distance2.expression = "4";
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(ex.status.state == FeatureState::Ok);
+    REQUIRE(model.BoundingBox());
+    CHECK(model.BoundingBox()->max.z == doctest::Approx(10.0).epsilon(1e-3));
+    CHECK(model.BoundingBox()->min.z == doctest::Approx(-4.0).epsilon(1e-3));
+    CHECK(model.Volume() == doctest::Approx(20.0 * 20.0 * 14.0).epsilon(1e-6));
+
+    ex.reversed = true;   // the first distance goes the other way
+    d.MarkChanged(1);
+    model.Rebuild(d);
+    CHECK(model.BoundingBox()->max.z == doctest::Approx(4.0).epsilon(1e-3));
+    CHECK(model.BoundingBox()->min.z == doctest::Approx(-10.0).epsilon(1e-3));
+
+    ex.distance2.expression = "0";
+    d.MarkChanged(1);
+    model.Rebuild(d);
+    CHECK(ex.status.state == FeatureState::Error);
+
+    // Saved and read back; a file without "distance2" keeps the default.
+    ex.distance2.expression = "4";
+    const std::string json = doc::DocumentToJson(d);
+    Expected<doc::Document> loaded = doc::DocumentFromJson(json);
+    REQUIRE(loaded.HasValue());
+    const auto* back = loaded->FindAs<doc::ExtrudeFeature>(ex.id);
+    REQUIRE(back);
+    CHECK(back->extent == doc::ExtentType::Asymmetric);
+    CHECK(back->distance2.expression == "4");
+}
+
 TEST_CASE("rebuild after reloading gives the same solid") {
     doc::Document d;
     auto& sk = AddSketch(d, doc::origin::kPlaneXZ);

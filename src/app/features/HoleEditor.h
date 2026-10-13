@@ -20,6 +20,8 @@ public:
     const char* Title() const override { return Tr("Отверстие"); }
     std::string Hint() const override;
     bool        PicksFaces() const override { return true; }
+    /// "Соосно": round edges and cylinders of the body as it was are clickable.
+    bool        PicksOriginal() const override { return myCoaxial; }
 
     void DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;
 
@@ -37,10 +39,14 @@ private:
     void DrawSizes(AppContext& app, Session& session, doc::HoleFeature& f, float width);
     /// A click on the model: choose the face or add a centre on it.
     void ClickModel(AppContext& app, Session& session, doc::HoleFeature& f, const ViewportFrame& vf);
+    /// "Соосно": a click on a round edge or a cylindrical face adds a centre
+    /// held on its axis (a flat face first chooses the face, as usual).
+    void ClickCoaxial(AppContext& app, Session& session, doc::HoleFeature& f, const ViewportFrame& vf);
 
     std::string        myDiameter, myDepth, myHeadDiameter, myHeadDepth, mySinkDiameter;
     std::optional<int> myHoveredCentre;
-    DragArrow          myArrow;   ///< depth   ///< centre under the cursor in the viewport
+    DragArrow          myArrow;   ///< depth
+    bool               myCoaxial = false;   ///< clicks make coaxial centres
 };
 
 } // namespace bz::app

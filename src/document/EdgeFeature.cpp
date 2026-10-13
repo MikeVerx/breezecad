@@ -2,8 +2,10 @@
 
 #include "document/JsonIO.h"
 
+#include <algorithm>
 #include <array>
 #include <format>
+#include <string>
 #include <utility>
 
 namespace bz::doc {
@@ -42,17 +44,43 @@ Status FilletFeature::LoadFields(const Json& in) {
     return Status::Ok();
 }
 
+namespace {
+
+constexpr std::array<std::pair<ChamferMode, std::string_view>, 3> kChamferModes{{
+    {ChamferMode::EqualDistance, "equal"},
+    {ChamferMode::DistanceAngle, "distanceAngle"},
+    {ChamferMode::TwoDistances, "twoDistances"},
+}};
+
+} // namespace
+
 void ChamferFeature::SaveFields(Json& out) const {
     SaveEdges(out);
     out["distance"] = json_io::ToJson(distance);
+    // Added in 0.2.2; older files have none of these: equal distances.
+    for (const auto& [m, label] : kChamferModes)
+        if (m == mode) out["mode"] = label;
+    out["distance2"] = json_io::ToJson(distance2);
+    out["angle"] = json_io::ToJson(angle);
+    out["flipped"] = flipped;
 }
 
 Status ChamferFeature::LoadFields(const Json& in) {
     ChamferFeature f;
     if (Status s = f.LoadEdges(in, "Фаска"); !s) return s;
-    if (!json_io::ReadMember(in, "distance", f.distance)) return Error{"Фаска: повреждено расстояние"};
+    std::string modeName = "equal";
+    if (!json_io::ReadMember(in, "distance", f.distance) || !json_io::ReadMember(in, "mode", modeName) ||
+        !json_io::ReadMember(in, "distance2", f.distance2) || !json_io::ReadMember(in, "angle", f.angle) ||
+        !json_io::ReadMember(in, "flipped", f.flipped))
+        return Error{"Фаска: повреждены размеры"};
+    const auto known = std::ranges::find(kChamferModes, modeName, [](const auto& m) { return m.second; });
+    if (known == kChamferModes.end()) return Error{std::format("Фаска: неизвестный способ «{}»", modeName)};
     edges = std::move(f.edges);
+    mode = known->first;
     distance = std::move(f.distance);
+    distance2 = std::move(f.distance2);
+    angle = std::move(f.angle);
+    flipped = f.flipped;
     return Status::Ok();
 }
 

@@ -131,12 +131,23 @@ RowResult Row(AppContext& app, const char* id, const std::string& name, const Ro
 std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
     if (const auto* ex = dynamic_cast<const doc::ExtrudeFeature*>(&f)) {
         if (ex->extent == doc::ExtentType::ThroughAll) return Tr("насквозь");
+        if (ex->extent == doc::ExtentType::Asymmetric)   // 10 / 5 мм
+            return FormatValue(ex->distance.value, Quantity::Length, d.units) + " / " +
+                   FormatValue(ex->distance2.value, Quantity::Length, d.units) + " " + UnitLabel(Quantity::Length, d.units);
         return FormatValue(ex->distance.value, Quantity::Length, d.units) + " " + UnitLabel(Quantity::Length, d.units);
     }
     if (const auto* fillet = dynamic_cast<const doc::FilletFeature*>(&f))
         return "R" + FormatValue(fillet->radius.value, Quantity::Length, d.units);
-    if (const auto* chamfer = dynamic_cast<const doc::ChamferFeature*>(&f))
-        return FormatValue(chamfer->distance.value, Quantity::Length, d.units) + "\xC3\x97" + "45\xC2\xB0";
+    if (const auto* chamfer = dynamic_cast<const doc::ChamferFeature*>(&f)) {
+        const std::string first = FormatValue(chamfer->distance.value, Quantity::Length, d.units);
+        switch (chamfer->mode) {
+            case doc::ChamferMode::EqualDistance: return first + "\xC3\x97" + "45\xC2\xB0";   // 2×45°
+            case doc::ChamferMode::DistanceAngle:
+                return first + "\xC3\x97" + FormatValue(chamfer->angle.value, Quantity::Angle, d.units) + "\xC2\xB0";
+            case doc::ChamferMode::TwoDistances:
+                return first + "\xC3\x97" + FormatValue(chamfer->distance2.value, Quantity::Length, d.units);   // 2×5
+        }
+    }
     if (const auto* shell = dynamic_cast<const doc::ShellFeature*>(&f))
         return FormatValue(shell->thickness.value, Quantity::Length, d.units) + " " + UnitLabel(Quantity::Length, d.units);
     if (const auto* hole = dynamic_cast<const doc::HoleFeature*>(&f)) {
