@@ -1,7 +1,12 @@
 add_executable(bz_tests
     main.cpp
+    app/DimensionLayoutTests.cpp
+    app/NewTemplatesTests.cpp
     app/SettingsTests.cpp
     # The app is an executable; its OCCT-free pieces are compiled in directly.
+    ${PROJECT_SOURCE_DIR}/src/app/Format.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/NewTemplates.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/sketch/DimensionLayout.cpp
     ${PROJECT_SOURCE_DIR}/src/app/Settings.cpp
     assembly/AssemblyFileTests.cpp
     assembly/SolverTests.cpp

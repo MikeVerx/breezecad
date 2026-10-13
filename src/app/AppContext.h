@@ -59,13 +59,20 @@ struct ShellState {
     } betaReport;
     bool               showSettings = false;
     bool               backgroundMenu = false;   ///< open the "Фон" menu at the cursor
-    int                settingsTab = 0;          ///< 0 interface, 1 keys, 2 mouse, 3 touchpad, 4 general, 5 performance, 6 modules
+    int                settingsTab = 0;          ///< 0 general, 1 controls, 2 graphics, 3 modules
+    int                settingsSub = 0;          ///< group inside: controls — keyboard, mouse, touchpad; graphics — look, quality, performance
     std::string        moduleToRemove;           ///< "Модули": the module whose removal waits for "Да, удалить"
     std::string        captureShortcut;          ///< action whose new shortcut is being pressed
     std::string        shortcutFilter;
     std::string        shortcutNote;             ///< "taken from …" after a reassignment
     bool               showMassProperties = false;   ///< the "МЦХ" window
     bool               showLibrary = false;          ///< the standard parts window ("Библиотека")
+    /// The "Создать" window: the folder shown and the template chosen in it.
+    struct NewDocument {
+        bool        open = false;
+        std::string group;      ///< DocumentTypeInfo::group
+        std::string chosen;     ///< template id (NewTemplates)
+    } newDocument;
     /// The standard parts window: what it shows, kept while the program runs
     /// (not saved: the recent parts are those of this session only).
     struct Library {
@@ -93,6 +100,7 @@ struct ShellState {
         bool  flipped = false;     ///< keep the other half
     } section;
     bool measuring = false;   ///< "Измерить" is on
+    int  measureSlot = 0;     ///< which of its two fields the next click fills
     bool interference = false;   ///< "Коллизии": overlaps of the bodies shown
 
     /// Choosing faces with the left button (see viewport/FaceSelection).
@@ -110,6 +118,8 @@ struct ShellState {
         ImVec2 pressAt{0, 0};
         ImVec2 centre{0, 0};
         double pressTime = 0.0;
+        double pathLength = 0.0;           ///< how far the cursor went since the press (pixels), to tell a straight pull
+        render::CameraState cameraAtPress;  ///< put back when the press turns out to be a flick, not an orbit
     } marking;
 
     ObjectId    renaming;              ///< tree row being renamed

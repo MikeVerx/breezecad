@@ -7,12 +7,13 @@ namespace bz::doc {
 DocumentTypeRegistry& DocumentTypeRegistry::Default() {
     static DocumentTypeRegistry registry = [] {
         DocumentTypeRegistry r;
-        r.Register({.id = std::string(kPartType), .title = "Деталь", .untitledBase = "Деталь"});
+        r.Register({.id = std::string(kPartType), .title = "Деталь", .untitledBase = "Деталь", .group = "Детали", .icon = "tree-part"});
         // Its own extension, so assemblies stand out among part files; the
         // content says what it is, so a renamed file still opens.
-        r.Register({.id = std::string(kAssemblyType), .title = "Сборка", .untitledBase = "Сборка", .extension = ".bza"});
+        r.Register({.id = std::string(kAssemblyType), .title = "Сборка", .untitledBase = "Сборка", .extension = ".bza",
+                    .group = "Сборки", .icon = "assembly"});
         r.Register({.id = std::string(kDrawingType), .title = "Чертёж", .untitledBase = "Чертёж",
-                    .canCreate = false, .canOpen = false});
+                    .canCreate = false, .canOpen = false, .group = "Чертежи", .icon = "doc-drawing"});
         return r;
     }();
     return registry;

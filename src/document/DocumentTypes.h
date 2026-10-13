@@ -17,6 +17,8 @@ struct DocumentTypeInfo {
     std::string extension = ".bzc";   ///< ".bza" for assemblies
     bool        canCreate = true;   ///< a "Создать" button is offered
     bool        canOpen   = true;   ///< this version can open such files
+    std::string group{};       ///< its folder in the "Создать" window: "Детали", "Сборки"… (translated when shown)
+    std::string icon{};        ///< icon id for its tile (assets/icons), empty: a generic sheet
 };
 
 class DocumentTypeRegistry {

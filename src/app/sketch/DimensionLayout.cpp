@@ -197,6 +197,15 @@ std::optional<DimensionLayout> LayoutDimension(const sketch::Sketch& sk, const s
             extension(a, fa);
             extension(b, fb);
             out.lines.push_back({fa, fb});
+            // Text dragged out past an extension line: the dimension line
+            // carries on to it (as in Inventor), so it never floats alone.
+            const Vec2 span = fb - fa;
+            const double len2 = span.Dot(span);
+            if (len2 > 1e-18) {
+                const double t = (through - fa).Dot(span) / len2;
+                if (t < 0) out.lines.push_back({through, fa});
+                else if (t > 1) out.lines.push_back({fb, through});
+            }
             const Vec2 along = (fb - fa).Length() > 1e-9 ? (fb - fa).Normalized() : dir;
             out.arrows.push_back({fb, along});
             out.arrows.push_back({fa, along * -1.0});

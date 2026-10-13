@@ -12,6 +12,8 @@
 namespace bz::app {
 
 void NewDocument(AppContext& app);
+/// Opens the "Создать" window on the template used last (NewDocumentDialog.cpp).
+void OpenNewDocumentDialog(AppContext& app);
 /// Opens `file`, or shows the open dialog when none is given.
 void OpenDocument(AppContext& app, std::optional<std::filesystem::path> file = {});
 void SaveDocument(AppContext& app, bool saveAs);

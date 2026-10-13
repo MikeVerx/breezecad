@@ -41,9 +41,14 @@ void DrawHomeScreen(AppContext& app, ImVec2 pos, ImVec2 size) {
 
     // Main actions.
     ImGui::SetCursorScreenPos({x0, y});
-    if (ui::PrimaryButton(ui, "##home-new", Tr("Новая деталь"), "Ctrl+N", {ui.S(200), ui.S(40)})) app.Later([&app] { NewDocument(app); });
-    ImGui::SetCursorScreenPos({x0 + ui.S(212), y});
-    if (ui::SecondaryButton(ui, "##home-assembly", Tr("Новая сборка"), nullptr, {ui.S(170), ui.S(40)}))
+    // "Создать…" opens the window with every kind; a part and an assembly
+    // are one click away beside it (the author's choice).
+    if (ui::PrimaryButton(ui, "##home-new", Tr("Создать…"), "Ctrl+N", {ui.S(170), ui.S(40)}))
+        app.Later([&app] { OpenNewDocumentDialog(app); });
+    ImGui::SameLine(0, ui.S(10));
+    if (ui::SecondaryButton(ui, "##home-part", Tr("Деталь"), nullptr, {ui.S(120), ui.S(40)})) app.Later([&app] { NewDocument(app); });
+    ImGui::SameLine(0, ui.S(10));
+    if (ui::SecondaryButton(ui, "##home-assembly", Tr("Сборка"), nullptr, {ui.S(120), ui.S(40)}))
         app.Later([&app] { NewAssembly(app); });
     ImGui::SameLine(0, ui.S(10));
     if (ui::SecondaryButton(ui, "##home-open", Tr("Открыть…"), "Ctrl+O", {ui.S(170), ui.S(40)})) app.Later([&app] { OpenDocument(app); });

@@ -79,7 +79,7 @@ void DrawProjectTabs(AppContext& app, ImVec2 pos, float width) {
         x += w + ui.S(2);
     }
     ImGui::SetCursorScreenPos({x + ui.S(2), pos.y + (h - ui.S(28)) / 2});
-    if (ui::IconButton(ui, "##tab-new", "ui-plus", 28, 12, Tr("Новая деталь (Ctrl+N)"))) app.Later([&app] { NewDocument(app); });
+    if (ui::IconButton(ui, "##tab-new", "ui-plus", 28, 12, Tr("Создать (Ctrl+N)"))) app.Later([&app] { OpenNewDocumentDialog(app); });
     EndArea();
 }
 
@@ -102,7 +102,7 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
     Session* s = app.Doc();
     if (!s || app.workspace.ShowsHome()) {
         text(Tr("Главная страница"), c.text, ui.fonts.medium);
-        text(Tr("Создайте деталь (Ctrl+N) или откройте документ (Ctrl+O)"), c.textSecondary);
+        text(Tr("Создайте документ (Ctrl+N) или откройте его (Ctrl+O)"), c.textSecondary);
         EndArea();
         return;
     }

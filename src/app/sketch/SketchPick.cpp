@@ -114,6 +114,18 @@ SketchHit HitTest(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse
     }
     if (best) return best;
 
+    // Dimension labels, before the curves: the text is drawn over them, and a
+    // label lying on a line (a diameter across its circle) must still be
+    // grabbed to move it.
+    for (const auto& c : sk.constraints) {
+        if (!sketch::IsDimensional(c.type)) continue;
+        const auto layout = LayoutDimension(sk, c, units);
+        if (!layout) continue;
+        const ImVec2 at = view.ToScreen(layout->label);
+        const float halfW = 6.0f + 3.6f * static_cast<float>(layout->text.size()), halfH = 11.0f;
+        if (std::abs(mouse.x - at.x) < halfW && std::abs(mouse.y - at.y) < halfH) return {c.id, sketch::EntityKind::Constraint};
+    }
+
     bestDistance = kCurveRadius;
     const auto tryCurve = [&](ObjectId id, sketch::EntityKind kind) {
         const float d = CurveDistance(sk, view, id, mouse);
@@ -128,17 +140,6 @@ SketchHit HitTest(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse
     for (const auto& s : sk.splines) tryCurve(s.id, sketch::EntityKind::Spline);
     for (const auto& t : sk.texts) tryCurve(t.id, sketch::EntityKind::Text);
     for (const auto& e : sk.ellipses) tryCurve(e.id, sketch::EntityKind::Ellipse);
-    if (best) return best;
-
-    // Dimension labels: a box around the text position.
-    for (const auto& c : sk.constraints) {
-        if (!sketch::IsDimensional(c.type)) continue;
-        const auto layout = LayoutDimension(sk, c, units);
-        if (!layout) continue;
-        const ImVec2 at = view.ToScreen(layout->label);
-        const float halfW = 6.0f + 3.6f * static_cast<float>(layout->text.size()), halfH = 11.0f;
-        if (std::abs(mouse.x - at.x) < halfW && std::abs(mouse.y - at.y) < halfH) return {c.id, sketch::EntityKind::Constraint};
-    }
     return best;
 }
 

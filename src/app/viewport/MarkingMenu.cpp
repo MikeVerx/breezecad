@@ -2,6 +2,7 @@
 
 #include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
+#include "core/Monitor.h"
 #include "core/I18n.h"
 #include "ui/Widgets.h"
 
@@ -13,6 +14,14 @@ namespace bz::app {
 namespace {
 
 constexpr double kHoldSeconds = 0.35;   ///< how long the button is held still before the menu opens
+// A flick (as SolidWorks' mouse gestures): the right button pressed and the
+// cursor pulled quickly and straight; the command of that direction runs at
+// once. Slower or curvy moves stay what they were (orbit, the held menu).
+// With the right button bound to orbit (the default set), the few pixels the
+// view turned before the pull was recognised are taken back.
+constexpr double kFlickSeconds = 0.22;  ///< the pull must cover the distance within this
+constexpr float  kFlickPixels = 64.0f;  ///< design px from the press
+constexpr double kFlickStraight = 0.85; ///< distance from the press / path length
 constexpr float  kStillPixels = 5.0f;   ///< moving more than this is a drag, not a hold
 constexpr float  kRadius = 112.0f;      ///< from the centre to the items, design px
 constexpr float  kDeadZone = 28.0f;     ///< inside it nothing is chosen
@@ -91,14 +100,43 @@ bool UpdateMarkingMenu(AppContext& app, Session& session, ViewportFrame& vf) {
             m.armed = true;
             m.pressAt = mouse;
             m.pressTime = ImGui::GetTime();
+            m.pathLength = 0.0;
+            m.cameraAtPress = app.viewport.Camera();
         }
         if (!m.armed) return false;
         const float dx = mouse.x - m.pressAt.x, dy = mouse.y - m.pressAt.y;
-        if (!ImGui::IsMouseDown(ImGuiMouseButton_Right) || dx * dx + dy * dy > kStillPixels * kStillPixels) {
-            m.armed = false;   // a click (context menu) or a drag (orbit): not for the menu
+        const double since = ImGui::GetTime() - m.pressTime;
+        const ImVec2 step = ImGui::GetIO().MouseDelta;
+        m.pathLength += std::sqrt(static_cast<double>(step.x * step.x + step.y * step.y));
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+            m.armed = false;   // a click: the context menu
             return false;
         }
-        if (ImGui::GetTime() - m.pressTime < kHoldSeconds) return false;
+        const double away = std::sqrt(static_cast<double>(dx * dx + dy * dy));
+        if (away > kStillPixels) {
+            // Moving: a flick if fast and straight enough, otherwise a drag (orbit).
+            if (app.settings.flickGestures && since <= kFlickSeconds && away >= ui.S(kFlickPixels) &&
+                away >= kFlickStraight * std::max(m.pathLength, away)) {
+                m.armed = false;
+                const Items items = ItemsFor(app, session);
+                const std::optional<int> slot = PointedSlot(ui, m.pressAt, mouse);
+                const Item* item = slot ? &items[static_cast<std::size_t>(*slot)] : nullptr;
+                const Action* a = item && item->action ? app.actions.Find(item->action) : nullptr;
+                if (!a || !a->IsEnabled()) return false;   // nothing that way: just an orbit
+                // The view turned a little while the pull was read as an orbit: put it back.
+                app.viewport.SetCamera(m.cameraAtPress);
+                ShellState::Navigation& nav = app.shell.nav;
+                nav.orbiting = nav.panning = nav.zooming = false;
+                nav.button = -2;   // swallow the release: no context menu either
+                mon::Action("flick", a->id);
+                Run(app, *item);
+                vf.hovered = false;
+                return true;
+            }
+            if (since > kFlickSeconds || away > ui.S(kFlickPixels) * 2) m.armed = false;   // an orbit (or a drag) after all
+            return false;
+        }
+        if (since < kHoldSeconds) return false;
         m.open = true;
         m.centre = m.pressAt;
         m.held = true;

@@ -16,6 +16,8 @@ void  DrawProjectTabs(AppContext& app, ImVec2 pos, float width);
 void  DrawStatusBar(AppContext& app, ImVec2 pos, float width);
 void  DrawHomeScreen(AppContext& app, ImVec2 pos, ImVec2 size);
 void  DrawDialogs(AppContext& app);
+/// The "Создать" window (NewDocumentDialog.cpp); opened by OpenNewDocumentDialog.
+void  DrawNewDocumentDialog(AppContext& app);
 
 // Panels of the left area (LeftPanels.cpp, TreePanel.cpp).
 void DrawTreePanel(AppContext& app, Session& session, float width);

@@ -37,6 +37,7 @@ private:
     std::string           myOffset, myAngle;
     doc::WorkPlaneMethod  myMethod = doc::WorkPlaneMethod::Offset;   ///< of the edited plane, last frame
     int                   mySlot = 0;   ///< where the next click goes: 0 the start, 1 the second start or the edge
+    std::size_t           myPointSlot = 0;   ///< three points: the field the next click fills
     DragArrow   myArrow;   ///< offset
     bool myRebuildOnRelease = false;   ///< the offset was dragged: rebuild when the drag ends
 };
