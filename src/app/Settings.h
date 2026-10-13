@@ -24,6 +24,7 @@ struct Settings {
     double      orbitSpeed     = 1.0;     ///< view rotation sensitivity, 0.5..2
     bool        invertOrbit    = false;   ///< drag up turns the model down
     bool        turntableOrbit = false;   ///< sideways drag turns about world Z (else about the screen's vertical)
+    bool        flickGestures  = true;    ///< a quick pull with the right button runs the radial menu's command that way
     int         autosaveMinutes = 5;      ///< 0 turns autosave off
     bool        gridSnap       = true;
     bool        pointSnap      = true;

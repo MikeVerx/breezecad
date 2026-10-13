@@ -810,6 +810,21 @@ void DrawMouseSettings(AppContext& app, float width) {
         ImGui::PopTextWrapPos();
         ImGui::PopStyleColor();
     }
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Жесты правой кнопкой"));
+    static constexpr std::array<const char*, 2> flick{N_("Рывок — команда"), N_("Выключены")};
+    const int fl = s.flickGestures ? 0 : 1;
+    if (const int n = ui::Segmented(ui, "flick", flick, fl, 2, width); n != fl) s.flickGestures = n == 0;
+    {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(Tr("Нажмите правую кнопку и резко потяните в сторону — сразу выполнится команда радиального меню в "
+                                  "этом направлении, как в SolidWorks. Медленное движение по-прежнему вращает вид, удержание на "
+                                  "месте открывает меню."));
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    }
 }
 
 /// "Настройки": interface scale and theme; keyboard shortcuts.

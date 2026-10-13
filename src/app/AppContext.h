@@ -118,6 +118,8 @@ struct ShellState {
         ImVec2 pressAt{0, 0};
         ImVec2 centre{0, 0};
         double pressTime = 0.0;
+        double pathLength = 0.0;           ///< how far the cursor went since the press (pixels), to tell a straight pull
+        render::CameraState cameraAtPress;  ///< put back when the press turns out to be a flick, not an orbit
     } marking;
 
     ObjectId    renaming;              ///< tree row being renamed

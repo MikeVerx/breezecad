@@ -59,6 +59,7 @@ Settings FromJson(const nlohmann::json& j) {
     s.orbitSpeed      = std::clamp(j.value("orbitSpeed", s.orbitSpeed), 0.25, 4.0);
     s.invertOrbit     = j.value("invertOrbit", s.invertOrbit);
     s.turntableOrbit  = j.value("turntableOrbit", s.turntableOrbit);
+    s.flickGestures   = j.value("flickGestures", s.flickGestures);
     s.autosaveMinutes = std::clamp(j.value("autosaveMinutes", s.autosaveMinutes), 0, 120);
     s.gridSnap        = j.value("gridSnap", s.gridSnap);
     s.pointSnap       = j.value("pointSnap", s.pointSnap);
@@ -166,6 +167,7 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"orbitSpeed", orbitSpeed},
         {"invertOrbit", invertOrbit},
         {"turntableOrbit", turntableOrbit},
+        {"flickGestures", flickGestures},
         {"language", language},
         {"window", {{"x", windowX}, {"y", windowY}, {"width", windowW}, {"height", windowH}, {"maximized", windowMaximized}}},
         {"shortcuts", ShortcutsJson(shortcuts)},
