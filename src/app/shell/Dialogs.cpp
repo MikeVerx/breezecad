@@ -9,6 +9,7 @@
 #include "app/ShortcutPresets.h"
 #include "app/Backgrounds.h"
 #include "app/shell/Shell.h"
+#include "app/shell/TouchpadSettings.h"
 #include "core/I18n.h"
 #include "core/Version.h"
 #include "document/Commands.h"
@@ -756,15 +757,15 @@ void DrawMouseSettings(AppContext& app, float width) {
 void DrawSettings(AppContext& app) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
-    if (!BeginDialog(ui, "##settings", app.shell.showSettings, ui.S(620))) return;
+    if (!BeginDialog(ui, "##settings", app.shell.showSettings, ui.S(700))) return;
     {
         ui::FontScope font(ui.fonts.title);
         ImGui::TextUnformatted(Tr("Настройки"));
     }
     const float width = ImGui::GetContentRegionAvail().x;
-    static constexpr std::array<const char*, 6> tabs{N_("Интерфейс"), N_("Клавиши"), N_("Мышь"), N_("Общие"), N_("Оптимизация"),
-                                                     N_("Модули")};
-    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 6, width);
+    static constexpr std::array<const char*, 7> tabs{N_("Интерфейс"), N_("Клавиши"), N_("Мышь"), N_("Тачпад"), N_("Общие"),
+                                                     N_("Оптимизация"), N_("Модули")};
+    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 7, width);
     ImGui::Dummy({0, ui.S(6)});
 
     if (app.shell.settingsTab == 0) {
@@ -801,13 +802,15 @@ void DrawSettings(AppContext& app) {
         ImGui::Dummy({0, ui.S(6)});
         ui::FieldLabel(ui, Tr("Фон вида"));
         if (ui::LinkButton(ui, "##open-backgrounds", Tr("Выбрать на вкладке «Вид» → «Фон»…"))) app.shell.backgroundMenu = true;
-    } else if (app.shell.settingsTab == 4) {
-        DrawOptimizationSettings(app, width);
     } else if (app.shell.settingsTab == 5) {
+        DrawOptimizationSettings(app, width);
+    } else if (app.shell.settingsTab == 6) {
         DrawModuleSettings(app, width);
     } else if (app.shell.settingsTab == 2) {
         DrawMouseSettings(app, width);
     } else if (app.shell.settingsTab == 3) {
+        DrawTouchpadSettings(app, width);
+    } else if (app.shell.settingsTab == 4) {
         ui::FieldLabel(ui, Tr("При запуске"));
         static constexpr std::array<const char*, 2> start{N_("Главная страница"), N_("Последний файл")};
         const int st = app.settings.reopenLast ? 1 : 0;

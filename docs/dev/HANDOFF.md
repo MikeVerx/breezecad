@@ -9,13 +9,15 @@
 ```bash
 cd /home/claude/breezecad && git switch next && git pull -q
 # если контейнер новый (пакеты пропали):
-apt-get install -y libocct-*-dev libtbb-dev libglfw3-dev libgl1-mesa-dev xvfb xdotool zenity gdb python3-pil
+apt-get install -y libocct-*-dev libtbb-dev libglfw3-dev libxi-dev libgl1-mesa-dev xvfb xdotool zenity gdb python3-pil
 cmake --preset linux-debug && cmake --build --preset linux-debug -- -k 0 2>&1 | grep -E "error|warning:"
 ./build/linux-debug/bin/bz_tests 2>&1 | tail -1
 ```
-Сборка Windows — только CI (MSYS2, OCCT 8). Билд для автора:
+Сборки Windows и macOS — только CI (MSYS2 + OCCT 8; Homebrew + OCCT 7.9 на `macos-14`, arm64).
+`next-build` — шесть файлов: `BreezeCAD-{windows,linux,macos}` и `BreezeCAD-beta-{windows,linux,macos}`
+(.zip, Linux — .tar.gz), например
 https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-windows.zip
-(обновляется сам после зелёного CI на `next`). Статус: `gh run list --branch next --limit 2`;
+(обновляется сам, когда на `next` зелёные все джобы; см. раздел 3в). Статус: `gh run list --branch next --limit 2`;
 причина падения: `gh api repos/MikeVerx/breezecad/check-runs/<job id>/annotations`
 (логи `--log-failed` недоступны — 403).
 
@@ -31,9 +33,7 @@ https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-win
 - Windows-ловушки: `far`/`near` — макросы windows.h, не называть так переменные.
 - Коммиты (автор попросил «для людей»): тело What/Why/Where/Tested, как в
   CONTRIBUTING.md (пример `git show c0bfa3d`); одна логическая часть на коммит.
-- CI заблокирован оплатой GitHub Actions (аккаунт MikeVerx) — сборка `next-build`
-  не обновляется, пока он не решит (публичный репо / лимит / новый месяц).
-  После — `gh run rerun <id> -R MikeVerx/breezecad` последнего запуска.
+- Репозиторий публичный (2026-10-12): минуты Actions бесплатны, macOS собирается на каждый push.
 - Коммиты: в конце строки `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` и
   `Claude-Session: …` (см. системное напоминание сессии).
 
@@ -44,10 +44,13 @@ https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-win
 - Сборка: `cmake --build --preset linux-debug -- -k 0 2>&1 | grep -E "error|warning:" | head`.
 - Скриншоты — только когда без них нельзя; кропать PIL'ом нужный участок.
 - Не ждать CI в цикле: пушнуть и идти дальше; проверить один раз в конце сессии.
-- **Минуты GitHub Actions платные** (приватный репо: Windows ×2, macOS ×10). Коммитить
-  часто, а **пушить пачкой 1–3 раза за сессию**. macOS — только вручную (workflow_dispatch),
-  docs/translations не собираются. Если джобы падают за ~6 с — это биллинг
-  («recent account payments have failed…»), не код: сказать автору.
+- Пушить пачками: каждый push отменяет идущий прогон (concurrency) — Windows-джоба (~10 мин)
+  до конца не доходит. docs/translations не собираются. Если джобы падают за ~6 с — это
+  биллинг («recent account payments have failed…»), не код: сказать автору.
+- Логи и артефакты прогона из сессии не скачать (их хранилище закрыто прокси) — читать
+  аннотации: `gh api repos/MikeVerx/breezecad/check-runs/<job id>/annotations`. Шаги пишут туда
+  `::notice` (версии, размер пакета, glibc, итог запуска), `scripts/ci-annotate.sh` — ошибки и
+  хвост лога. Аннотация обрезается до 4 КБ, на шаг — до 10 штук.
 - Подагентов не запускать без нужды.
 
 ## 3. UI-тест (Xvfb)
@@ -300,6 +303,40 @@ WORKLOG 2026-10-11). Остаток пункта:
   (`pip install pefile` — имена функций DLL в стеке Windows) → `tools/monitor/reports/testers/…md`.
 - FaultGuard: на ПК автора (Windows) перехват работает (диагностика bz-fault-diag a/b), на раннере CI —
   нет (тесты FaultGuard на Windows пропущены). Причина не найдена.
+
+## 3в. Три системы и тачпад (2026-10-12, ветка feat/macos, PR #7)
+- **macOS**: только Apple Silicon (arm64), macOS 14+ (бутылки Homebrew на `macos-14` собраны под 14).
+  `scripts/package-macos.sh`: `.app` из `build/macos/bin`, dylib Homebrew → `Contents/Frameworks`
+  (dylibbundler, ссылки `@executable_path/../Frameworks`, проверка — ничего вне бандла и системы),
+  подпись ad hoc изнутри наружу. Платная подпись — `MACOS_SIGN_IDENTITY` (+ hardened runtime,
+  timestamp); нотаризация — команды в шапке скрипта. Иконка — `assets/brand/breezecad.icns`,
+  Info.plist — `resources/macos/Info.plist.in`. На раннере нет OpenGL: «Start check» доходит до
+  окна (с убранным Cellar Homebrew — значит, библиотеки бандла грузятся) и честно пишет, что кадра нет.
+- **Linux**: tar.gz, собран на conda-forge (GCC 13, OCCT 8.0.1, GLFW 3.5, sysroot glibc 2.28):
+  в Debian 12 GCC 12 без `std::format`, а системный OCCT Ubuntu привязал бы к её glibc.
+  `scripts/package-linux.sh`: библиотеки по ldd в `lib/` (RUNPATH `$ORIGIN/lib`), системные —
+  glibc, стек OpenGL, X11, fontconfig. Итог: GLIBC ≤ 2.28, ~57 библиотек, ~80 МБ. CI запускает
+  пакет из архива на Xvfb и сохраняет кадр (`start-check-linux`) и кадр вкладки «Тачпад»
+  (`BZ_SETTINGS_TAB=3`). Джоба `linux-occt76` — системный OCCT 7.6 Ubuntu, только сборка и тесты.
+  В conda-оболочке (`bash -el`) статус пайпа `| tee` врёт — шаги пишут лог без пайпа.
+- **Бета-сборки**: маркер `beta-tester.txt` на маке — `BreezeCAD.app/Contents/Resources/` (в
+  `Contents/MacOS` ломает подпись); отчёты на маке — `~/Library/Application Support/BreezeCAD/Отчёты
+  для разработчика` (скачанное приложение запускается из копии только для чтения), в zip падения
+  — ещё .ips из `~/Library/Logs/DiagnosticReports`. Linux/macOS: стек падения — `crash.txt` сессии.
+  Инструкции — `resources/beta/{linux,macos}/`; Linux-запускатель — `Запустить BreezeCAD.sh`.
+- **Тачпад** (`platform/Touchpad*`, `app/TouchNavigation`, `app/viewport/TouchGestures`,
+  вкладка `app/shell/TouchpadSettings`, картинки `ui/GestureArt`): macOS — всё (Cocoa: прокрутка
+  с фазами, щипок, поворот, умный зум, сильное нажатие); Windows — прокрутка и щипок (сообщения
+  колеса Precision Touchpad; гладкая прокрутка = пальцы — догадка, выключается в настройках);
+  Linux — прокрутка, щипок, поворот (своё X-соединение, XInput 2.4; Wayland — через XWayland).
+  По умолчанию: два пальца — сдвиг, Shift — вращение, Ctrl/Cmd — масштаб, щипок — масштаб,
+  поворот — крен вида (`Viewport::Roll`), двойное касание — «Показать всё».
+- **Не делали (ждут обсуждения UX)**: перевод подписей Ctrl → Cmd по всему интерфейсу (сейчас Cmd
+  на маке работает как Ctrl, а подписи — «Ctrl»; во вкладке «Тачпад» уже «Cmd»/«Option»),
+  навигация трекпадом сверх настроек, маковское меню-бар (сейчас стандартное от GLFW: «О программе»,
+  «Скрыть», «Завершить»).
+- **Проверить на живом маке** — чек-лист в PR #7 (первый запуск, Retina, клики, жесты,
+  перенос окна между экранами, отчёт тестера после вылета).
 
 ## 6а. Бета-баги автора 2026-10-11 (вечер)
 - **Первая волна тестеров (2026-10-12): план и статус — `docs/dev/DEBUG-PATCH-1.md`, ветка `fix/beta-1`.**

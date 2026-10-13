@@ -100,12 +100,14 @@ void Windows(std::vector<SystemFact>& out) {
 
 #else
 
+#if !defined(__APPLE__)
 std::string FirstLineWith(const char* file, const std::string& prefix) {
     std::ifstream in(file);
     for (std::string line; std::getline(in, line);)
         if (line.starts_with(prefix)) return line.substr(prefix.size());
     return {};
 }
+#endif
 
 void Unix(std::vector<SystemFact>& out) {
     utsname u{};

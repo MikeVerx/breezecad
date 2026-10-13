@@ -16,6 +16,7 @@ add_executable(breezecad WIN32
     Operations.cpp
     Session.cpp
     Settings.cpp
+    TouchNavigation.cpp
     Workspace.cpp
     features/AppearanceEditor.cpp
     features/CopyEditors.cpp
@@ -44,6 +45,7 @@ add_executable(breezecad WIN32
     shell/LeftPanels.cpp
     shell/Ribbon.cpp
     shell/Splash.cpp
+    shell/TouchpadSettings.cpp
     shell/TreePanel.cpp
     sketch/DimensionLayout.cpp
     MouseNavigation.cpp
@@ -58,6 +60,7 @@ add_executable(breezecad WIN32
     viewport/Measure.cpp
     viewport/Planes.cpp
     viewport/Section.cpp
+    viewport/TouchGestures.cpp
     viewport/ViewportPanel.cpp
     viewport/FaceSelection.cpp)
 if(WIN32)

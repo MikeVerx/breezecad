@@ -73,6 +73,7 @@ void OnKey(GLFWwindow* window, int key, int scancode, int action, int mods) {
 Application::Application() = default;
 
 Application::~Application() {
+    platform::StopTouchpad();   // before ImGui puts its window procedure back (Windows)
     myModules.reset();   // modules shut down while everything they may touch is still there
     if (myUi) {
         ImGui_ImplOpenGL3_Shutdown();
@@ -148,6 +149,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     io.ConfigWindowsMoveFromTitleBarOnly = true;
     ImGui_ImplGlfw_InitForOpenGL(myWindow.Handle(), true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
+    platform::StartTouchpad(myWindow.Handle());   // after ImGui: it hooks the window too (Windows)
 
     // HiDPI: on macOS the framebuffer is 2x the window; elsewhere the UI scales.
     int winW = 1, fbW = 1, h = 1;
@@ -174,7 +176,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myShell.recoverable = myAutosave->FindRecoverable();
 
     myContext = std::make_unique<AppContext>(AppContext{*myUi, mySettings, myWorkspace, myActions, myNotes, *myAutosave,
-                                                        myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}});
+                                                        myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}, {}});
     RegisterActions(*myContext);
     StartModules();
     for (const auto& [id, chord] : mySettings.shortcuts) myActions.SetChord(id, ActionRegistry::ParseChord(chord));
@@ -199,6 +201,11 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     }
     if (myShell.crashedLastTime && !myShell.recoverable.empty())
         myNotes.Info(Tr("Прошлый сеанс завершился неожиданно. Несохранённую работу можно восстановить на главной странице."));
+    // Test hook (screenshots of the settings in CI): BZ_SETTINGS_TAB=<tab>.
+    if (const char* tab = std::getenv("BZ_SETTINGS_TAB")) {
+        myShell.showSettings = true;
+        myShell.settingsTab = std::clamp(std::atoi(tab), 0, 6);
+    }
     return true;
 }
 
@@ -246,6 +253,9 @@ int Application::Run() {
             platform::Window::WaitEvents(WaitsForBackground() ? 1.0 / 30.0 : 1.0);
         }
         const double now = glfwGetTime();
+        platform::SetSmoothScrollIsTouchpad(mySettings.touch.smoothIsTouchpad);
+        myContext->touch = platform::TakeTouchEvents();
+        if (!myContext->touch.empty()) myInput.seen = true;
         if (myInput.seen) {
             myInput.seen = false;
             myFramesToDraw = std::max(myFramesToDraw, 3);
@@ -357,10 +367,23 @@ float Application::ChooseScale() const {
 }
 
 void Application::ApplyScaleIfChanged() {
-    if (mySettings.uiScale == myAppliedScaleSetting) return;
+    // The window moved to a screen of another density (a Retina laptop and an
+    // external monitor on macOS): text and icons are rasterised for its pixels.
+    int winW = 0, fbW = 0, h = 0;
+    glfwGetWindowSize(myWindow.Handle(), &winW, &h);
+    glfwGetFramebufferSize(myWindow.Handle(), &fbW, &h);
+    const float density = winW > 0 && fbW > 0 ? static_cast<float>(fbW) / static_cast<float>(winW) : myFramebufferScale;
+    const bool densityChanged = std::abs(density - myFramebufferScale) > 0.01f;
+    if (mySettings.uiScale == myAppliedScaleSetting && !densityChanged) return;
     myAppliedScaleSetting = mySettings.uiScale;
+    if (densityChanged) {
+        log::Info("Screen density {:.2f} -> {:.2f}: text and icons again", myFramebufferScale, density);
+        myFramebufferScale = density;
+        ImGui::GetIO().FontGlobalScale = 1.0f / density;
+        myIcons.SetScale(density);
+    }
     const float scale = ChooseScale();
-    if (std::abs(scale - myScale) < 1e-3f) return;
+    if (!densityChanged && std::abs(scale - myScale) < 1e-3f) return;
     // Fonts are rasterised for one size: build them again, then the texture.
     myScale = scale;
     myFonts.Load(myAssets, myScale * myFramebufferScale);
@@ -447,11 +470,12 @@ void Application::Frame() {
     const double uiStart = glfwGetTime();
     {
         prof::Scope scope("interface");
+        myShell.animateUi = false;
         DrawRoot();
         DrawDialogs(app);
     }
     const ImVec2 corner = myShell.viewportMax.x > 0 && !myWorkspace.ShowsHome() ? myShell.viewportMax : ImGui::GetIO().DisplaySize;
-    myBusy = myNotes.Draw(*myUi, corner, now) || myBusy;
+    myBusy = myNotes.Draw(*myUi, corner, now) || myBusy || myShell.animateUi;
 
     ImGui::Render();
     smooth(myStats.uiMs, msSince(uiStart));

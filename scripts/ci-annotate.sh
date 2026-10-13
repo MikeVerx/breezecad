@@ -12,8 +12,14 @@ emit() {
 for log in "$@"; do
     [ -f "$log" ] || continue
     name=$(basename "$log")
-    grep -E "error|ERROR|FAILED|Failed|failed|FATAL|Assertion|terminate called|Segmentation|Exception|SEGFAULT|TEST CASE" "$log" \
-        | grep -v "warning:" | head -60 | emit "$name"
+    # Lines cut short: a failed compile command alone can be kilobytes, and
+    # an annotation over 64 KB is dropped without a word. The errors first:
+    # warnings' context lines would otherwise fill the 60 lines.
+    grep -E "error:|Error:|undefined reference|cannot find|DSO missing|FAILED:" "$log" | cut -c1-300 | head -40 | emit "$name (errors)"
+    grep -E "error|Error|ERROR|FAILED|Failed|failed|FATAL|Assertion|terminate called|Segmentation|Exception|SEGFAULT|TEST CASE|undefined reference|ld: |cannot find|DSO missing" "$log" \
+        | grep -v "warning:" | cut -c1-300 | head -60 | emit "$name"
+    # The end of the build log says how it stopped, whatever the words.
+    if [ "$name" = "build.log" ]; then tail -25 "$log" | cut -c1-300 | emit "$name (tail)"; fi
     # A crash prints no check at all: the end of the test log says what ran last.
     if [ "$name" = "test.log" ] && grep -q "tests failed" "$log"; then tail -60 "$log" | emit "$name (tail)"; fi
     # A backtrace, when the crash was run again under gdb.

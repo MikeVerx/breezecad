@@ -927,6 +927,19 @@ void Viewport::Orbit(double yaw, double pitch, Vec3 pivot, bool turntable) {
     SetCamera({ToVec(eye.XYZ()), ToVec(center.XYZ()), ToVec(up.XYZ()), c.scale});
 }
 
+void Viewport::Roll(double angle, Vec3 pivot) {
+    CameraState c = Camera();
+    const Vec3 dir = (c.center - c.eye).Normalized();
+    // The camera turns about its own line of sight (away from the viewer):
+    // a positive turn of the camera is a counter-clockwise turn of the model.
+    gp_Trsf t;
+    t.SetRotation(gp_Ax1(ToPnt(pivot), ToDir(dir)), angle);
+    const gp_Pnt eye = ToPnt(c.eye).Transformed(t);
+    const gp_Pnt center = ToPnt(c.center).Transformed(t);
+    const gp_Dir up = ToDir(c.up).Transformed(t);
+    SetCamera({ToVec(eye.XYZ()), ToVec(center.XYZ()), ToVec(up.XYZ()), c.scale});
+}
+
 void Viewport::Pan(double dx, double dy) {
     CameraState c = Camera();
     const Vec3 dir = (c.center - c.eye).Normalized();

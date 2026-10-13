@@ -8,6 +8,11 @@ struct GLFWwindow;
 
 namespace bz::platform {
 
+/// glfwInit with the hints this program needs; every window starts with it.
+/// On Linux GLFW 3.4+ would prefer Wayland, but OCCT draws into an X11
+/// window, so X11 (XWayland on Wayland desktops) is asked for.
+bool InitGlfw();
+
 struct WindowConfig {
     int         width     = 1440;
     int         height    = 900;

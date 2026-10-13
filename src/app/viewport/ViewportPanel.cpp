@@ -12,6 +12,7 @@
 #include "app/viewport/Measure.h"
 #include "app/viewport/Planes.h"
 #include "app/viewport/Section.h"
+#include "app/viewport/TouchGestures.h"
 #include "core/I18n.h"
 #include "document/ExtrudeFeature.h"
 #include "document/Origin.h"
@@ -27,8 +28,6 @@
 
 namespace bz::app {
 namespace {
-
-constexpr double kOrbitPerPixel = 0.0075;   // radians, KOMPAS-like sensitivity
 
 /// "Начать эскиз": choose an origin plane, a work plane or a flat face.
 void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDrawList* dl) {
@@ -167,11 +166,7 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
         nav.button = button;
         if (matches(m.orbit)) {
             nav.orbiting = true;
-            // Orbit around the model point under the cursor, else the model centre.
-            const auto hit = app.viewport.Pick(vf.ToLocal(mouse));
-            nav.pivot = hit ? hit->point : app.viewport.ModelCenter();
-            nav.facePlane = hit ? hit->plane : std::nullopt;
-            nav.faceBody = hit ? hit->body : ObjectId{};
+            ChooseOrbitPivot(app, vf, mouse);
         } else if (matches(m.pan)) {
             nav.panning = true;
         } else if (matches(m.zoom)) {
@@ -216,7 +211,9 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
             nav.button = -1;
         }
     }
-    if (sceneHovered && io.MouseWheel != 0.0f) {
+    // Fingers on a touchpad come as a wheel too: their gestures take it.
+    const bool touchTookWheel = NavigateTouch(app, vf, sceneHovered && !busy);
+    if (sceneHovered && io.MouseWheel != 0.0f && !touchTookWheel) {
         static double lastWheel = -10.0;   // one action per burst of wheel turns
         if (app.now - lastWheel > 1.0) mon::Action("view", "колесо");
         lastWheel = app.now;
@@ -227,6 +224,14 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
 }
 
 } // namespace
+
+void ChooseOrbitPivot(AppContext& app, const ViewportFrame& vf, ImVec2 at) {
+    ShellState::Navigation& nav = app.shell.nav;
+    const auto hit = app.viewport.Pick(vf.ToLocal(at));
+    nav.pivot = hit ? hit->point : app.viewport.ModelCenter();
+    nav.facePlane = hit ? hit->plane : std::nullopt;
+    nav.faceBody = hit ? hit->body : ObjectId{};
+}
 
 void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     ui::Ui& ui = app.ui;
