@@ -388,3 +388,44 @@ jobs:
           fi
           gh release upload next-build "${files[@]/#/release/}" --clobber
           gh release edit next-build --notes "$notes"
+
+  release:
+    # A push to main is a numbered release: BreezeCAD <version> with its notes
+    # (docs/releases/<label>.md) and the same six builds. Re-running only
+    # replaces the files of that release.
+    needs: [windows, linux, linux-occt76, macos]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: release-windows, path: release }
+      - uses: actions/download-artifact@v4
+        with: { name: BreezeCAD-linux, path: release }
+      - uses: actions/download-artifact@v4
+        with: { name: BreezeCAD-beta-linux, path: release }
+      - uses: actions/download-artifact@v4
+        with: { name: BreezeCAD-macos, path: release }
+      - uses: actions/download-artifact@v4
+        with: { name: BreezeCAD-beta-macos, path: release }
+      - name: Publish the numbered release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          files=(BreezeCAD-windows.zip BreezeCAD-beta-windows.zip BreezeCAD-linux.tar.gz BreezeCAD-beta-linux.tar.gz
+                 BreezeCAD-macos.zip BreezeCAD-beta-macos.zip)
+          for f in "${files[@]}"; do test -s "release/$f" || { echo "::error::missing $f"; exit 1; }; done
+          number=$(sed -n '/^project(/,/)/s/.*VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt | head -1)
+          suffix=$(sed -n 's/^set(BZ_VERSION_SUFFIX "\(.*\)")/\1/p' CMakeLists.txt | head -1)
+          label="$number$suffix"                                   # 0.2.1-Beta
+          tag="v$(echo "$label" | tr '[:upper:]' '[:lower:]')"     # v0.2.1-beta
+          notes_file="docs/releases/$(echo "$label" | tr '[:upper:]' '[:lower:]').md"
+          test -s "$notes_file" || { echo "::error::no release notes: $notes_file"; exit 1; }
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --title "BreezeCAD $label" --notes-file "$notes_file" --latest
+          fi
+          gh release upload "$tag" "${files[@]/#/release/}" --clobber
+          echo "::notice title=Release::BreezeCAD $label published as $tag"
