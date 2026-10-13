@@ -1,5 +1,8 @@
 add_executable(bz_tests
     main.cpp
+    app/SettingsTests.cpp
+    # The app is an executable; its OCCT-free pieces are compiled in directly.
+    ${PROJECT_SOURCE_DIR}/src/app/Settings.cpp
     assembly/AssemblyFileTests.cpp
     assembly/SolverTests.cpp
     core/ExpressionTests.cpp
@@ -40,7 +43,7 @@ add_executable(bz_tests
     sketch/ShapesTests.cpp
     sketch/SolverTests.cpp
     sketch/TrimTests.cpp)
-target_link_libraries(bz_tests PRIVATE bz::miniz bz::core bz::sketch bz::document bz::assembly bz::kernel bz::modules bz::doctest)
+target_link_libraries(bz_tests PRIVATE bz::miniz bz::core bz::sketch bz::document bz::assembly bz::kernel bz::modules bz::doctest bz::json)
 add_dependencies(bz_tests bz_example_module bz_example_module_fail)
 target_compile_definitions(bz_tests PRIVATE BZ_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
     BZ_EXAMPLE_MODULE="$<TARGET_FILE:bz_example_module>"

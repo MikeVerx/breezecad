@@ -94,6 +94,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     std::ofstream(config / "running.lock") << "running";
 
     mySettings = Settings::Load(config / "settings.json");
+    if (!mySettings.loadProblem.empty()) myNotes.Error(Tr(mySettings.loadProblem));
     if (const std::string problem = ApplyLanguage(mySettings); !problem.empty())
         myNotes.Error(Tr(problem));
     // The splash while the rest starts; the main window appears when ready.

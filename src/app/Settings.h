@@ -42,13 +42,17 @@ struct Settings {
     std::string mousePreset = "breezecad";
     bool        mouseCustom = false;
     std::vector<std::filesystem::path> recentFiles;   ///< most recent first
+    /// Not stored: set by Load when the file was damaged and defaults were used
+    /// (Russian template, translated when shown).
+    std::string loadProblem;
 
     static constexpr std::size_t kMaxRecent = 12;
 
     void AddRecent(const std::filesystem::path& file);
     void RemoveRecent(const std::filesystem::path& file);
 
-    /// Reads settings; missing or broken files give the defaults.
+    /// Reads settings; missing or broken files give the defaults (a broken
+    /// one is copied to "<file>.bak" and `loadProblem` says so).
     static Settings Load(const std::filesystem::path& file);
     bool Save(const std::filesystem::path& file) const;
 };

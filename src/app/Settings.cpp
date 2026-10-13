@@ -19,15 +19,23 @@ void Settings::RemoveRecent(const std::filesystem::path& file) {
     std::erase_if(recentFiles, [&](const auto& p) { return p == file; });
 }
 
-Settings Settings::Load(const std::filesystem::path& file) {
+namespace {
+
+/// Defaults for a damaged file, which is kept next to it as "<name>.bak":
+/// the next Save overwrites the original, and the user may want it back.
+Settings Damaged(const std::filesystem::path& file, std::string_view why) {
+    log::Warn("Settings file is damaged ({}), using defaults", why);
+    std::filesystem::path backup = file;
+    backup += ".bak";
+    std::error_code ec;
+    std::filesystem::copy_file(file, backup, std::filesystem::copy_options::overwrite_existing, ec);
     Settings s;
-    std::ifstream in(file);
-    if (!in) return s;
-    const nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
-    if (j.is_discarded() || !j.is_object()) {
-        log::Warn("Settings file is damaged, using defaults");
-        return s;
-    }
+    s.loadProblem = "Файл настроек повреждён, настройки сброшены. Прежний файл сохранён как settings.json.bak";
+    return s;
+}
+
+Settings FromJson(const nlohmann::json& j) {
+    Settings s;
     const std::string theme = j.value("theme", "system");
     s.theme = theme == "light" ? ThemeChoice::Light : theme == "dark" ? ThemeChoice::Dark : ThemeChoice::System;
     s.animations      = j.value("animations", s.animations);
@@ -75,11 +83,30 @@ Settings Settings::Load(const std::filesystem::path& file) {
         s.mouseCustom = m->value("custom", false);
     }
     s.shortcutsCustom = j.value("shortcutsCustom", s.shortcutsCustom);
-    for (const auto& [id, chord] : j.value("shortcuts", nlohmann::json::object()).items())
+    // Named: items() of a temporary would outlive it (ASan: stack-use-after-scope).
+    const nlohmann::json shortcuts = j.value("shortcuts", nlohmann::json::object());
+    for (const auto& [id, chord] : shortcuts.items())
         if (chord.is_string()) s.shortcuts.emplace_back(id, chord.get<std::string>());
     for (const auto& r : j.value("recentFiles", nlohmann::json::array()))
         if (r.is_string()) s.recentFiles.push_back(PathFromUtf8(r.get<std::string>()));
     return s;
+}
+
+} // namespace
+
+Settings Settings::Load(const std::filesystem::path& file) {
+    std::ifstream in(file);
+    if (!in) return {};
+    const nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
+    in.close();
+    if (j.is_discarded() || !j.is_object()) return Damaged(file, "not a JSON object");
+    // A field of another type ("uiScale": "1,25") throws inside nlohmann::json;
+    // uncaught, it closed the program before the window on every start (B-11).
+    try {
+        return FromJson(j);
+    } catch (const nlohmann::json::exception& e) {
+        return Damaged(file, e.what());
+    }
 }
 
 namespace {

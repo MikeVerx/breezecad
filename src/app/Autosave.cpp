@@ -5,6 +5,7 @@
 #include "core/Log.h"
 #include "core/PathText.h"
 #include "document/BzcFile.h"
+#include "document/JsonIO.h"
 
 #include <nlohmann/json.hpp>
 
@@ -46,7 +47,9 @@ bool Autosave::Update(Session& session, const Settings& settings, double now, do
     int slot = 1;
     if (std::ifstream in(folder / "info.json"); in) {
         const nlohmann::json info = nlohmann::json::parse(in, nullptr, false);
-        if (!info.is_discarded()) slot = info.value("slot", 0) % kCopies + 1;
+        int last = 0;   // a hand-edited "slot": "2" must not throw (B-11)
+        if (info.is_object() && doc::json_io::ReadMember(info, "slot", last))
+            slot = (last % kCopies + kCopies) % kCopies + 1;
     }
     const std::filesystem::path copy = folder / std::format("copy{}.bzc", slot);
     const Status status = session.WriteFile(copy, "BreezeCAD autosave");
@@ -78,13 +81,20 @@ std::vector<RecoverableDocument> Autosave::FindRecoverable() const {
         std::ifstream in(entry.path() / "info.json");
         if (!in) continue;
         const nlohmann::json info = nlohmann::json::parse(in, nullptr, false);
-        if (info.is_discarded()) continue;
+        if (!info.is_object()) continue;
+        // Fields of another type are skipped, not thrown (B-11): this runs before the window.
+        int slot = 1;
+        std::string original, title = Tr("Без имени"), savedAt;
+        using doc::json_io::ReadMember;
+        if (!ReadMember(info, "slot", slot) || !ReadMember(info, "original", original) ||
+            !ReadMember(info, "title", title) || !ReadMember(info, "savedAt", savedAt))
+            continue;
         RecoverableDocument doc;
         doc.folder = entry.path();
-        doc.copy = entry.path() / std::format("copy{}.bzc", info.value("slot", 1));
-        doc.original = PathFromUtf8(info.value("original", ""));
-        doc.title = info.value("title", Tr("Без имени"));
-        doc.savedAt = info.value("savedAt", "");
+        doc.copy = entry.path() / std::format("copy{}.bzc", slot);
+        doc.original = PathFromUtf8(original);
+        doc.title = title;
+        doc.savedAt = savedAt;
         if (std::filesystem::exists(doc.copy, ec)) found.push_back(std::move(doc));
     }
     return found;
