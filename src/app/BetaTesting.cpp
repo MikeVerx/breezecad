@@ -109,9 +109,9 @@ void CopySystemCrashReports(const std::filesystem::path& sessionDir) {
     if (ec) return;
     const char* home = std::getenv("HOME");
     if (!home) return;
-    for (const auto& e : std::filesystem::directory_iterator(std::filesystem::path(home) / "Library" / "Logs" / "DiagnosticReports", ec)) {
+    for (const auto& e : FolderEntries(std::filesystem::path(home) / "Library" / "Logs" / "DiagnosticReports")) {
         const std::string name = ToUtf8(e.path().filename());
-        if (!e.is_regular_file() || !name.starts_with("breezecad") || e.last_write_time(ec) < started) continue;
+        if (!IsFile(e) || !name.starts_with("breezecad") || e.last_write_time(ec) < started) continue;
         std::filesystem::copy_file(e.path(), sessionDir / name, std::filesystem::copy_options::skip_existing, ec);
     }
 }
