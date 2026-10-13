@@ -74,6 +74,8 @@ doc::HoleFeature* HoleEditor::Feature(Session& session) const { return dynamic_c
 bool HoleEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::HoleFeature*>(&f) != nullptr; }
 
 std::string HoleEditor::Hint() const {
+    if (myCoaxial)
+        return Tr("Щёлкните круглую кромку или цилиндрическую грань — отверстие встанет соосно с ней. Enter — готово, Esc — отмена");
     return Tr("Щёлкните плоскую грань — там встанет центр; ещё щелчки добавляют центры, щелчок по центру убирает. "
            "Enter — готово, Esc — отмена");
 }
@@ -125,6 +127,9 @@ void HoleEditor::DrawInViewport(AppContext& app, Session& session, const Viewpor
     doc::HoleFeature* f = Feature(session);
     if (!f) return;
     myHoveredCentre.reset();
+    if (myCoaxial)
+        if (const int index = session.doc.IndexOf(f->id); index >= 0)
+            app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::EdgesAndFaces);
 
     if (HasFace(*f)) {
         const SketchView view{doc::PlaneFrame(f->face), vf};
@@ -175,12 +180,62 @@ void HoleEditor::DrawInViewport(AppContext& app, Session& session, const Viewpor
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
     if (myHoveredCentre) {
-        f->centres.erase(f->centres.begin() + *myHoveredCentre);
+        f->RemoveCentre(static_cast<std::size_t>(*myHoveredCentre));
         myHoveredCentre.reset();
         Changed(session);
         return;
     }
-    ClickModel(app, session, *f, vf);
+    if (myCoaxial) ClickCoaxial(app, session, *f, vf);
+    else ClickModel(app, session, *f, vf);
+}
+
+void HoleEditor::ClickCoaxial(AppContext& app, Session& session, doc::HoleFeature& f, const ViewportFrame& vf) {
+    const Vec2 at = vf.ToLocal(ImGui::GetMousePos());
+    doc::HoleAxis axis;
+    Vec3 axisDir;
+    std::optional<Vec3> onAxis;   // a point of the axis, when known now (a cylinder)
+    if (const auto edge = app.viewport.PickEdge(at); edge && edge->curve == doc::CurveKind::Circle) {
+        axis.edge = *edge;
+        axisDir = edge->direction;
+        // No face yet: the flat face the rim lies on (the top of a boss).
+        if (!HasFace(f))
+            for (const doc::FaceSignature& s : edge->faces)
+                if (s.kind == doc::SurfaceKind::Plane && std::abs(s.direction.Dot(edge->direction)) > 0.999) {
+                    f.face = {s.direction, edge->middle};
+                    break;
+                }
+    } else if (const auto cylinder = app.viewport.PickCylinder(at)) {
+        axis.cylinder = doc::CylinderTouch{cylinder->axisPoint, cylinder->axisDir, cylinder->radius, {}};
+        axisDir = cylinder->axisDir;
+        onAxis = cylinder->axisPoint;
+    } else if (const auto face = app.viewport.PickFace(at); face && !HasFace(f)) {
+        f.face = *face;   // the face first; the round edge or cylinder next
+        Changed(session);
+        return;
+    } else {
+        app.notes.Info(Tr("Щёлкните круглую кромку или цилиндрическую грань"));
+        return;
+    }
+    if (!HasFace(f)) {
+        app.notes.Info(Tr("Сначала щёлкните плоскую грань, на которой будет отверстие"));
+        return;
+    }
+    if (std::abs(axisDir.Normalized().Dot(f.face.normal)) < 0.999) {
+        app.notes.Info(Tr("Ось кромки или цилиндра не перпендикулярна грани отверстия"));
+        return;
+    }
+    const Frame plane = doc::PlaneFrame(f.face);
+    // Where the axis crosses the face; for an edge the rebuild puts it there
+    // (its centre is not known here), meanwhile a point of the rim.
+    Vec3 at3 = axis.edge ? axis.edge->middle : *onAxis;
+    if (onAxis) {
+        const Vec3 d = axisDir.Normalized();
+        at3 = *onAxis + d * ((plane.origin - *onAxis).Dot(plane.normal) / d.Dot(plane.normal));
+    }
+    axis.centre = f.centres.size();
+    f.centres.push_back(plane.ToLocal(at3));
+    f.concentric.push_back(axis);
+    Changed(session);
 }
 
 void HoleEditor::ClickModel(AppContext& app, Session& session, doc::HoleFeature& f, const ViewportFrame& vf) {
@@ -228,15 +283,28 @@ void HoleEditor::DrawFaceSection(AppContext& app, Session& session, doc::HoleFea
         dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(32), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), chip.c_str());
         ImGui::Dummy({width, h});
     }
-    Caption(app,
-            HasFace(f) ? Tr("Щёлкните по грани, чтобы добавить центр; щелчок по центру убирает его. Координаты можно ввести точно.")
-                       : Tr("Щёлкните плоскую грань тела там, где нужно отверстие."),
-            width);
+    {
+        static constexpr std::array<const char*, 2> modes{N_("Центр по щелчку"), N_("Соосно")};
+        const int current = myCoaxial ? 1 : 0;
+        if (const int chosen = ui::Segmented(ui, "centre-mode", modes, current, 2, width); chosen != current) myCoaxial = chosen == 1;
+        ImGui::Dummy({0, ui.S(4)});
+    }
+    if (myCoaxial)
+        Caption(app,
+                Tr("Щёлкните круглую кромку или цилиндрическую грань: центр встанет на её ось и будет следовать за ней. "
+                   "Сначала можно указать плоскую грань для отверстия; кромка на плоской грани выберет её сама."),
+                width);
+    else
+        Caption(app,
+                HasFace(f) ? Tr("Щёлкните по грани, чтобы добавить центр; щелчок по центру убирает его. Координаты можно ввести точно.")
+                           : Tr("Щёлкните плоскую грань тела там, где нужно отверстие."),
+                width);
     if (HasFace(f)) {
         DrawCentres(app, session, f, width);
         if (ui::LinkButton(ui, "##other-face", Tr("Другая грань"))) {
             f.face = {};
             f.centres.clear();
+            f.concentric.clear();
             Changed(session);
         }
     }
@@ -270,15 +338,26 @@ void HoleEditor::DrawCentres(AppContext& app, Session& session, doc::HoleFeature
                     Changed(session);
                 }
         };
-        coordinate("X", "##x", centre.x);
-        ImGui::SameLine(0, gap);
-        coordinate("Y", "##y", centre.y);
-        ImGui::SameLine(0, gap);
+        if (const doc::HoleAxis* axis = f.AxisOf(i)) {
+            // Held on an axis: the rebuild puts it there, typing would not stick.
+            ImGui::AlignTextToFramePadding();
+            const float w = width - remove - gap;
+            ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textSecondary));
+            ImGui::TextUnformatted(axis->edge ? Tr("Соосно с кромкой") : Tr("Соосно с цилиндром"));
+            ImGui::PopStyleColor();
+            ImGui::SameLine(0, 0);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, w - ImGui::GetItemRectSize().x));
+        } else {
+            coordinate("X", "##x", centre.x);
+            ImGui::SameLine(0, gap);
+            coordinate("Y", "##y", centre.y);
+            ImGui::SameLine(0, gap);
+        }
         if (ui::IconButton(ui, "##remove", "ui-close", 28, 12, Tr("Убрать центр"))) erase = i;
         ImGui::PopID();
     }
     if (erase) {
-        f.centres.erase(f.centres.begin() + static_cast<std::ptrdiff_t>(*erase));
+        f.RemoveCentre(*erase);
         Changed(session);
     }
 }

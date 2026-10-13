@@ -1021,6 +1021,10 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                                         const Vec3 n = hole->face.normal;
                                         hole->face.point = hole->face.point + n * (plane->origin - hole->face.point).Dot(n);
                                     }
+                                    // Centres held coaxial with a round edge or a cylinder go
+                                    // where that axis is now.
+                                    if (occt::FollowAxes(body, *hole) > 0)
+                                        return Error{"Кромка или цилиндр, с которыми отверстие соосно, не найдены: укажите их заново"};
                                     const Expected<TopoDS_Shape> tools = occt::HoleTools(body, *hole);
                                     if (!tools) return tools.GetError();
                                     impl.tools[hole->id] = {*tools, doc::BooleanOp::Cut, {}};

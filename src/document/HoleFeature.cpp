@@ -17,6 +17,20 @@ constexpr std::array<std::pair<HoleType, std::string_view>, 3> kTypeIds{{
 
 } // namespace
 
+void HoleFeature::RemoveCentre(std::size_t index) {
+    if (index >= centres.size()) return;
+    centres.erase(centres.begin() + static_cast<std::ptrdiff_t>(index));
+    std::erase_if(concentric, [&](const HoleAxis& a) { return a.centre == index; });
+    for (HoleAxis& a : concentric)
+        if (a.centre > index) --a.centre;
+}
+
+const HoleAxis* HoleFeature::AxisOf(std::size_t index) const {
+    for (const HoleAxis& a : concentric)
+        if (a.centre == index) return &a;
+    return nullptr;
+}
+
 void HoleFeature::CollectParameters(std::vector<Parameter*>& out) {
     out.push_back(&diameter);
     out.push_back(&depth);
@@ -38,6 +52,18 @@ void HoleFeature::SaveFields(Json& out) const {
     out["headDiameter"] = json_io::ToJson(headDiameter);
     out["headDepth"]    = json_io::ToJson(headDepth);
     out["sinkDiameter"] = json_io::ToJson(sinkDiameter);
+    if (!concentric.empty()) {
+        Json axes = Json::array();
+        for (const HoleAxis& a : concentric) {
+            Json j{{"centre", a.centre}};
+            if (a.edge) j["edge"] = json_io::ToJson(*a.edge);
+            if (a.cylinder)
+                j["cylinder"] = {{"point", json_io::ToJson(a.cylinder->axisPoint)}, {"axis", json_io::ToJson(a.cylinder->axisDir)},
+                                 {"radius", a.cylinder->radius}};
+            axes.push_back(std::move(j));
+        }
+        out["concentric"] = std::move(axes);
+    }
 }
 
 Status HoleFeature::LoadFields(const Json& in) {
@@ -53,9 +79,30 @@ Status HoleFeature::LoadFields(const Json& in) {
         if (!json_io::Read(c, v)) return Error{"Отверстие: повреждены центры"};
         f.centres.push_back(v);
     }
+    for (const Json& j : in.value("concentric", Json::array())) {
+        HoleAxis a;
+        if (!j.is_object() || !j.contains("centre") || !j["centre"].is_number_unsigned()) return Error{"Отверстие: повреждена соосность"};
+        a.centre = j["centre"].get<std::size_t>();
+        if (const auto it = j.find("edge"); it != j.end()) {
+            EdgeReference e;
+            if (!json_io::Read(*it, e)) return Error{"Отверстие: повреждена кромка соосности"};
+            a.edge = e;
+        }
+        if (const auto it = j.find("cylinder"); it != j.end()) {
+            CylinderTouch t;
+            if (!it->is_object() || !json_io::Read(it->value("point", Json()), t.axisPoint) ||
+                !json_io::Read(it->value("axis", Json()), t.axisDir) || !it->contains("radius") || !(*it)["radius"].is_number())
+                return Error{"Отверстие: повреждён цилиндр соосности"};
+            t.radius = (*it)["radius"].get<double>();
+            a.cylinder = t;
+        }
+        if (a.centre >= f.centres.size() || (!a.edge && !a.cylinder)) continue;   // nothing to hold: a free centre
+        f.concentric.push_back(a);
+    }
     // Only the type's own fields: id, name and suppressed are already read.
     face         = f.face;
     centres      = std::move(f.centres);
+    concentric   = std::move(f.concentric);
     type         = f.type;
     throughAll   = f.throughAll;
     diameter     = std::move(f.diameter);

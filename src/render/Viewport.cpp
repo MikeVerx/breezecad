@@ -1417,7 +1417,8 @@ std::vector<doc::EdgeReference> Viewport::PickFaceEdges(Vec2 pixel) {
 
 std::optional<Viewport::CylinderPick> Viewport::PickCylinder(Vec2 pixel) {
     Impl& m = *myImpl;
-    if (!m.original.active || m.original.target != PickTarget::Faces) return std::nullopt;
+    if (!m.original.active || (m.original.target != PickTarget::Faces && m.original.target != PickTarget::EdgesAndFaces))
+        return std::nullopt;
     const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
     const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
     const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();

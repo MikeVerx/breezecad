@@ -8,14 +8,26 @@
 // its normal, e.g. when the part gets thicker.
 
 #include "core/Math.h"
+#include "document/EdgeReference.h"
 #include "document/FaceReference.h"
 #include "document/Feature.h"
+#include "document/WorkPlaneFeature.h"   // CylinderTouch
 
+#include <optional>
 #include <vector>
 
 namespace bz::doc {
 
 enum class HoleType : unsigned char { Simple, Counterbore, Countersink };
+
+/// A centre held on the axis of a round edge or a cylindrical face of the
+/// body ("соосно"): on every rebuild it moves to where that axis crosses the
+/// hole's face, so the hole stays coaxial when the shaft or boss moves.
+struct HoleAxis {
+    std::size_t                  centre = 0;   ///< index into HoleFeature::centres
+    std::optional<EdgeReference> edge;        ///< a circular edge
+    std::optional<CylinderTouch> cylinder;    ///< or a cylindrical face (`radial` unused)
+};
 
 class HoleFeature final : public FeatureBase<HoleFeature> {
 public:
@@ -23,6 +35,7 @@ public:
 
     FaceReference     face;
     std::vector<Vec2> centres;      ///< in PlaneFrame(face)
+    std::vector<HoleAxis> concentric;   ///< centres held on an axis (optional, 0.2.2)
     HoleType          type = HoleType::Simple;
     bool              throughAll = false;
     Parameter diameter{.name = "", .expression = "6.6", .quantity = Quantity::Length, .value = 6.6, .error = {}};
@@ -34,6 +47,10 @@ public:
     Parameter sinkDiameter{.name = "", .expression = "13", .quantity = Quantity::Length, .value = 13.0, .error = {}};
 
     std::string_view Type() const override { return kType; }
+    /// Removes centre `index` and the axis that held it.
+    void RemoveCentre(std::size_t index);
+    /// The axis holding centre `index`, if any.
+    const HoleAxis* AxisOf(std::size_t index) const;
     void CollectParameters(std::vector<Parameter*>& out) override;
     void SaveFields(nlohmann::json& out) const override;
     Status LoadFields(const nlohmann::json& in) override;
