@@ -1,7 +1,10 @@
 # Which build this is (version, commit, date): refreshed at every build.
+if(NOT DEFINED BZ_VERSION_LABEL)   # built on its own (tests/audit)
+    set(BZ_VERSION_LABEL "${PROJECT_VERSION}")
+endif()
 set(BZ_BUILD_INFO ${PROJECT_BINARY_DIR}/generated/core/BuildInfo.h)
 add_custom_target(bz_build_info
-    COMMAND ${CMAKE_COMMAND} -DSRC=${PROJECT_SOURCE_DIR} -DOUT=${BZ_BUILD_INFO} -DVERSION=${PROJECT_VERSION}
+    COMMAND ${CMAKE_COMMAND} -DSRC=${PROJECT_SOURCE_DIR} -DOUT=${BZ_BUILD_INFO} -DVERSION=${BZ_VERSION_LABEL}
             -P ${PROJECT_SOURCE_DIR}/cmake/BuildInfo.cmake
     BYPRODUCTS ${BZ_BUILD_INFO}
     COMMENT "Build info"
