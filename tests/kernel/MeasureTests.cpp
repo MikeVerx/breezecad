@@ -55,6 +55,14 @@ TEST_CASE("measure faces and edges of a box") {
     CHECK(e.kind == EntityKind::Edge);
     CHECK(e.straight);
     CHECK(*e.length == doctest::Approx(100.0));
+
+    // An edge and a face: the angle to the face's plane, not to its normal.
+    const Measurement along = occt::Measure(edge, top);   // the edge lies parallel to the top
+    REQUIRE(along.angle);
+    CHECK(*along.angle == doctest::Approx(0.0));
+    const Measurement across = occt::Measure(side, edge);   // the edge goes through the side (x = 0) square to it
+    REQUIRE(across.angle);
+    CHECK(*across.angle == doctest::Approx(kPi / 2));
 }
 
 TEST_CASE("measure a cylinder") {
