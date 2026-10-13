@@ -215,7 +215,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" env -u LD_LIBRARY_PATH BZ_SETTINGS_TAB=3 \
+          timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" env -u LD_LIBRARY_PATH BZ_SETTINGS_TAB=1.2 \
             BZ_SCREENSHOT="$PWD/shots/touchpad.ppm:60" /tmp/start/BreezeCAD/breezecad > settings.log 2>&1
           size=$(head -c 20 shots/touchpad.ppm | tr '\n' ' ' | awk '{print $2, $3}')
           read -r w h <<< "$size"

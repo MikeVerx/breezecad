@@ -564,8 +564,10 @@ void DrawLanguageSettings(AppContext& app, float width) {
     }
 }
 
-/// The "Оптимизация" tab: what costs time on a weak computer.
-void DrawOptimizationSettings(AppContext& app, float width) {
+/// "Графика" → "Качество" (graphics, textures, animations) or, with
+/// `performance`, "Производительность" (long rebuilds): what costs time on a
+/// weak computer.
+void DrawOptimizationSettings(AppContext& app, float width, bool performance) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     const auto caption = [&](const std::string& text) {
@@ -577,6 +579,15 @@ void DrawOptimizationSettings(AppContext& app, float width) {
         ImGui::PopStyleColor();
         ImGui::Dummy({0, ui.S(6)});
     };
+    if (performance) {
+        ui::FieldLabel(ui, Tr("Долгое перестроение"));
+        static constexpr std::array<const char*, 2> rebuild{N_("В фоне"), N_("Сразу, окно ждёт")};
+        const int r = app.settings.backgroundRebuild ? 0 : 1;
+        if (const int n = ui::Segmented(ui, "rebuild", rebuild, r, 2, width); n != r) app.settings.backgroundRebuild = n == 0;
+        caption(Tr("В фоне окно не замирает, пока считается тяжёлая операция: модель обновится, когда расчёт закончится. "
+                   "«Сразу» — по-старому, на случай если фоновый расчёт ведёт себя странно."));
+        return;
+    }
     ui::FieldLabel(ui, Tr("Качество графики"));
     static constexpr std::array<const char*, 3> quality{N_("Высокое"), N_("Среднее"), N_("Слабый компьютер")};
     if (const int n = ui::Segmented(ui, "graphics", quality, app.settings.graphics, 3, width); n != app.settings.graphics)
@@ -596,13 +607,6 @@ void DrawOptimizationSettings(AppContext& app, float width) {
     const int a = app.settings.animations ? 0 : 1;
     if (const int n = ui::Segmented(ui, "anim", anim, a, 2, width); n != a) app.settings.animations = n == 0;
     caption(Tr("Переходы к видам, «Показать всё», вход в эскиз. Без анимации камера переходит сразу."));
-
-    ui::FieldLabel(ui, Tr("Долгое перестроение"));
-    static constexpr std::array<const char*, 2> rebuild{N_("В фоне"), N_("Сразу, окно ждёт")};
-    const int r = app.settings.backgroundRebuild ? 0 : 1;
-    if (const int n = ui::Segmented(ui, "rebuild", rebuild, r, 2, width); n != r) app.settings.backgroundRebuild = n == 0;
-    caption(Tr("В фоне окно не замирает, пока считается тяжёлая операция: модель обновится, когда расчёт закончится. "
-               "«Сразу» — по-старому, на случай если фоновый расчёт ведёт себя странно."));
 }
 
 /// The "Модули" tab: install a package; the modules in a list that scrolls,
@@ -809,206 +813,246 @@ void DrawMouseSettings(AppContext& app, float width) {
 }
 
 /// "Настройки": interface scale and theme; keyboard shortcuts.
-void DrawSettings(AppContext& app) {
+/// "Общие" → what is not about the controls or the picture.
+void DrawGeneralSettings(AppContext& app, float width) {
+    ui::Ui& ui = app.ui;
+    DrawLanguageSettings(app, width);
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("При запуске"));
+    static constexpr std::array<const char*, 2> start{N_("Главная страница"), N_("Последний файл")};
+    const int st = app.settings.reopenLast ? 1 : 0;
+    if (const int n = ui::Segmented(ui, "start", start, st, 2, width); n != st) app.settings.reopenLast = n == 1;
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Единицы новой детали"));
+    static constexpr std::array<const char*, 4> units{N_("мм"), N_("см"), N_("м"), N_("дюйм")};
+    if (const int n = ui::Segmented(ui, "new-units", units, app.settings.newPartLength, 4, width); n != app.settings.newPartLength)
+        app.settings.newPartLength = n;
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Шаг сетки эскиза, мм"));
+    static constexpr std::array<const char*, 5> grids{N_("Авто"), "0.5", "1", "5", "10"};
+    static constexpr std::array<double, 5> steps{0.0, 0.5, 1.0, 5.0, 10.0};
+    int g = 0;
+    for (std::size_t i = 0; i < steps.size(); ++i)
+        if (std::abs(steps[i] - app.settings.gridStep) < 1e-9) g = static_cast<int>(i);
+    if (const int n = ui::Segmented(ui, "grid", grids, g, 5, width); n != g) app.settings.gridStep = steps[static_cast<std::size_t>(n)];
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Автосохранение"));
+    static constexpr std::array<const char*, 4> autosave{N_("Выключено"), N_("2 мин"), N_("5 мин"), N_("10 мин")};
+    static constexpr std::array<int, 4> minutes{0, 2, 5, 10};
+    int a = 2;
+    for (std::size_t i = 0; i < minutes.size(); ++i)
+        if (minutes[i] == app.settings.autosaveMinutes) a = static_cast<int>(i);
+    if (const int n = ui::Segmented(ui, "autosave", autosave, a, 4, width); n != a)
+        app.settings.autosaveMinutes = minutes[static_cast<std::size_t>(n)];
+}
+
+/// "Управление" → "Клавиатура": the set of shortcuts and each one.
+void DrawKeyboardSettings(AppContext& app, float width) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
+    // The set of shortcuts: a ready-made one, or "Свой" once changed by hand.
+    ui::FieldLabel(ui, Tr("Набор сочетаний"));
+    const ShortcutPreset* base = FindShortcutPreset(app.settings.shortcutPreset);
+    if (!base) base = &ShortcutPresets().front();
+    const std::string shown = app.settings.shortcutsCustom ? Trf("Свой (на основе: {})", Tr(base->label))
+                                                           : std::string(Tr(base->label));
+    ImGui::SetNextItemWidth(width);
+    if (ImGui::BeginCombo("##preset", shown.c_str())) {
+        for (const ShortcutPreset& p : ShortcutPresets())
+            if (ImGui::Selectable(std::string(Tr(p.label)).c_str(), !app.settings.shortcutsCustom && &p == base)) {
+                app.actions.ResetChords();
+                for (const auto& [id, chord] : p.changes) app.actions.SetChord(id, ActionRegistry::ParseChord(chord));
+                app.settings.shortcutPreset = std::string(p.id);
+                app.settings.shortcutsCustom = false;
+                app.shell.shortcutNote.clear();
+                StoreShortcuts(app);
+            }
+        ImGui::EndCombo();
+    }
+    {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+        ImGui::TextUnformatted(Tr("Наборы повторяют привычные клавиши других программ; их названия принадлежат правообладателям."));
+        ImGui::PopStyleColor();
+    }
+    ImGui::Dummy({0, ui.S(4)});
+    ui::TextField(ui, "##shortcut-filter", app.shell.shortcutFilter, width, Tr("Поиск команды"));
+    ImGui::Dummy({0, ui.S(2)});
+    // Capturing: the first chord pressed (a lone modifier does not count).
+    if (!app.shell.captureShortcut.empty()) {
+        for (ImGuiKeyChord chord : app.pressedChords) {
+            const auto key = static_cast<ImGuiKey>(chord & ~ImGuiMod_Mask_);
+            if (key == ImGuiKey_LeftCtrl || key == ImGuiKey_RightCtrl || key == ImGuiKey_LeftShift || key == ImGuiKey_RightShift ||
+                key == ImGuiKey_LeftAlt || key == ImGuiKey_RightAlt || key == ImGuiKey_LeftSuper || key == ImGuiKey_RightSuper)
+                continue;
+            if (key == ImGuiKey_Escape) {
+                app.shell.captureShortcut.clear();
+                break;
+            }
+            const ImGuiKeyChord value = key == ImGuiKey_Backspace ? 0 : chord;
+            const std::string taken = app.actions.SetChord(app.shell.captureShortcut, value);
+            app.shell.shortcutNote.clear();
+            if (!taken.empty())
+                if (const Action* other = app.actions.Find(taken))
+                    app.shell.shortcutNote = Trf("{} было у «{}» — снято оттуда", ActionRegistry::ChordText(value), other->Label());
+            app.shell.captureShortcut.clear();
+            app.settings.shortcutsCustom = true;
+            StoreShortcuts(app);
+            break;
+        }
+    }
+    if (!app.shell.shortcutNote.empty()) {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.warning));
+        ImGui::TextUnformatted(app.shell.shortcutNote.c_str());
+        ImGui::PopStyleColor();
+    }
+    ImGui::BeginChild("##shortcuts", {width, ui.S(360)}, ImGuiChildFlags_Borders);
+    std::string filter = app.shell.shortcutFilter;
+    for (const Action& a : app.actions.All()) {
+        if (a.label.empty() || !a.run) continue;
+        if (!filter.empty() && std::string_view(a.Label()).find(filter) == std::string_view::npos && a.label.find(filter) == std::string::npos)
+            continue;
+        ImGui::PushID(a.id.c_str());
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float rowW = ImGui::GetContentRegionAvail().x, h = ui.S(30);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        if (!a.icon.empty()) ui.icons.Draw(dl, a.icon, {p.x + ui.S(6), p.y + ui.S(6)}, ui.S(18), c.textSecondary);
+        dl->AddText(ui.fonts.body, ui.S(13), {p.x + ui.S(32), p.y + ui.S(8)}, ui::ToU32(c.text), a.Label());
+        const bool capturing = app.shell.captureShortcut == a.id;
+        const std::string chord = capturing ? std::string(Tr("Нажмите сочетание…")) : a.chord ? ActionRegistry::ChordText(a.chord) : "—";
+        const float bw = ui.S(170);
+        ImGui::SetCursorScreenPos({p.x + rowW - bw - ui.S(4), p.y + ui.S(3)});
+        if (ui::SecondaryButton(ui, "##chord", chord.c_str(), nullptr, {bw, h - ui.S(6)})) {
+            app.shell.captureShortcut = capturing ? std::string() : a.id;
+            app.shell.shortcutNote.clear();
+        }
+        if (a.chord != a.defaultChord) dl->AddCircleFilled({p.x + rowW - bw - ui.S(12), p.y + h / 2}, ui.S(3), ui::ToU32(c.accent));
+        ImGui::SetCursorScreenPos(p);
+        ImGui::Dummy({rowW, h});   // the row's extent, for the scrolling list
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+        ImGui::TextUnformatted(Tr("Щёлкните сочетание и нажмите новое. Esc — отмена, Backspace — убрать. Точка — изменено."));
+        ImGui::PopStyleColor();
+    }
+    if (ui::SecondaryButton(ui, "##reset-keys", Tr("Сбросить все сочетания"), nullptr, {ui.S(196), ui.S(32)})) {
+        app.actions.ResetChords();
+        app.settings.shortcutPreset = "breezecad";
+        app.settings.shortcutsCustom = false;
+        StoreShortcuts(app);
+        app.shell.shortcutNote.clear();
+    }
+    // A set of shortcuts as a file: to carry to another computer or share.
+    ImGui::SameLine(0, ui.S(8));
+    if (ui::SecondaryButton(ui, "##export-keys", Tr("Сохранить в файл…"), nullptr, {ui.S(176), ui.S(32)})) {
+        if (const auto file = platform::ShowSaveDialog(Tr("Сочетания клавиш"), "breezecad-keys.json",
+                                                       {{Tr("Сочетания клавиш"), "*.json"}}, ".json")) {
+            nlohmann::json j = nlohmann::json::object();
+            for (const Action& a : app.actions.All())
+                if (!a.label.empty() && a.run) j[a.id] = ActionRegistry::ChordText(a.chord);
+            std::ofstream(*file, std::ios::binary) << j.dump(2);
+            app.notes.Success(Tr("Сочетания сохранены"));
+        }
+    }
+    ImGui::SameLine(0, ui.S(8));
+    if (ui::SecondaryButton(ui, "##import-keys", Tr("Загрузить из файла…"), nullptr, {ui.S(176), ui.S(32)})) {
+        if (const auto file = platform::ShowOpenDialog(Tr("Сочетания клавиш"), {{Tr("Сочетания клавиш"), "*.json"}}, {})) {
+            std::ifstream in(*file, std::ios::binary);
+            const nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
+            if (j.is_discarded() || !j.is_object()) {
+                app.notes.Error(Tr("Файл сочетаний повреждён"));
+            } else {
+                app.actions.ResetChords();
+                for (const auto& [id, chord] : j.items())
+                    if (chord.is_string()) app.actions.SetChord(id, ActionRegistry::ParseChord(chord.get<std::string>()));
+                app.settings.shortcutsCustom = true;
+                StoreShortcuts(app);
+                app.notes.Success(Tr("Сочетания загружены"));
+            }
+        }
+    }
+}
+
+/// "Графика" → "Внешний вид": scale, theme, the axes in the corner, background.
+void DrawAppearanceSettings(AppContext& app, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    ui::FieldLabel(ui, Tr("Масштаб интерфейса"));
+    static constexpr std::array<const char*, 10> scales{N_("Авто"), "75%", "85%", "90%", "100%", "110%", "125%", "150%", "175%", "200%"};
+    static constexpr std::array<double, 10> values{0, 0.75, 0.85, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0};
+    int current = 0;
+    for (std::size_t i = 0; i < values.size(); ++i)
+        if (std::abs(values[i] - app.settings.uiScale) < 1e-6) current = static_cast<int>(i);
+    const int chosen = ui::Segmented(ui, "scale", scales, current, 5, width);
+    if (chosen != current) app.settings.uiScale = values[static_cast<std::size_t>(chosen)];
+    {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(Trf("Сейчас {:.0f}%. «Авто» берёт масштаб экрана из системы и уменьшает интерфейс на небольших "
+                                   "экранах (1366×768), чтобы всё помещалось.", ui.scale * 100.0).c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    }
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Оформление"));
+    static constexpr std::array<const char*, 3> themes{N_("Как в системе"), N_("Светлая"), N_("Тёмная")};
+    const int theme = static_cast<int>(app.settings.theme);
+    if (const int t = ui::Segmented(ui, "theme", themes, theme, 3, width); t != theme) SetTheme(app, static_cast<ThemeChoice>(t));
+
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Оси в углу вида"));
+    static constexpr std::array<const char*, 2> triad{N_("Показывать"), N_("Скрыть")};
+    const int t = app.settings.showTriad ? 0 : 1;
+    if (const int n = ui::Segmented(ui, "triad", triad, t, 2, width); n != t) app.settings.showTriad = n == 0;
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Фон вида"));
+    if (ui::LinkButton(ui, "##open-backgrounds", Tr("Выбрать на вкладке «Вид» → «Фон»…"))) app.shell.backgroundMenu = true;
+}
+
+void DrawSettings(AppContext& app) {
+    ui::Ui& ui = app.ui;
     if (!BeginDialog(ui, "##settings", app.shell.showSettings, ui.S(700))) return;
     {
         ui::FontScope font(ui.fonts.title);
         ImGui::TextUnformatted(Tr("Настройки"));
     }
     const float width = ImGui::GetContentRegionAvail().x;
-    static constexpr std::array<const char*, 7> tabs{N_("Интерфейс"), N_("Клавиши"), N_("Мышь"), N_("Тачпад"), N_("Общие"),
-                                                     N_("Оптимизация"), N_("Модули")};
-    app.shell.settingsTab = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 7, width);
-    ImGui::Dummy({0, ui.S(6)});
-
-    if (app.shell.settingsTab == 0) {
-        DrawLanguageSettings(app, width);
-        ImGui::Dummy({0, ui.S(6)});
-        ui::FieldLabel(ui, Tr("Масштаб интерфейса"));
-        static constexpr std::array<const char*, 10> scales{N_("Авто"), "75%", "85%", "90%", "100%", "110%", "125%", "150%", "175%", "200%"};
-        static constexpr std::array<double, 10> values{0, 0.75, 0.85, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0};
-        int current = 0;
-        for (std::size_t i = 0; i < values.size(); ++i)
-            if (std::abs(values[i] - app.settings.uiScale) < 1e-6) current = static_cast<int>(i);
-        const int chosen = ui::Segmented(ui, "scale", scales, current, 5, width);
-        if (chosen != current) app.settings.uiScale = values[static_cast<std::size_t>(chosen)];
-        {
-            ui::FontScope font(ui.fonts.caption);
-            ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
-            ImGui::PushTextWrapPos(0);
-            ImGui::TextUnformatted(Trf("Сейчас {:.0f}%. «Авто» берёт масштаб экрана из системы и уменьшает интерфейс на небольших "
-                                       "экранах (1366×768), чтобы всё помещалось.", ui.scale * 100.0).c_str());
-            ImGui::PopTextWrapPos();
-            ImGui::PopStyleColor();
-        }
-        ImGui::Dummy({0, ui.S(6)});
-        ui::FieldLabel(ui, Tr("Оформление"));
-        static constexpr std::array<const char*, 3> themes{N_("Как в системе"), N_("Светлая"), N_("Тёмная")};
-        const int theme = static_cast<int>(app.settings.theme);
-        if (const int t = ui::Segmented(ui, "theme", themes, theme, 3, width); t != theme) SetTheme(app, static_cast<ThemeChoice>(t));
-
-        ImGui::Dummy({0, ui.S(6)});
-        ui::FieldLabel(ui, Tr("Оси в углу вида"));
-        static constexpr std::array<const char*, 2> triad{N_("Показывать"), N_("Скрыть")};
-        const int t = app.settings.showTriad ? 0 : 1;
-        if (const int n = ui::Segmented(ui, "triad", triad, t, 2, width); n != t) app.settings.showTriad = n == 0;
-        ImGui::Dummy({0, ui.S(6)});
-        ui::FieldLabel(ui, Tr("Фон вида"));
-        if (ui::LinkButton(ui, "##open-backgrounds", Tr("Выбрать на вкладке «Вид» → «Фон»…"))) app.shell.backgroundMenu = true;
-    } else if (app.shell.settingsTab == 5) {
-        DrawOptimizationSettings(app, width);
-    } else if (app.shell.settingsTab == 6) {
-        DrawModuleSettings(app, width);
-    } else if (app.shell.settingsTab == 2) {
-        DrawMouseSettings(app, width);
-    } else if (app.shell.settingsTab == 3) {
-        DrawTouchpadSettings(app, width);
-    } else if (app.shell.settingsTab == 4) {
-        ui::FieldLabel(ui, Tr("При запуске"));
-        static constexpr std::array<const char*, 2> start{N_("Главная страница"), N_("Последний файл")};
-        const int st = app.settings.reopenLast ? 1 : 0;
-        if (const int n = ui::Segmented(ui, "start", start, st, 2, width); n != st) app.settings.reopenLast = n == 1;
-        ImGui::Dummy({0, ui.S(6)});
-        ui::FieldLabel(ui, Tr("Единицы новой детали"));
-        static constexpr std::array<const char*, 4> units{N_("мм"), N_("см"), N_("м"), N_("дюйм")};
-        if (const int n = ui::Segmented(ui, "new-units", units, app.settings.newPartLength, 4, width); n != app.settings.newPartLength)
-            app.settings.newPartLength = n;
-        ImGui::Dummy({0, ui.S(6)});
-        ui::FieldLabel(ui, Tr("Шаг сетки эскиза, мм"));
-        static constexpr std::array<const char*, 5> grids{N_("Авто"), "0.5", "1", "5", "10"};
-        static constexpr std::array<double, 5> steps{0.0, 0.5, 1.0, 5.0, 10.0};
-        int g = 0;
-        for (std::size_t i = 0; i < steps.size(); ++i)
-            if (std::abs(steps[i] - app.settings.gridStep) < 1e-9) g = static_cast<int>(i);
-        if (const int n = ui::Segmented(ui, "grid", grids, g, 5, width); n != g) app.settings.gridStep = steps[static_cast<std::size_t>(n)];
-    } else {
-        // The set of shortcuts: a ready-made one, or "Свой" once changed by hand.
-        ui::FieldLabel(ui, Tr("Набор сочетаний"));
-        const ShortcutPreset* base = FindShortcutPreset(app.settings.shortcutPreset);
-        if (!base) base = &ShortcutPresets().front();
-        const std::string shown = app.settings.shortcutsCustom ? Trf("Свой (на основе: {})", Tr(base->label))
-                                                               : std::string(Tr(base->label));
-        ImGui::SetNextItemWidth(width);
-        if (ImGui::BeginCombo("##preset", shown.c_str())) {
-            for (const ShortcutPreset& p : ShortcutPresets())
-                if (ImGui::Selectable(std::string(Tr(p.label)).c_str(), !app.settings.shortcutsCustom && &p == base)) {
-                    app.actions.ResetChords();
-                    for (const auto& [id, chord] : p.changes) app.actions.SetChord(id, ActionRegistry::ParseChord(chord));
-                    app.settings.shortcutPreset = std::string(p.id);
-                    app.settings.shortcutsCustom = false;
-                    app.shell.shortcutNote.clear();
-                    StoreShortcuts(app);
-                }
-            ImGui::EndCombo();
-        }
-        {
-            ui::FontScope font(ui.fonts.caption);
-            ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
-            ImGui::TextUnformatted(Tr("Наборы повторяют привычные клавиши других программ; их названия принадлежат правообладателям."));
-            ImGui::PopStyleColor();
-        }
+    // Four tabs (the author's plan); "Управление" and "Графика" have groups inside.
+    static constexpr std::array<const char*, 4> tabs{N_("Общие"), N_("Управление"), N_("Графика"), N_("Модули")};
+    if (const int t = ui::Segmented(ui, "settings-tab", tabs, app.shell.settingsTab, 4, width); t != app.shell.settingsTab) {
+        app.shell.settingsTab = t;
+        app.shell.settingsSub = 0;
+    }
+    ImGui::Dummy({0, ui.S(4)});
+    if (app.shell.settingsTab == 1) {
+        static constexpr std::array<const char*, 3> subs{N_("Клавиатура"), N_("Мышь"), N_("Тачпад")};
+        app.shell.settingsSub = ui::Segmented(ui, "settings-sub", subs, app.shell.settingsSub, 3, width);
         ImGui::Dummy({0, ui.S(4)});
-        ui::TextField(ui, "##shortcut-filter", app.shell.shortcutFilter, width, Tr("Поиск команды"));
-        ImGui::Dummy({0, ui.S(2)});
-        // Capturing: the first chord pressed (a lone modifier does not count).
-        if (!app.shell.captureShortcut.empty()) {
-            for (ImGuiKeyChord chord : app.pressedChords) {
-                const auto key = static_cast<ImGuiKey>(chord & ~ImGuiMod_Mask_);
-                if (key == ImGuiKey_LeftCtrl || key == ImGuiKey_RightCtrl || key == ImGuiKey_LeftShift || key == ImGuiKey_RightShift ||
-                    key == ImGuiKey_LeftAlt || key == ImGuiKey_RightAlt || key == ImGuiKey_LeftSuper || key == ImGuiKey_RightSuper)
-                    continue;
-                if (key == ImGuiKey_Escape) {
-                    app.shell.captureShortcut.clear();
-                    break;
-                }
-                const ImGuiKeyChord value = key == ImGuiKey_Backspace ? 0 : chord;
-                const std::string taken = app.actions.SetChord(app.shell.captureShortcut, value);
-                app.shell.shortcutNote.clear();
-                if (!taken.empty())
-                    if (const Action* other = app.actions.Find(taken))
-                        app.shell.shortcutNote = Trf("{} было у «{}» — снято оттуда", ActionRegistry::ChordText(value), other->Label());
-                app.shell.captureShortcut.clear();
-                app.settings.shortcutsCustom = true;
-                StoreShortcuts(app);
-                break;
-            }
-        }
-        if (!app.shell.shortcutNote.empty()) {
-            ui::FontScope font(ui.fonts.caption);
-            ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.warning));
-            ImGui::TextUnformatted(app.shell.shortcutNote.c_str());
-            ImGui::PopStyleColor();
-        }
-        ImGui::BeginChild("##shortcuts", {width, ui.S(360)}, ImGuiChildFlags_Borders);
-        std::string filter = app.shell.shortcutFilter;
-        for (const Action& a : app.actions.All()) {
-            if (a.label.empty() || !a.run) continue;
-            if (!filter.empty() && std::string_view(a.Label()).find(filter) == std::string_view::npos && a.label.find(filter) == std::string::npos)
-                continue;
-            ImGui::PushID(a.id.c_str());
-            const ImVec2 p = ImGui::GetCursorScreenPos();
-            const float rowW = ImGui::GetContentRegionAvail().x, h = ui.S(30);
-            ImDrawList* dl = ImGui::GetWindowDrawList();
-            if (!a.icon.empty()) ui.icons.Draw(dl, a.icon, {p.x + ui.S(6), p.y + ui.S(6)}, ui.S(18), c.textSecondary);
-            dl->AddText(ui.fonts.body, ui.S(13), {p.x + ui.S(32), p.y + ui.S(8)}, ui::ToU32(c.text), a.Label());
-            const bool capturing = app.shell.captureShortcut == a.id;
-            const std::string chord = capturing ? std::string(Tr("Нажмите сочетание…")) : a.chord ? ActionRegistry::ChordText(a.chord) : "—";
-            const float bw = ui.S(170);
-            ImGui::SetCursorScreenPos({p.x + rowW - bw - ui.S(4), p.y + ui.S(3)});
-            if (ui::SecondaryButton(ui, "##chord", chord.c_str(), nullptr, {bw, h - ui.S(6)})) {
-                app.shell.captureShortcut = capturing ? std::string() : a.id;
-                app.shell.shortcutNote.clear();
-            }
-            if (a.chord != a.defaultChord) dl->AddCircleFilled({p.x + rowW - bw - ui.S(12), p.y + h / 2}, ui.S(3), ui::ToU32(c.accent));
-            ImGui::SetCursorScreenPos(p);
-            ImGui::Dummy({rowW, h});   // the row's extent, for the scrolling list
-            ImGui::PopID();
-        }
-        ImGui::EndChild();
-        {
-            ui::FontScope font(ui.fonts.caption);
-            ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
-            ImGui::TextUnformatted(Tr("Щёлкните сочетание и нажмите новое. Esc — отмена, Backspace — убрать. Точка — изменено."));
-            ImGui::PopStyleColor();
-        }
-        if (ui::SecondaryButton(ui, "##reset-keys", Tr("Сбросить все сочетания"), nullptr, {ui.S(196), ui.S(32)})) {
-            app.actions.ResetChords();
-            app.settings.shortcutPreset = "breezecad";
-            app.settings.shortcutsCustom = false;
-            StoreShortcuts(app);
-            app.shell.shortcutNote.clear();
-        }
-        // A set of shortcuts as a file: to carry to another computer or share.
-        ImGui::SameLine(0, ui.S(8));
-        if (ui::SecondaryButton(ui, "##export-keys", Tr("Сохранить в файл…"), nullptr, {ui.S(176), ui.S(32)})) {
-            if (const auto file = platform::ShowSaveDialog(Tr("Сочетания клавиш"), "breezecad-keys.json",
-                                                           {{Tr("Сочетания клавиш"), "*.json"}}, ".json")) {
-                nlohmann::json j = nlohmann::json::object();
-                for (const Action& a : app.actions.All())
-                    if (!a.label.empty() && a.run) j[a.id] = ActionRegistry::ChordText(a.chord);
-                std::ofstream(*file, std::ios::binary) << j.dump(2);
-                app.notes.Success(Tr("Сочетания сохранены"));
-            }
-        }
-        ImGui::SameLine(0, ui.S(8));
-        if (ui::SecondaryButton(ui, "##import-keys", Tr("Загрузить из файла…"), nullptr, {ui.S(176), ui.S(32)})) {
-            if (const auto file = platform::ShowOpenDialog(Tr("Сочетания клавиш"), {{Tr("Сочетания клавиш"), "*.json"}}, {})) {
-                std::ifstream in(*file, std::ios::binary);
-                const nlohmann::json j = nlohmann::json::parse(in, nullptr, false);
-                if (j.is_discarded() || !j.is_object()) {
-                    app.notes.Error(Tr("Файл сочетаний повреждён"));
-                } else {
-                    app.actions.ResetChords();
-                    for (const auto& [id, chord] : j.items())
-                        if (chord.is_string()) app.actions.SetChord(id, ActionRegistry::ParseChord(chord.get<std::string>()));
-                    app.settings.shortcutsCustom = true;
-                    StoreShortcuts(app);
-                    app.notes.Success(Tr("Сочетания загружены"));
-                }
-            }
-        }
+    } else if (app.shell.settingsTab == 2) {
+        static constexpr std::array<const char*, 3> subs{N_("Внешний вид"), N_("Качество"), N_("Производительность")};
+        app.shell.settingsSub = ui::Segmented(ui, "settings-sub", subs, app.shell.settingsSub, 3, width);
+        ImGui::Dummy({0, ui.S(4)});
+    }
+    ImGui::Dummy({0, ui.S(2)});
+
+    switch (app.shell.settingsTab) {
+        case 1:
+            if (app.shell.settingsSub == 1) DrawMouseSettings(app, width);
+            else if (app.shell.settingsSub == 2) DrawTouchpadSettings(app, width);
+            else DrawKeyboardSettings(app, width);
+            break;
+        case 2:
+            if (app.shell.settingsSub == 1) DrawOptimizationSettings(app, width, false);
+            else if (app.shell.settingsSub == 2) DrawOptimizationSettings(app, width, true);
+            else DrawAppearanceSettings(app, width);
+            break;
+        case 3: DrawModuleSettings(app, width); break;
+        default: DrawGeneralSettings(app, width); break;
     }
     ImGui::Dummy({0, ui.S(8)});
     const bool escape = ImGui::IsKeyPressed(ImGuiKey_Escape) && app.shell.captureShortcut.empty();

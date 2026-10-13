@@ -342,7 +342,7 @@ WORKLOG 2026-10-11). Остаток пункта:
   `scripts/package-linux.sh`: библиотеки по ldd в `lib/` (RUNPATH `$ORIGIN/lib`), системные —
   glibc, стек OpenGL, X11, fontconfig. Итог: GLIBC ≤ 2.28, ~57 библиотек, ~80 МБ. CI запускает
   пакет из архива на Xvfb и сохраняет кадр (`start-check-linux`) и кадр вкладки «Тачпад»
-  (`BZ_SETTINGS_TAB=3`). Джоба `linux-occt76` — системный OCCT 7.6 Ubuntu, только сборка и тесты.
+  (`BZ_SETTINGS_TAB=1.2` — «Управление» → «Тачпад»). Джоба `linux-occt76` — системный OCCT 7.6 Ubuntu, только сборка и тесты.
   В conda-оболочке (`bash -el`) статус пайпа `| tee` врёт — шаги пишут лог без пайпа.
 - **Бета-сборки**: маркер `beta-tester.txt` на маке — `BreezeCAD.app/Contents/Resources/` (в
   `Contents/MacOS` ломает подпись); отчёты на маке — `~/Library/Application Support/BreezeCAD/Отчёты

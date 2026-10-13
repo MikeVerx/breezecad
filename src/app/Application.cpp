@@ -29,6 +29,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 
 // Defined (non-static) in imgui_impl_glfw.cpp but not declared in its header.
@@ -213,10 +214,12 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     }
     if (myShell.crashedLastTime && !myShell.recoverable.empty())
         myNotes.Info(Tr("Прошлый сеанс завершился неожиданно. Несохранённую работу можно восстановить на главной странице."));
-    // Test hook (screenshots of the settings in CI): BZ_SETTINGS_TAB=<tab>.
+    // Test hook (screenshots of the settings in CI): BZ_SETTINGS_TAB=<tab>[.<group>],
+    // e.g. 1.2 for "Управление" → "Тачпад".
     if (const char* tab = std::getenv("BZ_SETTINGS_TAB")) {
         myShell.showSettings = true;
-        myShell.settingsTab = std::clamp(std::atoi(tab), 0, 6);
+        myShell.settingsTab = std::clamp(std::atoi(tab), 0, 3);
+        if (const char* dot = std::strchr(tab, '.')) myShell.settingsSub = std::clamp(std::atoi(dot + 1), 0, 2);
     }
     return true;
 }
