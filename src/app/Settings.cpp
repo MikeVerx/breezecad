@@ -1,5 +1,6 @@
 #include "app/Settings.h"
 
+#include "core/I18n.h"
 #include "core/Log.h"
 #include "core/PathText.h"
 
@@ -36,7 +37,7 @@ Settings Damaged(const std::filesystem::path& file, std::string_view why) {
     std::error_code ec;
     std::filesystem::copy_file(file, backup, std::filesystem::copy_options::overwrite_existing, ec);
     Settings s;
-    s.loadProblem = "Файл настроек повреждён, настройки сброшены. Прежний файл сохранён как settings.json.bak";
+    s.loadProblem = N_("Файл настроек повреждён, настройки сброшены. Прежний файл сохранён как settings.json.bak");
     return s;
 }
 
