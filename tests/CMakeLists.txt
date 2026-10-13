@@ -8,6 +8,7 @@ add_executable(bz_tests
     core/ImageTests.cpp
     core/SourceRulesTests.cpp
     document/AppearanceTests.cpp
+    document/CorruptFileTests.cpp
     document/DocumentTests.cpp
     kernel/AssemblyModelTests.cpp
     kernel/AutoDropTests.cpp

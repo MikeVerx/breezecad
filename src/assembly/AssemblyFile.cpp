@@ -176,7 +176,9 @@ std::string AssemblyToJson(const Assembly& a) {
     return root.dump(1, '\t');
 }
 
-Expected<Assembly> AssemblyFromJson(std::string_view text, std::vector<std::string>* warnings) {
+namespace {
+
+Expected<Assembly> AssemblyFromJsonUnguarded(std::string_view text, std::vector<std::string>* warnings) {
     const Json root = Json::parse(text, nullptr, false);
     if (root.is_discarded() || !root.is_object()) return Error{"Содержимое сборки повреждено (не JSON)"};
 
@@ -272,6 +274,17 @@ Expected<Assembly> AssemblyFromJson(std::string_view text, std::vector<std::stri
     if (root.value("formatVersion", 0) > kAssemblyFormatVersion && warnings)
         warnings->push_back("Сборка создана более новой версией BreezeCAD. Новые возможности могут не открыться.");
     return a;
+}
+
+} // namespace
+
+// See doc::DocumentFromJson: a field of the wrong type throws inside nlohmann::json.
+Expected<Assembly> AssemblyFromJson(std::string_view text, std::vector<std::string>* warnings) {
+    try {
+        return AssemblyFromJsonUnguarded(text, warnings);
+    } catch (const Json::exception& e) {
+        return Error{std::format("Содержимое сборки повреждено: {}", e.what())};
+    }
 }
 
 Status SaveAssembly(const Assembly& assembly, const std::filesystem::path& path, std::string_view generator) {
