@@ -895,12 +895,16 @@ bool FollowSupport(doc::SketchFeature& sk, const doc::Document& doc, const std::
 
 /// OCCT prints progress reports (STEP statistics...) to stdout; keep only
 /// warnings and errors, our own log covers the rest.
-/// Process-wide OCCT setup: fewer messages, booleans on all cores.
+/// Process-wide OCCT setup: fewer messages, booleans on the calling thread.
 void SetUpOcct() {
     static std::once_flag once;
     std::call_once(once, [] {
-        // Booleans split their intersection work over the processor's cores.
-        BOPAlgo_Options::SetParallelMode(true);
+        // Booleans on the thread that asked for them, not OCCT's worker pool:
+        // FaultGuard catches a fault only on the thread that called
+        // RunGuarded, so a fault in a worker closed the program (audit B-08;
+        // the author's decision 2026-10-13: stability first, a 2-core laptop
+        // loses little speed).
+        BOPAlgo_Options::SetParallelMode(false);
         const Handle(Message_Messenger)& messenger = Message::DefaultMessenger();
         // Range-for works with both OCCT 7.x and 8.x sequence types.
         for (const auto& printer : messenger->Printers()) printer->SetTraceLevel(Message_Warning);
@@ -993,10 +997,6 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                                      return occt::MakeExtrusion(faces, *ex, frame, ThroughAllLength(bodies, frame), target, until);
                                  });
             } else if (auto* rev = dynamic_cast<doc::RevolveFeature*>(&f)) {
-                // On this thread only: OCCT 7.9.3 faulted inside its worker pool
-                // building a revolve (tester report), where FaultGuard cannot
-                // catch it. Here a fault costs this operation, not the program.
-                const occt::SerialBooleans serial;
                 ApplySketchSolid(*rev, impl, bodies, rev->status, doc,
                                  [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature& profile, const Frame& frame) {
                                      return occt::MakeRevolution(faces, *rev, profile.sketch, frame);
