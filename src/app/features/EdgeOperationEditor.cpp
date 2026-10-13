@@ -102,7 +102,8 @@ void EdgeOperationEditor::DrawInViewport(AppContext& app, Session& session, cons
     if (index < 0) return;
     app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index),
                                       myByFace ? render::PickTarget::Faces : render::PickTarget::Edges);
-    app.viewport.SetMarkedEdges(f->edges);
+    if (myHighlightEdge && *myHighlightEdge < f->edges.size()) app.viewport.SetMarkedEdges({f->edges[*myHighlightEdge]});
+    else app.viewport.SetMarkedEdges(f->edges);
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
     if (myByFace) {
@@ -216,8 +217,31 @@ void ChamferEditor::DrawSize(AppContext& app, Session& session, doc::EdgeFeature
             Changed(session);
         }
         Caption(app, Tr("У ребра две грани. Опорная — та, что смотрит выше (по оси Z); у вертикальных рёбер — "
-                        "по оси Y, затем X. Результат виден сразу на модели; «Наоборот» меняет грани местами."),
+                        "по оси Y, затем X. «Наоборот» меняет грани местами у всех рёбер, кнопка у ребра — только у него."),
                 width);
+    }
+    // Each edge on its own: hovering a row shows that edge alone in the view.
+    myHighlightEdge.reset();
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    for (std::size_t i = 0; i < f.edges.size(); ++i) {
+        ImGui::PushID(static_cast<int>(i));
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float h = ui.S(30), bw = ui.S(110);
+        ImGui::InvisibleButton("##edge-row", {width - bw - ui.S(6), h});
+        const bool hovered = ImGui::IsItemHovered();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        if (hovered) dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.hover), ui.S(6));
+        const std::string label = Trf("Ребро {}", i + 1);
+        dl->AddText(ui.fonts.body, ui.S(13), {p.x + ui.S(10), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), label.c_str());
+        ImGui::SameLine(0, ui.S(6));
+        const bool turned = f.FlippedAt(i);
+        if (ui::SecondaryButton(ui, "##flip-edge", turned ? Tr("Наоборот") : Tr("Прямо"), nullptr, {bw, h})) {
+            f.FlipAt(i);
+            Changed(session);
+        }
+        if (hovered || ImGui::IsItemHovered()) myHighlightEdge = i;
+        ImGui::PopID();
     }
 }
 
