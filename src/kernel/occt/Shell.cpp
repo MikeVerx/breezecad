@@ -3,6 +3,8 @@
 #include "kernel/occt/Extrude.h"
 
 #include <BRepCheck_Analyzer.hxx>
+#include <BRepGProp.hxx>
+#include <GProp_GProps.hxx>
 #include <BRepGProp_Face.hxx>
 #include <BRep_Tool.hxx>
 #include <Geom2d_Curve.hxx>
@@ -19,6 +21,7 @@
 #include <TopoDS.hxx>
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 
 namespace bz::kernel::occt {
@@ -83,6 +86,23 @@ Expected<TopoDS_Shape> Offset(const TopoDS_Shape& body, double distance) {
     return offset.Shape();
 }
 
+double VolumeOf(const TopoDS_Shape& shape) {
+    GProp_GProps props;
+    BRepGProp::VolumeProperties(shape, props);
+    return props.Mass();
+}
+
+/// Whether `result` is really a shell of `body`. OCCT 8 reports success for a
+/// square-to-circle loft and hands back the body untouched (same volume, no
+/// cavity), which passes BRepCheck. A real shell always changes the volume,
+/// and an inward one always takes material away.
+bool IsHollowed(const TopoDS_Shape& body, const TopoDS_Shape& result, bool outward) {
+    const double before = VolumeOf(body), after = VolumeOf(result);
+    if (!(after > 0.0)) return false;
+    if (std::abs(after - before) <= 1e-4 * std::abs(before)) return false;   // nothing was hollowed
+    return outward || after < before;
+}
+
 } // namespace
 
 Expected<TopoDS_Shape> MakeShell(const TopoDS_Shape& body, const std::vector<TopoDS_Face>& open, double thickness, bool outward) {
@@ -113,6 +133,7 @@ Expected<TopoDS_Shape> MakeShell(const TopoDS_Shape& body, const std::vector<Top
             result = solid.Shape();
         }
         if (!BRepCheck_Analyzer(result).IsValid()) return Error{kFailed};
+        if (!IsHollowed(body, result, outward)) return failed();
         return result;
     } catch (const Standard_Failure&) {
         return failed();
