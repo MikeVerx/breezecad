@@ -16,21 +16,26 @@
 
 namespace bz::platform {
 
-std::filesystem::path ExecutableDir() {
+std::filesystem::path ExecutablePath() {
 #if defined(_WIN32)
     wchar_t buffer[MAX_PATH * 4];
     const DWORD n = GetModuleFileNameW(nullptr, buffer, static_cast<DWORD>(std::size(buffer)));
-    return std::filesystem::path(std::wstring(buffer, n)).parent_path();
+    return std::filesystem::path(std::wstring(buffer, n));
 #elif defined(__APPLE__)
     char buffer[PATH_MAX];
     uint32_t size = sizeof(buffer);
-    if (_NSGetExecutablePath(buffer, &size) != 0) return std::filesystem::current_path();
-    return std::filesystem::weakly_canonical(buffer).parent_path();
+    if (_NSGetExecutablePath(buffer, &size) != 0) return {};
+    return std::filesystem::weakly_canonical(buffer);
 #else
     std::error_code ec;
     const auto exe = std::filesystem::read_symlink("/proc/self/exe", ec);
-    return ec ? std::filesystem::current_path() : exe.parent_path();
+    return ec ? std::filesystem::path{} : exe;
 #endif
+}
+
+std::filesystem::path ExecutableDir() {
+    const std::filesystem::path exe = ExecutablePath();
+    return exe.empty() ? std::filesystem::current_path() : exe.parent_path();
 }
 
 namespace {

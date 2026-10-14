@@ -10,6 +10,7 @@ add_executable(bz_tests
     ${PROJECT_SOURCE_DIR}/src/app/Settings.cpp
     assembly/AssemblyFileTests.cpp
     assembly/SolverTests.cpp
+    core/CrashCodeTests.cpp
     core/ExpressionTests.cpp
     core/FaultGuardTests.cpp
     core/FoldersTests.cpp

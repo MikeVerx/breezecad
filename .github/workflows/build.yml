@@ -220,6 +220,16 @@ jobs:
             echo "::warning title=Linux start check::no frame (exit $status): $(tail -5 start.log | tr '\n' ' ' | cut -c1-400)"
             exit 1
           fi
+      # A part opened: the real screen must change (Linux froze on the last
+      # picture before the first 3D render until 2026-10). Pictures of the X
+      # screen, not of the program's buffer, which looked right regardless.
+      - name: Screen with a document open
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          command -v import > /dev/null || sudo apt-get install -y -qq imagemagick > /dev/null
+          bash scripts/ci-document-screen.sh /tmp/start/BreezeCAD/breezecad 96
       # The settings' touchpad tab as a picture in the annotations (artifacts
       # and logs cannot always be downloaded, annotations can).
       - name: Picture of the touchpad settings
@@ -234,6 +244,18 @@ jobs:
           read -r w h <<< "$size"
           python3 scripts/ppm2png.py shots/touchpad.ppm shots/settings-touchpad.png \
             --crop $(( (w - 780) / 2 )),$(( h > 860 ? (h - 860) / 2 : 0 )),780,860 --annotate "settings touchpad" && rm shots/touchpad.ppm
+      # The crash and hang windows on the real package (BZ_FAULT_TEST): the
+      # program crashes (or freezes), its window must come up with a report.
+      - name: Picture of the crash window
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: bash scripts/ci-fault-window.sh crash /tmp/start/BreezeCAD/breezecad 97
+      - name: Picture of the hang window
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: bash scripts/ci-fault-window.sh hang /tmp/start/BreezeCAD/breezecad 98
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         with:

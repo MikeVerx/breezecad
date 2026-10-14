@@ -26,14 +26,19 @@ void Action(std::string_view source, std::string_view name);
 /// The last action, for crash and hang reports ("" if none).
 std::string_view LastAction();
 
-/// The window's loop is alive (called every loop turn and frame).
+/// The window's loop is alive (called every loop turn and frame). Always
+/// kept, monitoring or not: the hang window (app/CrashGuard) watches it.
 void Beat();
+/// Seconds since the last Beat; 0 while the loop waits on purpose (Waiting).
+double SecondsSinceBeat();
 /// One frame drawn in `ms`; `parts` from prof::TakeFrame.
 void Frame(double ms, const std::vector<prof::Part>& parts);
 /// Resident memory, MB (sent when it changes noticeably).
 void Memory(double mb);
 /// A finished piece of work worth timing: a rebuild, loading parts...
 void Timed(std::string_view kind, std::string_view detail, double ms);
+/// Frames drawn over the last `seconds` and why (Application::ReportRedraws).
+void Redraws(int frames, double seconds, std::string_view why);
 /// A warning or an error from the log.
 void LogLine(bool error, std::string_view message);
 /// From a crash handler: best effort, no allocation, no locks.

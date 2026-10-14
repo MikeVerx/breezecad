@@ -10,6 +10,7 @@
 #include "kernel/TextGeometry.h"
 #include "sketch/Fillet.h"
 #include "sketch/Mirror.h"
+#include "ui/Widgets.h"
 #include "sketch/Offset.h"
 #include "sketch/Shapes.h"
 #include "sketch/Solver.h"
@@ -774,7 +775,7 @@ void SketchEditor::HandleSpline(AppContext& app, Session& session, const SketchV
         ImDrawList* dl = ImGui::GetWindowDrawList();
         for (std::size_t i = 0; i + 1 < curve.size(); ++i) DrawSketchSegment(app.ui, dl, view, curve[i], curve[i + 1], app.ui.C().accent, 2.0f, false);
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) {
+    if (ui::EnterPressed()) {
         FinishSpline(app, session, false);
         return;
     }

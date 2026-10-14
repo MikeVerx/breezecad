@@ -183,7 +183,7 @@ void DrawNewDocumentDialog(AppContext& app) {
     if (ui::SecondaryButton(ui, "##new-cancel", Tr("Отмена"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape)) close();
     ImGui::SameLine(0, ui.S(8));
     const bool can = chosen && chosen->available;
-    if ((ui::PrimaryButton(ui, "##new-create", Tr("Создать"), "Enter", {bw, ui.S(36)}, can) || (can && ImGui::IsKeyPressed(ImGuiKey_Enter))) &&
+    if ((ui::PrimaryButton(ui, "##new-create", Tr("Создать"), "Enter", {bw, ui.S(36)}, can) || (can && ui::EnterPressed())) &&
         can)
         create = chosen;
     if (create && create->available) {

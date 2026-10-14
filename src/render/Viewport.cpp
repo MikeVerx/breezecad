@@ -35,6 +35,7 @@
 #include <Graphic3d_ClipPlane.hxx>
 #include <Graphic3d_Mat4d.hxx>
 #include <Graphic3d_Vec2.hxx>
+#include <OpenGl_ArbFBO.hxx>
 #include <OpenGl_Context.hxx>
 #include <OpenGl_FrameBuffer.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
@@ -65,6 +66,7 @@
 #include <GLFW/glfw3.h>   // glfwGetTime for camera animation
 
 #include <algorithm>
+#include <format>
 #include <type_traits>
 #include <cmath>
 #include <vector>
@@ -594,7 +596,19 @@ Viewport::~Viewport() {
 bool Viewport::Init(const NativeGlSurface& surface) {
     Impl& m = *myImpl;
 
+#if !defined(_WIN32) && !defined(__APPLE__)
+    // The window's own X connection, not a second one. OCCT asks "is my
+    // context current?" by comparing its connection with the current one;
+    // with a connection of its own the answer was always no, and it bound the
+    // context to that connection before every 3D render. Under XWayland with
+    // the NVIDIA driver the window then kept showing the last picture: the
+    // program worked on, the screen froze once a document was open
+    // (Hyprland, 2026-10).
+    Handle(Aspect_DisplayConnection) display =
+        surface.display ? new Aspect_DisplayConnection(static_cast<Aspect_XDisplay*>(surface.display)) : new Aspect_DisplayConnection();
+#else
     Handle(Aspect_DisplayConnection) display = new Aspect_DisplayConnection();
+#endif
     m.driver = new OpenGl_GraphicDriver(display, false);
     m.driver->ChangeOptions().buffersNoSwap = true;
     // Render plain sRGB colours into our RGBA8 texture. OCCT's linear-light
@@ -871,6 +885,33 @@ void Viewport::Render() {
     m.view->Redraw();
     m.fbo->UnbindBuffer(ctx);
     m.dirty = false;
+}
+
+std::string Viewport::HandBackToWindow() {
+    const Handle(OpenGl_Context) ctx = myImpl->GlContext();
+    if (ctx.IsNull() || ctx->core11fwd == nullptr) return {};
+    OpenGl_GlCore11Fwd& gl = *ctx->core11fwd;
+    // What OCCT left: on Hyprland with an NVIDIA card the window froze on its
+    // last picture once a document was open (2026-10), as if the interface
+    // went to a framebuffer or buffer nobody shows. Logged when it changes.
+    GLint drawFbo = 0, readFbo = 0, drawBuffer = 0;
+    GLboolean mask[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
+    gl.glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFbo);
+    gl.glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFbo);
+    gl.glGetIntegerv(GL_DRAW_BUFFER, &drawBuffer);
+    gl.glGetBooleanv(GL_COLOR_WRITEMASK, mask);
+    const bool scissor = gl.glIsEnabled(GL_SCISSOR_TEST) == GL_TRUE;
+    const GLenum error = gl.glGetError();
+    std::string state = std::format("draw framebuffer {}, read framebuffer {}, draw buffer 0x{:x}, colour writes {}{}{}{}, scissor {}, "
+                                    "OpenGL error 0x{:x}",
+                                    drawFbo, readFbo, drawBuffer, mask[0] ? 'r' : '-', mask[1] ? 'g' : '-', mask[2] ? 'b' : '-',
+                                    mask[3] ? 'a' : '-', scissor ? "on" : "off", error);
+    // The window's own framebuffer and its back buffer, everything written.
+    if (ctx->arbFBO != nullptr) ctx->arbFBO->glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    ctx->SetDrawBuffer(GL_BACK);   // OCCT's own call: OCCT 7.6 has no glDrawBuffer in core11fwd
+    gl.glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    gl.glDisable(GL_SCISSOR_TEST);
+    return state;
 }
 
 unsigned Viewport::TextureId() const {
