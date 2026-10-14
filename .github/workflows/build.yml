@@ -236,36 +236,16 @@ jobs:
             --crop $(( (w - 780) / 2 )),$(( h > 860 ? (h - 860) / 2 : 0 )),780,860 --annotate "settings touchpad" && rm shots/touchpad.ppm
       # The crash and hang windows on the real package (BZ_FAULT_TEST): the
       # program crashes (or freezes), its window must come up with a report.
-      # Xvfb of its own: xvfb-run would take the display away when the
-      # crashed program ends, before its window (another process) has drawn.
-      - name: Pictures of the crash and hang windows
+      - name: Picture of the crash window
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         continue-on-error: true
         shell: bash
-        run: |
-          set +e
-          Xvfb :97 -screen 0 1600x1000x24 > /dev/null 2>&1 &
-          xvfb=$!
-          sleep 2
-          status=0
-          for kind in crash hang; do
-            cfg="$PWD/cfg-$kind"
-            DISPLAY=:97 XDG_CONFIG_HOME="$cfg" BZ_NO_SPLASH=1 BZ_FAULT_TEST=$kind BZ_HANG_SECONDS=3 \
-              BZ_CRASH_WINDOW_SHOT="$PWD/shots/$kind.ppm:10" env -u LD_LIBRARY_PATH /tmp/start/BreezeCAD/breezecad > "fault-$kind.log" 2>&1 &
-            app=$!
-            for _ in $(seq 60); do [ -f "shots/$kind.ppm" ] && break; sleep 1; done
-            kill $app 2> /dev/null
-            report=$(ls "$cfg"/breezecad/reports/$kind-*.txt 2> /dev/null | head -1)
-            if [ -f "shots/$kind.ppm" ] && [ -n "$report" ]; then
-              echo "::notice title=$kind window::$(head -c 600 "$report" | tr '\n' '|')"
-              python3 scripts/ppm2png.py "shots/$kind.ppm" "shots/$kind-window.png" --annotate "$kind window" && rm "shots/$kind.ppm"
-            else
-              echo "::warning title=$kind window::no window or no report: $(tail -5 "fault-$kind.log" | tr '\n' ' ' | cut -c1-400)"
-              status=1
-            fi
-          done
-          kill $xvfb
-          exit $status
+        run: bash scripts/ci-fault-window.sh crash /tmp/start/BreezeCAD/breezecad 97
+      - name: Picture of the hang window
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: bash scripts/ci-fault-window.sh hang /tmp/start/BreezeCAD/breezecad 98
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         with:
