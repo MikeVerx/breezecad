@@ -123,6 +123,7 @@ private:
     RedrawCount myRedraws;
     std::string myGlStateAfterScene;   ///< what the 3D view left in OpenGL (logged when it changes)
     int         myGlStateLogs = 0;
+    bool        myDrawableReclaimLogged = false;
 
     std::filesystem::path myScreenshotFile;
     int                   myScreenshotFrame = -1;

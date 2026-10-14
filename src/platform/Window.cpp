@@ -168,6 +168,26 @@ void Window::Show() {
 
 bool Window::IsMinimized() const { return glfwGetWindowAttrib(myWindow, GLFW_ICONIFIED) != 0; }
 
+bool Window::ReclaimDrawable() {
+#if defined(__linux__)
+    // GLFW draws and swaps through a GLXWindow made over the X window; OCCT
+    // makes the same context current on the plain X window, a second GLX
+    // drawable with buffers of its own. From then on everything went into
+    // buffers that are never shown, and the window kept the last picture
+    // from before the first 3D render: the screen froze as soon as a
+    // document opened, on any Linux (testers on Hyprland, 2026-10; the same
+    // on plain X11 with Mesa). OCCT's own check compares the current
+    // drawable with the X window, so it takes it again at its next render:
+    // this runs every frame, and costs one comparison when nothing changed.
+    const GLXWindow ours = glfwGetGLXWindow(myWindow);
+    if (!ours || glXGetCurrentDrawable() == ours) return false;
+    glXMakeCurrent(glfwGetX11Display(), ours, glfwGetGLXContext(myWindow));
+    return true;
+#else
+    return false;   // one drawable per window: WGL and NSOpenGL have nothing to take back
+#endif
+}
+
 void Window::WaitEvents(double timeoutSeconds) { glfwWaitEventsTimeout(timeoutSeconds); }
 void Window::PollEvents() { glfwPollEvents(); }
 void Window::PostEmptyEvent() { glfwPostEmptyEvent(); }

@@ -56,6 +56,10 @@ public:
     const std::string& OpenGLRenderer() const { return myGLRenderer; }
     /// Shows a window created hidden (maximized then, if it was asked to be).
     void  Show();
+    /// Makes the window's own drawable current again if something else took
+    /// it (OCCT does, on Linux). Call before drawing into the window. True
+    /// when it had to: the caller may log the first time.
+    bool  ReclaimDrawable();
 
     /// Waits for input; returns early after `timeoutSeconds`.
     static void WaitEvents(double timeoutSeconds);

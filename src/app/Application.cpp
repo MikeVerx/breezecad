@@ -267,6 +267,12 @@ void Application::ApplyTheme(bool force) {
 }
 
 int Application::Run() {
+    // Test hook (CI): BZ_TEST_NEW_PART=<seconds> opens a new part that long
+    // after the start, so pictures of the screen before and after can show
+    // that the window still updates once a document is open.
+    const char* newPartSetting = std::getenv("BZ_TEST_NEW_PART");
+    double newPartAt = newPartSetting ? std::atof(newPartSetting) : -1.0;
+    const double runStart = glfwGetTime();
     while (true) {
         mon::Beat();
         if (NeedsAnotherFrame()) {
@@ -326,6 +332,11 @@ int Application::Run() {
         }
         ReportRedraws(now);
         if (myScreenshotFrame >= 0 && myFrameIndex > myScreenshotFrame) break;
+        if (newPartAt >= 0 && now - runStart >= newPartAt) {
+            newPartAt = -1.0;
+            NewDocument(*myContext);
+            myFramesToDraw = std::max(myFramesToDraw, 3);
+        }
     }
     myWindow.Geometry(mySettings.windowX, mySettings.windowY, mySettings.windowW, mySettings.windowH, mySettings.windowMaximized);
     mySettings.Save(platform::ConfigDir() / "settings.json");
@@ -583,6 +594,10 @@ void Application::Frame() {
         ++mySceneFramesThisSecond;
     }
     const double presentStart = glfwGetTime();
+    if (myWindow.ReclaimDrawable() && !myDrawableReclaimLogged) {
+        myDrawableReclaimLogged = true;
+        log::Info("OpenGL: the window's drawable taken back from the 3D view (Linux, GLX)");
+    }
 
     int fbW = 0, fbH = 0;
     glfwGetFramebufferSize(myWindow.Handle(), &fbW, &fbH);
