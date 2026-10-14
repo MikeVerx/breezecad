@@ -35,6 +35,7 @@
 #include <Graphic3d_ClipPlane.hxx>
 #include <Graphic3d_Mat4d.hxx>
 #include <Graphic3d_Vec2.hxx>
+#include <OpenGl_ArbFBO.hxx>
 #include <OpenGl_Context.hxx>
 #include <OpenGl_FrameBuffer.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
