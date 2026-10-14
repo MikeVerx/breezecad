@@ -1,5 +1,6 @@
 #include "app/Application.h"
 #include "app/BetaTesting.h"
+#include "app/CrashGuard.h"
 
 #include "app/Language.h"
 #include "core/Monitor.h"
@@ -27,16 +28,33 @@
 #include <imgui_impl_opengl3.h>
 #include <lunasvg.h>
 
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <thread>
 
 // Defined (non-static) in imgui_impl_glfw.cpp but not declared in its header.
 ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(int keycode, int scancode);
 
 namespace bz::app {
 namespace {
+
+/// Test hook (BZ_FAULT_TEST): "crash" — an access violation, "hang" — the
+/// window's loop stops for 20 s. Tries the crash and hang windows out
+/// (app/CrashGuard.h) on a real build; CI takes pictures of them.
+void FaultTest(std::string_view kind) {
+    if (kind == "crash") {
+        // A null pointer the compiler cannot see as one (5 letters - 5).
+        volatile int* nowhere = reinterpret_cast<int*>(static_cast<std::uintptr_t>(kind.size() - 5));
+        *nowhere = 1;
+    } else if (kind == "hang") {
+        std::this_thread::sleep_for(std::chrono::seconds(20));
+    }
+}
 
 constexpr GLenum kGlFramebufferSrgb = 0x8DB9;   // GL_FRAMEBUFFER_SRGB (OpenGL 3.0, absent from GL 1.1 headers)
 
@@ -125,6 +143,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     progress(Tr("Создание окна…"));
     if (!myWindow.Create(windowConfig)) return false;
     beta::WriteSystemInfo(myWindow, mySettings.language.empty() ? std::string("system") : mySettings.language);
+    crash::NoteGraphics(myWindow.OpenGLRenderer() + ", OpenGL " + myWindow.OpenGLVersion());
 
     glfwSetWindowUserPointer(myWindow.Handle(), &myInput);
     glfwSetCursorPosCallback(myWindow.Handle(), [](GLFWwindow* w, double, double) { OnAnyInput(w); });
@@ -258,6 +277,12 @@ void Application::ApplyTheme(bool force) {
 }
 
 int Application::Run() {
+    // A frozen loop for this long gets the "not responding" window (a
+    // rebuild runs on its own thread; this is the window itself stuck).
+    // BZ_HANG_SECONDS changes it, to try the window out.
+    const char* hangSetting = std::getenv("BZ_HANG_SECONDS");
+    crash::StartHangGuard(hangSetting ? std::max(2.0, std::atof(hangSetting)) : 15.0);
+    const char* faultTest = std::getenv("BZ_FAULT_TEST");
     while (true) {
         mon::Beat();
         if (NeedsAnotherFrame()) {
@@ -306,7 +331,12 @@ int Application::Run() {
             if (myFramesToDraw > 0) --myFramesToDraw;
         }
         if (myScreenshotFrame >= 0 && myFrameIndex > myScreenshotFrame) break;
+        if (faultTest && myFrameIndex == 3) {
+            FaultTest(faultTest);
+            faultTest = nullptr;
+        }
     }
+    crash::StopHangGuard();
     myWindow.Geometry(mySettings.windowX, mySettings.windowY, mySettings.windowW, mySettings.windowH, mySettings.windowMaximized);
     mySettings.Save(platform::ConfigDir() / "settings.json");
     log::Info("BreezeCAD exits normally");
@@ -609,17 +639,7 @@ void Application::PollShotRequest() {
 }
 
 void Application::TakeScreenshot(const std::filesystem::path& file) const {
-    int w = 0, h = 0;
-    glfwGetFramebufferSize(myWindow.Handle(), &w, &h);
-    std::vector<unsigned char> pixels(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 3);
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
-    std::ofstream out(file, std::ios::binary);
-    if (!out) return;
-    out << "P6\n" << w << ' ' << h << "\n255\n";
-    const auto rowBytes = static_cast<std::streamsize>(w) * 3;
-    for (int row = h - 1; row >= 0; --row)
-        out.write(reinterpret_cast<const char*>(pixels.data()) + static_cast<std::ptrdiff_t>(row) * rowBytes, rowBytes);
+    platform::SaveFramebufferPpm(myWindow.Handle(), file);
     log::Info("Screenshot saved: {}", ToUtf8(file));
 }
 

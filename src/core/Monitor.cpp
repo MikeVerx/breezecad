@@ -168,8 +168,12 @@ void Action(std::string_view source, std::string_view name) {
 
 std::string_view LastAction() { return S().action; }
 
-void Beat() {
-    if (Enabled()) S().beatNs.store(Nanos(), std::memory_order_relaxed);
+void Beat() { S().beatNs.store(Nanos(), std::memory_order_relaxed); }
+
+double SecondsSinceBeat() {
+    const State& s = S();
+    if (s.waiting.load() > 0) return 0.0;
+    return static_cast<double>(Nanos() - s.beatNs.load(std::memory_order_relaxed)) * 1e-9;
 }
 
 void Frame(double ms, const std::vector<prof::Part>& parts) {

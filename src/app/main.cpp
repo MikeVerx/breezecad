@@ -5,10 +5,17 @@
 //   BZ_SCREENSHOT=out.ppm[:frame]  saves one frame and exits;
 //   BZ_SHOT_DIR=dir                saves a frame whenever dir/request appears;
 //   BZ_MONITOR=events.jsonl        monitoring for tools/monitor (core/Monitor.h);
-//   BZ_SETTINGS_TAB=n              starts with the settings open on tab n.
+//   BZ_SETTINGS_TAB=n              starts with the settings open on tab n;
+//   BZ_FAULT_TEST=crash|hang       crashes, or freezes for 20 s, after 3 frames;
+//   BZ_HANG_SECONDS=n              the hang window after n s instead of 15;
+//   BZ_CRASH_WINDOW_SHOT=out.ppm   the crash/hang window saves a frame and closes.
+// Started by itself (app/CrashGuard.h): --crash-window / --hang-window show
+// the crash or hang window instead of the program (shell/CrashWindow.h).
 
 #include "app/Application.h"
 #include "app/BetaTesting.h"
+#include "app/CrashGuard.h"
+#include "app/shell/CrashWindow.h"
 #include "core/Log.h"
 #include "core/Monitor.h"
 
@@ -73,16 +80,37 @@ void WriteMinidump(EXCEPTION_POINTERS* info) {
     bz::log::Error("Crash dump: {}", file.string());
 }
 
+/// The crash report (app/CrashGuard.h) and the crash window. `what` is the
+/// "Crash:" line's value. True when the window is up.
+bool ReportCrash(const std::string& what) {
+    void* frames[32];
+    const USHORT count = CaptureStackBackTrace(1, 32, frames, nullptr);
+    std::string text = bz::app::crash::ReportHeader();
+    text += "Crash: " + what + "\n";
+    text += bz::app::crash::ReasonLine();
+    text += std::format("Last action: {}\nStack:\n", bz::mon::LastAction());
+    for (USHORT i = 0; i < count; ++i) text += std::format("  #{} {}\n", i, Where(frames[i]));
+    HANDLE out = CreateFileW(bz::app::crash::ReportPathWide(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (out != INVALID_HANDLE_VALUE) {
+        DWORD written = 0;
+        WriteFile(out, text.data(), static_cast<DWORD>(text.size()), &written, nullptr);
+        CloseHandle(out);
+    }
+    return bz::app::crash::ShowCrashWindow();
+}
+
 LONG WINAPI OnCrash(EXCEPTION_POINTERS* info) {
     bz::mon::CrashNote("exception");
-    bz::log::Error("Crash: exception 0x{:08x} at {}", info->ExceptionRecord->ExceptionCode,
-                   Where(info->ExceptionRecord->ExceptionAddress));
+    const std::string what = std::format("exception 0x{:08x} at {}", info->ExceptionRecord->ExceptionCode,
+                                         Where(info->ExceptionRecord->ExceptionAddress));
+    bz::log::Error("Crash: {}", what);
     void* frames[32];
     const USHORT count = CaptureStackBackTrace(0, 32, frames, nullptr);
     for (USHORT i = 0; i < count; ++i) bz::log::Error("  #{} {}", i, Where(frames[i]));
     bz::log::Error("Last action: {}", bz::mon::LastAction());
     WriteMinidump(info);
-    return EXCEPTION_CONTINUE_SEARCH;
+    // Our window says what happened: the system's "stopped working" box would be a second one.
+    return ReportCrash(what) ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH;
 }
 
 } // namespace
@@ -94,16 +122,14 @@ LONG WINAPI OnCrash(EXCEPTION_POINTERS* info) {
 
 namespace {
 
-/// The testers' build: the same trace also into crash.txt of the session
-/// (stderr reaches no report). Set before the handler is, read only by it.
-char gCrashFile[2048] = "";
-
 void Say(int fd, const char* text) { (void)!::write(fd, text, std::strlen(text)); }
 
 void Trace(int fd, const char* name, void* const* frames, int count) {
     Say(fd, "Crash: ");
     Say(fd, name);
-    Say(fd, "\nLast action: ");
+    Say(fd, "\n");
+    Say(fd, bz::app::crash::ReasonLine());
+    Say(fd, "Last action: ");
     Say(fd, bz::mon::LastAction().data());
     Say(fd, "\nStack:\n");
     backtrace_symbols_fd(frames, count, fd);
@@ -119,11 +145,15 @@ void OnSignal(int signal) {
     void* frames[64];
     const int count = backtrace(frames, 64);
     Trace(2, name, frames, count);
-    if (gCrashFile[0]) {
-        const int fd = ::open(gCrashFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    // The report (app/CrashGuard.h): the same trace under a header, then the
+    // window that shows it. stderr reaches no one when started from a menu.
+    if (const char* report = bz::app::crash::ReportPath(); report[0]) {
+        const int fd = ::open(report, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd >= 0) {
+            Say(fd, bz::app::crash::ReportHeader());
             Trace(fd, name, frames, count);
             ::close(fd);
+            bz::app::crash::ShowCrashWindow();
         }
     }
     std::signal(signal, SIG_DFL);
@@ -131,8 +161,6 @@ void OnSignal(int signal) {
 }
 
 void CatchCrashes() {
-    if (const std::filesystem::path& session = bz::app::beta::SessionDir(); !session.empty())
-        std::snprintf(gCrashFile, sizeof gCrashFile, "%s", (session / "crash.txt").string().c_str());
     void* warmUp[1];
     backtrace(warmUp, 1);   // loads what backtrace needs now, not in the handler
     // Its own stack, so that a stack overflow is reported too.
@@ -165,7 +193,11 @@ namespace {
     }
     bz::log::Error("Crash: uncaught exception: {} (last action: {})", what, bz::mon::LastAction());
     bz::mon::CrashNote("uncaught exception");
-    std::abort();
+    bz::app::crash::NoteReason(("uncaught exception: " + what).c_str());
+#if defined(_WIN32)
+    ReportCrash("uncaught exception");   // abort() raises no exception for OnCrash to see
+#endif
+    std::abort();   // elsewhere: SIGABRT, reported by OnSignal with the reason
 }
 
 std::vector<std::filesystem::path> CommandLineFiles(int argc, char** argv) {
@@ -187,8 +219,11 @@ std::vector<std::filesystem::path> CommandLineFiles(int argc, char** argv) {
 } // namespace
 
 int main(int argc, char** argv) {
+    const std::vector<std::filesystem::path> args = CommandLineFiles(argc, argv);
+    if (bz::app::IsCrashWindowRequest(args)) return bz::app::RunCrashWindow(args);   // no session, no log of its own
     bz::app::beta::BeginSession();   // the testers' build: monitoring into its session folder
     bz::mon::StartFromEnvironment();
+    bz::app::crash::Prepare();
     std::set_terminate(OnTerminate);
 #if defined(_WIN32)
     SetUnhandledExceptionFilter(OnCrash);
@@ -196,7 +231,7 @@ int main(int argc, char** argv) {
     CatchCrashes();
 #endif
     bz::app::Application app;
-    if (!app.Init(CommandLineFiles(argc, argv))) {
+    if (!app.Init(args)) {
         bz::mon::Stop(1);
         bz::app::beta::EndSession(1);
         return 1;
