@@ -336,7 +336,7 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
             const bool escape = ImGui::IsKeyPressed(ImGuiKey_Escape);
             if (escape) {
                 app.shell.renaming = {};
-            } else if (ImGui::IsItemDeactivated() || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            } else if (ImGui::IsItemDeactivated() || ui::EnterPressed()) {
                 const ObjectId id = f.id;
                 const std::string name = app.shell.renameText;
                 app.shell.renaming = {};

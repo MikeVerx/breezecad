@@ -30,7 +30,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <format>
 #include <fstream>
+#include <iterator>
 
 // Defined (non-static) in imgui_impl_glfw.cpp but not declared in its header.
 ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(int keycode, int scancode);
@@ -46,18 +48,25 @@ Application::InputTap* TapOf(GLFWwindow* window) {
 }
 
 /// Marks the window as needing frames after any input.
-void OnAnyInput(GLFWwindow* window) {
-    if (auto* tap = TapOf(window)) tap->seen = true;
+void OnAnyInput(GLFWwindow* window, Application::Wake wake) {
+    if (auto* tap = TapOf(window)) {
+        tap->seen = true;
+        ++tap->wakes[static_cast<std::size_t>(wake)];
+    }
 }
+
+constexpr const char* kWakeNames[] = {"cursor", "button", "scroll", "key", "text", "size", "focus", "refresh", "drop"};
+static_assert(std::size(kWakeNames) == static_cast<std::size_t>(Application::Wake::Count));
 
 /// Records a key press together with the modifiers held at that instant.
 /// ImGui sees key events spread over frames, so a quick Ctrl+S on a slow
 /// frame may reach it with Ctrl already released; this never loses it.
 void OnKey(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    OnAnyInput(window);
+    OnAnyInput(window, Application::Wake::Key);
     if (action != GLFW_PRESS) return;
-    const ImGuiKey imguiKey = ImGui_ImplGlfw_KeyToImGuiKey(key, scancode);
+    ImGuiKey imguiKey = ImGui_ImplGlfw_KeyToImGuiKey(key, scancode);
     if (imguiKey == ImGuiKey_None) return;
+    if (imguiKey == ImGuiKey_KeypadEnter) imguiKey = ImGuiKey_Enter;   // one Enter for shortcuts, whichever was pressed
 #if defined(__APPLE__)
     const int ctrl = GLFW_MOD_SUPER;   // Cmd plays the role of Ctrl, as in ImGui
 #else
@@ -127,14 +136,14 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     beta::WriteSystemInfo(myWindow, mySettings.language.empty() ? std::string("system") : mySettings.language);
 
     glfwSetWindowUserPointer(myWindow.Handle(), &myInput);
-    glfwSetCursorPosCallback(myWindow.Handle(), [](GLFWwindow* w, double, double) { OnAnyInput(w); });
-    glfwSetMouseButtonCallback(myWindow.Handle(), [](GLFWwindow* w, int, int, int) { OnAnyInput(w); });
-    glfwSetScrollCallback(myWindow.Handle(), [](GLFWwindow* w, double, double) { OnAnyInput(w); });
+    glfwSetCursorPosCallback(myWindow.Handle(), [](GLFWwindow* w, double, double) { OnAnyInput(w, Wake::Cursor); });
+    glfwSetMouseButtonCallback(myWindow.Handle(), [](GLFWwindow* w, int, int, int) { OnAnyInput(w, Wake::Button); });
+    glfwSetScrollCallback(myWindow.Handle(), [](GLFWwindow* w, double, double) { OnAnyInput(w, Wake::Scroll); });
     glfwSetKeyCallback(myWindow.Handle(), OnKey);
-    glfwSetCharCallback(myWindow.Handle(), [](GLFWwindow* w, unsigned) { OnAnyInput(w); });
-    glfwSetWindowSizeCallback(myWindow.Handle(), [](GLFWwindow* w, int, int) { OnAnyInput(w); });
-    glfwSetWindowFocusCallback(myWindow.Handle(), [](GLFWwindow* w, int) { OnAnyInput(w); });
-    glfwSetWindowRefreshCallback(myWindow.Handle(), [](GLFWwindow* w) { OnAnyInput(w); });
+    glfwSetCharCallback(myWindow.Handle(), [](GLFWwindow* w, unsigned) { OnAnyInput(w, Wake::Text); });
+    glfwSetWindowSizeCallback(myWindow.Handle(), [](GLFWwindow* w, int, int) { OnAnyInput(w, Wake::Size); });
+    glfwSetWindowFocusCallback(myWindow.Handle(), [](GLFWwindow* w, int) { OnAnyInput(w, Wake::Focus); });
+    glfwSetWindowRefreshCallback(myWindow.Handle(), [](GLFWwindow* w) { OnAnyInput(w, Wake::Refresh); });
     glfwSetDropCallback(myWindow.Handle(), [](GLFWwindow* w, int count, const char** paths) {   // UTF-8 paths
         auto* tap = TapOf(w);
         if (!tap) return;
@@ -142,7 +151,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
             const std::string_view p(paths[i]);
             tap->dropped.emplace_back(std::u8string(p.begin(), p.end()));
         }
-        tap->seen = true;
+        OnAnyInput(w, Wake::Drop);
     });
 
     kernel::SetTextFont(assets / "fonts" / "IBMPlexSans-Medium.ttf", assets / "fonts" / "IBMPlexSans-SemiBold.ttf");   // sketch text
@@ -258,6 +267,12 @@ void Application::ApplyTheme(bool force) {
 }
 
 int Application::Run() {
+    // Test hook (CI): BZ_TEST_NEW_PART=<seconds> opens a new part that long
+    // after the start, so pictures of the screen before and after can show
+    // that the window still updates once a document is open.
+    const char* newPartSetting = std::getenv("BZ_TEST_NEW_PART");
+    double newPartAt = newPartSetting ? std::atof(newPartSetting) : -1.0;
+    const double runStart = glfwGetTime();
     while (true) {
         mon::Beat();
         if (NeedsAnotherFrame()) {
@@ -280,6 +295,10 @@ int Application::Run() {
         // The window close button: ask about unsaved documents first.
         if (myWindow.ShouldClose()) {
             myWindow.SetShouldClose(false);
+            // Logged: a desktop closing the window on its own looks like a
+            // crash to the user, and only this line tells them apart.
+            log::Info("Quit: the window system asked to close the window (its close button or the desktop)");
+            mon::Action("window", "close requested by the system");
             myShell.quitRequested = true;
             myFramesToDraw = std::max(myFramesToDraw, 3);
         }
@@ -291,7 +310,10 @@ int Application::Run() {
         }
         if (myModules && myModules->Tick()) myFramesToDraw = std::max(myFramesToDraw, 3);   // show what they changed
         HandleCloseRequests();
-        if (myShell.quitRequested && myWorkspace.sessions.empty()) break;
+        if (myShell.quitRequested && myWorkspace.sessions.empty()) {
+            log::Info("Quit: no documents left to ask about");
+            break;
+        }
 
         if (mySettings.background + "|" + mySettings.backgroundPicture != myBackgroundApplied) ApplyTheme(true);   // chosen: at once
         if (now - mySystemThemeCheck > 2.0) {
@@ -301,11 +323,20 @@ int Application::Run() {
         for (auto& s : myWorkspace.sessions)
             if (myAutosave->Update(*s, mySettings, now, now - myShell.lastInputTime)) myFramesToDraw = std::max(myFramesToDraw, 1);
 
-        if (myFramesToDraw > 0 || NeedsAnotherFrame() || WaitsForBackground()) {
+        const char* why = myFramesToDraw > 0 ? "input or a change" : WhyAnotherFrame();
+        if (!why && WaitsForBackground()) why = "background rebuild";
+        if (why) {
+            CountRedraw(why);
             Frame();
             if (myFramesToDraw > 0) --myFramesToDraw;
         }
+        ReportRedraws(now);
         if (myScreenshotFrame >= 0 && myFrameIndex > myScreenshotFrame) break;
+        if (newPartAt >= 0 && now - runStart >= newPartAt) {
+            newPartAt = -1.0;
+            NewDocument(*myContext);
+            myFramesToDraw = std::max(myFramesToDraw, 3);
+        }
     }
     myWindow.Geometry(mySettings.windowX, mySettings.windowY, mySettings.windowW, mySettings.windowH, mySettings.windowMaximized);
     mySettings.Save(platform::ConfigDir() / "settings.json");
@@ -337,15 +368,53 @@ void Application::StartModules() {
     }
 }
 
-bool Application::NeedsAnotherFrame() const {
-    if (myBusy || myViewport.NeedsRender() || !myDeferred.empty()) return true;
+const char* Application::WhyAnotherFrame() const {
+    if (myBusy) return "animation";
+    // Only a 3D view on screen needs drawing: on the home page nothing renders
+    // it, so "needs render" stayed true and the window redrew ~130 times a
+    // second doing nothing (testers' logs, 2026-10).
+    if (myViewport.NeedsRender() && myWorkspace.ActiveIndex() >= 0 && !myWorkspace.ShowsHome()) return "viewport";
+    if (!myDeferred.empty()) return "deferred work";
     for (const auto& s : myWorkspace.sessions)
-        if (s->Rebuilding() && !s->RebuildingInBackground()) return true;   // the next slice of a rebuild
-    if (myScreenshotFrame >= 0) return true;
+        if (s->Rebuilding() && !s->RebuildingInBackground()) return "rebuild";   // the next slice of a rebuild
+    if (myScreenshotFrame >= 0) return "screenshot";
     const ImGuiIO& io = ImGui::GetIO();
     for (bool down : io.MouseDown)
-        if (down) return true;
-    return false;
+        if (down) return "mouse button held";
+    return nullptr;
+}
+
+void Application::CountRedraw(const char* why) {
+    ++myRedraws.frames;
+    ++myRedraws.why[why];
+}
+
+void Application::ReportRedraws(double now) {
+    constexpr double kWindow = 10.0;   // s
+    if (myRedraws.start < 0) myRedraws.start = now;
+    if (now - myRedraws.start < kWindow) return;
+    const int frames = myRedraws.frames;
+    int userInput = 0;   // what a person does; size, focus and refresh come from the system
+    for (const Wake w : {Wake::Cursor, Wake::Button, Wake::Scroll, Wake::Key, Wake::Text, Wake::Drop})
+        userInput += myInput.wakes[static_cast<std::size_t>(w)];
+    if (frames > 0) {
+        std::string text;
+        for (const auto& [why, n] : myRedraws.why) text += std::format("{}{} {}", text.empty() ? "" : ", ", why, n);
+        text += "; window events:";
+        for (std::size_t i = 0; i < myInput.wakes.size(); ++i)
+            if (myInput.wakes[i] > 0) text += std::format(" {} {}", kWakeNames[i], myInput.wakes[i]);
+        mon::Redraws(frames, now - myRedraws.start, text);
+        // A sleeping window draws nothing; 10 frames a second with nobody
+        // touching it means something keeps waking it up.
+        if (userInput == 0 && frames >= 100 && now - myRedraws.loggedAt >= 60.0) {
+            myRedraws.loggedAt = now;
+            log::Info("Redraw without input: {} frames in {:.0f} s ({})", frames, now - myRedraws.start, text);
+        }
+    }
+    myRedraws.start = now;
+    myRedraws.frames = 0;
+    myRedraws.why.clear();
+    myInput.wakes.fill(0);
 }
 
 bool Application::WaitsForBackground() const {
@@ -512,10 +581,23 @@ void Application::Frame() {
             prof::Scope scope("scene");
             myViewport.Render();
         }
+        // Logged when it changes: the first 3D render and anything unusual
+        // after it (20 lines at most: an error every other frame must not flood the log).
+        if (std::string state = myViewport.HandBackToWindow(); state != myGlStateAfterScene) {
+            if (myGlStateLogs < 20) {
+                ++myGlStateLogs;
+                log::Info("OpenGL after the 3D view: {}", state);
+            }
+            myGlStateAfterScene = std::move(state);
+        }
         smooth(myStats.sceneMs, msSince(sceneStart));
         ++mySceneFramesThisSecond;
     }
     const double presentStart = glfwGetTime();
+    if (myWindow.ReclaimDrawable() && !myDrawableReclaimLogged) {
+        myDrawableReclaimLogged = true;
+        log::Info("OpenGL: the window's drawable taken back from the 3D view (Linux, GLX)");
+    }
 
     int fbW = 0, fbH = 0;
     glfwGetFramebufferSize(myWindow.Handle(), &fbW, &fbH);
@@ -524,6 +606,13 @@ void Application::Frame() {
     // switches sRGB writes on for its own rendering and does not switch them
     // off, which would make the whole interface look washed out.
     glDisable(kGlFramebufferSrgb);
+    // OCCT leaves alpha writes off ("colour writes rgb-" in the log). With
+    // them off the window's alpha is never written; where the window has an
+    // alpha channel the desktop shows it see-through or black (Mesa under
+    // XWayland: a black window). Every frame, not only after a 3D render:
+    // OCCT also sets up its context when the program starts.
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDisable(GL_SCISSOR_TEST);
     const Color bg = myTheme.colors.appBackground;
     glClearColor(bg.r, bg.g, bg.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);

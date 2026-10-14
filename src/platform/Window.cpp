@@ -3,6 +3,7 @@
 #include "core/Log.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 #include <GLFW/glfw3.h>
 #if defined(_WIN32)
@@ -45,6 +46,7 @@ NativeGlSurface Window::NativeSurface() const {
 #else
     surface.window = static_cast<std::uintptr_t>(glfwGetX11Window(myWindow));
     surface.glContext = glfwGetGLXContext(myWindow);
+    surface.display = glfwGetX11Display();
 #endif
     return surface;
 }
@@ -70,6 +72,13 @@ bool Window::Create(const WindowConfig& config) {
     glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
     glfwWindowHint(GLFW_DEPTH_BITS, 24);
     glfwWindowHint(GLFW_STENCIL_BITS, 8);
+#if defined(__linux__)
+    // No alpha channel in the window: it is opaque. With one, X11 gives a
+    // 32-bit visual, and a compositor (XWayland under Hyprland) blends the
+    // window with what is behind it by that alpha — a window black or
+    // see-through wherever alpha went unwritten.
+    glfwWindowHint(GLFW_ALPHA_BITS, 0);
+#endif
 
     // The windowed size never exceeds the screen (a 1366x768 laptop gets a
     // window that fits), and it opens centred unless a place was remembered.
@@ -96,6 +105,16 @@ bool Window::Create(const WindowConfig& config) {
     if (const auto* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER))) myGLRenderer = renderer;
     log::Info("Window: OpenGL {}", myGLVersion);
     log::Info("Graphics: {} / {}", myGLVendor, myGLRenderer);
+#if defined(__linux__)
+    // Wayland sessions run the program through XWayland: reports from them
+    // differ, so the log says which one this was.
+    const char* wayland = std::getenv("WAYLAND_DISPLAY");
+    const char* desktop = std::getenv("XDG_CURRENT_DESKTOP");
+    XWindowAttributes attributes{};
+    const int depth = XGetWindowAttributes(glfwGetX11Display(), glfwGetX11Window(myWindow), &attributes) ? attributes.depth : 0;
+    log::Info("Window system: X11{}, desktop {}, window depth {} bits", wayland && *wayland ? " through XWayland (a Wayland session)" : "",
+              desktop && *desktop ? desktop : "unknown", depth);
+#endif
     return true;
 }
 
@@ -148,6 +167,26 @@ void Window::Show() {
 }
 
 bool Window::IsMinimized() const { return glfwGetWindowAttrib(myWindow, GLFW_ICONIFIED) != 0; }
+
+bool Window::ReclaimDrawable() {
+#if defined(__linux__)
+    // GLFW draws and swaps through a GLXWindow made over the X window; OCCT
+    // makes the same context current on the plain X window, a second GLX
+    // drawable with buffers of its own. From then on everything went into
+    // buffers that are never shown, and the window kept the last picture
+    // from before the first 3D render: the screen froze as soon as a
+    // document opened, on any Linux (testers on Hyprland, 2026-10; the same
+    // on plain X11 with Mesa). OCCT's own check compares the current
+    // drawable with the X window, so it takes it again at its next render:
+    // this runs every frame, and costs one comparison when nothing changed.
+    const GLXWindow ours = glfwGetGLXWindow(myWindow);
+    if (!ours || glXGetCurrentDrawable() == ours) return false;
+    glXMakeCurrent(glfwGetX11Display(), ours, glfwGetGLXContext(myWindow));
+    return true;
+#else
+    return false;   // one drawable per window: WGL and NSOpenGL have nothing to take back
+#endif
+}
 
 void Window::WaitEvents(double timeoutSeconds) { glfwWaitEventsTimeout(timeoutSeconds); }
 void Window::PollEvents() { glfwPollEvents(); }

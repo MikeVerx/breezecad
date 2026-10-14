@@ -80,6 +80,10 @@ bool CommitInput(Ui& ui, const char* id, const std::string& value, EditState& st
 bool SelectionSlot(Ui& ui, const char* id, const std::string& caption, const std::string& value, const char* waiting, bool active,
                    float width, bool* cleared);
 
+/// Enter, or Enter on the number pad, pressed this frame (with key repeat
+/// when `repeat`). The two are one key for the user.
+bool EnterPressed(bool repeat = true);
+
 /// Small grey caption above a control ("Операция", "Расстояние").
 void FieldLabel(Ui& ui, const char* text);
 
