@@ -567,6 +567,15 @@ void Application::Frame() {
             prof::Scope scope("scene");
             myViewport.Render();
         }
+        // Logged when it changes: the first 3D render and anything unusual
+        // after it (20 lines at most: an error every other frame must not flood the log).
+        if (std::string state = myViewport.HandBackToWindow(); state != myGlStateAfterScene) {
+            if (myGlStateLogs < 20) {
+                ++myGlStateLogs;
+                log::Info("OpenGL after the 3D view: {}", state);
+            }
+            myGlStateAfterScene = std::move(state);
+        }
         smooth(myStats.sceneMs, msSince(sceneStart));
         ++mySceneFramesThisSecond;
     }
