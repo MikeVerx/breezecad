@@ -908,7 +908,7 @@ std::string Viewport::HandBackToWindow() {
                                     mask[3] ? 'a' : '-', scissor ? "on" : "off", error);
     // The window's own framebuffer and its back buffer, everything written.
     if (ctx->arbFBO != nullptr) ctx->arbFBO->glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    gl.glDrawBuffer(GL_BACK);
+    ctx->SetDrawBuffer(GL_BACK);   // OCCT's own call: OCCT 7.6 has no glDrawBuffer in core11fwd
     gl.glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     gl.glDisable(GL_SCISSOR_TEST);
     return state;
