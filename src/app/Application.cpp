@@ -359,7 +359,10 @@ void Application::StartModules() {
 
 const char* Application::WhyAnotherFrame() const {
     if (myBusy) return "animation";
-    if (myViewport.NeedsRender()) return "viewport";
+    // Only a 3D view on screen needs drawing: on the home page nothing renders
+    // it, so "needs render" stayed true and the window redrew ~130 times a
+    // second doing nothing (testers' logs, 2026-10).
+    if (myViewport.NeedsRender() && myWorkspace.ActiveIndex() >= 0 && !myWorkspace.ShowsHome()) return "viewport";
     if (!myDeferred.empty()) return "deferred work";
     for (const auto& s : myWorkspace.sessions)
         if (s->Rebuilding() && !s->RebuildingInBackground()) return "rebuild";   // the next slice of a rebuild
