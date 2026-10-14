@@ -3,12 +3,15 @@
 """Converts a binary PPM (P6, what BZ_SCREENSHOT writes) to PNG without
 third-party packages, so CI can show the start check's frame as a picture.
 
-Usage: ppm2png.py in.ppm out.png [--crop X,Y,W,H] [--half] [--annotate TITLE]
+Usage: ppm2png.py in.ppm out.png [--crop X,Y,W,H] [--half] [--gray] [--annotate TITLE] [--chunk N]
   --crop      keep that rectangle (pixels of the frame)
   --half      halve the size (2x2 averaging)
+  --gray      grey levels only: a third of the size (a picture to check a layout)
   --annotate  also print the PNG as base64 in GitHub notices, a few lines
-              of 60 000 characters: logs and artifacts cannot always be
-              downloaded, annotations can (gh api …/check-runs/<id>/annotations)
+              of --chunk characters (60 000): logs and artifacts cannot always
+              be downloaded, annotations can (gh api …/check-runs/<id>/annotations).
+              The API keeps 4096 characters of each, and 10 notices of a step:
+              --chunk 4000 with a small (--gray, --half) picture fits whole.
 """
 import argparse
 import base64
@@ -55,14 +58,25 @@ def half(width, height, rgb):
     return w, h, bytes(out)
 
 
-def png_bytes(width, height, rgb):
+def gray(rgb):
+    return bytes((rgb[i] * 299 + rgb[i + 1] * 587 + rgb[i + 2] * 114) // 1000 for i in range(0, len(rgb), 3))
+
+
+def png_bytes(width, height, pixels, channels=3):
     def chunk(kind, body):
         return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
 
-    stride = width * 3
-    raw = b"".join(b"\x00" + rgb[y * stride:(y + 1) * stride] for y in range(height))
-    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
-    return png + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+    # Filter "Up" (each row minus the one above): a flat interface packs far smaller.
+    stride = width * channels
+    rows = [pixels[y * stride:(y + 1) * stride] for y in range(height)]
+    raw = bytearray()
+    previous = bytes(stride)
+    for row in rows:
+        raw += b"\x02" + bytes((a - b) & 0xFF for a, b in zip(row, previous))
+        previous = row
+    colour = 2 if channels == 3 else 0
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, colour, 0, 0, 0))
+    return png + chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b"")
 
 
 if __name__ == "__main__":
@@ -71,18 +85,20 @@ if __name__ == "__main__":
     ap.add_argument("png")
     ap.add_argument("--crop")
     ap.add_argument("--half", action="store_true")
+    ap.add_argument("--gray", action="store_true")
     ap.add_argument("--annotate")
+    ap.add_argument("--chunk", type=int, default=60000)
     args = ap.parse_args()
     w, h, pixels = read_ppm(args.ppm)
     if args.crop:
         w, h, pixels = crop(w, h, pixels, *[int(v) for v in args.crop.split(",")])
     if args.half:
         w, h, pixels = half(w, h, pixels)
-    png = png_bytes(w, h, pixels)
+    png = png_bytes(w, h, gray(pixels), 1) if args.gray else png_bytes(w, h, pixels)
     open(args.png, "wb").write(png)
     print(f"{args.png}: {w}x{h}, {len(png)} bytes")
     if args.annotate:
         text = base64.b64encode(png).decode()
-        parts = [text[i:i + 60000] for i in range(0, len(text), 60000)]
+        parts = [text[i:i + args.chunk] for i in range(0, len(text), args.chunk)]
         for n, part in enumerate(parts, 1):
             print(f"::notice title={args.annotate} png {n}/{len(parts)}::{part}")

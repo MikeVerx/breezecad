@@ -1,5 +1,6 @@
 #include "app/Actions.h"
 
+#include "core/Log.h"
 #include "core/Monitor.h"
 
 #include <imgui_internal.h>
@@ -62,9 +63,20 @@ bool ActionRegistry::Run(std::string_view id) const {
 }
 
 void ActionRegistry::HandleShortcuts(const std::vector<ImGuiKeyChord>& pressed) const {
+    // A shortcut that did nothing goes into the log with the reason: "Ctrl+N
+    // does nothing" from a tester is otherwise impossible to tell apart from
+    // a key the system kept (2026-10, Hyprland). Only chords with Ctrl or Alt:
+    // plain letters are typing.
+    const auto skipped = [](ImGuiKeyChord chord, const char* why) {
+        if (chord & (ImGuiMod_Ctrl | ImGuiMod_Alt)) log::Debug("Shortcut {}: {}", ChordText(chord), why);
+    };
     // Typing in a field, or a menu/dialog on top: keys belong to them.
-    if (ImGui::GetIO().WantTextInput) return;
+    if (ImGui::GetIO().WantTextInput) {
+        for (const ImGuiKeyChord chord : pressed) skipped(chord, "a text field has the keyboard");
+        return;
+    }
     if (ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) {
+        for (const ImGuiKeyChord chord : pressed) skipped(chord, "a menu or a dialog is open");
         // Esc closes the menu on top (a context menu) and does nothing else.
         // ImGui closes popups on Esc only with keyboard navigation, which is
         // off. Dialogs (modal) handle Esc themselves.
@@ -79,12 +91,17 @@ void ActionRegistry::HandleShortcuts(const std::vector<ImGuiKeyChord>& pressed) 
     // key can mean different things in different modes (R: rectangle in a
     // sketch, revolve in the model).
     for (const ImGuiKeyChord chord : pressed) {
+        bool ran = false, known = false;
         for (const auto& a : myActions) {
-            if (a.chord != chord || !a.run || !a.IsEnabled()) continue;
+            if (a.chord != chord || !a.run) continue;
+            known = true;
+            if (!a.IsEnabled()) continue;
             mon::Action("key", a.id);
             a.run();
+            ran = true;
             break;
         }
+        if (!ran) skipped(chord, known ? "its command is unavailable now" : "no command has it");
     }
 }
 

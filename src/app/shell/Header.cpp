@@ -177,7 +177,7 @@ void CommandSearch(AppContext& app, ImVec2 pos, float width) {
             const ImVec2 ss = ui.fonts.mono->CalcTextSizeA(ui.S(11), FLT_MAX, 0, sc.c_str());
             pdl->AddText(ui.fonts.mono, ui.S(11), {rp.x + width + ui.S(100) - ss.x, rp.y + ui.S(8)}, ui::ToU32(c.textMuted), sc.c_str());
         }
-        const bool enter = first && fieldActive && ImGui::IsKeyPressed(ImGuiKey_Enter);
+        const bool enter = first && fieldActive && ui::EnterPressed();
         if ((chosen || enter) && enabled && !ran) {
             ran = true;
             const std::string id = a->id;

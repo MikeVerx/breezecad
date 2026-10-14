@@ -519,7 +519,7 @@ void DrawLibrary(AppContext& app) {
     // In an assembly the part goes into it (its file next to the assembly).
     if ((ui::PrimaryButton(ui, "##library-create", intoAssembly ? Tr("Вставить в сборку") : Tr("Создать деталь"), "Enter",
                            {bw, ui.S(36)}, standard != nullptr) ||
-         (standard && ImGui::IsKeyPressed(ImGuiKey_Enter))) &&
+         (standard && ui::EnterPressed())) &&
         standard && (intoAssembly ? PlaceStandardPart(app, request) : CreateStandardPart(app, request)))
         close();
     ImGui::EndPopup();

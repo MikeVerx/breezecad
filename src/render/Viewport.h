@@ -19,6 +19,7 @@
 #include <span>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace bz::kernel {
@@ -122,6 +123,11 @@ public:
 
     /// Renders into the texture. Cheap when nothing changed.
     void Render();
+    /// After Render, before the window's own drawing: puts back what the
+    /// window needs (its framebuffer, back buffer, colour writes, no
+    /// scissor), whatever OCCT left. Returns what was there before, as text
+    /// for the log ("" when nothing has been rendered yet).
+    std::string HandBackToWindow();
     /// OpenGL texture with the last rendered frame (bottom-up rows).
     unsigned TextureId() const;
     /// True when something changed that needs Render().

@@ -301,6 +301,16 @@ void StartTouchpad(GLFWwindow* window) {
     // the app's pointer for XTest's fake motion, so clicks land where the
     // pointer started. scripts/ui-test/ui.sh sets it.
     if (std::getenv("BZ_NO_TOUCHPAD")) return;
+    // Under Wayland the program is an X11 window of XWayland (InitGlfw), and
+    // there this second connection's XInput selection on the window took
+    // the pointer from GLFW: clicks were lost or came a second late
+    // (Hyprland, Arch, 2026-10). Wayland touchpads need a native path, not
+    // XInput; until then the touchpad scrolls as a wheel. BZ_TOUCHPAD=1
+    // turns it on anyway, to check other compositors.
+    if (const char* wayland = std::getenv("WAYLAND_DISPLAY"); wayland && *wayland && !std::getenv("BZ_TOUCHPAD")) {
+        log::Info("Touchpad: off under Wayland (XWayland), touchpad scrolling works as a wheel");
+        return;
+    }
     gX.window = glfwGetX11Window(window);
     if (!gX.window || !(gX.display = XOpenDisplay(nullptr))) return;
     int event = 0, error = 0, major = 2, minor = 4;
