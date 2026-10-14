@@ -5,6 +5,7 @@
   <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-windows.zip"><b>Windows</b></a> ·
   <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-macos.zip"><b>macOS</b></a> ·
   <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-linux.tar.gz"><b>Linux</b></a> ·
+  <a href="https://github.com/MikeVerx/breezecad/releases/tag/modules"><b>Modules</b></a> ·
   <a href="#build-from-source">Build from source</a> ·
   <a href="docs/ARCHITECTURE.md">Architecture</a> ·
   <a href="README.ru.md">Русский</a>
@@ -87,6 +88,19 @@ instructions in Russian.
 Touchpads work on all three systems: two fingers pan (Shift: orbit), pinch
 zooms; on a Mac also turning two fingers, smart zoom and force click.
 Everything is in **Settings → Тачпад**.
+
+The latest numbered release with its notes is on the [Releases](https://github.com/MikeVerx/breezecad/releases/latest) page.
+
+### Modules
+
+Modules add features and are downloaded separately — only the ones you
+need. Every module, what it does and its file for each system are on the
+**[BreezeCAD modules](https://github.com/MikeVerx/breezecad/releases/tag/modules)** page. Install one in **Settings → Модули →
+«Установить модуль…»** or drop the `.bzmod` file onto the program's window.
+
+| Module | What it does |
+| --- | --- |
+| [MCP server for Claude](modules/mcp/README.md) | Claude builds in the open BreezeCAD: sketches, features, assemblies, a picture of the model — 65 tools |
 
 ## Build from source
 
