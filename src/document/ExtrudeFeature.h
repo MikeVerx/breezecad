@@ -11,6 +11,7 @@ enum class ExtentType : unsigned char {
     Symmetric,    ///< `distance` in total, half to each side of the sketch
     ThroughAll,   ///< through the whole body (cuts)
     ToPlane,      ///< up to a plane: an origin or work plane (`toPlane`) or a flat face (`toFace`)
+    Asymmetric,   ///< `distance` along the direction and `distance2` the other way (Inventor's "Asymmetric")
 };
 
 /// Sweeps sketch regions along the sketch normal.
@@ -22,6 +23,8 @@ public:
     bool       reversed = false;
     Parameter  distance{.name = "", .expression = "10", .quantity = Quantity::Length, .value = 10.0, .error = {}};
     Parameter  taper{.name = "", .expression = "0", .quantity = Quantity::Angle, .value = 0.0, .error = {}};
+    /// Asymmetric: the distance on the other side of the sketch.
+    Parameter  distance2{.name = "", .expression = "5", .quantity = Quantity::Length, .value = 5.0, .error = {}};
     ObjectId      toPlane;   ///< ToPlane: an origin plane or a work plane
     FaceReference toFace;    ///< ToPlane: a flat face of the body (when `toPlane` is not set)
 

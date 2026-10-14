@@ -28,7 +28,7 @@ case "$1" in
       sleep 0.3
       mkdir -p "$SHOTS"; rm -f "$SHOTS/request"
       # A UTF-8 locale: zenity (file dialogs) rejects Cyrillic arguments otherwise.
-      (cd "$BIN" && LIBGL_ALWAYS_SOFTWARE=1 LANG=C.UTF-8 BZ_SHOT_DIR="$SHOTS" ./breezecad $2 >/tmp/breezecad-ui.log 2>&1 &)
+      (cd "$BIN" && LIBGL_ALWAYS_SOFTWARE=1 BZ_NO_TOUCHPAD=1 LANG=C.UTF-8 BZ_SHOT_DIR="$SHOTS" ./breezecad $2 >/tmp/breezecad-ui.log 2>&1 &)
       sleep 4
     fi
     for _ in $(seq 40); do xdotool search --name BreezeCAD >/dev/null 2>&1 && break; sleep 0.25; done

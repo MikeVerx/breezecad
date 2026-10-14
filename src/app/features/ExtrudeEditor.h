@@ -29,6 +29,8 @@ protected:
 
 private:
     DragArrow   myArrow;
+    DragArrow   myArrowBack;   ///< asymmetric: the distance on the other side
+    std::string myDistance2;
     bool        myPickTarget = false;   ///< clicks in the view choose the plane "до", not profiles
     std::string myDistance;
     std::string myTaper;

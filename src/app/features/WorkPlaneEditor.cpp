@@ -93,7 +93,8 @@ void WorkPlaneEditor::DrawInViewport(AppContext& app, Session& session, const Vi
         for (const ShownPlane& p : WorkPlanes(session, static_cast<std::size_t>(index) + 1))
             if (p.id == f->id) DrawPlane(app, dl, vf, p, true);
         myArrow.Release();
-        if (PickPoints(app, session, vf, static_cast<std::size_t>(index), 3, f->points, f->pointEdges, f->pointFeatures)) Changed(session);
+        if (PickPoints(app, session, vf, static_cast<std::size_t>(index), 3, myPointSlot, f->points, f->pointEdges, f->pointFeatures))
+            Changed(session);
         return;
     }
     // Through an edge: edges and faces of the body before this plane are picked.
@@ -218,16 +219,49 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
             break;
         case WorkPlaneMethod::Midplane:
             Section(app, Tr("Между"));
-            if (PickChip(ui, "##first", Tr("Первая"), first, mySlot == 0, width)) mySlot = 0;
-            ImGui::Dummy({0, ui.S(4)});
-            if (PickChip(ui, "##second", Tr("Вторая"), StartName(session, f.base2, f.face2), mySlot == 1, width)) mySlot = 1;
+            {
+                bool clear1 = false, clear2 = false;
+                const char* waiting = Tr("ожидает выбора…");
+                if (ui::SelectionSlot(ui, "##first", Tr("Первая"), first, waiting, mySlot == 0, width, &clear1)) mySlot = 0;
+                if (ui::SelectionSlot(ui, "##second", Tr("Вторая"), StartName(session, f.base2, f.face2), waiting, mySlot == 1, width,
+                                      &clear2))
+                    mySlot = 1;
+                if (clear1) {
+                    f.base = {};
+                    f.face = {};
+                    mySlot = 0;
+                    Changed(session);
+                }
+                if (clear2) {
+                    f.base2 = {};
+                    f.face2 = {};
+                    mySlot = 1;
+                    Changed(session);
+                }
+            }
             Caption(app, Tr("Две параллельные плоскости или плоские грани. Щелчок в окне попадает в выделенное поле."), width);
             break;
         case WorkPlaneMethod::Angle:
             Section(app, Tr("Через ребро"));
-            if (PickChip(ui, "##first", Tr("Плоскость"), first, mySlot == 0, width)) mySlot = 0;
-            ImGui::Dummy({0, ui.S(4)});
-            if (PickChip(ui, "##edge", Tr("Ребро"), f.edge ? std::string(Tr("выбрано")) : std::string(), mySlot == 1, width)) mySlot = 1;
+            {
+                bool clear1 = false, clear2 = false;
+                const char* waiting = Tr("ожидает выбора…");
+                if (ui::SelectionSlot(ui, "##first", Tr("Плоскость"), first, waiting, mySlot == 0, width, &clear1)) mySlot = 0;
+                if (ui::SelectionSlot(ui, "##edge", Tr("Ребро"), f.edge ? std::string(Tr("выбрано")) : std::string(), waiting, mySlot == 1,
+                                      width, &clear2))
+                    mySlot = 1;
+                if (clear1) {
+                    f.base = {};
+                    f.face = {};
+                    mySlot = 0;
+                    Changed(session);
+                }
+                if (clear2) {
+                    f.edge.reset();
+                    mySlot = 1;
+                    Changed(session);
+                }
+            }
             Caption(app, Tr("Прямое ребро: новая плоскость проходит через него под углом к исходной. Ребро не должно быть ей перпендикулярно."), width);
             Gap(app);
             Section(app, Tr("Угол"));
@@ -240,10 +274,8 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
             break;
         case WorkPlaneMethod::ThreePoints: {
             Section(app, Tr("Через точки"));
-            const std::string count = f.points.size() >= 3 ? std::string(Tr("выбраны")) : f.points.empty() ? std::string()
-                                                                                            : Trf("{} из 3", f.points.size());
-            PickChip(ui, "##points", Tr("Точки"), count, true, width);
-            Caption(app, Tr("Щёлкните три вершины тела или рабочие точки. Четвёртый щелчок начинает выбор заново. Плоскость следует за ними, когда деталь меняется."), width);
+            if (PointSlots(app, 3, myPointSlot, f.points, f.pointEdges, f.pointFeatures, width)) Changed(session);
+            Caption(app, Tr("Щёлкните три вершины тела или рабочие точки; щелчок по полю выбирает, какую заменить. Плоскость следует за ними, когда деталь меняется."), width);
             break;
         }
     }

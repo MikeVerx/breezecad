@@ -7,6 +7,7 @@
 #include "core/Log.h"
 
 #include <chrono>
+#include <cstdlib>
 #include <utility>
 
 #include <GLFW/glfw3.h>
@@ -296,6 +297,10 @@ void StartTouchpad(GLFWwindow* window) {
 #if GLFW_VERSION_MAJOR > 3 || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 4)
     if (glfwGetPlatform() != GLFW_PLATFORM_X11) return;
 #endif
+    // UI tests on Xvfb: with this XInput selection the X server stops moving
+    // the app's pointer for XTest's fake motion, so clicks land where the
+    // pointer started. scripts/ui-test/ui.sh sets it.
+    if (std::getenv("BZ_NO_TOUCHPAD")) return;
     gX.window = glfwGetX11Window(window);
     if (!gX.window || !(gX.display = XOpenDisplay(nullptr))) return;
     int event = 0, error = 0, major = 2, minor = 4;

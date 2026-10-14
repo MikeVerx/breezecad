@@ -49,6 +49,7 @@ Settings FromJson(const nlohmann::json& j) {
     s.backgroundRebuild = j.value("backgroundRebuild", s.backgroundRebuild);
     s.showTriad       = j.value("showTriad", s.showTriad);
     s.reopenLast      = j.value("reopenLast", s.reopenLast);
+    s.lastNewTemplate = j.value("lastNewTemplate", s.lastNewTemplate);
     // "viewBackground" (0..2) from earlier versions.
     static constexpr const char* kOld[] = {"theme", "light", "dark"};
     s.background = kOld[std::clamp(j.value("viewBackground", 0), 0, 2)];
@@ -58,6 +59,7 @@ Settings FromJson(const nlohmann::json& j) {
     s.orbitSpeed      = std::clamp(j.value("orbitSpeed", s.orbitSpeed), 0.25, 4.0);
     s.invertOrbit     = j.value("invertOrbit", s.invertOrbit);
     s.turntableOrbit  = j.value("turntableOrbit", s.turntableOrbit);
+    s.flickGestures   = j.value("flickGestures", s.flickGestures);
     s.autosaveMinutes = std::clamp(j.value("autosaveMinutes", s.autosaveMinutes), 0, 120);
     s.gridSnap        = j.value("gridSnap", s.gridSnap);
     s.pointSnap       = j.value("pointSnap", s.pointSnap);
@@ -158,12 +160,14 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"uiScale", uiScale},
         {"showTriad", showTriad},
         {"reopenLast", reopenLast},
+        {"lastNewTemplate", lastNewTemplate},
         {"background", background},
         {"backgroundPicture", backgroundPicture},
         {"newPartLength", newPartLength},
         {"orbitSpeed", orbitSpeed},
         {"invertOrbit", invertOrbit},
         {"turntableOrbit", turntableOrbit},
+        {"flickGestures", flickGestures},
         {"language", language},
         {"window", {{"x", windowX}, {"y", windowY}, {"width", windowW}, {"height", windowH}, {"maximized", windowMaximized}}},
         {"shortcuts", ShortcutsJson(shortcuts)},

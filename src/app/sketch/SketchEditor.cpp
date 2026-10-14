@@ -164,6 +164,8 @@ void SketchEditor::Reset() {
     myDragging = false;
     myPressedOnEntity = false;
     myEditDimension = {};
+    myLabelGrab = {};
+    myLabelMoved = false;
 }
 
 void SketchEditor::CreateAndEdit(AppContext& app, Session& session, const doc::SketchPlacement& placement) {
@@ -252,6 +254,8 @@ void SketchEditor::SetTool(AppContext& app, Session& session, SketchTool tool) {
     myFieldSeed.clear();
     myFocusField = mySeedField = -1;
     myBackspaces = 0;
+    myLabelGrab = {};
+    myLabelMoved = false;
     if (tool != SketchTool::Text) EndTextEdit(session);
     myTool = tool;
     myMirrorAxisStep = tool == SketchTool::Mirror && !mySelection.empty();   // chosen beforehand: go to the line
@@ -554,7 +558,8 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
         myBoxStart.reset();
         if (myDragging) {
-            session.CommitInPlaceEdit(std::move(myDragBefore), Tr("Перемещение в эскизе"));
+            const bool label = f->sketch.FindConstraint(myDragEntity) != nullptr;
+            session.CommitInPlaceEdit(std::move(myDragBefore), label ? Tr("Перемещение размера") : Tr("Перемещение в эскизе"));
         } else if (myHover) {
             // Click: select; Shift or Ctrl add to the selection.
             if (!io.KeyShift && !io.KeyCtrl) mySelection.clear();

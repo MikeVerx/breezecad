@@ -75,7 +75,13 @@ Measurement Measure(const TopoDS_Shape& a, const TopoDS_Shape& b) {
         m.to = ToVec(distance.PointOnShape2(1));
     }
     const auto da = Direction(a), db = Direction(b);
-    if (da && db) m.angle = std::acos(std::min(1.0, std::abs(da->Normalized().Dot(db->Normalized()))));
+    if (da && db) {
+        const double between = std::acos(std::min(1.0, std::abs(da->Normalized().Dot(db->Normalized()))));
+        // A face gives its normal: between an edge and a face the angle is
+        // the one to the face's plane, the complement (0 for an edge lying along it).
+        const bool edgeAndFace = (a.ShapeType() == TopAbs_FACE) != (b.ShapeType() == TopAbs_FACE);
+        m.angle = edgeAndFace ? kPi / 2 - between : between;
+    }
     return m;
 }
 

@@ -1,14 +1,27 @@
 #include "app/features/PointPick.h"
 
 #include "app/viewport/Planes.h"
+#include "core/I18n.h"
 #include "ui/Widgets.h"
+
+#include <algorithm>
 
 #include <string>
 
 namespace bz::app {
 
+namespace {
+
+/// A valid slot: an existing point or the next one to add.
+std::size_t ClampSlot(std::size_t active, std::size_t count, std::size_t max) {
+    return std::min({active, count, max - 1});
+}
+
+} // namespace
+
 bool PickPoints(AppContext& app, Session& session, const ViewportFrame& vf, std::size_t featureIndex, std::size_t max,
-                std::vector<Vec3>& points, std::vector<std::optional<doc::EdgeReference>>& edges, std::vector<ObjectId>& workPoints) {
+                std::size_t& active, std::vector<Vec3>& points, std::vector<std::optional<doc::EdgeReference>>& edges,
+                std::vector<ObjectId>& workPoints) {
     app.viewport.BeginPickingOriginal(session.model, featureIndex, render::PickTarget::Vertices);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const std::vector<ShownPoint> shown = WorkPoints(session, featureIndex);
@@ -34,17 +47,49 @@ bool PickPoints(AppContext& app, Session& session, const ViewportFrame& vf, std:
         edge = v->edge;
     }
     if (!at) return false;
-    if (points.size() >= max) {   // one more click starts over
-        points.clear();
-        edges.clear();
-        workPoints.clear();
-    }
     edges.resize(points.size());
     workPoints.resize(points.size());
-    points.push_back(*at);
-    edges.push_back(edge);
-    workPoints.push_back(work);
+    active = ClampSlot(active, points.size(), max);
+    if (active < points.size()) {
+        points[active] = *at;
+        edges[active] = edge;
+        workPoints[active] = work;
+    } else {
+        points.push_back(*at);
+        edges.push_back(edge);
+        workPoints.push_back(work);
+    }
+    // The next empty field; with all filled, the one just set stays chosen.
+    if (points.size() < max) active = points.size();
     return true;
+}
+
+bool PointSlots(AppContext& app, std::size_t max, std::size_t& active, std::vector<Vec3>& points,
+                std::vector<std::optional<doc::EdgeReference>>& edges, std::vector<ObjectId>& workPoints, float width) {
+    edges.resize(points.size());
+    workPoints.resize(points.size());
+    active = ClampSlot(active, points.size(), max);
+    bool changed = false;
+    std::optional<std::size_t> remove;
+    for (std::size_t i = 0; i < max; ++i) {
+        const std::string value = i >= points.size() ? std::string() : workPoints[i] ? std::string(Tr("рабочая точка"))
+                                                                                       : std::string(Tr("вершина"));
+        bool cleared = false;
+        const std::string id = "##point-slot-" + std::to_string(i);
+        // Fields after the next empty one wait for it.
+        if (ui::SelectionSlot(app.ui, id.c_str(), Trf("Точка {}", i + 1), value, Tr("ожидает выбора…"), active == i, width, &cleared))
+            active = std::min(i, points.size());
+        if (cleared) remove = i;
+    }
+    if (remove && *remove < points.size()) {
+        const auto at = static_cast<std::ptrdiff_t>(*remove);
+        points.erase(points.begin() + at);
+        edges.erase(edges.begin() + at);
+        workPoints.erase(workPoints.begin() + at);
+        active = points.size();
+        changed = true;
+    }
+    return changed;
 }
 
 } // namespace bz::app

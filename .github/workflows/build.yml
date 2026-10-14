@@ -8,6 +8,11 @@
 # Every run keeps them as workflow artifacts (Actions → the run → Artifacts);
 # pushes to `next` where every job is green also put all six into the
 # pre-release "next-build" — a stable link to the freshest build.
+#
+# Modules are separate downloads: each platform also packs the modules of
+# modules/ (bz-<id>-<version>-<system>-<arch>.bzmod, artifacts modules-<system>),
+# and a green push to next or main puts them on the release page "modules" —
+# one page listing every module, its description and its file per system.
 name: build
 
 # Documentation-only pushes build nothing. The platforms run side by side;
@@ -51,7 +56,7 @@ jobs:
           cmake --version | head -1
           grep -h "define OCC_VERSION_COMPLETE" /mingw64/include/opencascade/Standard_Version.hxx
       - name: Configure
-        run: OCCT_DIR=/mingw64/lib/cmake/opencascade cmake --preset windows-mingw
+        run: OCCT_DIR=/mingw64/lib/cmake/opencascade cmake --preset windows-mingw -DBZ_BUILD_MCP=ON
       - name: Build
         id: build
         run: cmake --build --preset windows-mingw 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
@@ -104,6 +109,14 @@ jobs:
           name: BreezeCAD-windows
           path: dist/BreezeCAD
           retention-days: 30
+      # The modules: separate packages, installed in "Настройки → Модули".
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        with:
+          name: modules-windows
+          path: build/windows-mingw/packages/*.bzmod
+          if-no-files-found: error
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         with:
@@ -152,7 +165,7 @@ jobs:
           occt=$(grep -h "define OCC_VERSION_COMPLETE" "$CONDA_PREFIX"/include/opencascade/Standard_Version.hxx | awk '{print $3}')
           echo "::notice title=Linux toolchain::$($CXX -dumpfullversion), OCCT $occt, GLFW $(grep -h 'define GLFW_VERSION_M' "$CONDA_PREFIX"/include/GLFW/glfw3.h | awk '{printf "%s.", $3}')"
       - name: Configure
-        run: cmake --preset linux-release -DCMAKE_PREFIX_PATH="$CONDA_PREFIX"
+        run: cmake --preset linux-release -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DBZ_BUILD_MCP=ON
       # Three at a time: with OCCT 8 headers four compilers at once ran the
       # runner out of memory, which killed the build without a message.
       - name: Build
@@ -215,7 +228,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" env -u LD_LIBRARY_PATH BZ_SETTINGS_TAB=3 \
+          timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" env -u LD_LIBRARY_PATH BZ_SETTINGS_TAB=1.2 \
             BZ_SCREENSHOT="$PWD/shots/touchpad.ppm:60" /tmp/start/BreezeCAD/breezecad > settings.log 2>&1
           size=$(head -c 20 shots/touchpad.ppm | tr '\n' ' ' | awk '{print $2, $3}')
           read -r w h <<< "$size"
@@ -234,6 +247,13 @@ jobs:
           name: BreezeCAD-beta-linux
           path: release/BreezeCAD-beta-linux.tar.gz
           compression-level: 0
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        with:
+          name: modules-linux
+          path: build/linux-release/packages/*.bzmod
+          if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
@@ -280,7 +300,7 @@ jobs:
           occt=$(grep -h "define OCC_VERSION_COMPLETE" "$(brew --prefix opencascade)"/include/opencascade/Standard_Version.hxx | awk '{print $3}')
           echo "::notice title=macOS toolchain::$(sw_vers -productVersion) $(uname -m), $(clang++ --version | head -1), OCCT $occt, GLFW $(brew list --versions glfw | awk '{print $2}')"
       - name: Configure
-        run: cmake --preset macos -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+        run: cmake --preset macos -DCMAKE_PREFIX_PATH="$(brew --prefix)" -DBZ_BUILD_MCP=ON
       - name: Build
         id: build
         run: cmake --build --preset macos 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
@@ -335,6 +355,13 @@ jobs:
           name: BreezeCAD-beta-macos
           path: release/BreezeCAD-beta-macos.zip
           compression-level: 0
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        with:
+          name: modules-macos
+          path: build/macos/packages/*.bzmod
+          if-no-files-found: error
           retention-days: 30
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
@@ -429,3 +456,36 @@ jobs:
           fi
           gh release upload "$tag" "${files[@]/#/release/}" --clobber
           echo "::notice title=Release::BreezeCAD $label published as $tag"
+
+  modules:
+    # The page of modules: the release "modules" (not a version of the
+    # program, never "Latest") with every module's packages for every system
+    # and a list — name, version, what it does, which file is for which
+    # system — made from the modules' own module.json. Packages of a version
+    # no longer built are taken down, so the page shows only current ones.
+    needs: [windows, linux, linux-occt76, macos]
+    if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/main') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { pattern: modules-*, path: packages, merge-multiple: true }
+      - name: Publish the modules page
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls packages/*.bzmod >/dev/null || { echo "::error::no module packages"; exit 1; }
+          python3 scripts/modules-page.py modules packages > notes.md
+          if ! gh release view modules >/dev/null 2>&1; then
+            gh release create modules --target "$GITHUB_SHA" --title "Модули BreezeCAD" --notes-file notes.md --latest=false
+          fi
+          gh release upload modules packages/*.bzmod --clobber
+          gh release edit modules --notes-file notes.md --latest=false
+          # Older versions off the page.
+          for old in $(gh release view modules --json assets --jq '.assets[].name'); do
+            test -f "packages/$old" || gh release delete-asset modules "$old" --yes
+          done
+          echo "::notice title=Modules::$(ls packages | wc -l) packages on the release page \"modules\""

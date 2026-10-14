@@ -4,7 +4,7 @@
 set -e
 UI="$(dirname "$0")/ui.sh"
 "$UI" start
-"$UI" clk 460 224            # Новая деталь
+"$UI" clk 599 224            # Новая деталь
 sleep 1
 "$UI" clk 52 115             # Начать эскиз
 "$UI" clk 1060 507           # плоскость XY

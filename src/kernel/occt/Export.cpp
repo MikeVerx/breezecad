@@ -47,7 +47,8 @@ TopoDS_Compound Compound(const std::vector<Body>& bodies) {
 std::vector<Triangle> Triangulate(const std::vector<Body>& bodies, MeshQuality quality) {
     std::vector<Triangle> triangles;
     for (const Body& body : bodies) {
-        BRepMesh_IncrementalMesh mesher(body.shape, quality.chordal, false, quality.angular, true);
+        // Not in parallel: a fault in OCCT's worker threads is not caught (see SetUpOcct).
+        BRepMesh_IncrementalMesh mesher(body.shape, quality.chordal, false, quality.angular, false);
         for (TopExp_Explorer it(body.shape, TopAbs_FACE); it.More(); it.Next()) {
             const TopoDS_Face face = TopoDS::Face(it.Current());
             TopLoc_Location location;

@@ -1,5 +1,6 @@
 #include "kernel/occt/Hole.h"
 
+#include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Extrude.h"   // ApplyBoolean
 #include "kernel/occt/FaceMatch.h"
 
@@ -85,6 +86,37 @@ Expected<TopoDS_Shape> DrillHoles(const TopoDS_Shape& body, const doc::HoleFeatu
     const Expected<TopoDS_Shape> tools = HoleTools(body, f);
     if (!tools) return tools.GetError();
     return ApplyBoolean(body, *tools, doc::BooleanOp::Cut);
+}
+
+std::size_t FollowAxes(const TopoDS_Shape& body, doc::HoleFeature& feature) {
+    std::size_t lost = 0;
+    const Frame plane = doc::PlaneFrame(feature.face);
+    for (doc::HoleAxis& axis : feature.concentric) {
+        if (axis.centre >= feature.centres.size()) continue;
+        std::optional<std::pair<Vec3, Vec3>> line;
+        try {
+            if (axis.edge) {
+                line = ResolveCircle(*axis.edge, body);
+            } else if (axis.cylinder) {
+                if (const auto now = ResolveCylinder(body, *axis.cylinder)) {
+                    axis.cylinder->axisPoint = now->axisPoint;
+                    axis.cylinder->axisDir = now->axisDir;
+                    axis.cylinder->radius = now->radius;
+                    line = std::make_pair(now->axisPoint, now->axisDir.Normalized());
+                }
+            }
+        } catch (const Standard_Failure&) {
+            line.reset();
+        }
+        const double along = line ? line->second.Dot(plane.normal) : 0.0;
+        if (!line || std::abs(along) < 1e-6) {   // gone, or lying in the face's plane: no crossing
+            ++lost;
+            continue;
+        }
+        const double t = (plane.origin - line->first).Dot(plane.normal) / along;
+        feature.centres[axis.centre] = plane.ToLocal(line->first + line->second * t);
+    }
+    return lost;
 }
 
 } // namespace bz::kernel::occt

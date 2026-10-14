@@ -198,16 +198,23 @@ Expected<TopoDS_Shape> MakeExtrusion(const std::vector<TopoDS_Face>& faces, cons
     }
     if (length <= 1e-6) return Error{"Расстояние должно быть больше нуля"};
 
-    // Symmetric (and through-all both ways) start half a length behind the plane.
-    const bool symmetric = f.extent == doc::ExtentType::Symmetric;
+    // Symmetric starts half the length behind the sketch plane; asymmetric
+    // starts `distance2` behind it and goes `distance` beyond it.
+    double behind = 0.0;
+    if (f.extent == doc::ExtentType::Symmetric) behind = length / 2.0;
+    if (f.extent == doc::ExtentType::Asymmetric) {
+        if (f.distance2.value <= 1e-6) return Error{"Расстояние должно быть больше нуля"};
+        behind = f.distance2.value;
+        length += behind;
+    }
     gp_Trsf shift;
-    if (symmetric) shift.SetTranslation(dir * (-length / 2.0));
+    if (behind > 0.0) shift.SetTranslation(dir * (-behind));
 
     try {
         TopoDS_Shape result;
         for (const TopoDS_Face& face : faces) {
             const TopoDS_Face start =
-                symmetric ? TopoDS::Face(BRepBuilderAPI_Transform(face, shift, true).Shape()) : face;
+                behind > 0.0 ? TopoDS::Face(BRepBuilderAPI_Transform(face, shift, true).Shape()) : face;
             TopoDS_Shape piece = Sweep(start, dir, length, f.taper.value);
             if (IsEmpty(piece)) return Error{"Не удалось построить выдавливание (уклон слишком большой?)"};
             result = result.IsNull() ? piece : BRepAlgoAPI_Fuse(result, piece).Shape();
@@ -229,6 +236,20 @@ Expected<TopoDS_Shape> MakeExtrusion(const std::vector<TopoDS_Face>& faces, cons
 
 namespace {
 
+/// `Op` (Fuse, Cut, Common) of `a` and `b`. On the calling thread, as every
+/// boolean (SetUpOcct in Model.cpp turns OCCT's parallel mode off).
+template <class Op>
+TopoDS_Shape RunBoolean(const TopoDS_Shape& a, const TopoDS_Shape& b) {
+    TopTools_ListOfShape arguments, tools;
+    arguments.Append(a);
+    tools.Append(b);
+    Op op;
+    op.SetArguments(arguments);
+    op.SetTools(tools);
+    op.Build();
+    return op.Shape();   // throws StdFail_NotDone when it failed
+}
+
 /// What every boolean result goes through: not empty, cleaned, valid.
 Expected<TopoDS_Shape> FinishBoolean(const TopoDS_Shape& raw, doc::BooleanOp op) {
     if (IsEmpty(raw)) {
@@ -242,14 +263,16 @@ Expected<TopoDS_Shape> FinishBoolean(const TopoDS_Shape& raw, doc::BooleanOp op)
 
 } // namespace
 
+TopoDS_Shape Fuse(const TopoDS_Shape& a, const TopoDS_Shape& b) { return RunBoolean<BRepAlgoAPI_Fuse>(a, b); }
+
 Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const TopoDS_Shape& tool, doc::BooleanOp op) {
     try {
         TopoDS_Shape result;
         switch (op) {
             case doc::BooleanOp::NewBody:   return tool;
-            case doc::BooleanOp::Join:      result = BRepAlgoAPI_Fuse(target, tool).Shape(); break;
-            case doc::BooleanOp::Cut:       result = BRepAlgoAPI_Cut(target, tool).Shape(); break;
-            case doc::BooleanOp::Intersect: result = BRepAlgoAPI_Common(target, tool).Shape(); break;
+            case doc::BooleanOp::Join:      result = RunBoolean<BRepAlgoAPI_Fuse>(target, tool); break;
+            case doc::BooleanOp::Cut:       result = RunBoolean<BRepAlgoAPI_Cut>(target, tool); break;
+            case doc::BooleanOp::Intersect: result = RunBoolean<BRepAlgoAPI_Common>(target, tool); break;
         }
         return FinishBoolean(result, op);
     } catch (const Standard_Failure& failure) {

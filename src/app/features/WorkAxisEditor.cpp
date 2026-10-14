@@ -81,7 +81,7 @@ void WorkAxisEditor::DrawInViewport(AppContext& app, Session& session, const Vie
             }
             break;
         case WorkAxisMethod::Points:
-            if (PickPoints(app, session, vf, static_cast<std::size_t>(index), 2, f->points, f->pointEdges, f->pointFeatures))
+            if (PickPoints(app, session, vf, static_cast<std::size_t>(index), 2, myPointSlot, f->points, f->pointEdges, f->pointFeatures))
                 Changed(session);
             break;
         case WorkAxisMethod::Planes: {
@@ -131,17 +131,29 @@ void WorkAxisEditor::DrawBody(AppContext& app, Session& session, doc::Feature& f
             Caption(app, Tr("Щёлкните прямое ребро тела."), width);
             break;
         case WorkAxisMethod::Planes:
-            if (PickChip(ui, "##first", Tr("Первая"), PlaneName(session, f.plane1), mySlot == 0, width)) mySlot = 0;
-            ImGui::Dummy({0, ui.S(4)});
-            if (PickChip(ui, "##second", Tr("Вторая"), PlaneName(session, f.plane2), mySlot == 1, width)) mySlot = 1;
+            {
+                bool clear1 = false, clear2 = false;
+                const char* waiting = Tr("ожидает выбора…");
+                if (ui::SelectionSlot(ui, "##first", Tr("Первая"), PlaneName(session, f.plane1), waiting, mySlot == 0, width, &clear1))
+                    mySlot = 0;
+                if (ui::SelectionSlot(ui, "##second", Tr("Вторая"), PlaneName(session, f.plane2), waiting, mySlot == 1, width, &clear2))
+                    mySlot = 1;
+                if (clear1) {
+                    f.plane1 = {};
+                    mySlot = 0;
+                    Changed(session);
+                }
+                if (clear2) {
+                    f.plane2 = {};
+                    mySlot = 1;
+                    Changed(session);
+                }
+            }
             Caption(app, Tr("Плоскости начала координат или рабочие; ось — линия их пересечения."), width);
             break;
         case WorkAxisMethod::Points: {
-            const std::string count = f.points.size() >= 2 ? std::string(Tr("выбраны"))
-                                    : f.points.empty()     ? std::string()
-                                                           : Trf("{} из 2", f.points.size());
-            PickChip(ui, "##points", Tr("Точки"), count, true, width);
-            Caption(app, Tr("Щёлкните две вершины тела или рабочие точки. Третий щелчок начинает выбор заново."), width);
+            if (PointSlots(app, 2, myPointSlot, f.points, f.pointEdges, f.pointFeatures, width)) Changed(session);
+            Caption(app, Tr("Щёлкните две вершины тела или рабочие точки; щелчок по полю выбирает, какую заменить."), width);
             break;
         }
     }

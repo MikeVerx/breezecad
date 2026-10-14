@@ -4,6 +4,8 @@
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepPrimAPI_MakeRevol.hxx>
@@ -12,6 +14,7 @@
 #include <TopoDS.hxx>
 #include <format>
 #include <gp_Ax1.hxx>
+#include <gp_Lin.hxx>
 #include <gp_Trsf.hxx>
 
 #include <algorithm>
@@ -65,6 +68,65 @@ bool CrossesAxis(const std::vector<TopoDS_Face>& faces, const gp_Ax1& axis, cons
     return lo < -tolerance && hi > tolerance;
 }
 
+/// How near the axis counts as on it, mm. Generous on purpose: a profile a
+/// hair off the axis makes a sliver surface OCCT handles no better than a
+/// touch.
+constexpr double kOnAxis = 1e-4;
+
+/// True when the profile meets the axis at a single point (a corner or a
+/// tangent arc) instead of along a side lying on the axis. Turning it gives
+/// a solid pinched to a point there — OCCT builds it but its booleans and
+/// later operations may fail or crash on it.
+bool TouchesAxisAtPoint(const std::vector<TopoDS_Face>& faces, const gp_Ax1& axis) {
+    const gp_Lin line(axis);
+    const gp_Vec dir(axis.Direction());
+    const auto along = [&](const gp_Pnt& p) { return gp_Vec(axis.Location(), p).Dot(dir); };
+    // Sides lying on the axis, as intervals along it.
+    std::vector<std::pair<double, double>> onAxis;
+    std::vector<TopoDS_Edge> others;
+    double lo = 1e300, hi = -1e300;
+    for (const TopoDS_Face& face : faces)
+        for (TopExp_Explorer e(face, TopAbs_EDGE); e.More(); e.Next()) {
+            const TopoDS_Edge& edge = TopoDS::Edge(e.Current());
+            const BRepAdaptor_Curve curve(edge);
+            bool on = true;
+            double a = 1e300, b = -1e300;
+            for (int i = 0; i <= 8; ++i) {
+                const gp_Pnt p = curve.Value(curve.FirstParameter() + (curve.LastParameter() - curve.FirstParameter()) * i / 8.0);
+                on = on && line.Distance(p) < kOnAxis;
+                a = std::min(a, along(p));
+                b = std::max(b, along(p));
+            }
+            lo = std::min(lo, a);
+            hi = std::max(hi, b);
+            if (on) onAxis.emplace_back(a, b);
+            else others.push_back(edge);
+        }
+    if (others.empty() || lo > hi) return false;
+    const double reach = hi - lo + 10.0;
+    const TopoDS_Edge axisEdge =
+        BRepBuilderAPI_MakeEdge(axis.Location().Translated(gp_Vec(dir) * (lo - reach)), axis.Location().Translated(gp_Vec(dir) * (hi + reach)));
+    for (const TopoDS_Edge& edge : others) {
+        BRepExtrema_DistShapeShape distance;
+        try {
+            distance.LoadS1(edge);
+            distance.LoadS2(axisEdge);
+            distance.Perform();
+        } catch (const Standard_Failure&) {
+            continue;   // cannot tell: leave it to the revolve itself
+        }
+        if (!distance.IsDone() || distance.Value() > kOnAxis) continue;
+        for (int i = 1; i <= distance.NbSolution(); ++i) {
+            const double t = along(distance.PointOnShape1(i));
+            const bool covered = std::ranges::any_of(onAxis, [&](const auto& span) {
+                return t > span.first - kOnAxis && t < span.second + kOnAxis;
+            });
+            if (!covered) return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 Expected<TopoDS_Shape> MakeRevolution(const std::vector<TopoDS_Face>& faces, const doc::RevolveFeature& f,
@@ -73,6 +135,8 @@ Expected<TopoDS_Shape> MakeRevolution(const std::vector<TopoDS_Face>& faces, con
     Expected<gp_Ax1> axis = AxisOf(f, sk, frame);
     if (!axis) return axis.GetError();
     if (CrossesAxis(faces, *axis, frame)) return Error{"Ось вращения пересекает контур — контур должен лежать по одну сторону от оси"};
+    if (TouchesAxisAtPoint(faces, *axis))
+        return Error{"Контур касается оси вращения в точке — отодвиньте его от оси или положите на ось целую сторону контура"};
 
     double angle = 2 * kPi;
     if (f.extent != doc::RevolveExtent::Full) {
@@ -94,7 +158,7 @@ Expected<TopoDS_Shape> MakeRevolution(const std::vector<TopoDS_Face>& faces, con
             const TopoDS_Shape start = symmetric ? BRepBuilderAPI_Transform(face, back, true).Shape() : TopoDS_Shape(face);
             BRepPrimAPI_MakeRevol revol(start, turnAxis, angle, true);
             if (!revol.IsDone()) return Error{"Не удалось построить вращение"};
-            result = result.IsNull() ? revol.Shape() : BRepAlgoAPI_Fuse(result, revol.Shape()).Shape();
+            result = result.IsNull() ? revol.Shape() : Fuse(result, revol.Shape());
         }
         result = Clean(result);
         if (!BRepCheck_Analyzer(result).IsValid()) return Error{"Вращение дало некорректное тело"};

@@ -5,6 +5,7 @@
   <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-windows.zip"><b>Windows</b></a> ·
   <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-macos.zip"><b>macOS</b></a> ·
   <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-linux.tar.gz"><b>Linux</b></a> ·
+  <a href="https://github.com/MikeVerx/breezecad/releases/tag/modules"><b>Модули</b></a> ·
   <a href="#сборка-из-исходников">Сборка из исходников</a> ·
   <a href="docs/ARCHITECTURE.md">Архитектура</a> ·
   <a href="README.md">English</a>
@@ -80,6 +81,20 @@ macOS один раз его остановит. Правой кнопкой п�
 Тачпад работает на всех трёх системах: два пальца — сдвиг (с Shift — вращение),
 щипок — масштаб; на маке ещё поворот двумя пальцами, «умный зум» и сильное
 нажатие. Всё — в **Настройки → Тачпад**.
+
+Последний пронумерованный выпуск с описанием изменений — на странице
+[«Выпуски»](https://github.com/MikeVerx/breezecad/releases/latest).
+
+### Модули
+
+Модули добавляют программе новые возможности и скачиваются отдельно: только
+те, что нужны. Все модули, что они делают и файлы под каждую систему — на
+странице **[«Модули BreezeCAD»](https://github.com/MikeVerx/breezecad/releases/tag/modules)**. Ставятся в **Настройки → Модули →
+«Установить модуль…»** или перетаскиванием файла `.bzmod` в окно программы.
+
+| Модуль | Что делает |
+| --- | --- |
+| [MCP-сервер для Claude](modules/mcp/README.md) | Claude строит в открытом BreezeCAD: эскизы, операции, сборки, картинка модели — 65 инструментов |
 
 ## Сборка из исходников
 

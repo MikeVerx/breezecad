@@ -353,11 +353,16 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
     IdGenerator& ids = session.doc.Ids();
     // Neighbouring edges share their ends: one projected point for both.
     const double tolerance = std::max(view.MmPerPixel(), 1e-6) * 1e-3;
+    // An independent projection unmarks its points as soon as a curve is
+    // placed, so they are also remembered here: otherwise every corner of a
+    // projected face got two loose points, one per edge, each fixed apart.
+    std::vector<ObjectId> placed;
     const auto point = [&](Vec2 at) {
         for (const sketch::Point& p : sk.points)
-            if (p.projected && (p.pos - at).Length() < tolerance) return p.id;
+            if ((p.projected || std::ranges::find(placed, p.id) != placed.end()) && (p.pos - at).Length() < tolerance) return p.id;
         const ObjectId id = sk.AddPoint(ids, at);
         sk.FindPoint(id)->projected = true;
+        placed.push_back(id);
         return id;
     };
     // Puts one projected curve into the sketch; `link` makes it follow the
@@ -1589,11 +1594,36 @@ void SketchEditor::HandleConstraint(AppContext& app, Session& session, const Ske
 
 void SketchEditor::HandleDimension(AppContext& app, Session& session, const SketchView& view) {
     doc::SketchFeature* f = Active(session);
+    // The text of a dimension already there: dragged, it moves (as in the
+    // "Выбор" tool and in Inventor); clicked, its value is edited.
+    if (myLabelGrab) {
+        sketch::Constraint* c = f->sketch.FindConstraint(myLabelGrab);
+        if (c && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            if (!myLabelMoved && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 3.0f)) {
+                myLabelMoved = true;
+                myDragBefore = f->Clone();
+            }
+            if (myLabelMoved && myCursor)
+                if (const auto anchor = DimensionAnchor(f->sketch, *c)) c->labelOffset = myDragLabelStart + (*myCursor - myDragStart) - *anchor;
+            return;
+        }
+        if (c && myLabelMoved && myDragBefore) session.CommitInPlaceEdit(std::move(myDragBefore), Tr("Перемещение размера"));
+        else if (c) StartInlineEdit(*c);
+        myLabelGrab = {};
+        myLabelMoved = false;
+        myDragBefore.reset();
+        return;
+    }
     if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left) || !myCursor) return;
 
     if (myHover && myHover.kind == EntityKind::Constraint && myPicks.empty()) {
         if (const sketch::Constraint* c = f->sketch.FindConstraint(myHover.id); c && sketch::IsDimensional(c->type))
-            StartInlineEdit(*c);
+            if (const auto layout = LayoutDimension(f->sketch, *c, session.doc.units)) {
+                myLabelGrab = c->id;
+                myLabelMoved = false;
+                myDragStart = *myCursor;
+                myDragLabelStart = layout->label;
+            }
         return;
     }
     if (myHover && myHover.kind != EntityKind::Constraint && myPicks.size() < 2 &&

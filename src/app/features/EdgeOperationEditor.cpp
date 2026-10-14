@@ -33,7 +33,15 @@ void EdgeOperationEditor::StartNext(AppContext& app, Session& session, const doc
         std::vector<Parameter*> to;
         next->CollectParameters(to);
         const auto from = previous.Parameters();
-        for (std::size_t i = 0; i < to.size() && i < from.size(); ++i) to[i]->expression = from[i]->expression;
+        for (std::size_t i = 0; i < to.size() && i < from.size(); ++i) {
+            to[i]->expression = from[i]->expression;
+            if (to[i]->name.empty() && !from[i]->name.empty()) to[i]->name = session.doc.NextParameterName();
+        }
+        if (auto* chamfer = dynamic_cast<doc::ChamferFeature*>(next))
+            if (const auto* before = dynamic_cast<const doc::ChamferFeature*>(&previous)) {
+                chamfer->mode = before->mode;
+                chamfer->flipped = before->flipped;
+            }
         LoadTexts(*next);
         Changed(session);
     }
@@ -94,7 +102,8 @@ void EdgeOperationEditor::DrawInViewport(AppContext& app, Session& session, cons
     if (index < 0) return;
     app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index),
                                       myByFace ? render::PickTarget::Faces : render::PickTarget::Edges);
-    app.viewport.SetMarkedEdges(f->edges);
+    if (myHighlightEdge && *myHighlightEdge < f->edges.size()) app.viewport.SetMarkedEdges({f->edges[*myHighlightEdge]});
+    else app.viewport.SetMarkedEdges(f->edges);
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
     if (myByFace) {
@@ -153,13 +162,87 @@ std::unique_ptr<doc::EdgeFeature> ChamferEditor::Create(Session& session) const 
 }
 
 void ChamferEditor::LoadTexts(const doc::Feature& feature) {
-    myDistance = static_cast<const doc::ChamferFeature&>(feature).distance.expression;
+    const auto& f = static_cast<const doc::ChamferFeature&>(feature);
+    myDistance = f.distance.expression;
+    myDistance2 = f.distance2.expression;
+    myAngle = f.angle.expression;
 }
 
 void ChamferEditor::DrawSize(AppContext& app, Session& session, doc::EdgeFeature& feature, float width) {
-    Section(app, Tr("Расстояние"));
-    ParameterField(app, session, "distance", myDistance, static_cast<doc::ChamferFeature&>(feature).distance, width,
-                   myFocusFirstField);
+    auto& f = static_cast<doc::ChamferFeature&>(feature);
+    using doc::ChamferMode;
+    Section(app, Tr("Способ"));
+    {
+        static constexpr std::array<const char*, 3> modes{N_("Равные"), N_("С углом"), N_("Два размера")};
+        const int current = static_cast<int>(f.mode);
+        if (const int chosen = ui::Segmented(app.ui, "chamfer-mode", modes, current, 3, width); chosen != current) {
+            f.mode = static_cast<ChamferMode>(chosen);
+            // A size shown for the first time gets its name in the variables.
+            if (f.mode == ChamferMode::TwoDistances && f.distance2.name.empty()) f.distance2.name = session.doc.NextParameterName();
+            if (f.mode == ChamferMode::DistanceAngle && f.angle.name.empty()) f.angle.name = session.doc.NextParameterName();
+            Changed(session);
+        }
+    }
+    Gap(app);
+    switch (f.mode) {
+        case ChamferMode::EqualDistance:
+            Section(app, Tr("Расстояние"));
+            ParameterField(app, session, "distance", myDistance, f.distance, width, myFocusFirstField);
+            return;
+        case ChamferMode::DistanceAngle:
+            Section(app, Tr("Расстояние"));
+            ParameterField(app, session, "distance", myDistance, f.distance, width, myFocusFirstField);
+            ImGui::Dummy({0, app.ui.S(6)});
+            Section(app, Tr("Угол"));
+            ParameterField(app, session, "angle", myAngle, f.angle, width, false);
+            Caption(app, Tr("Расстояние откладывается по опорной грани, угол — между фаской и этой гранью (больше 0° и меньше 90°)."),
+                    width);
+            break;
+        case ChamferMode::TwoDistances:
+            Section(app, Tr("Расстояние 1"));
+            ParameterField(app, session, "distance", myDistance, f.distance, width, myFocusFirstField);
+            ImGui::Dummy({0, app.ui.S(6)});
+            Section(app, Tr("Расстояние 2"));
+            ParameterField(app, session, "distance2", myDistance2, f.distance2, width, false);
+            Caption(app, Tr("Расстояние 1 — по опорной грани, расстояние 2 — по другой грани ребра."), width);
+            break;
+    }
+    Gap(app);
+    Section(app, Tr("Опорная грань"));
+    {
+        static constexpr std::array<const char*, 2> sides{N_("Прямо"), N_("Наоборот")};
+        const int current = f.flipped ? 1 : 0;
+        if (const int chosen = ui::Segmented(app.ui, "chamfer-side", sides, current, 2, width); chosen != current) {
+            f.flipped = chosen == 1;
+            Changed(session);
+        }
+        Caption(app, Tr("У ребра две грани. Опорная — та, что смотрит выше (по оси Z); у вертикальных рёбер — "
+                        "по оси Y, затем X. «Наоборот» меняет грани местами у всех рёбер, кнопка у ребра — только у него."),
+                width);
+    }
+    // Each edge on its own: hovering a row shows that edge alone in the view.
+    myHighlightEdge.reset();
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    for (std::size_t i = 0; i < f.edges.size(); ++i) {
+        ImGui::PushID(static_cast<int>(i));
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float h = ui.S(30), bw = ui.S(110);
+        ImGui::InvisibleButton("##edge-row", {width - bw - ui.S(6), h});
+        const bool hovered = ImGui::IsItemHovered();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        if (hovered) dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.hover), ui.S(6));
+        const std::string label = Trf("Ребро {}", i + 1);
+        dl->AddText(ui.fonts.body, ui.S(13), {p.x + ui.S(10), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), label.c_str());
+        ImGui::SameLine(0, ui.S(6));
+        const bool turned = f.FlippedAt(i);
+        if (ui::SecondaryButton(ui, "##flip-edge", turned ? Tr("Наоборот") : Tr("Прямо"), nullptr, {bw, h})) {
+            f.FlipAt(i);
+            Changed(session);
+        }
+        if (hovered || ImGui::IsItemHovered()) myHighlightEdge = i;
+        ImGui::PopID();
+    }
 }
 
 } // namespace bz::app

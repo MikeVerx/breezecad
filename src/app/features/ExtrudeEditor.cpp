@@ -34,6 +34,7 @@ void ExtrudeEditor::LoadTexts(const doc::Feature& feature) {
     const auto& f = static_cast<const doc::ExtrudeFeature&>(feature);
     myDistance = f.distance.expression;
     myTaper = f.taper.expression;
+    myDistance2 = f.distance2.expression;
 }
 
 void ExtrudeEditor::CarryOver(const doc::SketchSolidFeature& previous, doc::SketchSolidFeature& next) const {
@@ -41,6 +42,7 @@ void ExtrudeEditor::CarryOver(const doc::SketchSolidFeature& previous, doc::Sket
     auto& f = static_cast<doc::ExtrudeFeature&>(next);
     f.extent = prev.extent;
     f.reversed = prev.reversed;
+    f.distance2.expression = prev.distance2.expression;
 }
 
 bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::SketchSolidFeature& feature, const SketchView& view) {
@@ -74,6 +76,7 @@ bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::Sketc
         }
         return true;
     }
+    if (f.extent != ExtentType::Asymmetric || f.distance2.HasError()) myArrowBack.Release();
     if (f.extent == ExtentType::ThroughAll || f.distance.HasError()) {
         myArrow.Release();
         return false;
@@ -84,18 +87,30 @@ bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::Sketc
         return false;
     }
     const bool symmetric = f.extent == ExtentType::Symmetric;
+    const bool asymmetric = f.extent == ExtentType::Asymmetric;
     const Vec3 dir = view.frame.normal * (f.reversed ? -1.0 : 1.0);
+    const double step = DragStep(view.MmPerPixel());
+    if (asymmetric && !f.distance2.HasError()) {
+        // The other side has its own arrow; neither turns around.
+        const std::string back = FormatValue(f.distance2.value, Quantity::Length, session.doc.units, 2) + " " +
+                                 UnitLabel(Quantity::Length, session.doc.units);
+        if (auto along = myArrowBack.Update(app, view.vf, view.frame.ToWorld(*middle), dir * -1.0, f.distance2.value, back)) {
+            myDistance2 = FormatValue(std::max(*along, step), Quantity::Length, session.doc.units, 3);
+            f.distance2.expression = myDistance2;
+            Changed(session);
+        }
+        if (myArrowBack.Hot()) return true;
+    }
     const double reach = symmetric ? f.distance.value / 2 : f.distance.value;
     const std::string label = FormatValue(f.distance.value, Quantity::Length, session.doc.units, 2) + " " +
                               UnitLabel(Quantity::Length, session.doc.units);
     if (auto along = myArrow.Update(app, view.vf, view.frame.ToWorld(*middle), dir, reach, label)) {
         // Dragged past the sketch plane: the other direction.
-        if (*along < 0 && !symmetric) {
+        if (*along < 0 && !symmetric && !asymmetric) {
             f.reversed = !f.reversed;
             *along = -*along;
             myArrow.Flipped();
         }
-        const double step = DragStep(view.MmPerPixel());
         const double total = std::max(symmetric ? 2 * *along : *along, step);
         myDistance = FormatValue(total, Quantity::Length, session.doc.units, 3);
         f.distance.expression = myDistance;
@@ -116,17 +131,28 @@ void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
 
     Section(app, Tr("Направление"));
     {
-        static constexpr std::array<const char*, 3> labels{N_("Прямое"), N_("Обратное"), N_("Симметрично")};
-        const int current = f.extent == ExtentType::Symmetric ? 2 : f.reversed ? 1 : 0;
+        const bool both = f.extent == ExtentType::Symmetric || f.extent == ExtentType::Asymmetric;
+        static constexpr std::array<const char*, 3> labels{N_("Прямое"), N_("Обратное"), N_("В обе стороны")};
+        const int current = both ? 2 : f.reversed ? 1 : 0;
         const int chosen = ui::Segmented(ui, "dir", labels, current, 3, width);
         if (chosen != current) {
             f.reversed = chosen == 1;
             if (chosen == 2) f.extent = ExtentType::Symmetric;
-            else if (f.extent == ExtentType::Symmetric) f.extent = ExtentType::Distance;
+            else if (both) f.extent = ExtentType::Distance;
             Changed(session);
         }
+        if (f.extent == ExtentType::Symmetric || f.extent == ExtentType::Asymmetric) {
+            ImGui::Dummy({0, ui.S(6)});
+            static constexpr std::array<const char*, 2> split{N_("Поровну"), N_("Несимметрично")};
+            const int now = f.extent == ExtentType::Asymmetric ? 1 : 0;
+            if (const int picked = ui::Segmented(ui, "split", split, now, 2, width); picked != now) {
+                f.extent = picked == 1 ? ExtentType::Asymmetric : ExtentType::Symmetric;
+                if (f.extent == ExtentType::Asymmetric && f.distance2.name.empty()) f.distance2.name = session.doc.NextParameterName();
+                Changed(session);
+            }
+        }
         if (f.extent != ExtentType::Symmetric && f.extent != ExtentType::ToPlane &&
-            ui::LinkButton(ui, "##flip", Tr("Изменить направление"))) {
+            ui::LinkButton(ui, "##flip", f.extent == ExtentType::Asymmetric ? Tr("Поменять стороны") : Tr("Изменить направление"))) {
             f.reversed = !f.reversed;
             Changed(session);
         }
@@ -170,6 +196,14 @@ void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
     if (f.extent == ExtentType::Distance || f.extent == ExtentType::Symmetric) {
         Section(app, f.extent == ExtentType::Symmetric ? Tr("Расстояние (всего)") : Tr("Расстояние"));
         ParameterField(app, session, "distance", myDistance, f.distance, width, myFocusFirstField);
+        Gap(app);
+    }
+    if (f.extent == ExtentType::Asymmetric) {
+        Section(app, Tr("Расстояние 1"));
+        ParameterField(app, session, "distance", myDistance, f.distance, width, myFocusFirstField);
+        ImGui::Dummy({0, ui.S(6)});
+        Section(app, Tr("Расстояние 2 (в другую сторону)"));
+        ParameterField(app, session, "distance2", myDistance2, f.distance2, width, false);
         Gap(app);
     }
 

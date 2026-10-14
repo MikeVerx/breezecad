@@ -13,6 +13,7 @@
 #include "document/SweepFeature.h"
 #include "document/ThreadFeature.h"
 
+#include <string>
 #include <cmath>
 
 #include <format>
@@ -56,16 +57,27 @@ Json Extrude(AppContext& app, const Json& args) {
     s.RebuildNow();
     auto f = std::make_unique<doc::ExtrudeFeature>();
     FillSolid(s, args, *f);
-    static const std::vector<std::string> kExtents = {"distance", "symmetric", "through_all"};
-    f->extent   = static_cast<doc::ExtentType>(Choice(args, "extent", kExtents, 0));
+    static const std::vector<std::string> kExtents = {"distance", "symmetric", "through_all", "asymmetric"};
+    // Choice gives the index in kExtents; ExtentType has ToPlane between them.
+    const std::size_t extent = Choice(args, "extent", kExtents, 0);
+    f->extent   = extent == 3 ? doc::ExtentType::Asymmetric : static_cast<doc::ExtentType>(extent);
     f->reversed = Flag(args, "reversed", false);
+    // Names in a row: the extrusion is not in the document yet, so
+    // NextParameterName would give each of its parameters the same one.
+    const int first = std::stoi(s.doc.NextParameterName().substr(1));
+    int given = 0;
+    const auto nextName = [&] { return "d" + std::to_string(first + given++); };
     // Through all needs no distance: no named parameter that drives nothing.
     if (f->extent != doc::ExtentType::ThroughAll) {
-        f->distance.name       = s.doc.NextParameterName();
+        f->distance.name       = nextName();
         f->distance.expression = Expression(args, "distance");
     }
+    if (f->extent == doc::ExtentType::Asymmetric) {   // the other side
+        f->distance2.name       = nextName();
+        f->distance2.expression = Expression(args, "distance2");
+    }
     if (Has(args, "taper")) {   // named like the distance: part.set_parameter can change it
-        f->taper.name       = s.doc.NextParameterName();
+        f->taper.name       = nextName();
         f->taper.expression = Expression(args, "taper");
     }
     return Finish(s, std::move(f), args, "Выдавливание");
@@ -222,7 +234,10 @@ void AddSolidCommands(Commands& out) {
                    "Возвращает состояние операции (при ошибке — сообщение) и объём детали.",
                    SolidSchema({{"distance", ExpressionArg("Расстояние, мм.")},
                                 {"extent", EnumArg("distance — на расстояние (по умолчанию), symmetric — в обе стороны поровну, "
-                                                   "through_all — насквозь (для cut).", {"distance", "symmetric", "through_all"})},
+                                                   "through_all — насквозь (для cut), asymmetric — distance в направлении и "
+                                                   "distance2 в обратную сторону.",
+                                                   {"distance", "symmetric", "through_all", "asymmetric"})},
+                                {"distance2", ExpressionArg("asymmetric: расстояние в обратную сторону, мм.")},
                                 {"reversed", BoolArg("В другую сторону.")},
                                 {"taper", ExpressionArg("Уклон, градусы.")}},
                                {}),

@@ -53,13 +53,37 @@ Json Hole(AppContext& app, const Json& args) {
     auto f  = std::make_unique<doc::HoleFeature>();
     f->face = face.ref;
     const Frame frame = doc::PlaneFrame(face.ref);
-    const Json& centres = Required(args, "centers");
-    if (!centres.is_array() || centres.empty()) Fail("«centers» — непустой список точек [x, y, z] на грани");
-    for (const Json& c : centres) {
+    for (const Json& c : args.value("centers", Json::array())) {
         const Vec3 p = Point3(c, "centers");
         if (std::abs((p - frame.origin).Dot(frame.normal)) > 0.5) Fail("Центр отверстия не лежит на выбранной грани (проверьте z/нормаль)");
         f->centres.push_back(frame.ToLocal(p));
     }
+    // Coaxial centres: on the axis of a round edge or a cylindrical face,
+    // following it when the part changes (as "Соосно" in the panel).
+    for (const Json& c : args.value("coaxial", Json::array())) {
+        doc::HoleAxis axis;
+        Vec3 point, dir;
+        if (c.contains("edge")) {
+            const kernel::EdgeInfo& e = EdgeArg(s, c["edge"], "coaxial.edge");
+            if (e.kind != doc::CurveKind::Circle || !e.centre) Fail("«coaxial.edge» — круглое ребро");
+            axis.edge = e.ref;
+            point = *e.centre;
+            dir = e.direction;
+        } else if (c.contains("face")) {
+            const kernel::FaceInfo& cyl = FaceArg(s, c["face"], "coaxial.face");
+            if (cyl.kind != doc::SurfaceKind::Cylinder || !cyl.axis) Fail("«coaxial.face» — цилиндрическая грань");
+            axis.cylinder = doc::CylinderTouch{cyl.axis->axisPoint, cyl.axis->axisDir, cyl.axis->radius, {}};
+            point = cyl.axis->axisPoint;
+            dir = cyl.axis->axisDir.Normalized();
+        } else {
+            Fail("«coaxial» — список {\"edge\": N} или {\"face\": N}");
+        }
+        if (std::abs(dir.Normalized().Dot(frame.normal)) < 0.999) Fail("Ось кромки или цилиндра не перпендикулярна грани отверстия");
+        axis.centre = f->centres.size();
+        f->centres.push_back(frame.ToLocal(point + dir * ((frame.origin - point).Dot(frame.normal) / dir.Dot(frame.normal))));
+        f->concentric.push_back(axis);
+    }
+    if (f->centres.empty()) Fail("Нужен хотя бы один центр: «centers» (точки на грани) или «coaxial» (кромка или цилиндр)");
     static const std::vector<std::string> kTypes = {"simple", "counterbore", "countersink"};
     f->type       = static_cast<doc::HoleType>(Choice(args, "type", kTypes, 0));
     f->throughAll = Flag(args, "through_all", !Has(args, "depth"));
@@ -73,6 +97,33 @@ Json Hole(AppContext& app, const Json& args) {
     if (f->type == doc::HoleType::Counterbore) name.insert(name.end(), {&f->headDiameter, &f->headDepth});
     if (f->type == doc::HoleType::Countersink) name.push_back(&f->sinkDiameter);
     return AddToPart(s, std::move(f), args, "Отверстие", name);
+}
+
+/// Фаска: equal legs (as before), a distance and an angle, or two distances;
+/// `flip` turns the reference face of all edges, `flip_edges` of those only.
+Json Chamfer(AppContext& app, const Json& args) {
+    Session& s = ActivePart(app);
+    auto     f = std::make_unique<doc::ChamferFeature>();
+    f->edges   = EdgeRefs(s, args, "edges");
+    static const std::vector<std::string> kModes = {"equal", "distance_angle", "two_distances"};
+    f->mode = static_cast<doc::ChamferMode>(Choice(args, "mode", kModes, 0));
+    f->distance.expression = Expression(args, "distance");
+    std::vector<Parameter*> name{&f->distance};
+    if (f->mode == doc::ChamferMode::DistanceAngle) {
+        f->angle.expression = Expression(args, "angle");
+        name.push_back(&f->angle);
+    } else if (f->mode == doc::ChamferMode::TwoDistances) {
+        f->distance2.expression = Expression(args, "distance2");
+        name.push_back(&f->distance2);
+    }
+    f->flipped = Flag(args, "flip", false);
+    if (Has(args, "flip_edges"))
+        for (const doc::EdgeReference& e : EdgeRefs(s, args, "flip_edges")) {
+            const auto at = std::ranges::find(f->edges, e);
+            if (at == f->edges.end()) Fail("«flip_edges» — только рёбра из «edges»");
+            f->FlipAt(static_cast<std::size_t>(at - f->edges.begin()));
+        }
+    return AddToPart(s, std::move(f), args, "Фаска", name);
 }
 
 template <class T>
@@ -191,6 +242,12 @@ void AddFeatureCommands(Commands& out) {
                    "feature.thread по его оси и диаметру. Под метчик M8 — диаметр 6.8.",
                    OpSchema({{"face", IntegerArg("Плоская грань, на которой начинаются отверстия.")},
                              {"centers", {{"type", "array"}, {"items", Point3Arg("Центр.")}, {"description", "Центры на этой грани."}}},
+                             {"coaxial",
+                              {{"type", "array"},
+                               {"items", {{"type", "object"},
+                                          {"properties", {{"edge", IntegerArg("Круглое ребро (part.edges).")},
+                                                          {"face", IntegerArg("Или цилиндрическая грань (part.faces).")}}}}},
+                               {"description", "Центры соосно с кромкой или цилиндром: следуют за ними при изменении детали."}}},
                              {"diameter", ExpressionArg("Диаметр, мм.")},
                              {"depth", ExpressionArg("Глубина, мм; не задана — насквозь.")},
                              {"through_all", BoolArg("Насквозь.")},
@@ -198,14 +255,25 @@ void AddFeatureCommands(Commands& out) {
                              {"head_diameter", ExpressionArg("Цековка: диаметр.")},
                              {"head_depth", ExpressionArg("Цековка: глубина.")},
                              {"sink_diameter", ExpressionArg("Зенковка: диаметр на поверхности (конус 90°).")}},
-                            {"face", "centers", "diameter"}),
+                            {"face", "diameter"}),
                    true, &Hole});
     out.push_back({"feature.fillet", "Сопряжение (скругление) рёбер радиусом. Рёбра — номера из part.edges.",
                    OpSchema({{"edges", IndexListArg("Номера рёбер.")}, {"radius", ExpressionArg("Радиус, мм.")}}, {"edges", "radius"}), true,
                    [](AppContext& app, const Json& args) { return EdgeOp<doc::FilletFeature>(app, args, "Сопряжение", "radius"); }});
-    out.push_back({"feature.chamfer", "Фаска на рёбрах (равные катеты). Рёбра — номера из part.edges.",
-                   OpSchema({{"edges", IndexListArg("Номера рёбер.")}, {"distance", ExpressionArg("Катет, мм.")}}, {"edges", "distance"}), true,
-                   [](AppContext& app, const Json& args) { return EdgeOp<doc::ChamferFeature>(app, args, "Фаска", "distance"); }});
+    out.push_back({"feature.chamfer",
+                   "Фаска на рёбрах (номера из part.edges): equal — равные катеты distance (по умолчанию); distance_angle — "
+                   "distance по опорной грани и angle (0..90°) между фаской и ею; two_distances — distance по опорной грани, "
+                   "distance2 по другой. Опорная грань ребра — та, что смотрит выше по Z (затем Y, X); flip меняет её у всех "
+                   "рёбер, flip_edges — только у этих.",
+                   OpSchema({{"edges", IndexListArg("Номера рёбер.")},
+                             {"mode", EnumArg("equal (по умолчанию), distance_angle, two_distances.", {"equal", "distance_angle", "two_distances"})},
+                             {"distance", ExpressionArg("Катет (по опорной грани), мм.")},
+                             {"distance2", ExpressionArg("two_distances: катет по другой грани, мм.")},
+                             {"angle", ExpressionArg("distance_angle: угол к опорной грани, градусы.")},
+                             {"flip", BoolArg("Опорная — другая грань у всех рёбер.")},
+                             {"flip_edges", IndexListArg("Рёбра (из edges), у которых опорная грань другая.")}},
+                            {"edges", "distance"}),
+                   true, &Chamfer});
     out.push_back({"feature.shell",
                    "Оболочка: тело становится полым со стенкой thickness; open_faces — грани, которые убираются (открытые).",
                    OpSchema({{"open_faces", IndexListArg("Номера граней (part.faces), которые станут открытыми.")},

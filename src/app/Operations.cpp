@@ -60,7 +60,7 @@ void InstallModule(AppContext& app, std::optional<std::filesystem::path> package
     else if (m)
         app.notes.Error(Trf("Модуль «{}» установлен, но не запустился: {}", m->manifest.name, Tr(m->problem)));
     app.shell.showSettings = true;   // there it is, with its switch
-    app.shell.settingsTab = 6;   // "Модули" (after "Тачпад" was added)
+    app.shell.settingsTab = 3;   // "Модули"
 }
 
 void OpenDropped(AppContext& app, const std::filesystem::path& file) {
