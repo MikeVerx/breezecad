@@ -307,7 +307,7 @@ FieldResult ExpressionField(Ui& ui, const char* id, std::string& text, std::stri
     result.edited = caretAtEnd ? ImGui::InputText("##value", &text, ImGuiInputTextFlags_CallbackAlways, toEnd)
                                : ImGui::InputText("##value", &text, ImGuiInputTextFlags_AutoSelectAll);
     result.active = ImGui::IsItemActive();
-    const bool enter = ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false);
+    const bool enter = EnterPressed(false);
     result.submitted = enter && (result.active || ImGui::IsItemDeactivated());
     result.cancelled = ImGui::IsKeyPressed(ImGuiKey_Escape, false) && (result.active || ImGui::IsItemDeactivated());
     result.committed = ImGui::IsItemDeactivatedAfterEdit() || result.submitted;
@@ -415,6 +415,10 @@ bool CommitInput(Ui& ui, const char* id, const std::string& value, EditState& st
         return !cancelled && state.text != value;
     }
     return false;
+}
+
+bool EnterPressed(bool repeat) {
+    return ImGui::IsKeyPressed(ImGuiKey_Enter, repeat) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, repeat);
 }
 
 void FieldLabel(Ui& ui, const char* text) {
