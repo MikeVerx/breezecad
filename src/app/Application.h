@@ -10,9 +10,12 @@
 #include "ui/Icons.h"
 #include "ui/Theme.h"
 
+#include <array>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 namespace bz::app {
@@ -39,9 +42,13 @@ public:
     void EnableShotRequests(std::filesystem::path dir) { myShotDir = std::move(dir); }
     AppContext& Context() { return *myContext; }
 
+    /// What woke the window (counted for the redraw report, see ReportRedraws).
+    enum class Wake { Cursor, Button, Scroll, Key, Text, Size, Focus, Refresh, Drop, Count };
+
     /// Filled by the GLFW callbacks between frames.
     struct InputTap {
         bool                       seen = false;   ///< any input: draw frames
+        std::array<int, static_cast<std::size_t>(Wake::Count)> wakes{};   ///< callbacks since the last redraw report
         std::vector<ImGuiKeyChord> chords;         ///< key presses with the modifiers held at that moment
         std::vector<std::filesystem::path> dropped;   ///< files dropped on the window, handled between frames
     };
@@ -56,7 +63,15 @@ private:
     void ApplyTheme(bool force);
     void UpdateTitle();
     void HandleCloseRequests();
-    bool NeedsAnotherFrame() const;
+    bool NeedsAnotherFrame() const { return WhyAnotherFrame() != nullptr; }
+    /// Why the next frame must be drawn even without input; nullptr if it need not.
+    const char* WhyAnotherFrame() const;
+    /// Counts a frame drawn because of `why` (a string literal).
+    void CountRedraw(const char* why);
+    /// Every 10 s: how many frames were drawn and why, into the monitoring;
+    /// into the log when the window kept redrawing with no user input at all
+    /// (it should sleep then: a laptop's battery and fan notice).
+    void ReportRedraws(double now);
     /// A document rebuilds on another thread: frames at a calm pace.
     bool WaitsForBackground() const;
     double myMemoryReadAt = -10.0;   ///< when the memory figure was last read
@@ -99,6 +114,13 @@ private:
     int    mySceneFramesThisSecond = 0;
     double mySecondStart = 0.0;
     bool   myBusy = false;   ///< something animates: keep drawing
+    struct RedrawCount {
+        double start = -1.0;                     ///< start of the current 10 s window
+        int    frames = 0;
+        std::map<std::string_view, int> why;     ///< keys are string literals
+        double loggedAt = -1e9;                  ///< last log line (at most one a minute)
+    };
+    RedrawCount myRedraws;
 
     std::filesystem::path myScreenshotFile;
     int                   myScreenshotFrame = -1;

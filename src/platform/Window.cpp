@@ -3,6 +3,7 @@
 #include "core/Log.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 #include <GLFW/glfw3.h>
 #if defined(_WIN32)
@@ -96,6 +97,14 @@ bool Window::Create(const WindowConfig& config) {
     if (const auto* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER))) myGLRenderer = renderer;
     log::Info("Window: OpenGL {}", myGLVersion);
     log::Info("Graphics: {} / {}", myGLVendor, myGLRenderer);
+#if defined(__linux__)
+    // Wayland sessions run the program through XWayland: reports from them
+    // differ, so the log says which one this was.
+    const char* wayland = std::getenv("WAYLAND_DISPLAY");
+    const char* desktop = std::getenv("XDG_CURRENT_DESKTOP");
+    log::Info("Window system: X11{}, desktop {}", wayland && *wayland ? " through XWayland (a Wayland session)" : "",
+              desktop && *desktop ? desktop : "unknown");
+#endif
     return true;
 }
 

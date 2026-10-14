@@ -34,6 +34,8 @@ void Frame(double ms, const std::vector<prof::Part>& parts);
 void Memory(double mb);
 /// A finished piece of work worth timing: a rebuild, loading parts...
 void Timed(std::string_view kind, std::string_view detail, double ms);
+/// Frames drawn over the last `seconds` and why (Application::ReportRedraws).
+void Redraws(int frames, double seconds, std::string_view why);
 /// A warning or an error from the log.
 void LogLine(bool error, std::string_view message);
 /// From a crash handler: best effort, no allocation, no locks.

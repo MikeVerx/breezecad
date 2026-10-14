@@ -204,6 +204,11 @@ void Timed(std::string_view kind, std::string_view detail, double ms) {
     Emit("timed", std::format("\"what\":{},\"detail\":{},\"ms\":{:.1f}", Quote(kind), Quote(detail), ms));
 }
 
+void Redraws(int frames, double seconds, std::string_view why) {
+    if (!Enabled()) return;
+    Emit("redraw", std::format("\"frames\":{},\"s\":{:.1f},\"why\":{}", frames, seconds, Quote(why)));
+}
+
 void LogLine(bool error, std::string_view message) {
     if (!Enabled()) return;
     Emit("log", std::format("\"lvl\":\"{}\",\"msg\":{}", error ? "error" : "warning", Quote(message)));
