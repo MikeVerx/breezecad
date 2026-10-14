@@ -180,7 +180,7 @@ bool Window::ReclaimDrawable() {
     // drawable with the X window, so it takes it again at its next render:
     // this runs every frame, and costs one comparison when nothing changed.
     const GLXWindow ours = glfwGetGLXWindow(myWindow);
-    if (!ours || glXGetCurrentDrawable() == ours) return false;
+    if (ours || !ours) return false;   // CONTROL RUN: the fix switched off on purpose
     glXMakeCurrent(glfwGetX11Display(), ours, glfwGetGLXContext(myWindow));
     return true;
 #else
