@@ -184,3 +184,52 @@ TEST_CASE("a chamfer from an old file (no mode) keeps equal distances") {
     CHECK(f.distance.expression == "2");
     CHECK_FALSE(f.flipped);
 }
+
+TEST_CASE("chamfer: one edge turned on its own") {
+    Box b;
+    auto& chamfer = b.Add<doc::ChamferFeature>("2");
+    EdgeReference back = TopFrontEdge(40.0);
+    back.faces = {{{SurfaceKind::Plane, {0, 1, 0}}, {SurfaceKind::Plane, {0, 0, 1}}}};
+    chamfer.edges.push_back(back);
+    chamfer.mode = doc::ChamferMode::TwoDistances;
+    chamfer.distance2.expression = "5";
+    const double v = 0.5 * 2 * 5 * 120;
+    // Both legs measured as (along the top, down the side): prisms' centres at 30 − down/3.
+    const auto centreZ = [&](double downFront, double downBack) {
+        return (kBoxVolume * 15 - v * (30 - downFront / 3) - v * (30 - downBack / 3)) / (kBoxVolume - 2 * v);
+    };
+    kernel::Model model;
+    model.Rebuild(b.d);
+    REQUIRE(chamfer.status.state == FeatureState::Ok);
+    auto props = model.Properties();
+    REQUIRE(props);
+    CHECK(props->centre.z == doctest::Approx(centreZ(5, 5)).epsilon(1e-6));
+
+    chamfer.FlipAt(1);   // the back edge only: 5 along the top, 2 down
+    CHECK(chamfer.FlippedAt(1));
+    CHECK_FALSE(chamfer.FlippedAt(0));
+    b.d.MarkChanged(2);
+    model.Rebuild(b.d);
+    REQUIRE(chamfer.status.state == FeatureState::Ok);
+    props = model.Properties();
+    REQUIRE(props);
+    CHECK(props->centre.z == doctest::Approx(centreZ(5, 2)).epsilon(1e-6));
+
+    chamfer.flipped = true;   // all turned: the back edge back where it began
+    CHECK_FALSE(chamfer.FlippedAt(1));
+    b.d.MarkChanged(2);
+    model.Rebuild(b.d);
+    props = model.Properties();
+    REQUIRE(props);
+    CHECK(props->centre.z == doctest::Approx(centreZ(2, 5)).epsilon(1e-6));
+
+    // Kept in the file.
+    const std::string json = doc::DocumentToJson(b.d);
+    Expected<doc::Document> loaded = doc::DocumentFromJson(json);
+    REQUIRE(loaded.HasValue());
+    const auto* read = loaded->FindAs<doc::ChamferFeature>(chamfer.id);
+    REQUIRE(read);
+    CHECK(read->flippedEdges.size() == 1);
+    CHECK_FALSE(read->FlippedAt(1));
+    CHECK(read->FlippedAt(0));
+}

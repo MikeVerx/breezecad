@@ -236,9 +236,8 @@ Expected<TopoDS_Shape> MakeExtrusion(const std::vector<TopoDS_Face>& faces, cons
 
 namespace {
 
-thread_local int tlSerial = 0;
-
-/// `Op` (Fuse, Cut, Common) of `a` and `b`, on this thread when asked to.
+/// `Op` (Fuse, Cut, Common) of `a` and `b`. On the calling thread, as every
+/// boolean (SetUpOcct in Model.cpp turns OCCT's parallel mode off).
 template <class Op>
 TopoDS_Shape RunBoolean(const TopoDS_Shape& a, const TopoDS_Shape& b) {
     TopTools_ListOfShape arguments, tools;
@@ -247,7 +246,6 @@ TopoDS_Shape RunBoolean(const TopoDS_Shape& a, const TopoDS_Shape& b) {
     Op op;
     op.SetArguments(arguments);
     op.SetTools(tools);
-    op.SetRunParallel(!BooleansSerial());
     op.Build();
     return op.Shape();   // throws StdFail_NotDone when it failed
 }
@@ -264,10 +262,6 @@ Expected<TopoDS_Shape> FinishBoolean(const TopoDS_Shape& raw, doc::BooleanOp op)
 }
 
 } // namespace
-
-SerialBooleans::SerialBooleans() { ++tlSerial; }
-SerialBooleans::~SerialBooleans() { --tlSerial; }
-bool BooleansSerial() { return tlSerial > 0; }
 
 TopoDS_Shape Fuse(const TopoDS_Shape& a, const TopoDS_Shape& b) { return RunBoolean<BRepAlgoAPI_Fuse>(a, b); }
 
@@ -298,7 +292,6 @@ Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const std::vecto
             BRepAlgoAPI_Fuse fuse;
             fuse.SetArguments(arguments);
             fuse.SetTools(toolList);
-            fuse.SetRunParallel(!BooleansSerial());
             fuse.Build();
             if (!fuse.IsDone()) return Error{"Ошибка булевой операции"};
             result = fuse.Shape();
@@ -306,7 +299,6 @@ Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const std::vecto
             BRepAlgoAPI_Cut cut;
             cut.SetArguments(arguments);
             cut.SetTools(toolList);
-            cut.SetRunParallel(!BooleansSerial());
             cut.Build();
             if (!cut.IsDone()) return Error{"Ошибка булевой операции"};
             result = cut.Shape();

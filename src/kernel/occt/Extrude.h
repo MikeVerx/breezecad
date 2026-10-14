@@ -22,22 +22,7 @@ Expected<TopoDS_Shape> MakeExtrusion(const std::vector<TopoDS_Face>& faces,
                                      const std::optional<Frame>& target = std::nullopt,
                                      const std::optional<TopoDS_Face>& untilFace = std::nullopt);
 
-/// While one is alive, the booleans this thread makes through ApplyBoolean
-/// and Fuse run on this thread only instead of OCCT's worker pool. A fault
-/// inside OCCT is then caught by FaultGuard (it guards the calling thread
-/// only) and costs one operation instead of the whole program. Nests.
-class SerialBooleans {
-public:
-    SerialBooleans();
-    ~SerialBooleans();
-    SerialBooleans(const SerialBooleans&) = delete;
-    SerialBooleans& operator=(const SerialBooleans&) = delete;
-};
-/// True inside a SerialBooleans of this thread.
-bool BooleansSerial();
-
-/// Union of two shapes, honouring SerialBooleans. Throws Standard_Failure
-/// like BRepAlgoAPI_Fuse when OCCT fails.
+/// Union of two shapes. Throws Standard_Failure like BRepAlgoAPI_Fuse when OCCT fails.
 TopoDS_Shape Fuse(const TopoDS_Shape& a, const TopoDS_Shape& b);
 
 /// Applies a boolean of `tool` to `target`. Returns the new body shape.

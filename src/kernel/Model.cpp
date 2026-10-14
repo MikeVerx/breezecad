@@ -299,19 +299,23 @@ void ApplyEdgeFeature(const doc::EdgeFeature& f, std::vector<Body>& bodies, doc:
     // they are nearest where they were picked (the most recent on a tie).
     Body* target = &bodies.back();
     std::vector<TopoDS_Edge> edges;
+    std::vector<std::size_t> kept;   // index in f.edges of each found edge
     double bestMiss = 1e300;
     for (auto it = bodies.rbegin(); it != bodies.rend(); ++it) {
         std::vector<TopoDS_Edge> found;
+        std::vector<std::size_t> which;
         double miss = 0;
         const auto resolved = occt::ResolveEdges(f.edges, it->shape);
         for (std::size_t k = 0; k < resolved.size(); ++k)
             if (resolved[k]) {
                 found.push_back(*resolved[k]);
+                which.push_back(k);
                 miss += DistanceTo(*resolved[k], f.edges[k].middle);
             }
         if (found.empty()) continue;
         if (found.size() > edges.size() || (found.size() == edges.size() && miss < bestMiss - 1e-6)) {
             edges = std::move(found);
+            kept = std::move(which);
             bestMiss = miss;
             target = &*it;
         }
@@ -321,7 +325,7 @@ void ApplyEdgeFeature(const doc::EdgeFeature& f, std::vector<Body>& bodies, doc:
         status = {FeatureState::Error, "Рёбра операции не найдены: модель изменилась слишком сильно"};
         return;
     }
-    Expected<TopoDS_Shape> result = make(target->shape, edges);
+    Expected<TopoDS_Shape> result = make(target->shape, edges, kept);
     if (!result) {
         status = {FeatureState::Error, result.GetError().message};
         return;
@@ -895,12 +899,16 @@ bool FollowSupport(doc::SketchFeature& sk, const doc::Document& doc, const std::
 
 /// OCCT prints progress reports (STEP statistics...) to stdout; keep only
 /// warnings and errors, our own log covers the rest.
-/// Process-wide OCCT setup: fewer messages, booleans on all cores.
+/// Process-wide OCCT setup: fewer messages, booleans on the calling thread.
 void SetUpOcct() {
     static std::once_flag once;
     std::call_once(once, [] {
-        // Booleans split their intersection work over the processor's cores.
-        BOPAlgo_Options::SetParallelMode(true);
+        // Booleans on the thread that asked for them, not OCCT's worker pool:
+        // FaultGuard catches a fault only on the thread that called
+        // RunGuarded, so a fault in a worker closed the program (audit B-08;
+        // the author's decision 2026-10-13: stability first, a 2-core laptop
+        // loses little speed).
+        BOPAlgo_Options::SetParallelMode(false);
         const Handle(Message_Messenger)& messenger = Message::DefaultMessenger();
         // Range-for works with both OCCT 7.x and 8.x sequence types.
         for (const auto& printer : messenger->Printers()) printer->SetTraceLevel(Message_Warning);
@@ -993,24 +1001,24 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                                      return occt::MakeExtrusion(faces, *ex, frame, ThroughAllLength(bodies, frame), target, until);
                                  });
             } else if (auto* rev = dynamic_cast<doc::RevolveFeature*>(&f)) {
-                // On this thread only: OCCT 7.9.3 faulted inside its worker pool
-                // building a revolve (tester report), where FaultGuard cannot
-                // catch it. Here a fault costs this operation, not the program.
-                const occt::SerialBooleans serial;
                 ApplySketchSolid(*rev, impl, bodies, rev->status, doc,
                                  [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature& profile, const Frame& frame) {
                                      return occt::MakeRevolution(faces, *rev, profile.sketch, frame);
                                  });
             } else if (auto* fillet = dynamic_cast<doc::FilletFeature*>(&f)) {
-                ApplyEdgeFeature(*fillet, bodies, fillet->status, [&](const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges) {
-                    return occt::MakeFillet(body, edges, fillet->radius.value);
-                });
+                ApplyEdgeFeature(*fillet, bodies, fillet->status,
+                                 [&](const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges, const std::vector<std::size_t>&) {
+                                     return occt::MakeFillet(body, edges, fillet->radius.value);
+                                 });
             } else if (auto* chamfer = dynamic_cast<doc::ChamferFeature*>(&f)) {
-                ApplyEdgeFeature(*chamfer, bodies, chamfer->status, [&](const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges) {
-                    return occt::MakeChamfer(body, edges,
-                                             occt::ChamferSize{chamfer->mode, chamfer->distance.value, chamfer->distance2.value,
-                                                               chamfer->angle.value, chamfer->flipped});
-                });
+                ApplyEdgeFeature(*chamfer, bodies, chamfer->status,
+                                 [&](const TopoDS_Shape& body, const std::vector<TopoDS_Edge>& edges, const std::vector<std::size_t>& kept) {
+                                     occt::ChamferSize size{chamfer->mode, chamfer->distance.value, chamfer->distance2.value,
+                                                            chamfer->angle.value, chamfer->flipped, {}};
+                                     // Per edge: its own turn of side (the global one is `flipped`).
+                                     for (const std::size_t k : kept) size.flips.push_back(chamfer->FlippedAt(k) != chamfer->flipped);
+                                     return occt::MakeChamfer(body, edges, size);
+                                 });
             } else if (auto* hole = dynamic_cast<doc::HoleFeature*>(&f)) {
                 ApplyToBody(bodies, hole->status, "Нет тела, в котором делать отверстие",
                                 [&](const TopoDS_Shape& body) { return FaceMiss(body, hole->face); },

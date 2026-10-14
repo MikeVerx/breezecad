@@ -9,6 +9,8 @@
 #include "core/I18n.h"
 #include "document/EdgeFeature.h"
 
+#include <optional>
+
 namespace bz::app {
 
 class EdgeOperationEditor : public FeatureOperationEditor {
@@ -23,6 +25,9 @@ protected:
     virtual std::unique_ptr<doc::EdgeFeature> Create(Session& session) const = 0;
     /// The size field (radius, distance).
     virtual void DrawSize(AppContext& app, Session& session, doc::EdgeFeature& feature, float width) = 0;
+
+    /// An edge (index in `edges`) the panel points at: only it is marked in the view.
+    std::optional<std::size_t> myHighlightEdge;
 
 private:
     void DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) final;

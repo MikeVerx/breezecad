@@ -45,8 +45,9 @@ enum class ChamferMode : unsigned char {
 };
 
 /// Bevels edges. Each edge has two faces; the reference face of an edge is
-/// found by its geometry (see kernel::occt::MakeChamfer), `flipped` takes the
-/// other one — the "flip" of Inventor.
+/// found by its geometry (see kernel::occt::MakeChamfer). `flipped` takes the
+/// other one for every edge; an edge listed in `flippedEdges` is turned once
+/// more (the per-edge "flip" of Inventor).
 class ChamferFeature final : public FeatureBase<ChamferFeature, EdgeFeature> {
 public:
     static constexpr std::string_view kType = "chamfer";
@@ -56,6 +57,12 @@ public:
     Parameter distance2{.name = "", .expression = "1", .quantity = Quantity::Length, .value = 1.0, .error = {}};
     Parameter angle{.name = "", .expression = "45", .quantity = Quantity::Angle, .value = kPi / 4, .error = {}};
     bool      flipped = false;
+    std::vector<EdgeReference> flippedEdges;   ///< edges (of `edges`) with their own side turned
+
+    /// Edge `index` of `edges` uses the other face as its reference.
+    bool FlippedAt(std::size_t index) const;
+    /// Turns the side of edge `index` of `edges`.
+    void FlipAt(std::size_t index);
 
     std::string_view Type() const override { return kType; }
     /// Always all three, in this order, whatever the mode (panels copy them by position).

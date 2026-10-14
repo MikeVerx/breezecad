@@ -97,11 +97,14 @@ Expected<TopoDS_Shape> MakeChamfer(const TopoDS_Shape& body, const std::vector<T
         return Error{"Угол фаски должен быть больше 0° и меньше 90°"};
     TopTools_IndexedDataMapOfShapeListOfShape faces;
     TopExp::MapShapesAndAncestors(body, TopAbs_EDGE, TopAbs_FACE, faces);
+    std::size_t next = 0;   // Build adds the edges in order
     return Build<BRepFilletAPI_MakeChamfer>(
         body, edges, size.distance,
         [&](BRepFilletAPI_MakeChamfer& b, const TopoDS_Edge& e) {
+            const std::size_t i = next++;
             if (!faces.Contains(e)) return;
-            const TopoDS_Face face = ReferenceFace(e, faces, size.flipped);
+            const bool own = i < size.flips.size() && size.flips[i];
+            const TopoDS_Face face = ReferenceFace(e, faces, size.flipped != own);
             if (face.IsNull()) return;
             if (size.mode == ChamferMode::TwoDistances) b.Add(size.distance, size.distance2, e, face);
             else b.AddDA(size.distance, size.angle, e, face);

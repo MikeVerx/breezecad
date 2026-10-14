@@ -1,7 +1,7 @@
 #include "../Fixtures.h"
 #include "document/BzcFile.h"
 #include "kernel/Model.h"
-#include "kernel/occt/Extrude.h"
+#include <BOPAlgo_Options.hxx>
 
 #include <doctest.h>
 
@@ -168,16 +168,7 @@ TEST_CASE("a triangle with a side on the axis makes a cone") {
     CHECK(model.Volume() == doctest::Approx(kPi * 10.0 * 10.0 * 30.0 / 3).epsilon(1e-4));
 }
 
-TEST_CASE("serial booleans: the scope nests and ends") {
-    using kernel::occt::BooleansSerial;
-    CHECK_FALSE(BooleansSerial());
-    {
-        const kernel::occt::SerialBooleans outer;
-        {
-            const kernel::occt::SerialBooleans inner;
-            CHECK(BooleansSerial());
-        }
-        CHECK(BooleansSerial());
-    }
-    CHECK_FALSE(BooleansSerial());
+TEST_CASE("booleans run on the calling thread (FaultGuard can catch a fault in them)") {
+    const kernel::Model model;   // sets OCCT up
+    CHECK_FALSE(BOPAlgo_Options::GetParallelMode());
 }
