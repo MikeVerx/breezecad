@@ -89,6 +89,21 @@ Touchpads work on all three systems: two fingers pan (Shift: orbit), pinch
 zooms; on a Mac also turning two fingers, smart zoom and force click.
 Everything is in **Settings → Тачпад**.
 
+### Tested hardware
+
+The weakest computer a tester has run BreezeCAD on stably:
+
+| | |
+| --- | --- |
+| Device | 14″ laptop, HD or Full HD screen |
+| Processor | 6th-generation Intel Core i5 (i5-6200U / i5-6300U, 2 cores, 4 threads) |
+| Graphics | integrated Intel HD Graphics 520 |
+| Memory | 8 GB DDR4 |
+| Storage | SSD |
+
+No discrete graphics card needed. If BreezeCAD runs for you on something
+weaker, tell us and it goes in the table.
+
 The latest numbered release with its notes is on the [Releases](https://github.com/MikeVerx/breezecad/releases/latest) page.
 
 ### Modules
