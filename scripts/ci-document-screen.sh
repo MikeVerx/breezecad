@@ -19,9 +19,9 @@ DISPLAY="$display" XDG_CONFIG_HOME="$PWD/cfg-document" BZ_NO_SPLASH=1 BZ_TEST_NE
   env -u LD_LIBRARY_PATH "$program" > document.log 2>&1 &
 app=$!
 sleep 4
-DISPLAY="$display" import -window root shots/home-screen.ppm
+DISPLAY="$display" import -window root -depth 8 shots/home-screen.ppm
 sleep 8
-DISPLAY="$display" import -window root shots/document-screen.ppm
+DISPLAY="$display" import -window root -depth 8 shots/document-screen.ppm
 kill "$app" 2> /dev/null
 kill "$xvfb" 2> /dev/null
 changed=$(python3 - shots/home-screen.ppm shots/document-screen.ppm <<'PY'
