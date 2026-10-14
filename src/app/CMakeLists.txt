@@ -9,6 +9,7 @@ add_executable(breezecad WIN32
     assembly/AssemblyUi.cpp
     Backgrounds.cpp
     BetaTesting.cpp
+    CrashGuard.cpp
     Format.cpp
     NewTemplates.cpp
     Language.cpp
@@ -51,6 +52,7 @@ add_executable(breezecad WIN32
     features/SectionEditor.cpp
     features/SketchOperationEditor.cpp
     shell/Bars.cpp
+    shell/CrashWindow.cpp
     shell/Dialogs.cpp
     shell/NewDocumentDialog.cpp
     shell/Header.cpp

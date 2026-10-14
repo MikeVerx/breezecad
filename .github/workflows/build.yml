@@ -244,6 +244,18 @@ jobs:
           read -r w h <<< "$size"
           python3 scripts/ppm2png.py shots/touchpad.ppm shots/settings-touchpad.png \
             --crop $(( (w - 780) / 2 )),$(( h > 860 ? (h - 860) / 2 : 0 )),780,860 --annotate "settings touchpad" && rm shots/touchpad.ppm
+      # The crash and hang windows on the real package (BZ_FAULT_TEST): the
+      # program crashes (or freezes), its window must come up with a report.
+      - name: Picture of the crash window
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: bash scripts/ci-fault-window.sh crash /tmp/start/BreezeCAD/breezecad 97
+      - name: Picture of the hang window
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: bash scripts/ci-fault-window.sh hang /tmp/start/BreezeCAD/breezecad 98
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         with:

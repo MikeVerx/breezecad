@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <fstream>
+#include <vector>
 
 #include <GLFW/glfw3.h>
 #if defined(_WIN32)
@@ -186,6 +188,20 @@ bool Window::ReclaimDrawable() {
 #else
     return false;   // one drawable per window: WGL and NSOpenGL have nothing to take back
 #endif
+}
+
+void SaveFramebufferPpm(GLFWwindow* window, const std::filesystem::path& file) {
+    int w = 0, h = 0;
+    glfwGetFramebufferSize(window, &w, &h);
+    std::vector<unsigned char> pixels(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 3);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    std::ofstream out(file, std::ios::binary);
+    if (!out) return;
+    out << "P6\n" << w << ' ' << h << "\n255\n";
+    const auto rowBytes = static_cast<std::streamsize>(w) * 3;
+    for (int row = h - 1; row >= 0; --row)   // OpenGL's rows go up, the picture's down
+        out.write(reinterpret_cast<const char*>(pixels.data()) + static_cast<std::ptrdiff_t>(row) * rowBytes, rowBytes);
 }
 
 void Window::WaitEvents(double timeoutSeconds) { glfwWaitEventsTimeout(timeoutSeconds); }

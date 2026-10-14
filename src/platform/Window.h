@@ -2,6 +2,7 @@
 
 #include "core/NativeSurface.h"
 
+#include <filesystem>
 #include <string>
 
 struct GLFWwindow;
@@ -72,5 +73,9 @@ private:
     bool        myMaximizeOnShow = false;
     std::string myGLVersion, myGLVendor, myGLRenderer;
 };
+
+/// Saves what `window` shows now (its framebuffer) as a binary PPM picture:
+/// test runs and CI pictures (BZ_SCREENSHOT).
+void SaveFramebufferPpm(GLFWwindow* window, const std::filesystem::path& file);
 
 } // namespace bz::platform

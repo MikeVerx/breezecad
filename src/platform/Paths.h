@@ -9,6 +9,9 @@ namespace bz::platform {
 /// the app bundle's Resources (macOS).
 std::filesystem::path AssetsDir();
 
+/// The running program's file (empty if the system does not say).
+std::filesystem::path ExecutablePath();
+
 /// Folder of the running program (breezecad.exe).
 std::filesystem::path ExecutableDir();
 
