@@ -46,6 +46,7 @@ NativeGlSurface Window::NativeSurface() const {
 #else
     surface.window = static_cast<std::uintptr_t>(glfwGetX11Window(myWindow));
     surface.glContext = glfwGetGLXContext(myWindow);
+    surface.display = glfwGetX11Display();
 #endif
     return surface;
 }

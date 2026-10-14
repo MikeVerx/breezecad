@@ -594,7 +594,19 @@ Viewport::~Viewport() {
 bool Viewport::Init(const NativeGlSurface& surface) {
     Impl& m = *myImpl;
 
+#if !defined(_WIN32) && !defined(__APPLE__)
+    // The window's own X connection, not a second one. OCCT asks "is my
+    // context current?" by comparing its connection with the current one;
+    // with a connection of its own the answer was always no, and it bound the
+    // context to that connection before every 3D render. Under XWayland with
+    // the NVIDIA driver the window then kept showing the last picture: the
+    // program worked on, the screen froze once a document was open
+    // (Hyprland, 2026-10).
+    Handle(Aspect_DisplayConnection) display =
+        surface.display ? new Aspect_DisplayConnection(static_cast<Aspect_XDisplay*>(surface.display)) : new Aspect_DisplayConnection();
+#else
     Handle(Aspect_DisplayConnection) display = new Aspect_DisplayConnection();
+#endif
     m.driver = new OpenGl_GraphicDriver(display, false);
     m.driver->ChangeOptions().buffersNoSwap = true;
     // Render plain sRGB colours into our RGBA8 texture. OCCT's linear-light
