@@ -1,0 +1,24 @@
+name: Предложить идею
+description: Новая возможность или улучшение
+labels: ["идея"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Что хочется
+      placeholder: Чтобы можно было…
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Зачем
+      description: Какую задачу это решит
+  - type: dropdown
+    id: area
+    attributes:
+      label: Где
+      options:
+        - Основная программа
+        - Модуль
+        - Не знаю
