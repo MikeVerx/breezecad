@@ -72,6 +72,13 @@ bool Window::Create(const WindowConfig& config) {
     glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
     glfwWindowHint(GLFW_DEPTH_BITS, 24);
     glfwWindowHint(GLFW_STENCIL_BITS, 8);
+#if defined(__linux__)
+    // No alpha channel in the window: it is opaque. With one, X11 gives a
+    // 32-bit visual, and a compositor (XWayland under Hyprland) blends the
+    // window with what is behind it by that alpha — a window black or
+    // see-through wherever alpha went unwritten.
+    glfwWindowHint(GLFW_ALPHA_BITS, 0);
+#endif
 
     // The windowed size never exceeds the screen (a 1366x768 laptop gets a
     // window that fits), and it opens centred unless a place was remembered.
@@ -103,8 +110,10 @@ bool Window::Create(const WindowConfig& config) {
     // differ, so the log says which one this was.
     const char* wayland = std::getenv("WAYLAND_DISPLAY");
     const char* desktop = std::getenv("XDG_CURRENT_DESKTOP");
-    log::Info("Window system: X11{}, desktop {}", wayland && *wayland ? " through XWayland (a Wayland session)" : "",
-              desktop && *desktop ? desktop : "unknown");
+    XWindowAttributes attributes{};
+    const int depth = XGetWindowAttributes(glfwGetX11Display(), glfwGetX11Window(myWindow), &attributes) ? attributes.depth : 0;
+    log::Info("Window system: X11{}, desktop {}, window depth {} bits", wayland && *wayland ? " through XWayland (a Wayland session)" : "",
+              desktop && *desktop ? desktop : "unknown", depth);
 #endif
     return true;
 }

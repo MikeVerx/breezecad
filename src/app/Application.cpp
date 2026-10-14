@@ -591,6 +591,13 @@ void Application::Frame() {
     // switches sRGB writes on for its own rendering and does not switch them
     // off, which would make the whole interface look washed out.
     glDisable(kGlFramebufferSrgb);
+    // OCCT leaves alpha writes off ("colour writes rgb-" in the log). With
+    // them off the window's alpha is never written; where the window has an
+    // alpha channel the desktop shows it see-through or black (Mesa under
+    // XWayland: a black window). Every frame, not only after a 3D render:
+    // OCCT also sets up its context when the program starts.
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glDisable(GL_SCISSOR_TEST);
     const Color bg = myTheme.colors.appBackground;
     glClearColor(bg.r, bg.g, bg.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
