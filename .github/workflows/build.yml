@@ -46,10 +46,27 @@ jobs:
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-glfw
-            mingw-w64-x86_64-opencascade
+            mingw-w64-x86_64-freetype
             mingw-w64-x86_64-binutils
             mingw-w64-x86_64-gdb
+            patch
+            git
             zip
+      # OCCT without FFmpeg, FreeImage, VTK, TBB, OpenVR and Tcl/Tk (MSYS2's
+      # package needs them all: ~140 MB of DLLs the program never calls).
+      # Built once and cached; the cache key changes with the recipe.
+      - name: Slim OCCT from the cache
+        id: occt-cache
+        uses: actions/cache@v4
+        with:
+          path: occt-install
+          key: occt-slim-mingw64-${{ hashFiles('scripts/occt-windows/**') }}
+      - name: Build slim OCCT (cache miss only, ~40 min)
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        run: bash scripts/occt-windows/build-occt.sh "$(cygpath -m "$PWD/occt-install")"
+      # Into the MinGW prefix, where everything below already looks for it.
+      - name: Install slim OCCT
+        run: cp -r occt-install/. /mingw64/
       - name: Versions
         run: |
           g++ --version | head -1
@@ -89,6 +106,8 @@ jobs:
           # No modules inside: they are separate packages (.bzmod) the user
           # installs in "Настройки → Модули".
           bash scripts/deploy-runtime.sh dist/BreezeCAD breezecad.exe /mingw64/bin
+          # What the package is made of: every file over 1 MB and the total.
+          echo "::notice title=Windows package::$(du -sh dist/BreezeCAD | cut -f1) unpacked, $(ls dist/BreezeCAD/*.dll | wc -l) DLLs; largest: $(find dist/BreezeCAD -type f -size +1M -printf '%s %f\n' | sort -rn | awk '{printf "%s %.1fM, ", $2, $1/1048576}' | cut -c1-900)"
           # The testers' build: the same program in "program/", the flag that turns
           # on reports, the launcher and the instructions on top.
           beta=dist/beta/BreezeCAD-beta
