@@ -37,6 +37,10 @@ w=${size%x*}; h=${size#*x}
 density=$(adb shell wm density | sed -n 's/.*: \([0-9]*\).*/\1/p' | tail -1)
 dp() { echo $(( $1 * density / 160 )); }      # dp → pixels
 echo "screen ${w}x${h}, density $density"
+# Blocks 1 and 2 (mobile/MobileLayout.cpp): 20 % of the width, at least 170 and 150 dp.
+wdp=$(( w * 160 / density ))
+b1=$(( wdp / 5 > 170 ? wdp / 5 : 170 )); b2=$(( wdp / 5 > 150 ? wdp / 5 : 150 ))
+b1=$(dp $b1); b2=$(dp $b2)
 
 alive() { adb shell pidof $PACKAGE | tr -d '\r'; }
 shot() { sleep "${2:-2}"; adb exec-out screencap -p > "$OUT/$1.png"; }
@@ -80,7 +84,7 @@ cx=$((w / 2)); cy=$((h / 2))
 adb shell input tap $cx $cy
 shot 4-sketch 2
 check sketch
-ok_x=$(( w * 20 / 100 - $(dp 30) ))      # block 1 is 20 % wide; OK nearest the model
+ok_x=$(( b1 - $(dp 30) ))               # OK: block 1's row, nearest the model
 ok_y=$(( h - $(dp 26) - $(dp 25) ))      # above the beard, middle of the row
 adb shell input tap $ok_x $ok_y
 adb shell input swipe $cx $cy $((cx + w / 10)) $((cy - h / 8)) 500
@@ -100,7 +104,7 @@ check tablet
 
 # 8. The big cube: its button at the model's top right.
 start example 25
-right=$(( w - w * 20 / 100 ))
+right=$(( w - b2 ))
 adb shell input tap $((right - $(dp 30))) $(dp 30)
 shot 8-cube
 check cube

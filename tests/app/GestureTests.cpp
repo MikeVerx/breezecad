@@ -73,6 +73,13 @@ TEST_CASE("Gestures: cursor on — one finger leads the cursor, two turn, three 
     g.Up(1, {140, 90}, 0.4);
     CHECK(g.Take().cursorEnded);
 
+    // A tap with the cursor on moves it, and clicks nothing.
+    g.Down(1, {60, 60}, 0.6);
+    g.Up(1, {60, 60}, 0.65);
+    s = g.Take();
+    CHECK(s.cursorFinger);
+    CHECK_FALSE(s.tap);
+
     // Two fingers: the first did not move yet — the cursor goes back.
     g.Down(1, {100, 100}, 1.0);
     g.Take();

@@ -122,9 +122,8 @@ void GestureRecognizer::Up(int id, Vec2 at, double time) {
         const bool quick = !myMoved && !myConsumed && time - myStartTime < kTapSeconds;
         if (myCursorLeading) myStep.cursorEnded = true;
         if (myBoxing) myStep.boxEnded = true;
-        if (quick && !myMode.fingersOnlyNavigate) {
-            if (myMaxFingers == 1) myStep.tap = at;
-        }
+        // With the cursor on, a tap only moves it there (it already did): no click.
+        if (quick && !myMode.fingersOnlyNavigate && !myCursorLeading && myMaxFingers == 1) myStep.tap = at;
         if (quick) {
             if (myMaxFingers == 2) myStep.undo = true;
             if (myMaxFingers == 3) myStep.redo = true;
