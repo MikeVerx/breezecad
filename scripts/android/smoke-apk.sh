@@ -108,16 +108,24 @@ right=$(( w - b2 ))
 adb shell input tap $((right - $(dp 30))) $(dp 30)
 shot 8-cube
 check cube
-# A face of the big cube (its middle, a little left: "Спереди") — the view turns to it.
-cube=$(( (h - $(dp 70)) < $(dp 230) ? (h - $(dp 70)) : $(dp 230) ))
-adb shell input tap $((right - $(dp 8) - cube / 2 - cube / 8)) $(( $(dp 58) + cube / 2 + cube / 10 ))
+# A face of the big cube — the view turns to it. The app logs where the
+# panel is; the cube's middle is the panel's middle (ui/ViewCube.cpp), the
+# front face a little left of it and down.
+adb logcat -d -s BreezeCAD:* | tr -d '\r' > "$OUT/cube.log"
+read -r px py ps < <(sed -n 's/.*Touch: cube panel at \([0-9]*\),\([0-9]*\) size \([0-9]*\).*/\1 \2 \3/p' "$OUT/cube.log" | tail -1)
+if [ -n "${ps:-}" ]; then
+    cs=$(( ps * 33 / 172 ))   # the cube's half edge (dp)
+    adb shell input tap $(dp $(( px + ps / 2 - cs * 6 / 10 ))) $(dp $(( py + ps / 2 + cs / 2 )))
+else
+    echo "step cube-face: the cube panel's place is not in the log"
+fi
 shot 9-cube-face
 check cube-face
 
 adb logcat -d -s BreezeCAD:* > "$OUT/breezecad.log"
 adb logcat -d '*:E' > "$OUT/errors.log"
 grep -E "OpenGL ES|Window:|ERROR|WARN|test commands" "$OUT/breezecad.log" | head -20
-echo "touch: $(grep -o 'Touch: [^\r]*' "$OUT/breezecad.log" | tail -12 | tr '\n' ';')"
+echo "touch: $(tr -d '\r' < "$OUT/breezecad.log" | grep -o 'Touch: .*' | tail -12 | tr '\n' ';')"
 if [ $failed -ne 0 ] || [ -z "$(alive)" ]; then
     echo "the app died:"; grep -E "FATAL|DEBUG|libbreezecad|backtrace|#[0-9]+ pc|AndroidRuntime" "$OUT/errors.log" | head -60
     exit 1

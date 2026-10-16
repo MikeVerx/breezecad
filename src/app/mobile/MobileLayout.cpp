@@ -563,6 +563,8 @@ void Chip(AppContext& app, ImVec2 at, const char* text) {
     dl->AddText(ui.fonts.body, fs, {at.x + ui.S(10), at.y + (ui.S(24) - ts.y) / 2}, ui::ToU32(c.textSecondary), text);
 }
 
+bool cubeLogged = false;   ///< the big cube's place written to the log since it opened
+
 void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
     ui::Ui& ui = app.ui;
     MobileState& m = app.shell.mobile;
@@ -575,6 +577,7 @@ void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
         if (ui::IconButton(ui, "##cube", "ui-cube", 44, 24, Tr("Видовой куб"), true, m.cubeOpen)) {
             m.cubeOpen = !m.cubeOpen;
             log::Info("Touch: cube {}", m.cubeOpen ? "opened" : "folded");
+            if (m.cubeOpen) cubeLogged = false;
         }
         if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
             HomeView(app);
@@ -591,6 +594,8 @@ void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
     const float s = std::max(ui.S(120), std::min(ui.S(230), std::min(viewMax.x - viewMin.x, viewMax.y - viewMin.y - foot) - ui.S(64)));
     const ImVec2 p{viewMax.x - s - ui.S(8), at.y + b + ui.S(6)};
     bool inside = false;
+    if (!cubeLogged) log::Info("Touch: cube panel at {:.0f},{:.0f} size {:.0f}", p.x, p.y, s);   // the emulator's check taps a face
+    cubeLogged = true;
     if (BeginIsland(ui, "##island-cube-big", p, {s, s + foot})) {
         ui::Ui big = ui;
         big.scale = ui.scale * s / ui.S(172);   // the cube is laid out in a 172-unit corner
@@ -618,7 +623,10 @@ void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
         inside = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) || ImGui::IsAnyItemActive();
     }
     EndIsland();
-    Chip(app, {viewMin.x + ui.S(84), viewMax.y - ui.S(34)}, Tr("тап вне кубика — свернуть"));
+    // The hint at the view's bottom, left of the panel when there is room (a narrow view: none).
+    const char* chip = Tr("тап вне кубика — свернуть");
+    const float chipW = ui.fonts.body->CalcTextSizeA(ui.S(11.5f), FLT_MAX, 0, chip).x + ui.S(20);
+    if (viewMin.x + ui.S(84) + chipW < p.x - ui.S(8)) Chip(app, {viewMin.x + ui.S(84), viewMax.y - ui.S(34)}, chip);
     const ImVec2 mouse = ImGui::GetMousePos();
     const bool onButton = mouse.x >= at.x && mouse.y >= at.y && mouse.x < at.x + b && mouse.y < at.y + b;
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !inside && !onButton) {
