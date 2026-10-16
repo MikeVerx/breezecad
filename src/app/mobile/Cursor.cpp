@@ -42,7 +42,7 @@ void DrawDropCursor(AppContext& app, ImDrawList* dl) {
     const float len = std::hypot(d.x, d.y);
     d = len > 1.0f ? ImVec2{d.x / len, d.y / len} : ImVec2{0, 1};
     const ImVec2 r{d.y, -d.x};   // across, to the right of "down"
-    const float reach = kCursorReach * k, radius = 24.0f * k;
+    const float reach = CursorReach(app), radius = 24.0f * k;
     const auto at = [&](float across, float along) { return ImVec2{tip.x + r.x * across + d.x * along, tip.y + r.y * across + d.y * along}; };
     const ImVec2 centre = at(0, reach);
 

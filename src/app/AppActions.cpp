@@ -126,6 +126,21 @@ void RegisterActions(AppContext& app) {
            [&app] { app.shell.showMassProperties = true; }});
     a.Add({"app.settings", N_("Настройки"), "ui-sliders", 0, N_("Масштаб интерфейса, оформление, сочетания клавиш"), {},
            [&app] { app.shell.showSettings = true; }});
+#if defined(__ANDROID__)
+    {
+        // The touch settings, found by search: what people call them.
+        Action touch{"app.settingsTouch", N_("Настройки сенсора"), "ui-sliders", 0,
+                     N_("Отзывчивость: вращение пальцем, порог касания, долгое нажатие, скорость курсора, прокрутка"), {},
+                     [&app] {
+                         app.shell.showSettings = true;
+                         app.shell.settingsTab = 1;
+                         app.shell.settingsSub = 2;
+                     }};
+        touch.keywords = "сенсор сенсорный экран отзывчивость чувствительность скорость курсор касание тап палец пальцы вращение "
+                         "прокрутка долгое нажатие жесты рука левша блоки лупа громкость";
+        a.Add(std::move(touch));
+    }
+#endif
     a.Add({"app.about", N_("О программе"), "ui-info", 0, {}, {}, [&app] { app.shell.showAbout = true; }});
     // The testers' build: a report of this session, with a few words.
     a.Add({"app.reportProblem", N_("Сообщить о проблеме…"), "ui-info", 0, N_("Собрать отчёт о том, что сейчас не так, для разработчика"),

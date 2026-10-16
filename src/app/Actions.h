@@ -22,6 +22,7 @@ struct Action {
     std::function<bool()> enabled;     ///< null = always enabled
     std::function<void()> run;
     ImGuiKeyChord         defaultChord = 0;   ///< as shipped (set by Add), for Сбросить
+    std::string           keywords;    ///< more words the search finds it by (Russian, lower case), optional
 
     bool IsEnabled() const { return !enabled || enabled(); }
     /// Label and tooltip in the interface language (the fields keep the Russian).

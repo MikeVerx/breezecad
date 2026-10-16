@@ -201,9 +201,12 @@ int HandleInput(const void* event, const InputSink& sink) {
 void FeedTypedText() {
     platform::android::TypedText typed = platform::android::TakeTypedText();
     ImGuiIO& io = ImGui::GetIO();
-    if (!typed.text.empty()) io.AddInputCharactersUTF8(typed.text.c_str());
-    for (const int code : typed.keys) {
-        switch (code) {
+    for (const platform::android::TypedItem& item : typed) {
+        if (item.key == 0) {
+            io.AddInputCharactersUTF8(item.text.c_str());
+            continue;
+        }
+        switch (item.key) {
             case AKEYCODE_DEL:         PressKey(ImGuiKey_Backspace); break;
             case AKEYCODE_FORWARD_DEL: PressKey(ImGuiKey_Delete); break;
             case AKEYCODE_ENTER:       PressKey(ImGuiKey_Enter); break;

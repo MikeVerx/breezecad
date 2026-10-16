@@ -53,12 +53,13 @@ Screen CurrentScreen();
 
 /// Shows or hides the system keyboard (for the field that has focus).
 void ShowKeyboard(bool show);
-/// Text typed on the system keyboard since the last call (UTF-8), and
-/// special keys as Android key codes (backspace, enter, …).
-struct TypedText {
-    std::string        text;
-    std::vector<int>   keys;
+/// What the system keyboard typed since the last call, in order: pieces of
+/// text (UTF-8) and special keys as Android key codes (backspace, enter, …).
+struct TypedItem {
+    std::string text;
+    int         key = 0;   ///< 0: text
 };
+using TypedText = std::vector<TypedItem>;
 TypedText TakeTypedText();
 
 /// Immersive mode: the system bars hidden, back to them with a swipe.

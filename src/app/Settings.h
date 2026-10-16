@@ -22,6 +22,13 @@ struct MobileSettings {
     double labelScale = 1.0;      ///< labels in the view (cursor, dimensions), apart from the panels
     bool   volumeZoom = false;    ///< the volume keys zoom the view
     bool   magnifier = true;      ///< the magnifier at the cursor's tip in a sketch
+    // Touch responsiveness ("Управление → Сенсор → Отзывчивость")
+    double fingerOrbit = 1.0;     ///< the view turns this much per finger travel (1 = as the mouse)
+    int    tapSlop = 10;          ///< dp a finger may move and still tap (more: taps on a shaky hand; less: quicker drags)
+    double longPress = 0.5;       ///< s held still for the context menu
+    double cursorSpeed = 1.0;     ///< the cursor's tip moves this part of the finger's travel (less: precise)
+    int    cursorReach = 48;      ///< dp from the finger up to the tip
+    double scrollSpeed = 1.0;     ///< lists scroll this much per finger travel
     std::vector<std::string> hotbar;   ///< actions added to the panel at the camera, in order
     bool   askedNotifications = false;   ///< the permission for the watchdog's notice was asked once
     std::string projectsFolderName;      ///< for display: the folder chosen (its URI is the system's)

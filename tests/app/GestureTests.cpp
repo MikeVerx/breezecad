@@ -39,6 +39,30 @@ TEST_CASE("Gestures: a slow touch is no tap, a held one is the menu") {
     CHECK_FALSE(g.Take().tap);
 }
 
+TEST_CASE("Gestures: a slow but still touch, released before the menu, is a tap") {
+    GestureRecognizer g = Recognizer(false);
+    g.Down(1, {50, 50}, 0.0);
+    g.Tick(0.4);
+    g.Up(1, {52, 51}, 0.42);
+    CHECK(g.Take().tap);
+}
+
+TEST_CASE("Gestures: the user's tuning — a wider slop keeps a shaky tap, a longer press waits") {
+    GestureRecognizer g = Recognizer(false);
+    g.SetTuning({20.0, 0.8});
+    g.Down(1, {50, 50}, 0.0);
+    g.Move(1, {64, 50}, 0.05);   // 14 dp: within 20
+    CHECK(g.Take().orbit == Vec2{0, 0});
+    g.Up(1, {64, 50}, 0.1);
+    CHECK(g.Take().tap);
+    g.Down(1, {50, 50}, 1.0);
+    g.Tick(1.6);
+    CHECK_FALSE(g.Take().longPress);
+    g.Tick(1.85);
+    CHECK(g.Take().longPress);
+    g.Up(1, {50, 50}, 1.9);
+}
+
 TEST_CASE("Gestures: cursor off — one finger turns, two move and pinch") {
     GestureRecognizer g = Recognizer(false);
     g.Down(1, {100, 100}, 0.0);

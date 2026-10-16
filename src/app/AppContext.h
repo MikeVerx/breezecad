@@ -170,6 +170,7 @@ struct ViewportFrame {
     ImVec2         max;
     ViewProjection projection;
     bool           hovered = false;   ///< mouse over the scene, not over overlays
+    float          promptTop = 0;     ///< where prompts over the view start (under the phone's islands); 0: min.y + 14
 
     Vec2 ToLocal(ImVec2 screen) const { return {screen.x - min.x, screen.y - min.y}; }
     ImVec2 ToScreen(Vec2 local) const { return {static_cast<float>(local.x) + min.x, static_cast<float>(local.y) + min.y}; }

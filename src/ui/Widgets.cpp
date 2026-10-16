@@ -153,8 +153,16 @@ int Segmented(Ui& ui, const char* id, std::span<const char* const> labels, int c
         }
         const Color tc = disabled ? ui.C().textDisabled : on ? ui.C().text : ui.C().textSecondary;
         const char* label = Tr(labels[static_cast<std::size_t>(i)]);   // tables keep the Russian (N_)
-        const ImVec2 ts = font->CalcTextSizeA(fontSize, FLT_MAX, 0, label);
-        dl->AddText(font, fontSize, {p.x + (cellW - ts.x) / 2, p.y + (cellH - ts.y) / 2}, ToU32(tc), label);
+        // A label wider than its cell (a narrow panel) shrinks a little, then is cut at the cell.
+        float fs = fontSize;
+        ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0, label);
+        const float room = cellW - ui.S(6);
+        if (ts.x > room && ts.x > 0) {
+            fs = std::max(fontSize * 0.75f, fontSize * room / ts.x);
+            ts = font->CalcTextSizeA(fs, FLT_MAX, 0, label);
+        }
+        const ImVec4 clip{p.x + ui.S(2), p.y, p.x + cellW - ui.S(2), p.y + cellH};
+        dl->AddText(font, fs, {p.x + std::max(ui.S(3), (cellW - ts.x) / 2), p.y + (cellH - ts.y) / 2}, ToU32(tc), label, nullptr, 0.0f, &clip);
     }
     ImGui::SetCursorScreenPos(origin);
     ImGui::Dummy({width, height});
@@ -191,6 +199,7 @@ bool Slider(Ui& ui, const char* id, float& value, float width) {
 namespace {
 
 bool ButtonBody(Ui& ui, const char* id, const char* label, const char* hint, ImVec2 size, bool enabled, bool primary) {
+    if (!ui.keyHints) hint = nullptr;
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const bool clicked = ImGui::InvisibleButton(id, size) && enabled;
     const bool hovered = enabled && ImGui::IsItemHovered();
@@ -223,6 +232,24 @@ bool ButtonBody(Ui& ui, const char* id, const char* label, const char* hint, ImV
 }
 
 } // namespace
+
+void FittedText(ImDrawList* dl, ImFont* font, float size, ImVec2 at, float right, ImU32 color, const char* text) {
+    const float room = right - at.x;
+    if (font->CalcTextSizeA(size, FLT_MAX, 0, text).x <= room) {
+        dl->AddText(font, size, at, color, text);
+        return;
+    }
+    const char* ellipsis = "\xE2\x80\xA6";
+    const float dots = font->CalcTextSizeA(size, FLT_MAX, 0, ellipsis).x;
+    std::string cut = text;
+    while (!cut.empty() && font->CalcTextSizeA(size, FLT_MAX, 0, cut.c_str()).x + dots > room) {
+        cut.pop_back();
+        while (!cut.empty() && (static_cast<unsigned char>(cut.back()) & 0xC0) == 0x80) cut.pop_back();   // whole UTF-8 characters
+        if (!cut.empty() && static_cast<unsigned char>(cut.back()) >= 0xC0) cut.pop_back();
+    }
+    cut += ellipsis;
+    dl->AddText(font, size, at, color, cut.c_str());
+}
 
 bool PrimaryButton(Ui& ui, const char* id, const char* label, const char* hint, ImVec2 size, bool enabled) {
     return ButtonBody(ui, id, label, hint, size, enabled, true);

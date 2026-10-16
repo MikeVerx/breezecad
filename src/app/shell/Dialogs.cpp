@@ -1050,6 +1050,56 @@ void DrawTouchScreenSettings(AppContext& app, float width) {
     static constexpr std::array<const char*, 2> onOff{N_("Включена"), N_("Выключена")};
     if (const int n = ui::Segmented(ui, "magnifier", onOff, m.magnifier ? 0 : 1, 2, width); n != (m.magnifier ? 0 : 1)) m.magnifier = n == 0;
     gap();
+    // Responsiveness: how the fingers are read (mobile/Gestures, mobile/TouchInput).
+    ImGui::Dummy({0, ui.S(6)});
+    {
+        ui::FontScope font(ui.fonts.medium);
+        ImGui::TextUnformatted(Tr("Отзывчивость"));
+    }
+    gap();
+    const auto choice = [&](const char* id, const char* label, const char* hint, auto& value, const auto& names, const auto& values) {
+        ui::FieldLabel(ui, label);
+        int at = -1;
+        for (std::size_t i = 0; i < values.size(); ++i)
+            if (std::abs(static_cast<double>(values[i]) - static_cast<double>(value)) < 1e-6) at = static_cast<int>(i);
+        const int shown = at < 0 ? 0 : at;
+        if (const int n = ui::Segmented(ui, id, names, shown, static_cast<int>(names.size()), width); n != shown)
+            value = values[static_cast<std::size_t>(n)];
+        if (hint) {
+            ui::FontScope small(ui.fonts.caption);
+            ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+            ImGui::TextUnformatted(hint);
+            ImGui::PopTextWrapPos();
+            ImGui::PopStyleColor();
+        }
+        gap();
+    };
+    static constexpr std::array<const char*, 5> orbitNames{"50%", "75%", "100%", "150%", "200%"};
+    static constexpr std::array<double, 5> orbitValues{0.5, 0.75, 1.0, 1.5, 2.0};
+    choice("finger-orbit", Tr("Вращение пальцем"), nullptr, m.fingerOrbit, orbitNames, orbitValues);
+    static constexpr std::array<const char*, 4> slopNames{N_("Чуткий"), N_("Обычный"), N_("Спокойный"), N_("Твёрдый")};
+    static constexpr std::array<int, 4> slopValues{6, 10, 16, 24};
+    choice("tap-slop", Tr("Порог касания"),
+           Tr("Насколько может сдвинуться палец, чтобы касание осталось нажатием. Если нажатия срываются в "
+              "прокрутку или вращение — выберите «Спокойный» или «Твёрдый»."),
+           m.tapSlop, slopNames, slopValues);
+    static constexpr std::array<const char*, 4> pressNames{"0,3 с", "0,5 с", "0,7 с", "1 с"};
+    static constexpr std::array<double, 4> pressValues{0.3, 0.5, 0.7, 1.0};
+    choice("long-press", Tr("Долгое нажатие (контекстное меню)"), nullptr, m.longPress, pressNames, pressValues);
+    static constexpr std::array<const char*, 4> cursorNames{"25%", "50%", "75%", "100%"};
+    static constexpr std::array<double, 4> cursorValues{0.25, 0.5, 0.75, 1.0};
+    choice("cursor-speed", Tr("Скорость курсора"),
+           Tr("100% — кончик идёт за пальцем. Меньше — точный режим: кончик проходит часть пути пальца, "
+              "тап по-прежнему ставит его в точку касания."),
+           m.cursorSpeed, cursorNames, cursorValues);
+    static constexpr std::array<const char*, 4> reachNames{"32 dp", "48 dp", "64 dp", "80 dp"};
+    static constexpr std::array<int, 4> reachValues{32, 48, 64, 80};
+    choice("cursor-reach", Tr("Кончик курсора над пальцем"), nullptr, m.cursorReach, reachNames, reachValues);
+    static constexpr std::array<const char*, 4> scrollNames{"50%", "100%", "150%", "200%"};
+    static constexpr std::array<double, 4> scrollValues{0.5, 1.0, 1.5, 2.0};
+    choice("scroll-speed", Tr("Прокрутка списков"), nullptr, m.scrollSpeed, scrollNames, scrollValues);
+
     ui::FieldLabel(ui, Tr("Кнопки громкости"));
     static constexpr std::array<const char*, 2> volume{N_("Громкость"), N_("Масштаб вида")};
     if (const int n = ui::Segmented(ui, "volume", volume, m.volumeZoom ? 1 : 0, 2, width); n != (m.volumeZoom ? 1 : 0)) m.volumeZoom = n == 1;

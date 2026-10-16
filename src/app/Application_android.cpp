@@ -125,7 +125,11 @@ bool Application::AndroidBetweenFrames(double now) {
     mobile::MobileState& m = myShell.mobile;
     const bool typing = ImGui::GetCurrentContext() && ImGui::GetIO().WantTextInput;
     const bool words = myShell.paletteOpen || myShell.renaming || myShell.treeSearch || m.fullKeyboard || !m.phone;
+    myUi->keyHints = m.hardKeyboard;   // Ctrl+N or Esc mean nothing on a touch screen without a keyboard
+    const bool hadNumpad = m.numpad;
     m.numpad = m.phone && typing && !words && !m.hardKeyboard;
+    // A value left any way (↵, the OK button, another field): it is "пред." for the next one.
+    if (hadNumpad && !m.numpad && !m.editingText.empty()) m.previousValue = m.editingText;
     const bool keyboard = typing && words && !m.hardKeyboard;
     if (!typing) m.fullKeyboard = false;
     if (keyboard != myKeyboardUp) {

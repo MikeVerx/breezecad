@@ -496,8 +496,8 @@ extern "C" JNIEXPORT void JNICALL Java_io_github_mikeverx_breezecad_BreezeActivi
                                                                                                jint keyCode) {
     {
         const std::lock_guard lock(S().mutex);
-        S().typed.text += Text(env, text);
-        if (keyCode != 0) S().typed.keys.push_back(keyCode);
+        if (keyCode != 0) S().typed.push_back({{}, keyCode});
+        else if (std::string t = Text(env, text); !t.empty()) S().typed.push_back({std::move(t), 0});
     }
     Wake();
 }

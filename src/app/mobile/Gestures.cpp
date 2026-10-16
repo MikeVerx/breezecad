@@ -65,7 +65,7 @@ void GestureRecognizer::Move(int id, Vec2 at, double) {
     Finger* f = Find(id);
     if (!f) return;
     f->at = at;
-    if ((at - f->start).Length() > kTapSlopDp) myMoved = true;
+    if ((at - f->start).Length() > myTuning.tapSlop) myMoved = true;
     if (myConsumed) return;
 
     const Vec2   centre = Centre();
@@ -119,7 +119,11 @@ void GestureRecognizer::Up(int id, Vec2 at, double time) {
     f->at = at;
     const bool last = myFingers.size() == 1;
     if (last) {
-        const bool quick = !myMoved && !myConsumed && time - myStartTime < kTapSeconds;
+        // One finger taps until the long press would fire (a slow, deliberate
+        // tap is still a tap: 0.25 s missed many on the phone); two or three
+        // fingers must be quick, so a pinch that barely moved is no undo.
+        const bool still = !myMoved && !myConsumed;
+        const bool quick = still && time - myStartTime < (myMaxFingers == 1 ? myTuning.longPress : kTapSeconds);
         if (myCursorLeading) myStep.cursorEnded = true;
         if (myBoxing) myStep.boxEnded = true;
         // With the cursor on, a tap only moves it there (it already did): no click.
@@ -146,7 +150,7 @@ void GestureRecognizer::Cancel() {
 
 void GestureRecognizer::Tick(double time) {
     if (myFingers.size() != 1 || myMaxFingers != 1 || myMoved || myConsumed) return;
-    if (time - myStartTime < kLongPressSeconds) return;
+    if (time - myStartTime < myTuning.longPress) return;
     myConsumed = true;
     myStep.longPress = myFingers[0].at;
 }

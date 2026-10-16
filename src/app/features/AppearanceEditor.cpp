@@ -833,7 +833,8 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(48);
         ui.icons.Draw(dl, "appearance", {p.x + ui.S(14), p.y + (h - ui.S(24)) / 2}, ui.S(24), {1, 1, 1, 1});
-        dl->AddText(ui.fonts.title, ui.S(14), {p.x + ui.S(48), p.y + (h - ui.S(14)) / 2 - ui.S(1)}, ui::ToU32(c.text), Title());
+        ui::FittedText(dl, ui.fonts.title, ui.S(14), {p.x + ui.S(48), p.y + (h - ui.S(14)) / 2 - ui.S(1)}, p.x + width - ui.S(40),
+                       ui::ToU32(c.text), Title());
         ImGui::SetCursorScreenPos({p.x + width - ui.S(38), p.y + ui.S(9)});
         if (ui::IconButton(ui, "##close-look", "ui-close", 30, 14, Tr("Отмена (Esc)"))) app.Later([&app, &session, this] { Cancel(app, session); });
         ImGui::SetCursorScreenPos({p.x, p.y + h});

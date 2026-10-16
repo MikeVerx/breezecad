@@ -92,6 +92,8 @@ void DrawNumpad(AppContext& app, ImVec2 pos, ImVec2 size) {
                 ui.icons.Draw(dl, "ui-backspace", {mid.x - ui.S(10), mid.y - ui.S(10)}, ui.S(20), ink);
             } else if (key.code == NumpadKeyboard) {
                 ui.icons.Draw(dl, "ui-keyboard", {mid.x - ui.S(10), mid.y - ui.S(10)}, ui.S(20), ink);
+            } else if (key.code == NumpadEnter) {   // the fonts have no ↵
+                ui.icons.Draw(dl, "ui-enter", {mid.x - ui.S(11), mid.y - ui.S(11)}, ui.S(22), ink);
             } else {
                 const char* text = key.code == NumpadPrevious ? Tr("пред.") : key.label;
                 ImFont* font = key.code == NumpadPrevious ? ui.fonts.bodySmall : ui.fonts.medium;

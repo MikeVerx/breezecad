@@ -130,7 +130,7 @@ bool NavigateFingers(AppContext& app, const ViewportFrame& vf) {
     }
     bool moved = false;
     if (g.orbit.x != 0 || g.orbit.y != 0) {
-        const double k = kOrbitPerPixel * app.settings.orbitSpeed;
+        const double k = kOrbitPerPixel * app.settings.orbitSpeed * app.settings.mobile.fingerOrbit;
         app.viewport.Orbit(g.orbit.x * k, g.orbit.y * k * (app.settings.invertOrbit ? -1.0 : 1.0), nav.pivot, app.settings.turntableOrbit);
         moved = true;
     }

@@ -15,7 +15,6 @@
 namespace bz::app::mobile {
 namespace {
 
-constexpr float  kSlop = static_cast<float>(kTapSlopDp);
 constexpr double kPenAway = 1.0;   ///< seconds after the last pen event: fingers do everything again
 
 Vec2   ToVec(ImVec2 p) { return {p.x, p.y}; }
@@ -49,6 +48,10 @@ ImVec2 TipOf(const MobileState& m, ImVec2 finger, float reach) {
 
 } // namespace
 
+float CursorReach(const AppContext& app) {
+    return static_cast<float>(app.settings.mobile.cursorReach * app.settings.mobile.labelScale);
+}
+
 bool CursorActive(const AppContext& app) {
     const MobileState& m = app.shell.mobile;
     if (!m.phone) return false;
@@ -79,19 +82,48 @@ void TouchInput::Click(ImVec2 at, int button) {
     Button(button, false);
 }
 
-bool TouchInput::Busy() const { return !myRoutes.empty() || myQueued > 0 || myGestures.Active() || myUi.id >= 0 || myNumpadId >= 0; }
+void TouchInput::Wheel(float dx, float dy) {
+    // One wheel step scrolls about five lines of text in ImGui.
+    const float step = 5.0f * ImGui::GetTextLineHeightWithSpacing() / std::max(0.1f, myScrollSpeed);
+    ImGuiIO& io = ImGui::GetIO();
+    io.AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
+    io.AddMouseWheelEvent(dx / step, dy / step);
+    myQueued = std::max(myQueued, 2);
+}
+
+void TouchInput::Fling(double now) {
+    if (myFlingX == 0 && myFlingY == 0) return;
+    if (myUi.id >= 0) return;   // still under the finger
+    const double dt = std::clamp(now - myFlingTime, 0.0, 0.05);
+    myFlingTime = now;
+    Pos(myFlingAt);
+    Wheel(static_cast<float>(myFlingX * dt), static_cast<float>(myFlingY * dt));
+    const float decay = static_cast<float>(std::exp(-dt * 3.5));   // about a second to stop
+    myFlingX *= decay;
+    myFlingY *= decay;
+    if (std::hypot(myFlingX, myFlingY) < 40.0f) myFlingX = myFlingY = 0;
+}
+
+bool TouchInput::Busy() const {
+    return !myRoutes.empty() || myQueued > 0 || myGestures.Active() || myUi.id >= 0 || myNumpadId >= 0 || myFlingX != 0 || myFlingY != 0;
+}
 
 void TouchInput::BeginFrame(AppContext& app, double now) {
     MobileState& m = app.shell.mobile;
     if (myQueued > 0) --myQueued;
     if (m.penNear && myPenId < 0 && now - m.penSeenAt > kPenAway) m.penNear = false;
     myGestures.SetMode({CursorActive(app), m.boxMode && !CursorActive(app), m.penNear});
+    const MobileSettings& tune = app.settings.mobile;
+    mySlop = static_cast<float>(tune.tapSlop);
+    myScrollSpeed = static_cast<float>(tune.scrollSpeed);
+    myGestures.SetTuning({static_cast<double>(tune.tapSlop), tune.longPress});
+    Fling(now);
 
     for (const PointerEvent& e : myQueue) Route1(app, e);
     myQueue.clear();
 
     // A finger held still on a panel: the right button (tree rows, lists).
-    if (myUi.id >= 0 && myUi.mode == UiFinger::Mode::Undecided && now - myUi.since >= kLongPressSeconds) {
+    if (myUi.id >= 0 && myUi.mode == UiFinger::Mode::Undecided && now - myUi.since >= app.settings.mobile.longPress) {
         myUi.mode = UiFinger::Mode::Held;
         Click(myUi.at, ImGuiMouseButton_Right);
     }
@@ -136,6 +168,7 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
         }
     }
     if (e.action == PointerAction::Down) {
+        myFlingX = myFlingY = 0;   // a finger stops a flung list
         Route route = Route::View;
         if (UiAt(at) || !Inside(at, m.viewMin, m.viewMax)) route = myUi.id < 0 ? Route::Ui : Route::Ignored;
         myRoutes[e.id] = route;
@@ -178,11 +211,11 @@ void TouchInput::UiEvent(const PointerEvent& e) {
     const ImVec2 at{e.x, e.y};
     const ImVec2 last = myUi.at;
     myUi.at = at;
-    ImGuiIO& io = ImGui::GetIO();
+    if (e.action == PointerAction::Move && myUi.mode != UiFinger::Mode::Scroll) myFlingX = myFlingY = 0;
     switch (e.action) {
         case PointerAction::Move: {
             const float dx = at.x - myUi.start.x, dy = at.y - myUi.start.y;
-            if (myUi.mode == UiFinger::Mode::Undecided && std::hypot(dx, dy) > kSlop) {
+            if (myUi.mode == UiFinger::Mode::Undecided && std::hypot(dx, dy) > mySlop) {
                 // Up or down scrolls the list under the finger; sideways is a
                 // drag (sliders, the projects strip, a value dragged).
                 if (std::abs(dy) >= std::abs(dx)) {
@@ -194,18 +227,28 @@ void TouchInput::UiEvent(const PointerEvent& e) {
                 }
             }
             if (myUi.mode == UiFinger::Mode::Scroll) {
-                // One wheel step is about five lines of text in ImGui.
-                const float lines = (at.y - last.y) / (5.0f * ImGui::GetTextLineHeightWithSpacing());
-                const float sideways = (at.x - last.x) / (5.0f * ImGui::GetTextLineHeightWithSpacing());
-                io.AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
-                io.AddMouseWheelEvent(sideways, lines);
-                myQueued = std::max(myQueued, 2);
+                Wheel(at.x - last.x, at.y - last.y);
+                // The finger's speed, smoothed: what a fling carries on with.
+                const double dt = std::max(1e-3, e.time - myLastMoveTime);
+                if (e.time - myLastMoveTime < 0.1) {
+                    myFlingX = 0.6f * myFlingX + 0.4f * static_cast<float>((at.x - last.x) / dt);
+                    myFlingY = 0.6f * myFlingY + 0.4f * static_cast<float>((at.y - last.y) / dt);
+                } else {
+                    myFlingX = myFlingY = 0;
+                }
             } else if (myUi.mode == UiFinger::Mode::Drag) {
                 Pos(at);
             }
+            myLastMoveTime = e.time;
             break;
         }
         case PointerAction::Up:
+            if (myUi.mode == UiFinger::Mode::Scroll && e.time - myLastMoveTime < 0.08 && std::hypot(myFlingX, myFlingY) > 150.0f) {
+                myFlingAt = at;   // the list keeps going
+                myFlingTime = e.time;
+            } else {
+                myFlingX = myFlingY = 0;
+            }
             if (myUi.mode == UiFinger::Mode::Undecided) Click(myUi.start, ImGuiMouseButton_Left);
             else if (myUi.mode == UiFinger::Mode::Drag) {
                 Pos(at);
@@ -245,7 +288,7 @@ void TouchInput::PenEvent(AppContext& app, const PointerEvent& e) {
             break;
         case PointerAction::Move:
             if (e.id != myPenId) break;
-            if (myPenButton && !myPenFraming && std::hypot(at.x - myPenStart.x, at.y - myPenStart.y) > kSlop) {
+            if (myPenButton && !myPenFraming && std::hypot(at.x - myPenStart.x, at.y - myPenStart.y) > mySlop) {
                 // The button and a drag: a selection frame from where it touched.
                 myPenFraming = true;
                 Pos(myPenStart, ImGuiMouseSource_Pen);
@@ -293,14 +336,33 @@ void TouchInput::ApplyGestures(AppContext& app) {
     MobileState& m = app.shell.mobile;
     GestureStep step = myGestures.Take();
 
+    const float reach = CursorReach(app);
+    const float speed = static_cast<float>(app.settings.mobile.cursorSpeed);
     if (step.cursorStarted) {
         m.cursorBefore = m.cursorShown ? m.cursorTip : ImVec2{-1, -1};
+        // The precise cursor: with a tip already shown it does not jump under
+        // the finger; it moves a part of the finger's travel from where it is.
+        myRelative = speed < 0.99f && m.cursorShown && step.cursorFinger;
+        if (myRelative) {
+            myAnchorFinger = ToIm(*step.cursorFinger);
+            myAnchorTip = m.cursorTip;
+            myRelativeTravel = 0;
+            myRelativeSince = ImGui::GetTime();
+        }
         m.cursorShown = true;
         m.cursorDragging = true;
     }
     if (step.cursorFinger) {
-        m.cursorFinger = ToIm(*step.cursorFinger);
-        m.cursorTip = TipOf(m, m.cursorFinger, kCursorReach * static_cast<float>(app.settings.mobile.labelScale));
+        const ImVec2 finger = ToIm(*step.cursorFinger);
+        if (myRelative) {
+            myRelativeTravel = std::max(myRelativeTravel, std::hypot(finger.x - myAnchorFinger.x, finger.y - myAnchorFinger.y));
+            const ImVec2 aim{myAnchorTip.x + (finger.x - myAnchorFinger.x) * speed, myAnchorTip.y + (finger.y - myAnchorFinger.y) * speed};
+            m.cursorTip = TipOf(m, {aim.x, aim.y + reach}, reach);
+            m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + reach};   // the drop drawn from the tip, not at the finger
+        } else {
+            m.cursorFinger = finger;
+            m.cursorTip = TipOf(m, m.cursorFinger, reach);
+        }
     }
     if (step.cursorRevert) {
         m.cursorDragging = false;
@@ -308,10 +370,18 @@ void TouchInput::ApplyGestures(AppContext& app) {
             m.cursorShown = false;
         } else {
             m.cursorTip = m.cursorBefore;
-            m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + kCursorReach * static_cast<float>(app.settings.mobile.labelScale)};
+            m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + reach};
         }
     }
-    if (step.cursorEnded) m.cursorDragging = false;
+    if (step.cursorEnded) {
+        m.cursorDragging = false;
+        // A tap with the precise cursor still puts the tip over the tapped spot.
+        if (myRelative && myRelativeTravel <= mySlop && ImGui::GetTime() - myRelativeSince < app.settings.mobile.longPress) {
+            m.cursorTip = TipOf(m, myAnchorFinger, reach);
+            m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + reach};
+        }
+        myRelative = false;
+    }
 
     if (step.tap) {
         Click(ToIm(*step.tap), ImGuiMouseButton_Left);
@@ -374,6 +444,7 @@ void TouchInput::RunRowButtons(AppContext& app) {
 void TouchInput::PlaceMouse(AppContext& app) {
     MobileState& m = app.shell.mobile;
     if (myUi.id >= 0 || myPenId >= 0 || myMouseButtons != 0 || myMouseInUse) return;   // a finger on a panel, the pen or a mouse has it
+    if (myFlingX != 0 || myFlingY != 0) return;                                        // a flung list scrolls under the last spot
     if (m.penNear) return;                                               // the hovering pen points
     if (myGestures.GetMode().boxMode && myGestures.Active()) return;     // a frame drawn with a finger
     if (CursorActive(app) && m.cursorShown) {

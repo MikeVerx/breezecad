@@ -117,6 +117,12 @@ Settings FromJson(const nlohmann::json& j) {
         o.labelScale = std::clamp(m->value("labelScale", o.labelScale), 0.6, 2.5);
         o.volumeZoom = m->value("volumeZoom", o.volumeZoom);
         o.magnifier = m->value("magnifier", o.magnifier);
+        o.fingerOrbit = std::clamp(m->value("fingerOrbit", o.fingerOrbit), 0.25, 4.0);
+        o.tapSlop = std::clamp(m->value("tapSlop", o.tapSlop), 3, 40);
+        o.longPress = std::clamp(m->value("longPress", o.longPress), 0.2, 2.0);
+        o.cursorSpeed = std::clamp(m->value("cursorSpeed", o.cursorSpeed), 0.1, 1.0);
+        o.cursorReach = std::clamp(m->value("cursorReach", o.cursorReach), 16, 120);
+        o.scrollSpeed = std::clamp(m->value("scrollSpeed", o.scrollSpeed), 0.25, 4.0);
         o.askedNotifications = m->value("askedNotifications", o.askedNotifications);
         o.projectsFolderName = m->value("projectsFolderName", o.projectsFolderName);
         o.hotbar.clear();
@@ -213,6 +219,12 @@ bool Settings::Save(const std::filesystem::path& file) const {
                     {"labelScale", mobile.labelScale},
                     {"volumeZoom", mobile.volumeZoom},
                     {"magnifier", mobile.magnifier},
+                    {"fingerOrbit", mobile.fingerOrbit},
+                    {"tapSlop", mobile.tapSlop},
+                    {"longPress", mobile.longPress},
+                    {"cursorSpeed", mobile.cursorSpeed},
+                    {"cursorReach", mobile.cursorReach},
+                    {"scrollSpeed", mobile.scrollSpeed},
                     {"hotbar", mobile.hotbar},
                     {"askedNotifications", mobile.askedNotifications},
                     {"projectsFolderName", mobile.projectsFolderName}}},

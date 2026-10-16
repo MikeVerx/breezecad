@@ -19,6 +19,7 @@
 #include "document/SketchFeature.h"
 #include "ui/Menus.h"
 #include "ui/ViewCube.h"
+#include "app/viewport/ViewPrompt.h"
 #include "ui/Widgets.h"
 
 #include "app/mobile/Cursor.h"
@@ -70,14 +71,7 @@ void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDra
     for (const ShownPlane& p : planes) DrawPlane(app, dl, vf, p, &p == hot, faint && &p != hot);
 
     // Prompt at the top of the viewport.
-    const char* prompt = Tr("Выберите плоскость или плоскую грань для эскиза");
-    ImFont* font = app.ui.fonts.medium;
-    const ImVec2 ts = font->CalcTextSizeA(app.ui.S(13), FLT_MAX, 0, prompt);
-    // On the phone the islands (undo, tabs, cube) take the view's top row: under them.
-    const float top = app.ui.S(app.shell.mobile.phone ? 64.0f : 14.0f);
-    const ImVec2 p{(vf.min.x + vf.max.x - ts.x) / 2 - app.ui.S(14), vf.min.y + top};
-    dl->AddRectFilled(p, {p.x + ts.x + app.ui.S(28), p.y + app.ui.S(34)}, ui::ToU32(app.ui.C().panel.WithAlpha(0.94f)), app.ui.S(17));
-    dl->AddText(font, app.ui.S(13), {p.x + app.ui.S(14), p.y + app.ui.S(9)}, ui::ToU32(app.ui.C().text), prompt);
+    DrawViewPrompt(app.ui, dl, vf, Tr("Выберите плоскость или плоскую грань для эскиза"), app.ui.C().text);
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
     if (hot) {
@@ -267,6 +261,8 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
                            ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
 
     ViewportFrame vf{pos, {pos.x + size.x, pos.y + size.y}, app.viewport.Projection(), false};
+    // On the phone undo, the tabs and the cube float over the view's top row: prompts go under them.
+    vf.promptTop = pos.y + app.ui.S(app.shell.mobile.phone ? 62.0f : 14.0f);
     const bool navigating = Navigate(app, session, vf, ImGui::IsItemHovered());
     vf.projection = app.viewport.Projection();
     vf.hovered = ImGui::IsItemHovered() && !navigating;
@@ -359,12 +355,10 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
 
             // A friendly start for an empty part.
             if (session.doc.FeatureCount() == 0) {
-                const char* text = Tr("Начните с эскиза: «Начать эскиз» на ленте (S), затем выберите плоскость");
-                ImFont* font = ui.fonts.medium;
-                const ImVec2 ts = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, text);
-                const ImVec2 p{pos.x + (size.x - ts.x) / 2 - ui.S(14), pos.y + ui.S(14)};
-                dl->AddRectFilled(p, {p.x + ts.x + ui.S(28), p.y + ui.S(34)}, ui::ToU32(ui.C().panel.WithAlpha(0.94f)), ui.S(17));
-                dl->AddText(font, ui.S(13), {p.x + ui.S(14), p.y + ui.S(9)}, ui::ToU32(ui.C().textSecondary), text);
+                // The phone has no "S" key and calls the ribbon the tools block.
+                const char* text = app.shell.mobile.phone ? Tr("Начните с эскиза: «Начать эскиз» в блоке инструментов, затем выберите плоскость")
+                                                          : Tr("Начните с эскиза: «Начать эскиз» на ленте (S), затем выберите плоскость");
+                DrawViewPrompt(ui, dl, vf, text, ui.C().textSecondary);
             }
             // Double click on the model: edit the operation that made the body.
             if (!measuring && vf.hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))

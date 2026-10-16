@@ -82,8 +82,8 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         ui.icons.Draw(dl, info.icon, {p.x + ui.S(14), p.y + (h - ui.S(24)) / 2}, ui.S(24), {1, 1, 1, 1});
         const bool slot = myTool == SketchTool::Rectangle && IsSlot(myOptions.rectangle);
         const std::string title = Trf("Эскиз › {}", polygon ? Tr("Многоугольник") : slot ? Tr("Паз") : Tr(info.label));
-        dl->AddText(ui.fonts.title, ui.S(14), {p.x + ui.S(48), p.y + (h - ui.S(14)) / 2 - ui.S(1)}, ui::ToU32(c.text),
-                    title.c_str());
+        ui::FittedText(dl, ui.fonts.title, ui.S(14), {p.x + ui.S(48), p.y + (h - ui.S(14)) / 2 - ui.S(1)}, p.x + width - ui.S(40),
+                       ui::ToU32(c.text), title.c_str());
         ImGui::SetCursorScreenPos({p.x + width - ui.S(38), p.y + ui.S(9)});
         if (ui::IconButton(ui, "##close-tool", "ui-close", 30, 14, Tr("Закончить (Esc)")))
             app.Later([&app, &session, this] { SetTool(app, session, SketchTool::Select); });

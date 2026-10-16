@@ -242,9 +242,8 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
                 const float total = is + ui.S(6) + ts.x;
                 const float sx = a.x + std::max(ui.S(4), (w - total) / 2);
                 ui.icons.Draw(dl, tabs[i].icon, {sx, (a.y + bb.y - is) / 2}, is, c.text);
-                ImGui::PushClipRect(a, bb, true);
-                dl->AddText(ui.fonts.medium, ui.S(12.5f), {sx + is + ui.S(6), (a.y + bb.y - ts.y) / 2}, ui::ToU32(c.text), tabs[i].name);
-                ImGui::PopClipRect();
+                ui::FittedText(dl, ui.fonts.medium, ui.S(12.5f), {sx + is + ui.S(6), (a.y + bb.y - ts.y) / 2}, bb.x - ui.S(4),
+                               ui::ToU32(c.text), tabs[i].name);
             } else {
                 ui.icons.Draw(dl, tabs[i].icon, {a.x + (w - is) / 2, (a.y + bb.y - is) / 2}, is, c.textSecondary);
             }
@@ -257,8 +256,10 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
     const float bottom = pos.y + size.y - ui.S(kBeard) - m.insets.bottom;
     const float rowTop = bottom - ui.S(kRow);
     const float padH = m.numpad ? NumpadHeight(ui) : 0.0f;
-    const float contentH = std::max(ui.S(40), rowTop - padH - y);
-    {
+    const float contentH = rowTop - padH - y;
+    // The numpad takes the block when there is no room for both (a low
+    // phone screen): the content waits under it rather than show through.
+    if (contentH >= ui.S(40)) {
         const ImVec2 cp{pos.x + pad, y};
         BeginArea("##block1-content", cp, {size.x - pad - 1, contentH}, c.panel, true);
         const float width = size.x - pad - 1;
@@ -325,7 +326,7 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
                         m.cursorIn3d = !m.cursorIn3d;
                         if (m.cursorIn3d && !m.cursorShown) {   // first time: in the middle of the model
                             m.cursorTip = {(m.viewMin.x + m.viewMax.x) / 2, (m.viewMin.y + m.viewMax.y) / 2};
-                            m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + kCursorReach};
+                            m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + CursorReach(app)};
                             m.cursorShown = true;
                         }
                     }
@@ -614,7 +615,7 @@ void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
         // Under it: "Домой" and what one finger does here.
         const ui::ThemeColors& c = ui.C();
         ImGui::SetCursorScreenPos({p.x + ui.S(14), p.y + s + ui.S(8)});
-        if (ui::SecondaryButton(ui, "##cube-home", Tr("Домой"), nullptr, ui.S(96, 40))) {
+        if (ui::SecondaryButton(ui, "##cube-big-home", Tr("Домой"), nullptr, ui.S(96, 40))) {
             HomeView(app);
             m.cubeOpen = false;
         }

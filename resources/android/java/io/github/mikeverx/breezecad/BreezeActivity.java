@@ -39,6 +39,8 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.text.Editable;
+import android.text.Selection;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
@@ -203,6 +205,7 @@ public class BreezeActivity extends NativeActivity {
             InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
             if (show) {
                 textInput.requestFocus();
+                imm.restartInput(textInput);   // a new field: the keyboard's buffer starts empty
                 imm.showSoftInput(textInput, InputMethodManager.SHOW_IMPLICIT);
             } else {
                 imm.hideSoftInputFromWindow(textInput.getWindowToken(), 0);
@@ -236,55 +239,94 @@ public class BreezeActivity extends NativeActivity {
             info.inputType = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
                     | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD;
             info.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_FLAG_NO_FULLSCREEN | EditorInfo.IME_ACTION_DONE;
-            return new BaseInputConnection(this, false) {
-                private String composing = "";
+            return new Connection(this);
+        }
+    }
 
-                @Override
-                public boolean commitText(CharSequence text, int newCursorPosition) {
-                    composing = "";
-                    nativeText(text.toString(), 0);
-                    return true;
-                }
+    /// The keyboard edits a real buffer (some keyboards compose words, fix
+    /// them, delete by selection); after each change the difference from what
+    /// C++ already has goes there as backspaces and new text, in order. Text
+    /// and keys sent separately lost their order (letters went missing or
+    /// came after a backspace that should have erased them).
+    static final class Connection extends BaseInputConnection {
+        private String sent = "";   // the buffer as C++ has it
 
-                @Override
-                public boolean setComposingText(CharSequence text, int newCursorPosition) {
-                    composing = text.toString();
-                    return true;
-                }
+        Connection(View view) {
+            super(view, true);
+        }
 
-                @Override
-                public boolean finishComposingText() {
-                    if (!composing.isEmpty()) nativeText(composing, 0);
-                    composing = "";
-                    return true;
-                }
+        private void sync() {
+            Editable e = getEditable();
+            String now = e == null ? "" : e.toString();
+            int common = 0;
+            int limit = Math.min(sent.length(), now.length());
+            while (common < limit && sent.charAt(common) == now.charAt(common)) ++common;
+            if (common > 0 && common < sent.length() && Character.isLowSurrogate(sent.charAt(common))) --common;
+            int erase = sent.codePointCount(common, sent.length());
+            for (int i = 0; i < erase; ++i) nativeText("", KeyEvent.KEYCODE_DEL);
+            if (common < now.length()) nativeText(now.substring(common), 0);
+            sent = now;
+        }
 
-                @Override
-                public boolean deleteSurroundingText(int before, int after) {
-                    for (int i = 0; i < before; ++i) nativeText("", KeyEvent.KEYCODE_DEL);
-                    return true;
-                }
+        @Override
+        public boolean commitText(CharSequence text, int newCursorPosition) {
+            boolean r = super.commitText(text, newCursorPosition);
+            sync();
+            return r;
+        }
 
-                @Override
-                public boolean sendKeyEvent(KeyEvent e) {
-                    if (e.getAction() != KeyEvent.ACTION_DOWN) return true;
-                    int code = e.getKeyCode();
-                    if (code == KeyEvent.KEYCODE_DEL || code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_FORWARD_DEL
-                            || code == KeyEvent.KEYCODE_TAB) {
-                        nativeText("", code);
-                    } else {
-                        int ch = e.getUnicodeChar();
-                        if (ch != 0) nativeText(new String(Character.toChars(ch)), 0);
-                    }
-                    return true;
-                }
+        @Override
+        public boolean setComposingText(CharSequence text, int newCursorPosition) {
+            boolean r = super.setComposingText(text, newCursorPosition);
+            sync();
+            return r;
+        }
 
-                @Override
-                public boolean performEditorAction(int action) {
-                    nativeText("", KeyEvent.KEYCODE_ENTER);
-                    return true;
+        @Override
+        public boolean finishComposingText() {
+            boolean r = super.finishComposingText();
+            sync();
+            return r;
+        }
+
+        @Override
+        public boolean deleteSurroundingText(int before, int after) {
+            // Characters the buffer does not have (typed in the field earlier)
+            // are erased in the app with backspaces.
+            Editable e = getEditable();
+            int have = e == null ? 0 : Math.max(0, Selection.getSelectionStart(e));
+            boolean r = super.deleteSurroundingText(before, after);
+            sync();
+            for (int i = have; i < before; ++i) nativeText("", KeyEvent.KEYCODE_DEL);
+            return r;
+        }
+
+        @Override
+        public boolean sendKeyEvent(KeyEvent e) {
+            if (e.getAction() != KeyEvent.ACTION_DOWN) return true;
+            int code = e.getKeyCode();
+            Editable buffer = getEditable();
+            if (code == KeyEvent.KEYCODE_DEL && buffer != null && buffer.length() > 0) {
+                int end = buffer.length();
+                buffer.delete(end - Character.charCount(Character.codePointBefore(buffer, end)), end);
+                sync();
+            } else if (code == KeyEvent.KEYCODE_DEL || code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_FORWARD_DEL
+                    || code == KeyEvent.KEYCODE_TAB) {
+                nativeText("", code);
+            } else {
+                int ch = e.getUnicodeChar();
+                if (ch != 0) {
+                    if (buffer != null) buffer.append(new String(Character.toChars(ch)));
+                    sync();
                 }
-            };
+            }
+            return true;
+        }
+
+        @Override
+        public boolean performEditorAction(int action) {
+            nativeText("", KeyEvent.KEYCODE_ENTER);
+            return true;
         }
     }
 

@@ -12,7 +12,8 @@
 //   long press          context menu          context menu
 //   always: a tap with 2 fingers — undo, with 3 — redo.
 //
-// A tap: the fingers barely moved and left within kTapSeconds.
+// A tap: the fingers barely moved (Tuning::tapSlop) and left before the long
+// press; a tap of two or three fingers also within kTapSeconds.
 
 #include "core/Math.h"
 
@@ -21,9 +22,9 @@
 
 namespace bz::app::mobile {
 
-inline constexpr double kTapSeconds = 0.25;        ///< a tap is shorter
-inline constexpr double kTapSlopDp = 10.0;         ///< and moves less
-inline constexpr double kLongPressSeconds = 0.5;   ///< a press held this long, still: the context menu
+inline constexpr double kTapSeconds = 0.35;        ///< a tap of two or three fingers is shorter
+inline constexpr double kTapSlopDp = 10.0;         ///< a tap moves less (default; Tuning)
+inline constexpr double kLongPressSeconds = 0.5;   ///< a press held this long, still: the context menu (default; Tuning)
 
 /// What a gesture did since the last Take(): deltas to apply, events to run.
 struct GestureStep {
@@ -65,7 +66,14 @@ public:
         bool fingersOnlyNavigate = false;   ///< a stylus is near (palm rejection): no taps, cursor or frames
     };
 
+    /// How the fingers are read (the user's "Отзывчивость" settings).
+    struct Tuning {
+        double tapSlop = kTapSlopDp;          ///< dp a finger may move and still tap or long-press
+        double longPress = kLongPressSeconds; ///< s
+    };
+
     void SetMode(const Mode& mode) { myMode = mode; }
+    void SetTuning(const Tuning& tuning) { myTuning = tuning; }
     const Mode& GetMode() const { return myMode; }
 
     void Down(int id, Vec2 at, double time);
@@ -93,6 +101,7 @@ private:
     double  Spread() const;
 
     Mode                myMode;
+    Tuning              myTuning;
     std::vector<Finger> myFingers;
     GestureStep         myStep;
 

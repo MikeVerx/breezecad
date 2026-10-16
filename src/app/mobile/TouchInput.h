@@ -26,7 +26,10 @@
 namespace bz::app::mobile {
 
 /// How far above the finger the cursor's tip is (dp).
-inline constexpr float kCursorReach = 48.0f;   ///< as in the mockup: the drop's round end 48 dp below its point
+inline constexpr float kCursorReach = 48.0f;   ///< as in the mockup: the drop's round end 48 dp below its point (default)
+
+/// The tip's distance above the finger now (dp): the user's setting at the labels' scale.
+float CursorReach(const AppContext& app);
 
 class TouchInput {
 public:
@@ -49,6 +52,8 @@ private:
     };
 
     void Route1(AppContext& app, const PointerEvent& e);
+    void Wheel(float dx, float dy);   ///< scroll what is under the mouse by this finger travel (dp)
+    void Fling(double now);
     void UiEvent(const PointerEvent& e);
     void PenEvent(AppContext& app, const PointerEvent& e);
     void MouseEvent(const PointerEvent& e);
@@ -65,6 +70,16 @@ private:
     std::map<int, Route>      myRoutes;
     GestureRecognizer         myGestures;
     UiFinger                  myUi;
+    // A list flung: it keeps scrolling, slowing down (dp/s), where the finger left
+    float  myFlingY = 0, myFlingX = 0;
+    ImVec2 myFlingAt{0, 0};
+    double myFlingTime = 0;
+    double myLastMoveTime = 0;
+    // The precise cursor (speed < 1): the tip moves a part of the finger's travel from where it was
+    bool   myRelative = false;
+    ImVec2 myAnchorFinger{0, 0}, myAnchorTip{0, 0};
+    float  myRelativeTravel = 0;
+    double myRelativeSince = 0;
     ImVec2                    myMouse{-1, -1};   ///< last position given to ImGui
     bool                      myMouseKnown = false;
     int                       myMouseButtons = 0;   ///< a real mouse's buttons held
@@ -75,6 +90,8 @@ private:
     bool   myPenButton = false;   ///< its button held at the touch: right click or a frame
     bool   myPenFraming = false;
     int    myQueued = 0;          ///< frames still needed for queued clicks
+    float  mySlop = 10.0f;        ///< the user's tap slop (dp)
+    float  myScrollSpeed = 1.0f;
     // The numpad (its keys are not ImGui items: see mobile/Numpad.cpp)
     int    myNumpadId = -1;       ///< the finger on a key
     double myNumpadSince = 0, myNumpadRepeat = 0;
