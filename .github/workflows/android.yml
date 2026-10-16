@@ -117,7 +117,7 @@ jobs:
           bash scripts/android/package-apk.sh build/$PRESET "$BZ_ANDROID_DEPS" ${{ matrix.abi }} apk/BreezeCAD-android-${{ matrix.abi }}.apk > apk.log 2>&1
           status=$?
           tail -3 apk.log
-          echo "::notice title=APK ${{ matrix.abi }}::$(tail -1 apk.log)"
+          echo "::notice title=APK ${{ matrix.abi }}::$(tail -1 apk.log | grep . || echo "no output, exit $status")"
           rm -f "$RUNNER_TEMP/bz.p12"
           exit $status
       - name: Report failures

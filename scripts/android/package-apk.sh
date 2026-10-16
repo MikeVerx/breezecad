@@ -39,8 +39,9 @@ mkdir -p "$W/lib/$ABI" "$W/assets/examples"
 # --- Native libraries: libbreezecad.so and what it needs, recursively --------
 lookup() {   # a library name → its file among ours (none: a system library)
     for dir in "$BUILD/android" "$DEPS/lib" "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$triple"; do
-        [ -f "$dir/$1" ] && { echo "$dir/$1"; return; }
+        [ -f "$dir/$1" ] && { echo "$dir/$1"; return 0; }
     done
+    return 0   # not ours: under set -e a non-zero status would end the script
 }
 queue=(libbreezecad.so)
 declare -A seen=()
