@@ -1,5 +1,6 @@
 # Build output
 build/
+.android-deps/
 out/
 
 # IDE

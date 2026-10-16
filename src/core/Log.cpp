@@ -7,6 +7,10 @@
 #include <fstream>
 #include <mutex>
 
+#if defined(__ANDROID__)
+#include <android/log.h>   // stderr goes nowhere on Android: logcat instead
+#endif
+
 namespace bz::log {
 namespace {
 
@@ -58,7 +62,13 @@ void Write(Level level, std::string_view message) {
 
     Sink& sink = GetSink();
     std::unique_lock lock(sink.mutex);
+#if defined(__ANDROID__)
+    const int priority = level == Level::Error ? ANDROID_LOG_ERROR : level == Level::Warning ? ANDROID_LOG_WARN
+                       : level == Level::Info  ? ANDROID_LOG_INFO  : ANDROID_LOG_DEBUG;
+    __android_log_write(priority, "BreezeCAD", line.c_str());
+#else
     std::fputs(line.c_str(), stderr);
+#endif
     if (sink.file.is_open()) {
         sink.file << line;
         sink.file.flush();   // keep the tail on disk if the process dies

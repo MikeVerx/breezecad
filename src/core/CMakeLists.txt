@@ -25,5 +25,8 @@ add_library(bz_core STATIC
 target_include_directories(bz_core PUBLIC ${PROJECT_SOURCE_DIR}/src PRIVATE ${PROJECT_BINARY_DIR}/generated)
 add_dependencies(bz_core bz_build_info)
 target_link_libraries(bz_core PUBLIC Threads::Threads PRIVATE bz::json bz::stb)
+if(ANDROID)
+    target_link_libraries(bz_core PRIVATE log)   # core/Log writes to logcat
+endif()
 bz_set_warnings(bz_core)
 add_library(bz::core ALIAS bz_core)

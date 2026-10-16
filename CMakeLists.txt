@@ -32,6 +32,11 @@ endif()
 option(BZ_BUILD_APP   "Build the BreezeCAD desktop application" ON)
 option(BZ_BUILD_TESTS "Build unit tests"                          ON)
 option(BZ_BUILD_MCP   "Build the MCP module package (modules/mcp → .bzmod)" OFF)
+# Android: the app is a native library (src/android) packed into an APK by
+# scripts/android/package-apk.sh; the desktop app (BZ_BUILD_APP) is off there.
+if(ANDROID)
+    option(BZ_BUILD_ANDROID_APP "Build the Android app library (libbreezecad.so)" ON)
+endif()
 
 # All binaries land in one folder so the app finds assets next to itself.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)

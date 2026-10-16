@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BreezeCAD for Android. Filled in by scripts/android/package-apk.sh:
+     @VERSION_CODE@ (grows with every CI run, so a new APK installs over the
+     old one), @VERSION_NAME@, @MIN_SDK@, @TARGET_SDK@.
+     A NativeActivity: all code is C++ (libbreezecad.so), no Java. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="io.github.mikeverx.breezecad"
+          android:versionCode="@VERSION_CODE@"
+          android:versionName="@VERSION_NAME@">
+
+    <uses-sdk android:minSdkVersion="@MIN_SDK@" android:targetSdkVersion="@TARGET_SDK@" />
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+
+    <application android:label="BreezeCAD"
+                 android:icon="@mipmap/ic_launcher"
+                 android:hasCode="false"
+                 android:extractNativeLibs="true"
+                 android:allowBackup="false"
+                 android:theme="@android:style/Theme.Material.Light.NoActionBar.Fullscreen">
+        <!-- Always landscape (ADR-0004); turning the phone over flips it,
+             the activity is not recreated on rotation or a keyboard. -->
+        <activity android:name="android.app.NativeActivity"
+                  android:exported="true"
+                  android:screenOrientation="sensorLandscape"
+                  android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+                  android:launchMode="singleTask">
+            <meta-data android:name="android.app.lib_name" android:value="breezecad" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

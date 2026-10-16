@@ -55,10 +55,21 @@ add_executable(bz_tests
     sketch/TrimTests.cpp)
 target_link_libraries(bz_tests PRIVATE bz::miniz bz::core bz::sketch bz::document bz::assembly bz::kernel bz::modules bz::doctest bz::json)
 add_dependencies(bz_tests bz_example_module bz_example_module_fail)
-target_compile_definitions(bz_tests PRIVATE BZ_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
-    BZ_EXAMPLE_MODULE="$<TARGET_FILE:bz_example_module>"
-    BZ_EXAMPLE_MODULE_FAIL="$<TARGET_FILE:bz_example_module_fail>"
-    BZ_CMAKE="${CMAKE_COMMAND}")
+if(ANDROID)
+    # The tests run on a phone or the emulator, not where they were built:
+    # scripts/android/run-tests.sh copies the sources' data (assets, src,
+    # tests) and the example modules to these places on the device.
+    set(BZ_TEST_DEVICE_DIR "/data/local/tmp/breezecad" CACHE STRING "Where run-tests.sh puts the tests on the device")
+    target_compile_definitions(bz_tests PRIVATE BZ_SOURCE_DIR="${BZ_TEST_DEVICE_DIR}/source"
+        BZ_EXAMPLE_MODULE="${BZ_TEST_DEVICE_DIR}/modules/hello/$<TARGET_FILE_NAME:bz_example_module>"
+        BZ_EXAMPLE_MODULE_FAIL="${BZ_TEST_DEVICE_DIR}/modules/hello-fail/$<TARGET_FILE_NAME:bz_example_module_fail>"
+        BZ_CMAKE="cmake")   # no CMake on a device: the one test using it is off there
+else()
+    target_compile_definitions(bz_tests PRIVATE BZ_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+        BZ_EXAMPLE_MODULE="$<TARGET_FILE:bz_example_module>"
+        BZ_EXAMPLE_MODULE_FAIL="$<TARGET_FILE:bz_example_module_fail>"
+        BZ_CMAKE="${CMAKE_COMMAND}")
+endif()
 if(BZ_BUILD_MCP)   # the MCP module's protocol layer, the module, and its package
     target_sources(bz_tests PRIVATE modules/McpProtocolTests.cpp ${PROJECT_SOURCE_DIR}/modules/mcp/Protocol.cpp
                                     ${PROJECT_SOURCE_DIR}/modules/mcp/Net.cpp ${PROJECT_SOURCE_DIR}/modules/mcp/Connection.cpp)

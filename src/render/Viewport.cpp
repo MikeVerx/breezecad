@@ -63,7 +63,11 @@
 #include <gp_Pln.hxx>
 #include <gp_Trsf.hxx>
 
+#if defined(__ANDROID__)
+#include <chrono>
+#else
 #include <GLFW/glfw3.h>   // glfwGetTime for camera animation
+#endif
 
 #include <algorithm>
 #include <format>
@@ -586,6 +590,18 @@ struct Viewport::Impl {
 
 // --- Viewport ---------------------------------------------------------------
 
+namespace {
+/// The clock StepAnimation's `now` comes from: glfwGetTime on the desktop;
+/// on Android (no GLFW) a steady clock — android/AndroidMain uses the same.
+double AnimationClock() {
+#if defined(__ANDROID__)
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+#else
+    return glfwGetTime();
+#endif
+}
+} // namespace
+
 Viewport::Viewport() : myImpl(std::make_unique<Impl>()) {}
 
 Viewport::~Viewport() {
@@ -596,7 +612,7 @@ Viewport::~Viewport() {
 bool Viewport::Init(const NativeGlSurface& surface) {
     Impl& m = *myImpl;
 
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
     // The window's own X connection, not a second one. OCCT asks "is my
     // context current?" by comparing its connection with the current one;
     // with a connection of its own the answer was always no, and it bound the
@@ -610,6 +626,15 @@ bool Viewport::Init(const NativeGlSurface& surface) {
     Handle(Aspect_DisplayConnection) display = new Aspect_DisplayConnection();
 #endif
     m.driver = new OpenGl_GraphicDriver(display, false);
+#if defined(__ANDROID__)
+    // EGL: OCCT must be told the display, context and configuration of the
+    // app's context itself, or it refuses the window ("EGL does not provide
+    // compatible configurations").
+    if (!m.driver->InitEglContext(surface.display, surface.glContext, surface.eglConfig)) {
+        log::Error("Viewport: OCCT did not take the EGL context");
+        return false;
+    }
+#endif
     m.driver->ChangeOptions().buffersNoSwap = true;
     // Render plain sRGB colours into our RGBA8 texture. OCCT's linear-light
     // pipeline relies on an sRGB-capable output, which the window may not
@@ -1099,7 +1124,7 @@ void Viewport::AnimateTo(const CameraState& target, double seconds) {
     }
     m.animFrom = Camera();
     m.animTo = target;
-    m.animStart = glfwGetTime();
+    m.animStart = AnimationClock();
     m.animDuration = seconds;
     m.animating = true;
 }
