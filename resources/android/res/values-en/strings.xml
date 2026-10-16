@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_problems">Crashes and hangs</string>
+    <string name="crash_title">BreezeCAD closed because of an error</string>
+    <string name="crash_text">Tap to see the error code and the report</string>
+    <string name="crash_explain">The program crashed. Unsaved work can be recovered at the next start: it is in the autosave. The code below helps to find the cause — copy it or share the report with the developer. The report is never sent by itself.</string>
+    <string name="hang_title">BreezeCAD is not responding</string>
+    <string name="hang_text">Wait, or close the program and send a report</string>
+    <string name="hang_explain">The program stopped responding and was closed. Unsaved work can be recovered at the next start. The code below helps to find the cause — copy it or share the report with the developer.</string>
+    <string name="hang_wait">Wait</string>
+    <string name="hang_close">Close and send a report</string>
+    <string name="copy_code">Copy the code</string>
+    <string name="share_report">Share the report</string>
+    <string name="restart">Start again</string>
+</resources>

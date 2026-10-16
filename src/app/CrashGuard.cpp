@@ -155,6 +155,13 @@ void Watch() {
         }
         if (stalled < g.seconds || now < quietUntil || now - pausedAt < stalled) continue;
         WriteHangReport(stalled);
+#if defined(__ANDROID__)
+        // No window of ours here: the watchdog process (":crash") sees the
+        // beat stop and offers "wait / close and send a report" (ADR-0004).
+        log::Warn("Hang: no response for {:.0f} s (last action: {}); report written", stalled, mon::LastAction());
+        quietUntil = now + 60.0;
+        continue;
+#endif
         log::Warn("Hang: no response for {:.0f} s (last action: {}); showing the hang window", stalled, mon::LastAction());
         const std::vector<std::string> args = {"--hang-window", std::to_string(platform::CurrentProcessId()), ToUtf8(gHangReport),
                                                std::to_string(static_cast<int>(stalled))};
@@ -212,7 +219,9 @@ const char* ReasonLine() { return gReason; }
 
 bool ShowCrashWindow() {
     if (gShown.exchange(true) || !gProgram[0] || !gReportPath[0]) return false;
-#if defined(_WIN32)
+#if defined(__ANDROID__)
+    return false;   // the watchdog process shows the error screen (resources/android/java, Watchdog)
+#elif defined(_WIN32)
     STARTUPINFOW si{};
     si.cb = sizeof si;
     PROCESS_INFORMATION pi{};
