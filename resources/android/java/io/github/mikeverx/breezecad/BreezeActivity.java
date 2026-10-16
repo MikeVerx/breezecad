@@ -53,6 +53,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class BreezeActivity extends NativeActivity {
+    // NativeActivity opens libbreezecad.so itself, outside Java's class
+    // loader: the native* methods below would not be found (UnsatisfiedLinkError
+    // on the first insets). Loaded here first; the activity then gets the same library.
+    static {
+        System.loadLibrary("breezecad");
+    }
+
     static final String PREFS = "breezecad";
     private static final int PICK_OPEN = 1, PICK_SAVE = 2, PICK_FOLDER = 3;
 
