@@ -84,6 +84,7 @@ set(BZ_APP_SOURCES
     mobile/MobileLayout.cpp
     mobile/MobileRibbon.cpp
     mobile/Numpad.cpp
+    mobile/PhoneHome.cpp
     mobile/TouchInput.cpp)
 
 if(ANDROID)

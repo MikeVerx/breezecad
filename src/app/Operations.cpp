@@ -2,6 +2,7 @@
 
 #include "app/Format.h"
 #include "app/features/OperationEditors.h"
+#include "app/mobile/PhoneHome.h"
 #include "app/sketch/SketchEditor.h"
 #include "core/I18n.h"
 #include "core/Log.h"
@@ -92,7 +93,10 @@ void SaveDocument(AppContext& app, bool saveAs) {
     Session* s = app.Doc();
     if (!s) return;
     app.ops.Close(app, *s);
-    if (app.workspace.Save(*s, saveAs, app.notes, app.settings)) app.autosave.Discard(*s);
+    if (app.workspace.Save(*s, saveAs, app.notes, app.settings)) {
+        app.autosave.Discard(*s);
+        if (app.shell.mobile.phone) mobile::SaveThumbnail(app, *s);   // the card's picture on the phone's home page
+    }
 }
 
 void ExportDocument(AppContext& app, ExportFormat format) {

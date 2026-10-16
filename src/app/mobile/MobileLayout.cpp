@@ -2,6 +2,7 @@
 
 #include "app/Operations.h"
 #include "app/features/OperationEditors.h"
+#include "app/mobile/PhoneHome.h"
 #include "app/mobile/TouchInput.h"
 #include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
@@ -671,74 +672,6 @@ void DrawStrip(AppContext& app, ImVec2 pos, ImVec2 size) {
     }
     ImGui::PopClipRect();
     EndArea();
-}
-
-// --- The home page on the phone ------------------------------------------------------
-
-#if defined(__ANDROID__)
-/// The projects folder (chosen once) and its documents, newest first: open
-/// one with a tap, without the system's picker.
-void DrawProjectsFolder(AppContext& app, ImVec2 pos, ImVec2 size) {
-    ui::Ui& ui = app.ui;
-    const ui::ThemeColors& c = ui.C();
-    ImDrawList* dl = BeginArea("##projects-folder", pos, size, c.panel);
-    const std::string folder = platform::android::ProjectsFolder();
-    dl->AddText(ui.fonts.strong, ui.S(15), {pos.x + ui.S(14), pos.y + ui.S(14)}, ui::ToU32(c.text), Tr("Папка проектов"));
-    const std::string name = folder.empty() ? Tr("не выбрана") : app.settings.mobile.projectsFolderName.empty()
-                                                                 ? std::string(Tr("выбрана"))
-                                                                 : app.settings.mobile.projectsFolderName;
-    dl->AddText(ui.fonts.body, ui.S(12), {pos.x + ui.S(14), pos.y + ui.S(36)}, ui::ToU32(c.textMuted), name.c_str());
-    ImGui::SetCursorScreenPos({pos.x + size.x - ui.S(120), pos.y + ui.S(12)});
-    if (ui::SecondaryButton(ui, "##choose-folder", folder.empty() ? Tr("Выбрать…") : Tr("Сменить…"), nullptr, ui.S(108, 34)))
-        platform::android::ChooseProjectsFolder();
-
-    // The list: the folder is read again now and then, not every frame (the system answers slowly).
-    static std::vector<platform::android::FolderEntry> entries;
-    static double readAt = -100;
-    static std::string readFrom;
-    if (folder != readFrom || app.now - readAt > 5.0) {
-        entries = folder.empty() ? std::vector<platform::android::FolderEntry>{} : platform::android::ListProjects();
-        readAt = app.now;
-        readFrom = folder;
-    }
-    BeginArea("##projects-list", {pos.x, pos.y + ui.S(60)}, {size.x, size.y - ui.S(60)}, c.panel, true);
-    if (folder.empty()) {
-        ImGui::SetCursorScreenPos({pos.x + ui.S(14), pos.y + ui.S(70)});
-        ImGui::PushTextWrapPos(pos.x + size.x - ui.S(14));
-        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
-        ImGui::TextWrapped("%s", Tr("Выберите папку один раз — детали и сборки будут сохраняться в неё и открываться отсюда без лишних окон."));
-        ImGui::PopStyleColor();
-        ImGui::PopTextWrapPos();
-    }
-    for (const auto& e : entries) {
-        ImGui::PushID(e.uri.c_str());
-        const ImVec2 p = ImGui::GetCursorScreenPos();
-        if (ImGui::InvisibleButton("##project", {size.x, ui.S(44)})) {
-            const auto entry = e;
-            app.Later([&app, entry] {
-                if (const auto local = platform::android::Import(entry.uri, entry.name); !local.empty()) OpenDocument(app, local);
-            });
-        }
-        ImDrawList* ldl = ImGui::GetWindowDrawList();
-        if (ImGui::IsItemActive()) ldl->AddRectFilled(p, {p.x + size.x, p.y + ui.S(44)}, ui::ToU32(c.pressed));
-        const bool assembly = e.name.ends_with(".bza");
-        ui.icons.Draw(ldl, assembly ? "tree-assembly" : "tree-part", {p.x + ui.S(14), p.y + ui.S(11)}, ui.S(22), {1, 1, 1, 1});
-        ldl->AddText(ui.fonts.body, ui.S(14), {p.x + ui.S(46), p.y + ui.S(13)}, ui::ToU32(c.text), e.name.c_str());
-        ImGui::PopID();
-    }
-    EndArea();
-    EndArea();
-}
-#endif
-
-void DrawPhoneHome(AppContext& app, ImVec2 pos, ImVec2 size) {
-#if defined(__ANDROID__)
-    const float folderW = std::min(size.x * 0.42f, app.ui.S(360));
-    DrawProjectsFolder(app, pos, {folderW, size.y});
-    DrawHomeScreen(app, {pos.x + folderW, pos.y}, {size.x - folderW, size.y});
-#else
-    DrawHomeScreen(app, pos, size);
-#endif
 }
 
 } // namespace
