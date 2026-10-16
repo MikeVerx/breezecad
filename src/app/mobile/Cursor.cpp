@@ -4,6 +4,10 @@
 #include "core/I18n.h"
 #include "ui/Gl.h"
 
+#ifndef GL_CLAMP_TO_EDGE   // Windows' gl.h is OpenGL 1.1
+#define GL_CLAMP_TO_EDGE 0x812F
+#endif
+
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
