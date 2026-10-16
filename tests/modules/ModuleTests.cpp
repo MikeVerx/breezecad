@@ -485,7 +485,8 @@ TEST_CASE("an installed module is removed: unloaded, its folder gone, forgotten"
     CHECK(mm.Modules().empty());
 }
 
-#if !defined(_WIN32)
+// Not on Android: the package is packed by running CMake, which a device has not.
+#if !defined(_WIN32) && !defined(__ANDROID__)
 TEST_CASE("a program inside a package stays runnable after installing") {
     // A module's helper (the MCP bridge is one) must keep its x bit: packed
     // the way module packages are made (cmake -E tar --format=zip).

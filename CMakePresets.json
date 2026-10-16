@@ -45,6 +45,34 @@
         "CMAKE_OSX_DEPLOYMENT_TARGET": "14.0",
         "CMAKE_OSX_ARCHITECTURES": "arm64"
       }
+    },
+    {
+      "name": "android",
+      "hidden": true,
+      "description": "Core and unit tests only (no window yet). ANDROID_NDK_HOME — the NDK, BZ_ANDROID_DEPS — the prefix of scripts/android/build-deps.sh.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake",
+        "ANDROID_PLATFORM": "android-28",
+        "ANDROID_STL": "c++_shared",
+        "ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES": "ON",
+        "CMAKE_FIND_ROOT_PATH": "$env{BZ_ANDROID_DEPS}",
+        "OpenCASCADE_DIR": "$env{BZ_ANDROID_DEPS}/lib/cmake/opencascade",
+        "BZ_BUILD_APP": "OFF"
+      }
+    },
+    {
+      "name": "android-arm64",
+      "displayName": "Android arm64 (phones), core + tests",
+      "inherits": "android",
+      "cacheVariables": { "ANDROID_ABI": "arm64-v8a" }
+    },
+    {
+      "name": "android-x86_64",
+      "displayName": "Android x86_64 (emulator), core + tests",
+      "inherits": "android",
+      "cacheVariables": { "ANDROID_ABI": "x86_64" }
     }
   ],
   "buildPresets": [
@@ -52,7 +80,9 @@
     { "name": "linux-release",       "configurePreset": "linux-release" },
     { "name": "windows-mingw",       "configurePreset": "windows-mingw" },
     { "name": "windows-mingw-debug", "configurePreset": "windows-mingw-debug" },
-    { "name": "macos",               "configurePreset": "macos" }
+    { "name": "macos",               "configurePreset": "macos" },
+    { "name": "android-arm64",       "configurePreset": "android-arm64" },
+    { "name": "android-x86_64",      "configurePreset": "android-x86_64" }
   ],
   "testPresets": [
     { "name": "linux-debug",   "configurePreset": "linux-debug",   "output": { "outputOnFailure": true } },
