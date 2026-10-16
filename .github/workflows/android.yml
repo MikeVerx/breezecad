@@ -1,0 +1,137 @@
+# Android, step 1 of the port (docs/ADR/0004-mobile-touch-ui.md): the core
+# (core, sketch, document, assembly, kernel, modules) and the unit tests,
+# built with the NDK — no window, no interface yet.
+#
+#   arm64-v8a  phones: built; the staged tests are the artifact
+#              "bz-tests-android-arm64" (run on a phone: scripts/android/run-tests.sh)
+#   x86_64     built the same way and run on an Android emulator: GitHub's
+#              runners cannot run arm64 code, the emulator checks Android's
+#              own C library and C++ runtime for real
+#
+# FreeType and OCCT for Android come from scripts/android/build-deps.sh
+# (about an hour per ABI the first time) and stay in the Actions cache.
+#
+# Separate from build.yml on purpose: it never holds up or breaks the
+# desktop builds and their release "next-build".
+name: android
+
+on:
+  push:
+    branches: [next, main, 'ci/android-*', 'feat/android-*']
+    paths-ignore: ['docs/**', 'translations/**', '**/*.md']
+  pull_request:
+    paths-ignore: ['docs/**', 'translations/**', '**/*.md']
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NDK_VERSION: r27c   # LTS; part of the cache key
+
+jobs:
+  build:
+    name: build (${{ matrix.abi }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, x86_64]
+    env:
+      BZ_ANDROID_DEPS: ${{ github.workspace }}/.android-deps/${{ matrix.abi }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: false
+      - name: Tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
+          echo "ANDROID_NDK_HOME=${{ steps.ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
+          echo "::notice title=Android toolchain::NDK $NDK_VERSION ($(grep Pkg.Revision ${{ steps.ndk.outputs.ndk-path }}/source.properties | cut -d= -f2 | tr -d ' ')), CMake $(cmake --version | head -1 | awk '{print $3}')"
+      - name: Restore FreeType and OCCT
+        id: deps
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.BZ_ANDROID_DEPS }}
+          key: android-deps-${{ matrix.abi }}-${{ env.NDK_VERSION }}-${{ hashFiles('scripts/android/build-deps.sh') }}
+      - name: Build FreeType and OCCT (first run, about an hour)
+        if: steps.deps.outputs.cache-hit != 'true'
+        run: |
+          set +e
+          bash scripts/android/build-deps.sh ${{ matrix.abi }} "$BZ_ANDROID_DEPS" > deps.log 2>&1
+          status=$?
+          tail -3 deps.log
+          exit $status
+      # Saved before BreezeCAD builds: a failing BreezeCAD build must not
+      # cost the hour of OCCT again.
+      - name: Save FreeType and OCCT
+        if: steps.deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.BZ_ANDROID_DEPS }}
+          key: ${{ steps.deps.outputs.cache-primary-key }}
+      - name: Configure
+        run: |
+          preset=android-${{ matrix.abi == 'arm64-v8a' && 'arm64' || 'x86_64' }}
+          echo "PRESET=$preset" >> "$GITHUB_ENV"
+          set +e
+          cmake --preset $preset > configure.log 2>&1
+          status=$?
+          grep -E "OpenCASCADE|Android|Error" configure.log | head -5
+          exit $status
+      - name: Build
+        run: |
+          set +e
+          cmake --build --preset $PRESET -j 3 > build.log 2>&1
+          status=$?
+          tail -3 build.log
+          exit $status
+      - name: Stage the tests
+        run: |
+          bash scripts/android/stage-tests.sh build/$PRESET "$BZ_ANDROID_DEPS" ${{ matrix.abi }} stage
+          file stage/bz_tests
+          echo "::notice title=Android ${{ matrix.abi }}::bz_tests $(du -h stage/bz_tests | cut -f1), staged $(du -sh stage | cut -f1): $(file -b stage/bz_tests | cut -d, -f1-2)"
+      - name: Report failures
+        if: failure()
+        run: bash scripts/ci-annotate.sh deps.log configure.log build.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bz-tests-android-${{ matrix.abi == 'arm64-v8a' && 'arm64' || 'x86_64' }}
+          path: stage
+          retention-days: 14
+
+  test:
+    # The x86_64 build on an emulator (Android 11, KVM on the runner).
+    name: test (x86_64 emulator)
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: bz-tests-android-x86_64
+          path: stage
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      # The runner's script runs line by line, so the whole run is one script.
+      - name: Run bz_tests on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash scripts/android/run-tests.sh stage > test.log 2>&1; status=$?; tail -5 test.log; exit $status
+      - name: Report failures
+        if: failure()
+        run: bash scripts/ci-annotate.sh test.log
