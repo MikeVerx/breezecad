@@ -23,8 +23,10 @@ SRC=$(cd "$(dirname "$0")/../.." && pwd)
 MIN_SDK=28   # = ANDROID_PLATFORM in CMakePresets.json
 
 NDK_BIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
-TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-PLATFORM=$(ls -d "$ANDROID_HOME"/platforms/android-* | sort -V | tail -1)
+# The newest released tools and platform: previews (android-Baklava, "beta3",
+# 36.0.0-rc…) make an APK that release Android refuses to install.
+TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | grep -E '/[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+PLATFORM=$(ls -d "$ANDROID_HOME"/platforms/android-* | grep -E '/android-[0-9]+$' | sort -V | tail -1)
 TARGET_SDK=${PLATFORM##*-}
 case "$ABI" in
     arm64-v8a) triple=aarch64-linux-android ;;
