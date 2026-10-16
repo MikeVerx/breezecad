@@ -11,6 +11,22 @@ namespace bz::app {
 
 enum class ThemeChoice : unsigned char { System, Light, Dark };
 
+/// The phone layout and touch (docs/ADR/0004-mobile-touch-ui.md); used on
+/// Android, kept in the file everywhere.
+struct MobileSettings {
+    int    layout = 0;            ///< 0 by the window's size, 1 always the desktop layout, 2 always the phone one
+    bool   leftHanded = false;    ///< blocks 1 and 2 change sides
+    int    leftWidth = 20;        ///< block 1, % of the window's width
+    int    rightWidth = 20;       ///< block 2, %
+    bool   iconsOnly = false;     ///< block 2 shows icons without names (20 / 70 / 10)
+    double labelScale = 1.0;      ///< labels in the view (cursor, dimensions), apart from the panels
+    bool   volumeZoom = false;    ///< the volume keys zoom the view
+    bool   magnifier = true;      ///< the magnifier at the cursor's tip in a sketch
+    std::vector<std::string> hotbar;   ///< actions added to the panel at the camera, in order
+    bool   askedNotifications = false;   ///< the permission for the watchdog's notice was asked once
+    std::string projectsFolderName;      ///< for display: the folder chosen (its URI is the system's)
+};
+
 /// User preferences, stored as JSON in the config folder.
 struct Settings {
     ThemeChoice theme          = ThemeChoice::System;
@@ -47,6 +63,7 @@ struct Settings {
     std::string mousePreset = "breezecad";
     bool        mouseCustom = false;
     TouchNavigation touch;                       ///< touchpad gestures
+    MobileSettings  mobile;                      ///< phone layout and touch screen
     std::vector<std::filesystem::path> recentFiles;   ///< most recent first
     /// Not stored: set by Load when the file was damaged and defaults were used
     /// (Russian template, translated when shown).

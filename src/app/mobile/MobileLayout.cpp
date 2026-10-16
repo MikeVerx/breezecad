@@ -1,0 +1,842 @@
+#include "app/mobile/MobileLayout.h"
+
+#include "app/Operations.h"
+#include "app/features/OperationEditors.h"
+#include "app/mobile/TouchInput.h"
+#include "app/shell/Shell.h"
+#include "app/sketch/SketchEditor.h"
+#include "app/viewport/Measure.h"
+#include "app/viewport/ViewportPanel.h"
+#include "core/I18n.h"
+#include "core/Log.h"
+#include "core/PathText.h"
+#include "platform/Window.h"
+#include "ui/Menus.h"
+#include "ui/ViewCube.h"
+#include "ui/Widgets.h"
+
+#include <imgui_stdlib.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstring>
+
+#if defined(__ANDROID__)
+#include "platform/Android.h"
+#endif
+
+namespace bz::app::mobile {
+namespace {
+
+// Sizes in dp (scaled by the interface scale through ui.S).
+constexpr float kBrow = 44;    ///< the top row of a block
+constexpr float kBeard = 26;   ///< the bottom line of a block
+constexpr float kRow = 50;     ///< block 1's row: frame · cursor · cancel · OK
+constexpr float kTabs = 38;    ///< block 1's tabs
+constexpr float kStrip = 40;   ///< block 4, the projects
+constexpr float kIsland = 42;  ///< the islands' height (blocks 3 and 5)
+
+Color Dark() { return {0.05f, 0.05f, 0.06f, 1.0f}; }   ///< the camera panel: the colour of the cut-out
+
+/// A floating panel over the model (blocks 3, 5, the cube): a window of its
+/// own, so it is above the view and takes the touches there.
+bool BeginIsland(ui::Ui& ui, const char* id, ImVec2 pos, ImVec2 size) {
+    const ui::ThemeColors& c = ui.C();
+    ImGui::SetNextWindowPos(pos);
+    ImGui::SetNextWindowSize(size);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ui.S(12));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0, 0});
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ui::ToVec4(c.panel.WithAlpha(0.96f)));
+    ImGui::PushStyleColor(ImGuiCol_Border, ui::ToVec4(c.divider));
+    const bool open = ImGui::Begin(id, nullptr,
+                                   ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                       ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(4);
+    return open;
+}
+
+void EndIsland() { ImGui::End(); }
+
+void Run(AppContext& app, const char* id) {
+    const std::string action = id;
+    app.Later([&app, action] { app.actions.Run(action); });
+}
+
+/// An icon button running an action (greyed when it cannot run now).
+void ActionButton(AppContext& app, const char* id, float size, float icon, bool active = false) {
+    const Action* a = app.actions.Find(id);
+    if (!a) return;
+    if (ui::IconButton(app.ui, id, a->icon, size, icon, a->Label(), a->IsEnabled(), active)) Run(app, id);
+}
+
+// --- The camera panel ------------------------------------------------------------
+
+/// Commands that can go to the hotbar ("+").
+constexpr const char* kHotbarChoices[] = {
+    "view.section",   "tools.measure", "view.home",       "view.fit",      "view.shaded",       "view.edges",
+    "view.wireframe", "view.transparent", "sketch.lookAt", "sketch.dimension", "sketch.line",     "sketch.circle",
+    "sketch.rectangle", "feature.extrude", "feature.fillet", "file.exportStl", "tools.massProperties", "view.background",
+};
+
+void DrawCameraPanel(AppContext& app, ImVec2 pos, ImVec2 size) {
+    ui::Ui& ui = app.ui;
+    MobileState& m = app.shell.mobile;
+    ImDrawList* dl = BeginArea("##camera", pos, size, Dark());
+    const float b = std::min(size.x - ui.S(4), ui.S(40));
+    const float x = pos.x + (size.x - b) / 2;
+    // Slots top to bottom; the camera's stretch stays empty.
+    float y = pos.y + std::max(ui.S(6), m.insets.top);
+    const auto clear = [&](float h) {
+        if (m.cutoutTo > m.cutoutFrom && y < m.cutoutTo + ui.S(4) && y + h > m.cutoutFrom - ui.S(4)) y = m.cutoutTo + ui.S(6);
+    };
+    const auto place = [&] {
+        clear(b);
+        ImGui::SetCursorScreenPos({x, y});
+        y += b + ui.S(4);
+    };
+    // The logo: the main menu.
+    place();
+    const ImVec2 lp = ImGui::GetCursorScreenPos();
+    if (ImGui::InvisibleButton("##logo", {b, b})) ImGui::OpenPopup("##main-menu");
+    ui.icons.Draw(dl, "brand-mark", {lp.x + (b - ui.S(24)) / 2, lp.y + (b - ui.S(24)) / 2}, ui.S(24), {1, 1, 1, 1});
+    MainMenuPopup(app);
+    // "+": a command to the hotbar.
+    place();
+    if (ui::IconButton(ui, "##hotbar-add", "ui-plus", b, 18, Tr("Добавить кнопку")))
+        ImGui::OpenPopup("##hotbar-pick");
+    {
+        ui::MenuStyle style(ui);
+        if (ImGui::BeginPopup("##hotbar-pick")) {
+            for (const char* id : kHotbarChoices) {
+                const Action* a = app.actions.Find(id);
+                if (!a) continue;
+                auto& bar = app.settings.mobile.hotbar;
+                const bool there = std::find(bar.begin(), bar.end(), id) != bar.end();
+                if (ui::MenuItem(ui, a->Label(), nullptr, a->icon, there)) {
+                    if (there) bar.erase(std::remove(bar.begin(), bar.end(), id), bar.end());
+                    else bar.emplace_back(id);
+                }
+            }
+            ImGui::EndPopup();
+        }
+    }
+    // The user's buttons; a long press takes one away.
+    const float bottomReserve = b + ui.S(8) + m.insets.bottom;
+    std::vector<std::string>& bar = app.settings.mobile.hotbar;
+    for (std::size_t i = 0; i < bar.size(); ++i) {
+        clear(b);
+        if (y + b > pos.y + size.y - bottomReserve) break;
+        ImGui::SetCursorScreenPos({x, y});
+        ImGui::PushID(static_cast<int>(i));
+        const Action* a = app.actions.Find(bar[i]);
+        if (a && ui::IconButton(ui, "##hot", a->icon, b, 20, a->Label(), a->IsEnabled())) Run(app, a->id.c_str());
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+            const std::string gone = bar[i];
+            app.Later([&app, gone] {
+                auto& list = app.settings.mobile.hotbar;
+                list.erase(std::remove(list.begin(), list.end(), gone), list.end());
+            });
+        }
+        ImGui::PopID();
+        y += b + ui.S(4);
+    }
+    // The colours at the bottom.
+    ImGui::SetCursorScreenPos({x, pos.y + size.y - b - ui.S(6) - m.insets.bottom});
+    if (ui::IconButton(ui, "##colours", "ui-palette", b, 20, Tr("Внешний вид"), true, app.ops.appearance.IsOpen()))
+        Run(app, "view.appearance");
+    EndArea();
+}
+
+// --- Block 1 ---------------------------------------------------------------------
+
+bool HasToolPanel(AppContext& app, Session& session) {
+    return app.ops.Active() || (app.shell.measuring && session.mode == EditMode::Model) ||
+           (session.activeSketch && app.sketch.HasToolPanel());
+}
+
+const char* CurrentTask(AppContext& app, Session& session) {
+    if (const OperationEditor* op = app.ops.Active()) return op->Title();
+    if (app.shell.measuring && session.mode == EditMode::Model) return Tr("Измерение");
+    if (session.mode == EditMode::Sketch) return Tr("Эскиз");
+    if (session.mode == EditMode::PickPlane) return Tr("Выберите плоскость");
+    return "";
+}
+
+void DrawRowButton(AppContext& app, const char* id, const char* icon, const char* tip, ImVec2 p, ImVec2 s, bool on, bool primary,
+                   bool enabled, bool* clicked, bool* held) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImGui::SetCursorScreenPos(p);
+    const bool click = ImGui::InvisibleButton(id, s, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+    if (clicked) *clicked = click && enabled && ImGui::IsMouseReleased(ImGuiMouseButton_Left);
+    if (held) *held = enabled && ImGui::IsItemClicked(ImGuiMouseButton_Right);   // a long press (touch) or a right click
+    const bool pressed = ImGui::IsItemActive();
+    const ImVec2 a{p.x + ui.S(3), p.y + ui.S(4)}, b{p.x + s.x - ui.S(3), p.y + s.y - ui.S(4)};
+    const Color fill = primary ? (enabled ? c.accent : c.segmentTrack) : on ? c.accentSoft : pressed ? c.pressed : c.segmentTrack;
+    dl->AddRectFilled(a, b, ui::ToU32(fill), ui.S(10));
+    if (on && !primary) dl->AddRect(a, b, ui::ToU32(c.accentSoftBorder), ui.S(10));
+    const float is = ui.S(22);
+    const Color ink = !enabled ? c.textDisabled : primary ? c.textOnAccent : on ? c.accent : c.textSecondary;
+    ui.icons.Draw(dl, icon, {p.x + (s.x - is) / 2, p.y + (s.y - is) / 2}, is, ink);
+    (void)tip;
+}
+
+void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool onLeft, bool logoHere) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    MobileState& m = app.shell.mobile;
+    ImDrawList* dl = BeginArea("##block1", pos, size, c.panel);
+    const float pad = onLeft ? std::max(0.0f, m.cornerRadius * 0.3f) : 0.0f;   // off the rounded corner
+    const float edge = onLeft ? pos.x : pos.x + size.x;
+    dl->AddLine({onLeft ? pos.x + size.x - 1 : pos.x, pos.y}, {onLeft ? pos.x + size.x - 1 : pos.x, pos.y + size.y}, ui::ToU32(c.divider));
+
+    // Brow: (logo) · save · open · ruler.
+    float x = pos.x + ui.S(6) + pad;
+    const float by = pos.y + std::max(0.0f, m.insets.top) + (ui.S(kBrow) - ui.S(36)) / 2;
+    if (logoHere) {
+        ImGui::SetCursorScreenPos({x, by});
+        const ImVec2 lp = ImGui::GetCursorScreenPos();
+        if (ImGui::InvisibleButton("##logo", ui.S(36, 36))) ImGui::OpenPopup("##main-menu");
+        ui.icons.Draw(dl, "brand-mark", {lp.x + ui.S(7), lp.y + ui.S(7)}, ui.S(22), {1, 1, 1, 1});
+        MainMenuPopup(app);
+        x += ui.S(40);
+    }
+    for (const char* id : {"file.save", "file.open", "tools.measure"}) {
+        ImGui::SetCursorScreenPos({x, by});
+        ActionButton(app, id, 36, 20, std::strcmp(id, "tools.measure") == 0 && app.shell.measuring);
+        x += ui.S(40);
+    }
+    float y = pos.y + std::max(0.0f, m.insets.top) + ui.S(kBrow);
+
+    // Tabs: tree / tool / dimensions. A new tool's panel comes forward by itself.
+    const bool tool = HasToolPanel(app, session);
+    if (tool && !m.hadToolPanel) m.block1Tab = 1;
+    if (!tool && m.hadToolPanel && m.block1Tab == 1) m.block1Tab = 0;
+    m.hadToolPanel = tool;
+    const char* tabs[] = {Tr("Дерево"), Tr("Инструмент"), Tr("Размеры")};
+    ImGui::SetCursorScreenPos({pos.x + ui.S(6) + pad, y + ui.S(2)});
+    const int chosen = ui::Segmented(ui, "##block1-tabs", tabs, m.block1Tab, 3, (size.x - ui.S(12) - pad) / ui.scale,
+                                     session.assembly ? 0b100 : 0);
+    if (chosen != m.block1Tab) {
+        // Leaving the tool's tab while an operation is open keeps it open: back to it any time.
+        m.block1Tab = chosen;
+    }
+    y += ui.S(kTabs);
+
+    // Content, then the numpad when a value is typed, the row, the beard.
+    const float bottom = pos.y + size.y - ui.S(kBeard) - m.insets.bottom;
+    const float rowTop = bottom - ui.S(kRow);
+    const float padH = m.numpad ? NumpadHeight(ui) : 0.0f;
+    const float contentH = std::max(ui.S(40), rowTop - padH - y);
+    {
+        const ImVec2 cp{pos.x + pad, y};
+        BeginArea("##block1-content", cp, {size.x - pad - 1, contentH}, c.panel, true);
+        const float width = size.x - pad - 1;
+        switch (m.block1Tab) {
+            case 0:
+                if (session.assembly) DrawAssemblyTree(app, session, width);
+                else DrawTreePanel(app, session, width);
+                break;
+            case 1:
+                if (OperationEditor* op = app.ops.Active()) op->DrawPanel(app, session);
+                else if (app.shell.measuring && session.mode == EditMode::Model) DrawMeasurePanel(app, session, width);
+                else if (session.activeSketch && app.sketch.HasToolPanel()) app.sketch.DrawToolPanel(app, session, width);
+                else {
+                    ImGui::SetCursorScreenPos({cp.x + ui.S(12), cp.y + ui.S(14)});
+                    ImGui::PushTextWrapPos(cp.x + width - ui.S(12));
+                    ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+                    ImGui::TextWrapped("%s", Tr("Выберите инструмент в списке справа — здесь появятся его параметры."));
+                    ImGui::PopStyleColor();
+                    ImGui::PopTextWrapPos();
+                }
+                break;
+            default:
+                if (session.assembly) DrawPropertiesPanel(app, session, width);
+                else DrawVariablesPanel(app, session, width);
+                break;
+        }
+        EndArea();
+    }
+    if (m.numpad) DrawNumpad(app, {pos.x + ui.S(4) + pad, rowTop - padH + ui.S(2)}, {size.x - ui.S(8) - pad, padH - ui.S(4)});
+    else m.numpadKeys.clear();
+
+    // The row: from the screen's edge to the model — frame · cursor · cancel · OK.
+    {
+        const bool cursorOn = CursorActive(app);
+        const bool sketch = session.mode == EditMode::Sketch;
+        const float w = (size.x - pad - ui.S(8)) / 4.0f;
+        const float h = ui.S(kRow);
+        struct Slot {
+            const char* id;
+            const char* icon;
+            const char* tip;
+        };
+        const Slot slots[4] = {{"##row-frame", "ui-frame", Tr("Выделение рамкой")},
+                               {"##row-cursor", "ui-cursor", Tr("Курсор")},
+                               {"##row-cancel", "ui-close", Tr("Отмена")},
+                               {"##row-ok", "ui-check", Tr("ОК")}};
+        for (int i = 0; i < 4; ++i) {
+            // Left of the model: in this order from the left. Right of it (the left hand): mirrored.
+            const int place = onLeft ? i : 3 - i;
+            const ImVec2 p{pos.x + pad + ui.S(4) + static_cast<float>(place) * w, rowTop};
+            bool clicked = false, held = false;
+            switch (i) {
+                case 0:
+                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, m.boxMode, false, true, &clicked, nullptr);
+                    if (clicked) {
+                        m.boxMode = !m.boxMode;
+                        m.boxHeld = false;
+                    }
+                    break;
+                case 1:
+                    // In a sketch the cursor is always on (the button says so, greyed).
+                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, cursorOn, false, !sketch, &clicked, nullptr);
+                    if (clicked) {
+                        m.cursorIn3d = !m.cursorIn3d;
+                        if (m.cursorIn3d && !m.cursorShown) {   // first time: in the middle of the model
+                            m.cursorTip = {(m.viewMin.x + m.viewMax.x) / 2, (m.viewMin.y + m.viewMax.y) / 2};
+                            m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + kCursorReach};
+                            m.cursorShown = true;
+                        }
+                    }
+                    break;
+                case 2:
+                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, false, false, true, &clicked, nullptr);
+                    if (clicked) m.cancelPressed = true;
+                    break;
+                default:
+                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, m.boxHeld, true, true, &clicked, &held);
+                    if (clicked) m.okPressed = true;
+                    if (held) m.okLongPressed = true;   // a long press confirms the operation, cursor or not
+                    break;
+            }
+        }
+    }
+
+    // Beard: what is going on (and what to do next, as the status bar says).
+    std::string beard = CurrentTask(app, session);
+    if (const OperationEditor* op = app.ops.Active()) {
+        if (const std::string hint = op->Hint(); !hint.empty()) beard += " · " + hint;
+    }
+    if (CursorActive(app) && m.cursorShown && m.boxMode) beard += m.boxHeld ? Tr(" · рамка: второй угол — ОК") : Tr(" · рамка: первый угол — ОК");
+    dl->AddText(ui.fonts.bodySmall, ui.S(11), {pos.x + ui.S(10) + pad, bottom + (ui.S(kBeard) - ui.S(11)) / 2},
+                ui::ToU32(c.textMuted), beard.c_str());
+    (void)edge;
+    EndArea();
+}
+
+// --- Block 2 ---------------------------------------------------------------------
+
+void DrawSearch(AppContext& app, ImVec2 pos, float width, float height) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    ImGui::SetCursorScreenPos({pos.x + ui.S(6), pos.y + ui.S(4)});
+    if (app.shell.focusPalette) {
+        ImGui::SetKeyboardFocusHere();
+        app.shell.focusPalette = false;
+    }
+    ui::TextField(ui, "##phone-search", app.shell.paletteQuery, (width - ui.S(12)) / ui.scale, Tr("Поиск команд"));
+    BeginArea("##phone-search-results", {pos.x, pos.y + ui.S(44)}, {width, height - ui.S(44)}, c.panel, true);
+    int shown = 0;
+    for (const Action* a : app.actions.Search(app.shell.paletteQuery)) {
+        if (shown++ >= 30) break;
+        ImGui::PushID(a->id.c_str());
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const bool enabled = a->IsEnabled();
+        if (ImGui::InvisibleButton("##found", {width, ui.S(44)}) && enabled) {
+            Run(app, a->id.c_str());
+            app.shell.paletteOpen = false;
+            app.shell.paletteQuery.clear();
+        }
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        if (!a->icon.empty()) ui.icons.Draw(dl, a->icon, {p.x + ui.S(10), p.y + ui.S(11)}, ui.S(22), enabled ? Color{1, 1, 1, 1} : Color{1, 1, 1, 0.4f});
+        dl->AddText(ui.fonts.body, ui.S(14), {p.x + ui.S(42), p.y + ui.S(13)}, ui::ToU32(enabled ? c.text : c.textDisabled), a->Label());
+        ImGui::PopID();
+    }
+    EndArea();
+}
+
+void DrawBlock2(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool onRight, bool iconsOnly) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    MobileState& m = app.shell.mobile;
+    ImDrawList* dl = BeginArea("##block2", pos, size, c.panel);
+    dl->AddLine({onRight ? pos.x : pos.x + size.x - 1, pos.y}, {onRight ? pos.x : pos.x + size.x - 1, pos.y + size.y}, ui::ToU32(c.divider));
+    const float pad = onRight ? std::max(0.0f, m.cornerRadius * 0.3f) : 0.0f;
+    const float inner = size.x - pad;
+    const float top = pos.y + std::max(0.0f, m.insets.top);
+
+    // Brow: frames per second · search.
+    const std::string fps = std::format("{:.0f} fps", app.stats.fps);
+    if (!iconsOnly) dl->AddText(ui.fonts.mono, ui.S(11), {pos.x + ui.S(10), top + (ui.S(kBrow) - ui.S(11)) / 2}, ui::ToU32(c.textMuted), fps.c_str());
+    ImGui::SetCursorScreenPos({pos.x + inner - ui.S(42), top + ui.S(4)});
+    if (ui::IconButton(ui, "##search", "ui-search", 36, 18, Tr("Поиск команд"), true, app.shell.paletteOpen)) {
+        app.shell.paletteOpen = !app.shell.paletteOpen;
+        app.shell.focusPalette = app.shell.paletteOpen;
+        app.shell.paletteQuery.clear();
+    }
+    float y = top + ui.S(kBrow);
+    const float bottom = pos.y + size.y - ui.S(kBeard) - m.insets.bottom;
+
+    if (app.shell.paletteOpen) {
+        DrawSearch(app, {pos.x, y}, inner, bottom - y);
+    } else {
+        // "Завершить эскиз" pinned above the list (soft accent, ADR-0004).
+        if (session.mode == EditMode::Sketch) {
+            const Action* finish = app.actions.Find("sketch.finish");
+            const ImVec2 a{pos.x + ui.S(6), y + ui.S(4)}, b{pos.x + inner - ui.S(6), y + ui.S(48)};
+            ImGui::SetCursorScreenPos(a);
+            if (ImGui::InvisibleButton("##finish-sketch", {b.x - a.x, b.y - a.y}) && finish->IsEnabled()) Run(app, "sketch.finish");
+            dl->AddRectFilled(a, b, ui::ToU32(ImGui::IsItemActive() ? c.pressed : c.accentSoft), ui.S(10));
+            dl->AddRect(a, b, ui::ToU32(c.accentSoftBorder), ui.S(10));
+            const float is = ui.S(22);
+            if (iconsOnly) {
+                ui.icons.Draw(dl, finish->icon, {(a.x + b.x - is) / 2, (a.y + b.y - is) / 2}, is, {1, 1, 1, 1});
+            } else {
+                ui.icons.Draw(dl, finish->icon, {a.x + ui.S(8), (a.y + b.y - is) / 2}, is, {1, 1, 1, 1});
+                dl->AddText(ui.fonts.medium, ui.S(14), {a.x + ui.S(38), (a.y + b.y - ui.S(14)) / 2 - ui.S(1)}, ui::ToU32(c.accent),
+                            Tr("Завершить эскиз"));
+            }
+            y += ui.S(52);
+        }
+        BeginArea("##block2-list", {pos.x + (onRight ? pad : 0), y}, {inner, bottom - y}, c.panel, true);
+        DrawToolList(app, session, inner, iconsOnly);
+        EndArea();
+    }
+
+    // Beard: a long rebuild's progress ("74/100").
+    if (session.Rebuilding()) {
+        const kernel::Model::Progress p = session.RebuildProgress();
+        if (p.total > 0) {
+            const std::string text = std::format("{}/{}", p.done, p.total);
+            const float w = inner - ui.S(20);
+            const float fy = bottom + ui.S(kBeard) / 2;
+            dl->AddRectFilled({pos.x + ui.S(10), fy - ui.S(2)}, {pos.x + ui.S(10) + w, fy + ui.S(2)}, ui::ToU32(c.segmentTrack), ui.S(2));
+            dl->AddRectFilled({pos.x + ui.S(10), fy - ui.S(2)},
+                              {pos.x + ui.S(10) + w * static_cast<float>(p.done) / static_cast<float>(p.total), fy + ui.S(2)},
+                              ui::ToU32(c.accent), ui.S(2));
+            if (!iconsOnly) dl->AddText(ui.fonts.mono, ui.S(10), {pos.x + ui.S(10), fy - ui.S(13)}, ui::ToU32(c.textMuted), text.c_str());
+        }
+    }
+    EndArea();
+}
+
+// --- Blocks 3 and 5, the cube --------------------------------------------------------
+
+void DrawTabsIsland(AppContext& app, Session& session, ImVec2 at, float maxWidth) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    MobileState& m = app.shell.mobile;
+    struct Tab {
+        const char* label;
+        RibbonTab   tab;
+    };
+    const Tab partTabs[] = {{Tr("3D-модель"), RibbonTab::Model}, {Tr("Эскиз"), RibbonTab::Sketch}, {Tr("Вид"), RibbonTab::View}};
+    const Tab asmTabs[] = {{Tr("Сборка"), RibbonTab::Model}, {Tr("Вид"), RibbonTab::View}};
+    const std::span<const Tab> tabs = session.assembly ? std::span<const Tab>(asmTabs) : std::span<const Tab>(partTabs);
+    if (session.assembly && app.shell.ribbonTab == RibbonTab::Sketch) app.shell.ribbonTab = RibbonTab::Model;
+    const float h = ui.S(kIsland), arrow = ui.S(34);
+    float width = arrow;
+    if (!m.tabsFolded)
+        for (const Tab& t : tabs) width += ui.fonts.medium->CalcTextSizeA(ui.S(13), FLT_MAX, 0, t.label).x + ui.S(24);
+    width = std::min(width + ui.S(4), maxWidth);
+    if (!BeginIsland(ui, "##island-tabs", at, {width, h})) {
+        EndIsland();
+        return;
+    }
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImGui::SetCursorScreenPos({at.x + ui.S(2), at.y + ui.S(4)});
+    if (ui::IconButton(ui, "##fold-tabs", m.tabsFolded ? "ui-chevron-right" : "ui-chevron-down", 32, 12,
+                       m.tabsFolded ? Tr("Показать вкладки") : Tr("Свернуть вкладки")))
+        m.tabsFolded = !m.tabsFolded;
+    if (!m.tabsFolded) {
+        float x = at.x + arrow;
+        for (const Tab& t : tabs) {
+            const bool on = app.shell.ribbonTab == t.tab;
+            ImFont* font = on ? ui.fonts.strong : ui.fonts.medium;
+            const float w = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, t.label).x + ui.S(24);
+            ImGui::SetCursorScreenPos({x, at.y});
+            ImGui::PushID(t.label);
+            if (ImGui::InvisibleButton("##tab", {w, h})) app.shell.ribbonTab = t.tab;
+            ImGui::PopID();
+            if (on) dl->AddRectFilled({x + ui.S(2), at.y + ui.S(5)}, {x + w - ui.S(2), at.y + h - ui.S(5)}, ui::ToU32(c.accentSoft), ui.S(8));
+            dl->AddText(font, ui.S(13), {x + ui.S(12), at.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(on ? c.accent : c.textSecondary),
+                        t.label);
+            x += w;
+        }
+    }
+    EndIsland();
+}
+
+float DrawUndoIsland(AppContext& app, ImVec2 at) {
+    ui::Ui& ui = app.ui;
+    const float h = ui.S(kIsland), w = ui.S(4 + 38 + 38 + 4);
+    if (BeginIsland(ui, "##island-undo", at, {w, h})) {
+        ImGui::SetCursorScreenPos({at.x + ui.S(4), at.y + ui.S(3)});
+        ActionButton(app, "edit.undo", 36, 18);
+        ImGui::SetCursorScreenPos({at.x + ui.S(42), at.y + ui.S(3)});
+        ActionButton(app, "edit.redo", 36, 18);
+    }
+    EndIsland();
+    return w;
+}
+
+void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
+    ui::Ui& ui = app.ui;
+    MobileState& m = app.shell.mobile;
+    const float b = ui.S(44);
+    const ImVec2 at{viewMax.x - b - ui.S(8), viewMin.y + ui.S(8)};
+    // Folded: a button (the triad shows the orientation). A tap opens the
+    // big cube; a long press goes straight home.
+    if (BeginIsland(ui, "##island-cube", at, {b, b})) {
+        ImGui::SetCursorScreenPos(at);
+        if (ui::IconButton(ui, "##cube", "ui-cube", 44, 24, Tr("Видовой куб"), true, m.cubeOpen)) m.cubeOpen = !m.cubeOpen;
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+            HomeView(app);
+            m.cubeOpen = false;
+        }
+    }
+    EndIsland();
+    if (!m.cubeOpen) return;
+
+    // Open: a big cube for the finger (bigger regions for edges and
+    // corners), turned with one finger, with "home"; it folds itself after
+    // a choice or a tap elsewhere.
+    const float s = std::min(ui.S(230), std::min(viewMax.x - viewMin.x, viewMax.y - viewMin.y) - ui.S(70));
+    const ImVec2 p{viewMax.x - s - ui.S(8), at.y + b + ui.S(6)};
+    bool inside = false;
+    if (BeginIsland(ui, "##island-cube-big", p, {s, s})) {
+        ui::Ui big = ui;
+        big.scale = ui.scale * s / ui.S(172);   // the cube is laid out in a 172-unit corner
+        const ui::ViewCubeAction cube = ui::DrawViewCube(big, app.viewport.Projection(), p, {p.x + s, p.y + s}, false);
+        if (cube.lookFrom) {
+            LookFrom(app, cube.lookFrom->first, cube.lookFrom->second);
+            m.cubeOpen = false;
+        }
+        if (cube.home) {
+            HomeView(app);
+            m.cubeOpen = false;
+        }
+        if (cube.dragYaw != 0 || cube.dragPitch != 0)
+            app.viewport.Orbit(cube.dragYaw, cube.dragPitch, app.viewport.ModelCenter(), app.settings.turntableOrbit);
+        inside = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) || ImGui::IsAnyItemActive();
+    }
+    EndIsland();
+    const ImVec2 mouse = ImGui::GetMousePos();
+    const bool onButton = mouse.x >= at.x && mouse.y >= at.y && mouse.x < at.x + b && mouse.y < at.y + b;
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !inside && !onButton) m.cubeOpen = false;
+}
+
+// --- Block 4: the projects ---------------------------------------------------------
+
+void DrawStrip(AppContext& app, ImVec2 pos, ImVec2 size) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    MobileState& m = app.shell.mobile;
+    ImDrawList* dl = BeginArea("##strip", pos, size, c.appBackground);
+    dl->AddLine(pos, {pos.x + size.x, pos.y}, ui::ToU32(c.divider));
+    const float h = size.y;
+    ImGui::SetCursorScreenPos({pos.x + ui.S(6), pos.y + (h - ui.S(34)) / 2});
+    if (ui::IconButton(ui, "##strip-home", "ui-home", 34, 18, Tr("Главная страница"), true, app.workspace.ShowsHome()))
+        app.workspace.ShowHome(true);
+    const float x0 = pos.x + ui.S(46);
+    dl->AddLine({x0 - ui.S(3), pos.y + ui.S(8)}, {x0 - ui.S(3), pos.y + h - ui.S(8)}, ui::ToU32(c.fieldBorder));
+
+    // Swiped sideways, no scroll bar: a drag that started on it moves it,
+    // and a tab is chosen only by a tap.
+    static bool dragged = false;
+    const bool over = ImGui::IsMouseHoveringRect({x0, pos.y}, {pos.x + size.x, pos.y + h});
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) dragged = false;
+    if (over || dragged) {
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 8.0f) && over) dragged = true;
+        if (dragged && ImGui::IsMouseDown(ImGuiMouseButton_Left)) m.stripScroll -= ImGui::GetIO().MouseDelta.x;
+        if (over) m.stripScroll -= ImGui::GetIO().MouseWheelH * ui.S(40);
+    }
+    float content = 0;
+    for (const auto& s : app.workspace.sessions)
+        content += ui.fonts.body->CalcTextSizeA(ui.S(13), FLT_MAX, 0, s->Title().c_str()).x + ui.S(40);
+    m.stripScroll = std::clamp(m.stripScroll, 0.0f, std::max(0.0f, content - (pos.x + size.x - x0)));
+
+    ImGui::PushClipRect({x0, pos.y}, {pos.x + size.x, pos.y + h}, true);
+    float x = x0 - m.stripScroll;
+    for (std::size_t i = 0; i < app.workspace.sessions.size(); ++i) {
+        Session& s = *app.workspace.sessions[i];
+        const bool active = static_cast<int>(i) == app.workspace.ActiveIndex() && !app.workspace.ShowsHome();
+        const std::string title = s.Title();
+        ImFont* font = active ? ui.fonts.medium : ui.fonts.body;
+        const float tw = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, title.c_str()).x;
+        const float w = tw + ui.S(40);
+        ImGui::SetCursorScreenPos({x, pos.y});
+        ImGui::PushID(static_cast<int>(i));
+        if (ImGui::InvisibleButton("##project", {w, h}) && !dragged) {
+            const int index = static_cast<int>(i);
+            app.Later([&app, index] { app.workspace.Activate(index); });
+        }
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {   // a long press: close it (asks about changes)
+            const int index = static_cast<int>(i);
+            app.Later([&app, index] { RequestClose(app, index); });
+        }
+        ImGui::PopID();
+        if (active) {
+            dl->AddRectFilled({x + ui.S(2), pos.y + ui.S(5)}, {x + w - ui.S(2), pos.y + h - ui.S(5)}, ui::ToU32(c.panel), ui.S(8));
+            dl->AddRect({x + ui.S(2), pos.y + ui.S(5)}, {x + w - ui.S(2), pos.y + h - ui.S(5)}, ui::ToU32(c.accentSoftBorder), ui.S(8));
+        }
+        dl->AddText(font, ui.S(13), {x + ui.S(14), pos.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(active ? c.text : c.textSecondary),
+                    title.c_str());
+        if (s.IsModified()) dl->AddCircleFilled({x + ui.S(14) + tw + ui.S(10), pos.y + h / 2}, ui.S(3), ui::ToU32(c.accent));
+        x += w + ui.S(2);
+    }
+    ImGui::PopClipRect();
+    EndArea();
+}
+
+// --- The home page on the phone ------------------------------------------------------
+
+#if defined(__ANDROID__)
+/// The projects folder (chosen once) and its documents, newest first: open
+/// one with a tap, without the system's picker.
+void DrawProjectsFolder(AppContext& app, ImVec2 pos, ImVec2 size) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    ImDrawList* dl = BeginArea("##projects-folder", pos, size, c.panel);
+    const std::string folder = platform::android::ProjectsFolder();
+    dl->AddText(ui.fonts.strong, ui.S(15), {pos.x + ui.S(14), pos.y + ui.S(14)}, ui::ToU32(c.text), Tr("Папка проектов"));
+    const std::string name = folder.empty() ? Tr("не выбрана") : app.settings.mobile.projectsFolderName.empty()
+                                                                 ? std::string(Tr("выбрана"))
+                                                                 : app.settings.mobile.projectsFolderName;
+    dl->AddText(ui.fonts.body, ui.S(12), {pos.x + ui.S(14), pos.y + ui.S(36)}, ui::ToU32(c.textMuted), name.c_str());
+    ImGui::SetCursorScreenPos({pos.x + size.x - ui.S(120), pos.y + ui.S(12)});
+    if (ui::SecondaryButton(ui, "##choose-folder", folder.empty() ? Tr("Выбрать…") : Tr("Сменить…"), nullptr, ui.S(108, 34)))
+        platform::android::ChooseProjectsFolder();
+
+    // The list: the folder is read again now and then, not every frame (the system answers slowly).
+    static std::vector<platform::android::FolderEntry> entries;
+    static double readAt = -100;
+    static std::string readFrom;
+    if (folder != readFrom || app.now - readAt > 5.0) {
+        entries = folder.empty() ? std::vector<platform::android::FolderEntry>{} : platform::android::ListProjects();
+        readAt = app.now;
+        readFrom = folder;
+    }
+    BeginArea("##projects-list", {pos.x, pos.y + ui.S(60)}, {size.x, size.y - ui.S(60)}, c.panel, true);
+    if (folder.empty()) {
+        ImGui::SetCursorScreenPos({pos.x + ui.S(14), pos.y + ui.S(70)});
+        ImGui::PushTextWrapPos(pos.x + size.x - ui.S(14));
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+        ImGui::TextWrapped("%s", Tr("Выберите папку один раз — детали и сборки будут сохраняться в неё и открываться отсюда без лишних окон."));
+        ImGui::PopStyleColor();
+        ImGui::PopTextWrapPos();
+    }
+    for (const auto& e : entries) {
+        ImGui::PushID(e.uri.c_str());
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        if (ImGui::InvisibleButton("##project", {size.x, ui.S(44)})) {
+            const auto entry = e;
+            app.Later([&app, entry] {
+                if (const auto local = platform::android::Import(entry.uri, entry.name); !local.empty()) OpenDocument(app, local);
+            });
+        }
+        ImDrawList* ldl = ImGui::GetWindowDrawList();
+        if (ImGui::IsItemActive()) ldl->AddRectFilled(p, {p.x + size.x, p.y + ui.S(44)}, ui::ToU32(c.pressed));
+        const bool assembly = e.name.ends_with(".bza");
+        ui.icons.Draw(ldl, assembly ? "tree-assembly" : "tree-part", {p.x + ui.S(14), p.y + ui.S(11)}, ui.S(22), {1, 1, 1, 1});
+        ldl->AddText(ui.fonts.body, ui.S(14), {p.x + ui.S(46), p.y + ui.S(13)}, ui::ToU32(c.text), e.name.c_str());
+        ImGui::PopID();
+    }
+    EndArea();
+    EndArea();
+}
+#endif
+
+void DrawPhoneHome(AppContext& app, ImVec2 pos, ImVec2 size) {
+#if defined(__ANDROID__)
+    const float folderW = std::min(size.x * 0.42f, app.ui.S(360));
+    DrawProjectsFolder(app, pos, {folderW, size.y});
+    DrawHomeScreen(app, {pos.x + folderW, pos.y}, {size.x - folderW, size.y});
+#else
+    DrawHomeScreen(app, pos, size);
+#endif
+}
+
+} // namespace
+
+bool WantsPhoneLayout(const Settings& settings, const platform::Window& window) {
+#if defined(__ANDROID__)
+    if (settings.mobile.layout == 1) return false;
+    if (settings.mobile.layout == 2) return true;
+    int w = 0, h = 0;
+    window.WindowSize(w, h);
+    return w > 0 && h > 0 && std::min(w, h) < 600;   // dp: Android's own line between phones and tablets
+#else
+    (void)settings;
+    (void)window;
+    return false;
+#endif
+}
+
+void DrawPhoneRoot(AppContext& app) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    MobileState& m = app.shell.mobile;
+    const ImGuiIO& io = ImGui::GetIO();
+    const float W = io.DisplaySize.x, H = io.DisplaySize.y;
+
+    ImGui::SetNextWindowPos({0, 0});
+    ImGui::SetNextWindowSize(io.DisplaySize);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ui::ToVec4(c.appBackground));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+    ImGui::Begin("##root", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+
+    // The camera's side gets the dark panel; the other side only its inset.
+    const float cameraW = m.cutoutSide != 0 ? std::max(ui.S(40), m.cutoutSide < 0 ? m.insets.left : m.insets.right) : 0.0f;
+    float x0 = m.cutoutSide < 0 ? cameraW : m.insets.left;
+    float x1 = W - (m.cutoutSide > 0 ? cameraW : m.insets.right);
+    if (cameraW > 0) DrawCameraPanel(app, {m.cutoutSide < 0 ? 0.0f : W - cameraW, 0}, {cameraW, H});
+    const bool logoInBrow = cameraW == 0;
+
+    Session* session = app.workspace.Active();
+    const float stripH = ui.S(kStrip);
+    const float stripBottom = H - m.insets.bottom;
+    if (app.workspace.ShowsHome() || !session) {
+        // The home page: a slim brow with the logo when there is no camera panel.
+        float top = m.insets.top;
+        if (logoInBrow) {
+            ImGui::SetCursorScreenPos({x0 + ui.S(8), top + ui.S(4)});
+            const ImVec2 lp = ImGui::GetCursorScreenPos();
+            if (ImGui::InvisibleButton("##logo", ui.S(36, 36))) ImGui::OpenPopup("##main-menu");
+            ui.icons.Draw(ImGui::GetWindowDrawList(), "brand-mark", {lp.x + ui.S(7), lp.y + ui.S(7)}, ui.S(22), {1, 1, 1, 1});
+            MainMenuPopup(app);
+            top += ui.S(44);
+        }
+        DrawPhoneHome(app, {x0, top}, {x1 - x0, stripBottom - stripH - top});
+        DrawStrip(app, {x0, stripBottom - stripH}, {x1 - x0, stripH});
+        ImGui::End();
+        return;
+    }
+
+    // The blocks: 20 / 60 / 20 by default; block 1 widens while a value is
+    // typed (the numpad's keys must fit a finger), block 2 narrows to icons.
+    const MobileSettings& ms = app.settings.mobile;
+    const float span = x1 - x0;
+    float w1 = std::max(ui.S(170), span * static_cast<float>(ms.leftWidth) / 100.0f);
+    if (m.numpad) w1 = std::max(w1, ui.S(300));
+    float w2 = ms.iconsOnly ? std::max(ui.S(60), span * 0.10f) : std::max(ui.S(150), span * static_cast<float>(ms.rightWidth) / 100.0f);
+    w1 = std::min(w1, span * 0.45f);
+    w2 = std::min(w2, span * 0.35f);
+    const bool lefty = ms.leftHanded;
+    const float b1x = lefty ? x1 - w1 : x0;
+    const float b2x = lefty ? x0 : x1 - w2;
+    const float vx0 = lefty ? x0 + w2 : x0 + w1;
+    const float vx1 = lefty ? x1 - w1 : x1 - w2;
+
+    const ImVec2 viewPos{vx0, m.insets.top};
+    const ImVec2 viewSize{vx1 - vx0, stripBottom - stripH - m.insets.top};
+    DrawViewport(app, *session, viewPos, viewSize);
+    DrawStrip(app, {vx0, stripBottom - stripH}, {vx1 - vx0, stripH});
+    DrawBlock1(app, *session, {b1x, 0}, {w1, H}, !lefty, logoInBrow);
+    DrawBlock2(app, *session, {b2x, 0}, {w2, H}, !lefty, ms.iconsOnly);
+    ImGui::End();
+
+    // Over the model: undo/redo (5), the tabs (3), the cube.
+    const ImVec2 islandAt{vx0 + ui.S(8), viewPos.y + ui.S(8)};
+    const float undoW = DrawUndoIsland(app, islandAt);
+    DrawTabsIsland(app, *session, {islandAt.x + undoW + ui.S(6), islandAt.y}, viewSize.x - undoW - ui.S(80));
+    DrawCube(app, viewPos, {vx1, viewPos.y + viewSize.y});
+}
+
+void DrawLastCrash(AppContext& app) {
+    MobileState::LastCrash& c = app.shell.mobile.lastCrash;
+    if (!c.open) return;
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& colors = ui.C();
+    const ImGuiIO& io = ImGui::GetIO();
+    ImGui::OpenPopup("##last-crash");
+    const float w = std::min(io.DisplaySize.x - ui.S(40), ui.S(560));
+    ImGui::SetNextWindowPos({io.DisplaySize.x / 2, io.DisplaySize.y / 2}, ImGuiCond_Always, {0.5f, 0.5f});
+    ImGui::SetNextWindowSize({w, 0});
+    ImGui::SetNextWindowSizeConstraints({w, 0}, {w, io.DisplaySize.y - ui.S(30)});
+    ui::FontScope font(ui.fonts.body);
+    if (!ImGui::BeginPopupModal("##last-crash", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize)) return;
+    ImGui::PushFont(ui.fonts.strong);
+    ImGui::TextUnformatted(c.hang ? Tr("В прошлый раз BreezeCAD перестал отвечать") : Tr("В прошлый раз BreezeCAD закрылся из-за ошибки"));
+    ImGui::PopFont();
+    ImGui::Spacing();
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + w - ui.S(30));
+    ImGui::TextWrapped("%s", Tr("Несохранённую работу можно восстановить на главной странице. Код ниже помогает найти причину — "
+                                "скопируйте его или поделитесь отчётом с разработчиком. Отчёт никуда не отправляется сам."));
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
+    ImGui::PushFont(ui.fonts.mono);
+    ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(colors.accent));
+    ImGui::TextUnformatted(c.code.c_str());
+    ImGui::PopStyleColor();
+    ImGui::PopFont();
+    if (!c.reason.empty()) ImGui::TextDisabled("%s", Trf("Система: {}", c.reason).c_str());
+    ImGui::Spacing();
+    if (ui::SecondaryButton(ui, "##copy-code", Tr("Скопировать код"), nullptr, ui.S(170, 38))) ImGui::SetClipboardText(c.code.c_str());
+    ImGui::SameLine(0, ui.S(8));
+#if defined(__ANDROID__)
+    if (!c.file.empty() && ui::SecondaryButton(ui, "##share-report", Tr("Поделиться отчётом"), nullptr, ui.S(190, 38)))
+        platform::android::Share(PathFromUtf8(c.file), "text/plain", "BreezeCAD " + c.code);
+    ImGui::SameLine(0, ui.S(8));
+#endif
+    if (ui::PrimaryButton(ui, "##close-crash", Tr("Понятно"), nullptr, ui.S(120, 38))) {
+        c.open = false;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+void PhoneFileMenu(AppContext& app) {
+#if defined(__ANDROID__)
+    ui::Ui& ui = app.ui;
+    if (ui::MenuItem(ui, Tr("Папка проектов…"), nullptr, "ui-folder")) platform::android::ChooseProjectsFolder();
+    Session* s = app.Doc();
+    if (ui::BeginSubmenu(ui, Tr("Поделиться"), "ui-share", s != nullptr)) {
+        struct Choice {
+            const char* label;
+            int         format;   ///< -1 the document itself, else ExportFormat
+        };
+        const Choice choices[] = {{Tr("Документ BreezeCAD"), -1}, {"STL", static_cast<int>(ExportFormat::Stl)},
+                                  {"3MF", static_cast<int>(ExportFormat::ThreeMf)}, {"STEP", static_cast<int>(ExportFormat::Step)}};
+        for (const Choice& ch : choices) {
+            if (!ui::MenuItem(ui, ch.label)) continue;
+            const int format = ch.format;
+            app.Later([&app, format] {
+                Session* doc = app.Doc();
+                if (!doc) return;
+                const std::filesystem::path dir = platform::android::CacheDir() / "share";
+                std::error_code ec;
+                std::filesystem::create_directories(dir, ec);
+                const char* ext = format < 0 ? (doc->assembly ? ".bza" : ".bzc")
+                                : format == static_cast<int>(ExportFormat::Stl) ? ".stl"
+                                : format == static_cast<int>(ExportFormat::Step) ? ".step" : ".3mf";
+                const std::filesystem::path file = dir / PathFromUtf8(doc->Title() + ext);
+                bool ok = false;
+                std::string error;
+                if (format < 0) ok = static_cast<bool>(doc->WriteFile(file, "BreezeCAD"));
+                else ok = app.workspace.ExportTo(*doc, static_cast<ExportFormat>(format), file, app.notes, &error);
+                if (!ok) return;
+                const char* mime = format < 0 ? "application/octet-stream"
+                                 : format == static_cast<int>(ExportFormat::Stl) ? "model/stl"
+                                 : format == static_cast<int>(ExportFormat::Step) ? "model/step" : "model/3mf";
+                platform::android::Share(file, mime, doc->Title());
+            });
+        }
+        ImGui::EndMenu();
+    }
+#else
+    (void)app;
+#endif
+}
+
+} // namespace bz::app::mobile

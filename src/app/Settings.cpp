@@ -107,6 +107,22 @@ Settings FromJson(const nlohmann::json& j) {
         s.touch.invert = t->value("invert", s.touch.invert);
         s.touch.smoothIsTouchpad = t->value("smoothIsTouchpad", s.touch.smoothIsTouchpad);
     }
+    if (const auto m = j.find("mobile"); m != j.end() && m->is_object()) {
+        MobileSettings& o = s.mobile;
+        o.layout = std::clamp(m->value("layout", o.layout), 0, 2);
+        o.leftHanded = m->value("leftHanded", o.leftHanded);
+        o.leftWidth = std::clamp(m->value("leftWidth", o.leftWidth), 12, 40);
+        o.rightWidth = std::clamp(m->value("rightWidth", o.rightWidth), 8, 40);
+        o.iconsOnly = m->value("iconsOnly", o.iconsOnly);
+        o.labelScale = std::clamp(m->value("labelScale", o.labelScale), 0.6, 2.5);
+        o.volumeZoom = m->value("volumeZoom", o.volumeZoom);
+        o.magnifier = m->value("magnifier", o.magnifier);
+        o.askedNotifications = m->value("askedNotifications", o.askedNotifications);
+        o.projectsFolderName = m->value("projectsFolderName", o.projectsFolderName);
+        o.hotbar.clear();
+        for (const auto& id : m->value("hotbar", nlohmann::json::array()))
+            if (id.is_string()) o.hotbar.push_back(id.get<std::string>());
+    }
     s.shortcutsCustom = j.value("shortcutsCustom", s.shortcutsCustom);
     // Named: items() of a temporary would outlive it (ASan: stack-use-after-scope).
     const nlohmann::json shortcuts = j.value("shortcuts", nlohmann::json::object());
@@ -189,6 +205,17 @@ bool Settings::Save(const std::filesystem::path& file) const {
                       {"speed", touch.speed},
                       {"invert", touch.invert},
                       {"smoothIsTouchpad", touch.smoothIsTouchpad}}},
+        {"mobile", {{"layout", mobile.layout},
+                    {"leftHanded", mobile.leftHanded},
+                    {"leftWidth", mobile.leftWidth},
+                    {"rightWidth", mobile.rightWidth},
+                    {"iconsOnly", mobile.iconsOnly},
+                    {"labelScale", mobile.labelScale},
+                    {"volumeZoom", mobile.volumeZoom},
+                    {"magnifier", mobile.magnifier},
+                    {"hotbar", mobile.hotbar},
+                    {"askedNotifications", mobile.askedNotifications},
+                    {"projectsFolderName", mobile.projectsFolderName}}},
         {"shortcutsCustom", shortcutsCustom},
         {"recentFiles", recent},
     };

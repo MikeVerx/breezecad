@@ -1,6 +1,9 @@
 // Windows on top of the work: "save changes?", "МЦХ" and "about". All close
 // with Esc.
 
+#if defined(__ANDROID__)
+#include "platform/Android.h"
+#endif
 #include "app/BetaTesting.h"
 #include "app/Format.h"
 #include "app/Language.h"
@@ -25,6 +28,7 @@
 
 #include <array>
 #include <imgui_stdlib.h>
+#include <algorithm>
 #include <cmath>
 #include <format>
 #include <nlohmann/json.hpp>
@@ -38,6 +42,12 @@ bool BeginDialog(ui::Ui& ui, const char* id, bool& open, float width) {
     if (open && !ImGui::IsPopupOpen(id)) ImGui::OpenPopup(id);
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowPos({display.x / 2, display.y / 2}, ImGuiCond_Always, {0.5f, 0.5f});
+#if defined(__ANDROID__)
+    // A phone held sideways is ~400 dp tall: the dialog fits the screen and
+    // scrolls (a swipe) instead of running off it.
+    width = std::min(width, display.x - ui.S(24));
+    ImGui::SetNextWindowSizeConstraints({width, 0}, {width, display.y - ui.S(16)});
+#endif
     ImGui::SetNextWindowSize({width, 0});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui.S(24, 22));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ui.S(14));
@@ -992,6 +1002,68 @@ void DrawKeyboardSettings(AppContext& app, float width) {
     }
 }
 
+#if defined(__ANDROID__)
+/// "Управление" → "Сенсор" (Android): the phone layout and touch (ADR-0004,
+/// "Настройки раскладки"), with "Сбросить".
+void DrawTouchScreenSettings(AppContext& app, float width) {
+    ui::Ui& ui = app.ui;
+    MobileSettings& m = app.settings.mobile;
+    const auto gap = [&] { ImGui::Dummy({0, ui.S(6)}); };
+    ui::FieldLabel(ui, Tr("Вид интерфейса"));
+    static constexpr std::array<const char*, 3> layouts{N_("По размеру экрана"), N_("Десктопный"), N_("Мобильный")};
+    if (const int n = ui::Segmented(ui, "layout", layouts, m.layout, 3, width); n != m.layout) m.layout = n;
+    gap();
+    ui::FieldLabel(ui, Tr("Рука"));
+    static constexpr std::array<const char*, 2> hands{N_("Правая: дерево слева"), N_("Левая: дерево справа")};
+    if (const int n = ui::Segmented(ui, "hand", hands, m.leftHanded ? 1 : 0, 2, width); n != (m.leftHanded ? 1 : 0)) m.leftHanded = n == 1;
+    gap();
+    ui::FieldLabel(ui, Tr("Ширина левого блока"));
+    static constexpr std::array<const char*, 4> lefts{"15%", "20%", "25%", "30%"};
+    static constexpr std::array<int, 4> leftValues{15, 20, 25, 30};
+    int l = 1;
+    for (std::size_t i = 0; i < leftValues.size(); ++i)
+        if (leftValues[i] == m.leftWidth) l = static_cast<int>(i);
+    if (const int n = ui::Segmented(ui, "left-width", lefts, l, 4, width); n != l) m.leftWidth = leftValues[static_cast<std::size_t>(n)];
+    gap();
+    ui::FieldLabel(ui, Tr("Блок инструментов"));
+    static constexpr std::array<const char*, 4> rights{N_("Только значки"), "15%", "20%", "25%"};
+    static constexpr std::array<int, 4> rightValues{10, 15, 20, 25};
+    int r = 2;
+    if (m.iconsOnly) r = 0;
+    else
+        for (std::size_t i = 1; i < rightValues.size(); ++i)
+            if (rightValues[i] == m.rightWidth) r = static_cast<int>(i);
+    if (const int n = ui::Segmented(ui, "right-width", rights, r, 4, width); n != r) {
+        m.iconsOnly = n == 0;
+        m.rightWidth = rightValues[static_cast<std::size_t>(n)];
+    }
+    gap();
+    ui::FieldLabel(ui, Tr("Подписи в рабочей области (курсор, лупа)"));
+    static constexpr std::array<const char*, 4> labels{"80%", "100%", "125%", "150%"};
+    static constexpr std::array<double, 4> labelValues{0.8, 1.0, 1.25, 1.5};
+    int s = 1;
+    for (std::size_t i = 0; i < labelValues.size(); ++i)
+        if (std::abs(labelValues[i] - m.labelScale) < 1e-6) s = static_cast<int>(i);
+    if (const int n = ui::Segmented(ui, "label-scale", labels, s, 4, width); n != s) m.labelScale = labelValues[static_cast<std::size_t>(n)];
+    gap();
+    ui::FieldLabel(ui, Tr("Лупа у курсора в эскизе"));
+    static constexpr std::array<const char*, 2> onOff{N_("Включена"), N_("Выключена")};
+    if (const int n = ui::Segmented(ui, "magnifier", onOff, m.magnifier ? 0 : 1, 2, width); n != (m.magnifier ? 0 : 1)) m.magnifier = n == 0;
+    gap();
+    ui::FieldLabel(ui, Tr("Кнопки громкости"));
+    static constexpr std::array<const char*, 2> volume{N_("Громкость"), N_("Масштаб вида")};
+    if (const int n = ui::Segmented(ui, "volume", volume, m.volumeZoom ? 1 : 0, 2, width); n != (m.volumeZoom ? 1 : 0)) m.volumeZoom = n == 1;
+    gap();
+    if (ui::SecondaryButton(ui, "##reset-mobile", Tr("Сбросить"), nullptr, {ui.S(140), ui.S(34)})) {
+        const bool asked = m.askedNotifications;
+        const std::string folder = m.projectsFolderName;
+        m = MobileSettings{};
+        m.askedNotifications = asked;
+        m.projectsFolderName = folder;
+    }
+}
+#endif
+
 /// "Графика" → "Внешний вид": scale, theme, the axes in the corner, background.
 void DrawAppearanceSettings(AppContext& app, float width) {
     ui::Ui& ui = app.ui;
@@ -1045,7 +1117,12 @@ void DrawSettings(AppContext& app) {
     }
     ImGui::Dummy({0, ui.S(4)});
     if (app.shell.settingsTab == 1) {
+#if defined(__ANDROID__)
+        // A touch screen instead of a touchpad (ADR-0004): layout, hand, sizes, cursor.
+        static constexpr std::array<const char*, 3> subs{N_("Клавиатура"), N_("Мышь"), N_("Сенсор")};
+#else
         static constexpr std::array<const char*, 3> subs{N_("Клавиатура"), N_("Мышь"), N_("Тачпад")};
+#endif
         app.shell.settingsSub = ui::Segmented(ui, "settings-sub", subs, app.shell.settingsSub, 3, width);
         ImGui::Dummy({0, ui.S(4)});
     } else if (app.shell.settingsTab == 2) {
@@ -1058,7 +1135,11 @@ void DrawSettings(AppContext& app) {
     switch (app.shell.settingsTab) {
         case 1:
             if (app.shell.settingsSub == 1) DrawMouseSettings(app, width);
+#if defined(__ANDROID__)
+            else if (app.shell.settingsSub == 2) DrawTouchScreenSettings(app, width);
+#else
             else if (app.shell.settingsSub == 2) DrawTouchpadSettings(app, width);
+#endif
             else DrawKeyboardSettings(app, width);
             break;
         case 2:
@@ -1110,8 +1191,14 @@ void DrawBetaReport(AppContext& app) {
         paragraph(Tr("Отправьте этот файл в чат тестеров. Кнопка ниже откроет папку, где он лежит."), c.textSecondary);
         ImGui::Dummy({0, ui.S(8)});
         const float bw = (width - ui.S(8)) / 2;
+#if defined(__ANDROID__)
+        // No file manager for the app's own folder: the system's "share" sends the zip (ADR-0004).
+        if (ui::PrimaryButton(ui, "##beta-show", Tr("Поделиться отчётом"), nullptr, {bw, ui.S(36)}))
+            platform::android::Share(r.packed, "application/zip", "BreezeCAD");
+#else
         if (ui::PrimaryButton(ui, "##beta-show", Tr("Открыть папку с отчётом"), nullptr, {bw, ui.S(36)}))
             if (!platform::OpenFolder(r.packed.parent_path())) app.notes.Error(Tr("Не удалось открыть папку"));
+#endif
         ImGui::SameLine(0, ui.S(8));
         if (ui::SecondaryButton(ui, "##beta-done", Tr("Закрыть"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape)) close();
         ImGui::EndPopup();
@@ -1218,10 +1305,23 @@ void DrawDialogs(AppContext& app) {
         dl->AddText(ui.fonts.body, ui.S(13), {p.x + ui.S(63), p.y + ui.S(32)}, ui::ToU32(c.textMuted),
                     Tr("Свободный параметрический САПР"));
         // Exactly which build: the commit names it on GitHub.
-        const std::string build = *Commit() ? Trf("Сборка {} {} от {}", Branch(), Commit(), BuildDate())
-                                            : Trf("Сборка от {}", BuildDate());
+        std::string build = *Commit() ? Trf("Сборка {} {} от {}", Branch(), Commit(), BuildDate())
+                                      : Trf("Сборка от {}", BuildDate());
+#if defined(__ANDROID__)
+        // The APK's own version and number (the number grows with every build;
+        // what a store and "install over" compare).
+        if (const std::string package = platform::android::PackageVersion(); !package.empty()) {
+            const auto tab = package.find('\t');
+            build = Trf("Android {}, версия {}", package.substr(0, tab), tab == std::string::npos ? "" : package.substr(tab + 1)) +
+                    "\n" + build;
+        }
+#endif
         dl->AddText(ui.fonts.mono, ui.S(11), {p.x + ui.S(63), p.y + ui.S(52)}, ui::ToU32(c.textMuted), build.c_str());
+#if defined(__ANDROID__)
+        ImGui::Dummy({0, ui.S(90)});
+#else
         ImGui::Dummy({0, ui.S(74)});
+#endif
         {
             ui::FontScope font(ui.fonts.bodySmall);
             ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textSecondary));
@@ -1231,6 +1331,11 @@ void DrawDialogs(AppContext& app) {
             ImGui::Dummy({0, ui.S(4)});
             ImGui::TextUnformatted(Tr("Использует: Open CASCADE Technology (LGPL 2.1), Dear ImGui, GLFW, lunasvg, "
                                    "nlohmann/json, miniz, portable-file-dialogs (MIT/zlib), stb_image (public domain), шрифты IBM Plex (OFL)."));
+#if defined(__ANDROID__)
+            ImGui::Dummy({0, ui.S(4)});
+            if (ui::LinkButton(ui, "##privacy", Tr("Политика конфиденциальности")))
+                platform::OpenUrl("https://mikeverx.github.io/breezecad/privacy.html");
+#endif
             ImGui::PopTextWrapPos();
             ImGui::PopStyleColor();
         }

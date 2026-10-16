@@ -16,23 +16,23 @@ namespace {
 constexpr const char* kLater = N_("Появится в следующих версиях");
 
 /// Lays ribbon groups out left to right.
-class RibbonBuilder {
+class RibbonBuilder final : public RibbonSink {
 public:
     RibbonBuilder(AppContext& app, ImVec2 origin, float height) : myApp(app), myUi(app.ui), myTop(origin.y), myHeight(height) {
         myX = origin.x + myUi.S(8);
     }
 
-    AppContext& App() const { return myApp; }
+    AppContext& App() const override { return myApp; }
     /// Right edge of what was laid out so far.
     float End() const { return myX; }
 
-    void BeginGroup(const char* caption) {
+    void BeginGroup(const char* caption) override {
         myCaption = caption;
         myGroupStart = myX + myUi.S(8);
         myX = myGroupStart;
     }
 
-    void EndGroup() {
+    void EndGroup() override {
         ImFont* font = myUi.fonts.caption;
         const float fs = myUi.S(11);
         const float captionWidth = font->CalcTextSizeA(fs, FLT_MAX, 0, myCaption).x;
@@ -46,7 +46,7 @@ public:
     }
 
     /// Large button running an action. `caption` may contain "\n".
-    void Large(const char* actionId, const char* caption, bool active = false) {
+    void Large(const char* actionId, const char* caption, bool active = false) override {
         const Action* a = myApp.actions.Find(actionId);
         ImGui::SetCursorScreenPos({myX, myTop + myUi.S(6)});
         const std::string tip = Tooltip(*a);
@@ -54,7 +54,7 @@ public:
         myX += myUi.S(74);
     }
 
-    void LargeLater(const char* icon, const char* caption) {
+    void LargeLater(const char* icon, const char* caption) override {
         ImGui::SetCursorScreenPos({myX, myTop + myUi.S(6)});
         ImGui::PushID(caption);
         ui::RibbonLargeButton(myUi, "##later", icon, caption, kLater, false);
@@ -62,13 +62,13 @@ public:
         myX += myUi.S(74);
     }
 
-    void BeginColumn() {
+    void BeginColumn() override {
         myColumnX = myX;
         myColumnY = myTop + myUi.S(8);
         myColumnWidth = 0;
     }
 
-    void Small(const char* actionId, const char* label = nullptr, bool active = false) {
+    void Small(const char* actionId, const char* label = nullptr, bool active = false) override {
         const Action* a = myApp.actions.Find(actionId);
         ImGui::SetCursorScreenPos({myColumnX, myColumnY});
         const std::string tip = Tooltip(*a);
@@ -77,7 +77,7 @@ public:
         NextRow();
     }
 
-    void SmallLater(const char* icon, const char* label) {
+    void SmallLater(const char* icon, const char* label) override {
         ImGui::SetCursorScreenPos({myColumnX, myColumnY});
         ImGui::PushID(label);
         ui::RibbonSmallButton(myUi, "##later", icon, label, kLater, false);
@@ -85,17 +85,17 @@ public:
         NextRow();
     }
 
-    void EndColumn() { myX = myColumnX + myColumnWidth + myUi.S(2); }
+    void EndColumn() override { myX = myColumnX + myColumnWidth + myUi.S(2); }
 
     /// Icon-only buttons in rows of `columns`, as Inventor's constraint grid.
-    void BeginGrid(int columns) {
+    void BeginGrid(int columns) override {
         myGridColumns = columns;
         myGridIndex = 0;
         myColumnX = myX;
         myColumnY = myTop + myUi.S(8);
     }
 
-    void Icon(const char* actionId, bool active = false) {
+    void Icon(const char* actionId, bool active = false) override {
         const Action* a = myApp.actions.Find(actionId);
         const float cell = myUi.S(26);
         const int col = myGridIndex % myGridColumns, row = myGridIndex / myGridColumns;
@@ -105,7 +105,7 @@ public:
         ++myGridIndex;
     }
 
-    void EndGrid() { myX = myColumnX + myUi.S(26) * static_cast<float>(myGridColumns) + myUi.S(2); }
+    void EndGrid() override { myX = myColumnX + myUi.S(26) * static_cast<float>(myGridColumns) + myUi.S(2); }
 
 private:
     void NextRow() {
@@ -138,7 +138,7 @@ private:
     float       myColumnX = 0, myColumnY = 0, myColumnWidth = 0;
 };
 
-void ModelRibbon(RibbonBuilder& r) {
+void ModelRibbonImpl(RibbonSink& r) {
     r.BeginGroup(Tr("Эскиз"));
     r.Large("sketch.start", Tr("Начать\nэскиз"));
     r.EndGroup();
@@ -206,7 +206,7 @@ void ModelRibbon(RibbonBuilder& r) {
     r.EndGroup();
 }
 
-void AssemblyRibbon(AppContext& app, RibbonBuilder& r) {
+void AssemblyRibbonImpl(AppContext& app, RibbonSink& r) {
     const AssemblyState::Tool tool = app.Doc() && app.Doc()->assembly ? app.Doc()->assembly->tool : AssemblyState::Tool::Move;
     r.BeginGroup(Tr("Компонент"));
     r.Large("assembly.place", Tr("Вставить"));
@@ -262,7 +262,7 @@ void AssemblyRibbon(AppContext& app, RibbonBuilder& r) {
     r.EndGroup();
 }
 
-void SketchRibbon(AppContext& app, RibbonBuilder& r) {
+void SketchRibbonImpl(AppContext& app, RibbonSink& r, bool withFinish) {
     const bool sketching = app.Doc() && app.Doc()->mode == EditMode::Sketch;
     const SketchTool tool = app.sketch.Tool();
     const auto active = [&](SketchTool t) { return sketching && tool == t; };
@@ -352,14 +352,14 @@ void SketchRibbon(AppContext& app, RibbonBuilder& r) {
     r.EndGroup();
 
     r.BeginGroup(Tr("Выход"));
-    r.Large("sketch.finish", Tr("Принять\nэскиз"));
+    if (withFinish) r.Large("sketch.finish", Tr("Принять\nэскиз"));
     r.BeginColumn();
     r.Small("sketch.lookAt", Tr("На эскиз"));
     r.EndColumn();
     r.EndGroup();
 }
 
-void ViewRibbon(AppContext& app, RibbonBuilder& r) {
+void ViewRibbonImpl(AppContext& app, RibbonSink& r) {
     const render::DisplayStyle style = app.shell.displayStyle;
     r.BeginGroup(Tr("Цвета"));
     r.Large("view.appearance", Tr("Внешний\nвид"), app.ops.appearance.IsOpen());
@@ -398,6 +398,17 @@ void ViewRibbon(AppContext& app, RibbonBuilder& r) {
 }
 
 } // namespace
+
+void FillRibbon(AppContext& app, Session& session, RibbonSink& sink, bool withFinish) {
+    switch (app.shell.ribbonTab) {
+        case RibbonTab::Model:
+            if (session.assembly) AssemblyRibbonImpl(app, sink);
+            else ModelRibbonImpl(sink);
+            break;
+        case RibbonTab::Sketch: SketchRibbonImpl(app, sink, withFinish); break;
+        case RibbonTab::View:   ViewRibbonImpl(app, sink); break;
+    }
+}
 
 void DrawModeBar(AppContext& app, ImVec2 pos, float width) {
     ui::Ui& ui = app.ui;
@@ -443,20 +454,35 @@ float DrawRibbon(AppContext& app, Session& session, ImVec2 pos, float width) {
     dl->AddLine(pos, {pos.x + width, pos.y}, ui::ToU32(c.dividerSoft));
     dl->AddLine({pos.x, pos.y + h - 1}, {pos.x + width, pos.y + h - 1}, ui::ToU32(c.divider));
 
+    // "Принять эскиз" is pinned at the start in a sketch, whatever the
+    // ribbon's scroll (ADR-0004: in every version), in the soft accent.
+    float pinned = 0;
+    if (session.mode == EditMode::Sketch && app.shell.ribbonTab == RibbonTab::Sketch) {
+        const Action* finish = app.actions.Find("sketch.finish");
+        ImGui::SetCursorScreenPos({pos.x + ui.S(8), pos.y + ui.S(6)});
+        std::string tip = finish->Label();
+        if (const std::string sc = ActionRegistry::ChordText(finish->chord); !sc.empty()) tip += " (" + sc + ")";
+        if (ui::RibbonLargeButton(ui, "##pinned-finish", finish->icon, Tr("Принять\nэскиз"), tip.c_str(), finish->IsEnabled(), true))
+            app.Later([&app] { app.actions.Run("sketch.finish"); });
+        pinned = ui.S(8 + 74 + 4);
+        dl->AddLine({pos.x + pinned, pos.y + ui.S(6)}, {pos.x + pinned, pos.y + h - ui.S(6)}, ui::ToU32(c.divider));
+    }
+    const float start = pos.x + pinned, span = width - pinned;
+
     // On a narrow window (a 1366-pixel laptop) the ribbon scrolls sideways:
     // mouse wheel over it, or the arrows at its edges. The arrows go first
     // (sized by the last frame's layout) so the buttons under them do not
     // take their clicks.
     float& scroll = app.shell.ribbonScroll;
-    const float overflow = std::max(0.0f, app.shell.ribbonContent - width);
+    const float overflow = std::max(0.0f, app.shell.ribbonContent - span);
     scroll = std::clamp(scroll, 0.0f, overflow);
     const float aw = ui.S(22);
     const bool leftArrow = overflow > 0 && scroll > 0, rightArrow = overflow > 0 && scroll < overflow;
     const auto arrow = [&](bool right) {
-        const ImVec2 a0{right ? pos.x + width - aw : pos.x, pos.y + 1}, a1{right ? pos.x + width : pos.x + aw, pos.y + h - 1};
+        const ImVec2 a0{right ? pos.x + width - aw : start, pos.y + 1}, a1{right ? pos.x + width : start + aw, pos.y + h - 1};
         ImGui::SetCursorScreenPos(a0);
         ImGui::PushID(right ? "##ribbon-right" : "##ribbon-left");
-        if (ImGui::InvisibleButton("##arrow", {aw, h - 2})) scroll += right ? width * 0.5f : -width * 0.5f;
+        if (ImGui::InvisibleButton("##arrow", {aw, h - 2})) scroll += right ? span * 0.5f : -span * 0.5f;
         const bool hot = ImGui::IsItemHovered();
         ImGui::PopID();
         dl->AddRectFilled(a0, a1, ui::ToU32(hot ? c.hover : c.ribbon));
@@ -469,18 +495,11 @@ float DrawRibbon(AppContext& app, Session& session, ImVec2 pos, float width) {
     if (leftArrow) arrow(false);
     if (rightArrow) arrow(true);
 
-    RibbonBuilder builder(app, {pos.x - scroll, pos.y}, h);
-    ImGui::PushClipRect({pos.x + (leftArrow ? aw : 0), pos.y}, {pos.x + width - (rightArrow ? aw : 0), pos.y + h}, true);
-    switch (app.shell.ribbonTab) {
-        case RibbonTab::Model:
-            if (session.assembly) AssemblyRibbon(app, builder);
-            else ModelRibbon(builder);
-            break;
-        case RibbonTab::Sketch: SketchRibbon(app, builder); break;
-        case RibbonTab::View:   ViewRibbon(app, builder); break;
-    }
+    RibbonBuilder builder(app, {start - scroll, pos.y}, h);
+    ImGui::PushClipRect({start + (leftArrow ? aw : 0), pos.y}, {pos.x + width - (rightArrow ? aw : 0), pos.y + h}, true);
+    FillRibbon(app, session, builder, pinned == 0);
     ImGui::PopClipRect();
-    app.shell.ribbonContent = builder.End() + scroll - pos.x + ui.S(8);
+    app.shell.ribbonContent = builder.End() + scroll - start + ui.S(8);
     if (overflow > 0 && ImGui::IsMouseHoveringRect(pos, {pos.x + width, pos.y + h}))
         scroll -= (ImGui::GetIO().MouseWheel + ImGui::GetIO().MouseWheelH) * ui.S(60);
     EndArea();
