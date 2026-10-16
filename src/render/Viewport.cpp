@@ -63,7 +63,11 @@
 #include <gp_Pln.hxx>
 #include <gp_Trsf.hxx>
 
+#if defined(__ANDROID__)
+#include <chrono>
+#else
 #include <GLFW/glfw3.h>   // glfwGetTime for camera animation
+#endif
 
 #include <algorithm>
 #include <format>
@@ -586,6 +590,18 @@ struct Viewport::Impl {
 
 // --- Viewport ---------------------------------------------------------------
 
+namespace {
+/// The clock StepAnimation's `now` comes from: glfwGetTime on the desktop;
+/// on Android (no GLFW) a steady clock — android/AndroidMain uses the same.
+double AnimationClock() {
+#if defined(__ANDROID__)
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+#else
+    return glfwGetTime();
+#endif
+}
+} // namespace
+
 Viewport::Viewport() : myImpl(std::make_unique<Impl>()) {}
 
 Viewport::~Viewport() {
@@ -596,7 +612,7 @@ Viewport::~Viewport() {
 bool Viewport::Init(const NativeGlSurface& surface) {
     Impl& m = *myImpl;
 
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
     // The window's own X connection, not a second one. OCCT asks "is my
     // context current?" by comparing its connection with the current one;
     // with a connection of its own the answer was always no, and it bound the
@@ -1099,7 +1115,7 @@ void Viewport::AnimateTo(const CameraState& target, double seconds) {
     }
     m.animFrom = Camera();
     m.animTo = target;
-    m.animStart = glfwGetTime();
+    m.animStart = AnimationClock();
     m.animDuration = seconds;
     m.animating = true;
 }

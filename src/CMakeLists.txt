@@ -18,6 +18,11 @@ add_subdirectory(assembly)
 add_subdirectory(kernel)
 add_subdirectory(modules)
 
+if(BZ_BUILD_ANDROID_APP)   # Android: no GLFW/ImGui yet — 3D view and touch (docs/dev/MOBILE-PORT.md)
+    add_subdirectory(render)
+    add_subdirectory(android)
+endif()
+
 if(BZ_BUILD_APP)
     add_subdirectory(platform)
     add_subdirectory(render)
