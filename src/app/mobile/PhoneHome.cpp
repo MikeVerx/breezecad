@@ -146,7 +146,7 @@ bool WideButton(ui::Ui& ui, const char* id, const char* icon, const char* label,
     const float is = ui.S(16);
     const ImVec2 ts = ui.fonts.medium->CalcTextSizeA(ui.S(13.5f), FLT_MAX, 0, label);
     const float x = p.x + (size.x - is - ui.S(8) - ts.x) / 2;
-    ui.icons.Draw(dl, icon, {x, p.y + (size.y - is) / 2}, is, {1, 1, 1, 1});
+    ui.icons.Draw(dl, icon, {x, p.y + (size.y - is) / 2}, is, blue ? c.textOnAccent : c.text);   // one-colour icons take the tint
     dl->AddText(ui.fonts.medium, ui.S(13.5f), {x + is + ui.S(8), p.y + (size.y - ts.y) / 2}, ui::ToU32(blue ? c.textOnAccent : c.text),
                 label);
     return clicked;
@@ -166,8 +166,11 @@ void DrawHero(AppContext& app, ImVec2 pos, ImVec2 size) {
     dl->AddText(ui.fonts.display, fs, {x + ui.S(42), y - ui.S(2)}, ui::ToU32(c.text), "Breeze");
     const float bw = ui.fonts.display->CalcTextSizeA(fs, FLT_MAX, 0, "Breeze").x;
     dl->AddText(ui.fonts.display, fs, {x + ui.S(42) + bw, y - ui.S(2)}, ui::ToU32(c.textSecondary), "CAD");
-    dl->AddText(ui.fonts.caption, ui.S(11), {x + ui.S(43), y + ui.S(22)}, ui::ToU32(c.textMuted),
-                Trf("{} · офлайн, без облака", VersionLine()).c_str());
+    // The version without the build's details (branch, commit, date): they are in "О программе".
+    std::string version = VersionLine();
+    if (const auto cut = version.find(" ("); cut != std::string::npos) version.resize(cut);
+    ui::FittedText(dl, ui.fonts.caption, ui.S(11), {x + ui.S(43), y + ui.S(22)}, x + inner, ui::ToU32(c.textMuted),
+                   Trf("{} · офлайн, без облака", version).c_str());
     y += ui.S(50);
 
     // Part and assembly: one tap. Below them every kind and opening a file.
@@ -202,7 +205,7 @@ void DrawHero(AppContext& app, ImVec2 pos, ImVec2 size) {
             ImGui::PushID(id);
             const bool clicked = ImGui::InvisibleButton("##foot", {w, ui.S(30)});
             ImGui::PopID();
-            ui.icons.Draw(dl, a->icon, {fx, fy + ui.S(7)}, ui.S(15), {1, 1, 1, 0.8f});
+            ui.icons.Draw(dl, a->icon, {fx, fy + ui.S(7)}, ui.S(15), c.textSecondary);
             dl->AddText(ui.fonts.bodySmall, ui.S(12), {fx + ui.S(19), fy + (ui.S(30) - ts.y) / 2},
                         ui::ToU32(clicked || ImGui::IsItemActive() ? c.text : c.textSecondary), label.c_str());
             if (clicked) {
@@ -379,7 +382,7 @@ void DrawProjects(AppContext& app, ImVec2 pos, ImVec2 size) {
             const bool clicked = ImGui::InvisibleButton("##home-folder", {w, rowH});
             dl->AddRectFilled({hx, y}, {hx + w, y + rowH}, ui::ToU32(ImGui::IsItemActive() ? c.pressed : c.field), rowH / 2);
             dl->AddRect({hx, y}, {hx + w, y + rowH}, ui::ToU32(c.fieldBorder), rowH / 2);
-            ui.icons.Draw(dl, "ui-folder", {hx + ui.S(12), y + (rowH - ui.S(14)) / 2}, ui.S(14), {1, 1, 1, 0.8f});
+            ui.icons.Draw(dl, "ui-folder", {hx + ui.S(12), y + (rowH - ui.S(14)) / 2}, ui.S(14), c.textSecondary);
             const float tx = hx + ui.S(32);
             const float cx = hx + w - ui.S(12) - cs.x;
             ui::FittedText(dl, ui.fonts.bodySmall, ui.S(12), {tx, y + (rowH - ns.y) / 2}, cx - ui.S(8), ui::ToU32(c.textSecondary),
@@ -408,7 +411,7 @@ void DrawProjects(AppContext& app, ImVec2 pos, ImVec2 size) {
     }
     if (cards.empty()) {
         ImGui::SetCursorScreenPos({x, y + ui.S(10)});
-        ImGui::PushTextWrapPos(x + inner);
+        ImGui::PushTextWrapPos(x + inner - ImGui::GetWindowPos().x);   // the wrap is in the window's own coordinates
         ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
         ImGui::TextWrapped("%s", noFolder ? Tr("Выберите папку проектов один раз — детали и сборки будут сохраняться в неё и открываться "
                                                "отсюда без лишних окон.")
