@@ -626,6 +626,15 @@ bool Viewport::Init(const NativeGlSurface& surface) {
     Handle(Aspect_DisplayConnection) display = new Aspect_DisplayConnection();
 #endif
     m.driver = new OpenGl_GraphicDriver(display, false);
+#if defined(__ANDROID__)
+    // EGL: OCCT must be told the display, context and configuration of the
+    // app's context itself, or it refuses the window ("EGL does not provide
+    // compatible configurations").
+    if (!m.driver->InitEglContext(surface.display, surface.glContext, surface.eglConfig)) {
+        log::Error("Viewport: OCCT did not take the EGL context");
+        return false;
+    }
+#endif
     m.driver->ChangeOptions().buffersNoSwap = true;
     // Render plain sRGB colours into our RGBA8 texture. OCCT's linear-light
     // pipeline relies on an sRGB-capable output, which the window may not

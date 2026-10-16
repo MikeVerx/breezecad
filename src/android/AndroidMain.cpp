@@ -210,8 +210,15 @@ private:
         surface.window = reinterpret_cast<std::uintptr_t>(myState->window);
         surface.glContext = myContext;
         surface.display = myDisplay;
+        surface.eglConfig = config;
         myViewport = std::make_unique<render::Viewport>();
-        if (!myViewport->Init(surface)) {
+        bool started = false;
+        try {   // OCCT reports a window it cannot use by throwing
+            started = myViewport->Init(surface);
+        } catch (...) {
+            log::Error("Android: OCCT refused the window");
+        }
+        if (!started) {
             log::Error("Android: the 3D view did not start");
             myViewport.reset();
             return;
