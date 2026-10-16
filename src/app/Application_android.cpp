@@ -23,7 +23,7 @@
 
 namespace bz::app {
 
-namespace android = platform::android;
+namespace droid = platform::android;   // app::android is the input (android/AndroidInput.h)
 
 void Application::StartAndroid() {
     myShell.mobile.touchScreen = true;
@@ -64,17 +64,17 @@ void Application::StartAndroid() {
 
 void Application::InstallAndroidClipboard() {
     ImGuiPlatformIO& pio = ImGui::GetPlatformIO();
-    pio.Platform_SetClipboardTextFn = [](ImGuiContext*, const char* text) { android::SetClipboard(text ? text : ""); };
+    pio.Platform_SetClipboardTextFn = [](ImGuiContext*, const char* text) { droid::SetClipboard(text ? text : ""); };
     pio.Platform_GetClipboardTextFn = [](ImGuiContext*) -> const char* {
         static std::string text;
-        text = android::Clipboard();
+        text = droid::Clipboard();
         return text.c_str();
     };
 }
 
 bool Application::AndroidBetweenFrames(double now) {
-    android::Heartbeat();
-    android::SetVolumeKeysTaken(mySettings.mobile.volumeZoom);
+    droid::Heartbeat();
+    droid::SetVolumeKeysTaken(mySettings.mobile.volumeZoom);
 
     // In the background the system may end the app at any moment without a
     // word: everything unsaved goes to the autosave at once.
@@ -89,7 +89,7 @@ bool Application::AndroidBetweenFrames(double now) {
     myInBackground = background;
 
     // The screen around the window: cut-out, bars, corners, keyboard.
-    const android::Screen screen = android::CurrentScreen();
+    const droid::Screen screen = droid::CurrentScreen();
     if (screen.revision != myScreenRevision) {
         myScreenRevision = screen.revision;
         mobile::MobileState& m = myShell.mobile;
@@ -108,12 +108,12 @@ bool Application::AndroidBetweenFrames(double now) {
     android::FeedTypedText();
 
     // An answer of the system's picker that no dialog waited for: the projects folder.
-    if (auto picked = android::TakePickResult()) {
-        if (picked->kind == android::PickResult::Kind::Folder && !picked->uri.empty()) {
+    if (auto picked = droid::TakePickResult()) {
+        if (picked->kind == droid::PickResult::Kind::Folder && !picked->uri.empty()) {
             mySettings.mobile.projectsFolderName = picked->name;
             myNotes.Success(Trf("Папка проектов: {}", picked->name));
-        } else if (picked->kind == android::PickResult::Kind::Open && !picked->uri.empty()) {
-            if (const auto local = android::Import(picked->uri, picked->name); !local.empty()) OpenDropped(*myContext, local);
+        } else if (picked->kind == droid::PickResult::Kind::Open && !picked->uri.empty()) {
+            if (const auto local = droid::Import(picked->uri, picked->name); !local.empty()) OpenDropped(*myContext, local);
         }
         myFramesToDraw = std::max(myFramesToDraw, 3);
     }
@@ -128,7 +128,7 @@ bool Application::AndroidBetweenFrames(double now) {
     const bool keyboard = typing && words && !m.hardKeyboard;
     if (!typing) m.fullKeyboard = false;
     if (keyboard != myKeyboardUp) {
-        android::ShowKeyboard(keyboard);
+        droid::ShowKeyboard(keyboard);
         myKeyboardUp = keyboard;
     }
 
@@ -136,7 +136,7 @@ bool Application::AndroidBetweenFrames(double now) {
     // little after the start rather than over the splash.
     if (!mySettings.mobile.askedNotifications && now - myStartedAt > 3.0) {
         mySettings.mobile.askedNotifications = true;
-        android::AskNotifications();
+        droid::AskNotifications();
     }
     return true;
 }
@@ -145,7 +145,7 @@ void Application::CheckLastExit() {
     // Layer 3 (ADR-0004): how the last run ended, as the system says, and a
     // report our handler or the hang guard left. Either one: the error
     // screen, then the recovery on the home page as on the desktop.
-    const std::string reason = android::LastExitReason();
+    const std::string reason = droid::LastExitReason();
     const std::filesystem::path dir = platform::ConfigDir() / "reports";
     std::filesystem::path newest;
     std::filesystem::file_time_type newestTime{};
@@ -190,7 +190,7 @@ void Application::CheckLastExit() {
 void Application::RunTestCommands() {
     // A test run on the emulator (scripts/android/smoke-apk.sh): what to open
     // and do, so its screenshots show the program at work. Never set by a person.
-    const std::string commands = android::TestCommands();
+    const std::string commands = droid::TestCommands();
     if (commands.empty()) return;
     log::Info("Android: test commands \"{}\"", commands);
     std::istringstream list(commands);

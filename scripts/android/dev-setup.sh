@@ -13,7 +13,8 @@ DEST=$HOME/android
 mkdir -p "$DEST/deps"
 cd "$DEST"
 for f in android-ndk android-sdk "android-deps-$ABI"; do
-    [ -f "$f.tar.xz" ] || gh release download android-dev-deps -R MikeVerx/breezecad -p "$f.tar.xz"
+    # Direct links: gh release download asks GraphQL, closed in the sandbox.
+    [ -f "$f.tar.xz" ] || curl -fL --retry 3 -o "$f.tar.xz" "https://github.com/MikeVerx/breezecad/releases/download/android-dev-deps/$f.tar.xz"
 done
 [ -d android-ndk-r27c ] || tar -xJf android-ndk.tar.xz
 [ -d sdk ] || tar -xJf android-sdk.tar.xz
