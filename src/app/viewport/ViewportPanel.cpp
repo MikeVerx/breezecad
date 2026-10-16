@@ -73,7 +73,9 @@ void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDra
     const char* prompt = Tr("Выберите плоскость или плоскую грань для эскиза");
     ImFont* font = app.ui.fonts.medium;
     const ImVec2 ts = font->CalcTextSizeA(app.ui.S(13), FLT_MAX, 0, prompt);
-    const ImVec2 p{(vf.min.x + vf.max.x - ts.x) / 2 - app.ui.S(14), vf.min.y + app.ui.S(14)};
+    // On the phone the islands (undo, tabs, cube) take the view's top row: under them.
+    const float top = app.ui.S(app.shell.mobile.phone ? 64.0f : 14.0f);
+    const ImVec2 p{(vf.min.x + vf.max.x - ts.x) / 2 - app.ui.S(14), vf.min.y + top};
     dl->AddRectFilled(p, {p.x + ts.x + app.ui.S(28), p.y + app.ui.S(34)}, ui::ToU32(app.ui.C().panel.WithAlpha(0.94f)), app.ui.S(17));
     dl->AddText(font, app.ui.S(13), {p.x + app.ui.S(14), p.y + app.ui.S(9)}, ui::ToU32(app.ui.C().text), prompt);
 

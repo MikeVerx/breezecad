@@ -5,6 +5,7 @@
 #include "ui/Gl.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 
 namespace bz::app::mobile {
@@ -69,6 +70,19 @@ void DrawDropCursor(AppContext& app, ImDrawList* dl) {
     // The tip.
     dl->AddCircleFilled(tip, 4.5f * k + 2.0f * k, ui::ToU32(Color{1, 1, 1, 1}), 16);
     dl->AddCircleFilled(tip, 4.5f * k, ui::ToU32(c.sketchSelected), 16);
+
+    // The mockup's hint beside the drop while it rests (a newcomer's question
+    // is what to drag): to the side with room, never while dragging.
+    if (!m.cursorDragging) {
+        const char* hint = Tr("тяни круг — кончик ведёт");
+        const float fs = 11.0f * k;
+        const ImVec2 ts = app.ui.fonts.bodySmall->CalcTextSizeA(fs, FLT_MAX, 0, hint);
+        const bool toLeft = centre.x + radius + 8 + ts.x + 12 > m.viewMax.x;
+        const float x = toLeft ? centre.x - radius - 8 - ts.x - 12 : centre.x + radius + 8;
+        const ImVec2 a{x, centre.y - ts.y / 2 - 4}, b{x + ts.x + 12, centre.y + ts.y / 2 + 4};
+        dl->AddRectFilled(a, b, ui::ToU32(c.panel.WithAlpha(0.9f)), 6.0f);
+        dl->AddText(app.ui.fonts.bodySmall, fs, {a.x + 6, a.y + 4}, ui::ToU32(c.textSecondary), hint);
+    }
 }
 
 Magnifier::~Magnifier() {
