@@ -1,6 +1,7 @@
 #include "app/mobile/Cursor.h"
 
 #include "app/mobile/TouchInput.h"
+#include "core/I18n.h"
 #include "ui/Gl.h"
 
 #include <algorithm>
@@ -9,55 +10,65 @@
 namespace bz::app::mobile {
 namespace {
 
-constexpr float kRegion = 56.0f;    ///< dp around the tip that the magnifier shows
-constexpr float kZoom = 2.2f;       ///< how much bigger
+constexpr float kRadius = 38.0f;    ///< the magnifier's circle (dp), as in the mockup
+constexpr float kZoom = 4.0f;       ///< "лупа × 4"
+constexpr float kRegion = 2 * kRadius / kZoom;   ///< dp around the tip it shows
 
 ImVec2 MagnifierCentre(const MobileState& m, float radius) {
-    // Above the tip, or beside it toward the middle when there is no room above.
-    ImVec2 c{m.cursorTip.x, m.cursorTip.y - radius - 34.0f};
-    if (c.y - radius < m.viewMin.y) {
-        const bool left = m.cursorTip.x > (m.viewMin.x + m.viewMax.x) / 2;
-        c = {m.cursorTip.x + (left ? -1.0f : 1.0f) * (radius + 46.0f), std::max(m.cursorTip.y, m.viewMin.y + radius + 4.0f)};
-    }
+    // Up and to the right of the tip (the mockup), mirrored toward the middle
+    // at the view's edges.
+    const bool left = m.cursorTip.x + 50.0f + radius > m.viewMax.x;
+    ImVec2 c{m.cursorTip.x + (left ? -50.0f : 50.0f), m.cursorTip.y - 68.0f};
+    if (c.y - radius < m.viewMin.y + 4.0f) c.y = m.cursorTip.y + 68.0f + kCursorReach;   // no room above: below the drop
     return c;
 }
 
 } // namespace
 
 void DrawDropCursor(AppContext& app, ImDrawList* dl) {
+    // As in the approved mockup (canvas "BreezeCAD Mobile — макет", board 2):
+    // an outlined drop, its point the tip and its round end under the finger
+    // (a dashed ring marks the finger's spot), the tip a dot in the sketch's
+    // highlight colour with a white rim.
     const MobileState& m = app.shell.mobile;
     if (!CursorActive(app) || !m.cursorShown) return;
     const ui::ThemeColors& c = app.ui.C();
     const float k = static_cast<float>(app.settings.mobile.labelScale);
     const ImVec2 tip = m.cursorTip;
-    // The round part sits where the finger is (reach below the tip, or the
-    // tip pressed against the view's edge).
-    const ImVec2 body = m.cursorFinger;
-    const float r = 20.0f * k;
-    const float alpha = m.cursorDragging ? 0.5f : 0.32f;
+    // From the tip toward the round end: down, unless the tip is pressed
+    // against the view's edge and the finger is off to a side.
+    ImVec2 d{m.cursorFinger.x - tip.x, m.cursorFinger.y - tip.y};
+    const float len = std::hypot(d.x, d.y);
+    d = len > 1.0f ? ImVec2{d.x / len, d.y / len} : ImVec2{0, 1};
+    const ImVec2 r{d.y, -d.x};   // across, to the right of "down"
+    const float reach = kCursorReach * k, radius = 24.0f * k;
+    const auto at = [&](float across, float along) { return ImVec2{tip.x + r.x * across + d.x * along, tip.y + r.y * across + d.y * along}; };
+    const ImVec2 centre = at(0, reach);
 
-    // The drop: the circle and a tail narrowing to the tip.
-    const ImVec2 d{tip.x - body.x, tip.y - body.y};
-    const float len = std::max(1.0f, std::hypot(d.x, d.y));
-    const ImVec2 n{-d.y / len, d.x / len};   // across the tail
-    if (len > r) {
-        const ImVec2 a{body.x + n.x * r * 0.62f, body.y + n.y * r * 0.62f};
-        const ImVec2 b{body.x - n.x * r * 0.62f, body.y - n.y * r * 0.62f};
-        dl->AddTriangleFilled(a, b, tip, ui::ToU32(c.accent.WithAlpha(alpha)));
+    const auto outline = [&] {
+        dl->PathLineTo(tip);
+        dl->PathBezierCubicCurveTo(at(12 * k, 18 * k), at(24 * k, 32 * k), at(radius, reach));
+        const float a0 = std::atan2(r.y, r.x);
+        dl->PathArcTo(centre, radius, a0, a0 + 3.14159265f, 28);
+        dl->PathBezierCubicCurveTo(at(-24 * k, 32 * k), at(-12 * k, 18 * k), tip);
+    };
+    outline();
+    dl->PathFillConcave(ui::ToU32(Color{1, 1, 1, m.cursorDragging ? 0.55f : 0.4f}));
+    outline();
+    dl->PathStroke(ui::ToU32(c.accent), ImDrawFlags_Closed, 2.0f * k);
+
+    // The finger's spot: a dashed ring.
+    const float ring = 12.0f * k;
+    dl->AddCircleFilled(centre, ring, ui::ToU32(Color{1, 1, 1, 0.75f}), 24);
+    for (int i = 0; i < 12; i += 2) {
+        const float a = static_cast<float>(i) * 3.14159265f / 6.0f;
+        dl->PathArcTo(centre, ring, a, a + 3.14159265f / 6.0f, 4);
+        dl->PathStroke(ui::ToU32(c.accent), ImDrawFlags_None, 1.2f * k);
     }
-    dl->AddCircleFilled(body, r, ui::ToU32(c.accent.WithAlpha(alpha)), 40);
-    dl->AddCircle(body, r, ui::ToU32(c.accent.WithAlpha(0.85f)), 40, 1.5f * k);
 
-    // The tip: a ring with a dot, white under it so it reads on any colour.
-    const float t = 6.0f * k;
-    dl->AddCircle(tip, t + 1.5f * k, ui::ToU32(Color{1, 1, 1, 0.9f}), 24, 3.0f * k);
-    dl->AddCircle(tip, t, ui::ToU32(c.danger), 24, 2.0f * k);
-    dl->AddCircleFilled(tip, 1.8f * k, ui::ToU32(c.danger));
-    const float h = t + 5.0f * k;
-    dl->AddLine({tip.x - h, tip.y}, {tip.x - t - 1, tip.y}, ui::ToU32(c.danger), 1.4f * k);
-    dl->AddLine({tip.x + t + 1, tip.y}, {tip.x + h, tip.y}, ui::ToU32(c.danger), 1.4f * k);
-    dl->AddLine({tip.x, tip.y - h}, {tip.x, tip.y - t - 1}, ui::ToU32(c.danger), 1.4f * k);
-    dl->AddLine({tip.x, tip.y + t + 1}, {tip.x, tip.y + h}, ui::ToU32(c.danger), 1.4f * k);
+    // The tip.
+    dl->AddCircleFilled(tip, 4.5f * k + 2.0f * k, ui::ToU32(Color{1, 1, 1, 1}), 16);
+    dl->AddCircleFilled(tip, 4.5f * k, ui::ToU32(c.sketchSelected), 16);
 }
 
 Magnifier::~Magnifier() {
@@ -77,17 +88,21 @@ void Magnifier::Draw(AppContext& app) {
     }
     if (!myHas || !myTexture) return;   // the first frame: nothing captured yet
     const MobileState& m = app.shell.mobile;
-    const float radius = kRegion * kZoom / 2;
+    const float radius = kRadius;
     const ImVec2 centre = MagnifierCentre(m, radius);
     ImDrawList* dl = ImGui::GetForegroundDrawList();
     const ui::ThemeColors& c = app.ui.C();
-    dl->AddCircleFilled({centre.x, centre.y + 2}, radius + 3, ui::ToU32(Color{0, 0, 0, 0.18f}), 48);
+    dl->AddCircleFilled(centre, radius, ui::ToU32(Color{1, 1, 1, 1}), 48);
     // The texture holds the window's rows bottom-up (OpenGL): flipped here.
     dl->AddImageRounded(static_cast<ImTextureID>(myTexture), {centre.x - radius, centre.y - radius}, {centre.x + radius, centre.y + radius},
                         {0, 1}, {1, 0}, IM_COL32_WHITE, radius);
-    dl->AddCircle(centre, radius, ui::ToU32(c.accent), 48, 2.0f);
-    // The tip's place in the middle.
-    dl->AddCircle(centre, 3.0f, ui::ToU32(c.danger), 16, 1.5f);
+    dl->AddCircle(centre, radius, ui::ToU32(c.accent), 48, 1.5f);
+    // Where the tip is: a light cross in the middle.
+    dl->AddLine({centre.x - 8, centre.y}, {centre.x + 8, centre.y}, ui::ToU32(c.textMuted), 1.0f);
+    dl->AddLine({centre.x, centre.y - 8}, {centre.x, centre.y + 8}, ui::ToU32(c.textMuted), 1.0f);
+    const char* label = Tr("лупа × 4");
+    const ImVec2 ts = app.ui.fonts.body->CalcTextSizeA(10.5f, FLT_MAX, 0, label);
+    dl->AddText(app.ui.fonts.body, 10.5f, {centre.x - ts.x / 2, centre.y + radius + 6}, ui::ToU32(c.textSecondary), label);
 }
 
 void Magnifier::Capture(const AppContext& app, float density, int windowHeight) {

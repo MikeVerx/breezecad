@@ -38,8 +38,8 @@ bool UiAt(ImVec2 p) {
     return false;
 }
 
-ImVec2 TipOf(const MobileState& m, ImVec2 finger) {
-    ImVec2 tip{finger.x, finger.y - kCursorReach};
+ImVec2 TipOf(const MobileState& m, ImVec2 finger, float reach) {
+    ImVec2 tip{finger.x, finger.y - reach};
     // Its invisible hit box never leaves the work area.
     tip.x = std::clamp(tip.x, m.viewMin.x + 1.0f, std::max(m.viewMin.x + 1.0f, m.viewMax.x - 2.0f));
     tip.y = std::clamp(tip.y, m.viewMin.y + 1.0f, std::max(m.viewMin.y + 1.0f, m.viewMax.y - 2.0f));
@@ -297,7 +297,7 @@ void TouchInput::ApplyGestures(AppContext& app) {
     }
     if (step.cursorFinger) {
         m.cursorFinger = ToIm(*step.cursorFinger);
-        m.cursorTip = TipOf(m, m.cursorFinger);
+        m.cursorTip = TipOf(m, m.cursorFinger, kCursorReach * static_cast<float>(app.settings.mobile.labelScale));
     }
     if (step.cursorRevert) {
         m.cursorDragging = false;
@@ -305,7 +305,7 @@ void TouchInput::ApplyGestures(AppContext& app) {
             m.cursorShown = false;
         } else {
             m.cursorTip = m.cursorBefore;
-            m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + kCursorReach};
+            m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + kCursorReach * static_cast<float>(app.settings.mobile.labelScale)};
         }
     }
     if (step.cursorEnded) m.cursorDragging = false;

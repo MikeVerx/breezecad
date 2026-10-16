@@ -26,7 +26,7 @@
 namespace bz::app::mobile {
 
 /// How far above the finger the cursor's tip is (dp).
-inline constexpr float kCursorReach = 60.0f;
+inline constexpr float kCursorReach = 48.0f;   ///< as in the mockup: the drop's round end 48 dp below its point
 
 class TouchInput {
 public:
