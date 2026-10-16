@@ -102,7 +102,8 @@ private:
         if (!a) return;
         // A caption written for two ribbon lines reads as one here.
         std::string text = label ? label : a->Label();
-        std::erase(text, '-');
+        // "Выдав-\nливание" → "Выдавливание"; "Начать\nэскиз" → "Начать эскиз".
+        for (std::size_t at; (at = text.find("-\n")) != std::string::npos;) text.erase(at, 2);
         std::replace(text.begin(), text.end(), '\n', ' ');
         if (DrawRow(actionId, a->icon, text.c_str(), a->IsEnabled(), active)) Run(actionId);
     }
