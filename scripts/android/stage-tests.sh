@@ -27,6 +27,9 @@ cp "$DEPS"/lib/*.so "$OUT/lib/"
 cp "$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$triple/libc++_shared.so "$OUT/lib/"
 # The paths the tests know (tests/CMakeLists.txt, BZ_SOURCE_DIR on Android).
 for d in assets src tests translations resources; do cp -r "$SRC/$d" "$OUT/source/"; done
+# The NDK builds with -g even in Release: strip the copies (the build keeps
+# its own): less to download and to push to a phone.
+"$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip --strip-unneeded "$OUT/bz_tests" "$OUT"/lib/*.so
 cp "$SRC/scripts/android/run-tests.sh" "$OUT/"
 echo "$ABI" > "$OUT/abi.txt"
 echo "staged: $OUT ($(du -sh "$OUT" | cut -f1), $(ls "$OUT/lib" | wc -l) libraries)"

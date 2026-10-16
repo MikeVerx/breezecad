@@ -131,7 +131,7 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: bash scripts/android/run-tests.sh stage > test.log 2>&1; status=$?; tail -5 test.log; exit $status
+          script: bash scripts/android/run-tests.sh stage > test.log 2>&1; status=$?; tail -5 test.log; echo "::notice title=bz_tests on Android x86_64::$(grep -m1 '^device:' test.log) — $(grep -E '^\[doctest\] (test cases|assertions)' test.log | tr '\n' ' ')"; exit $status
       - name: Report failures
         if: failure()
         run: bash scripts/ci-annotate.sh test.log
