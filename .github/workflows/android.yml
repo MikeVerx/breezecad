@@ -34,6 +34,7 @@ concurrency:
 
 env:
   NDK_VERSION: r27c   # LTS; part of the cache key
+  BUNDLETOOL_VERSION: 1.17.2   # makes the .aab for Google Play
 
 jobs:
   build:
@@ -107,6 +108,12 @@ jobs:
           BZ_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BZ_VERSION_CODE: ${{ github.run_number }}
         run: |
+          if [ "${{ matrix.abi }}" = arm64-v8a ]; then
+            # The phones' build is also packed as a bundle for Google Play (not published).
+            curl -fsSL -o "$RUNNER_TEMP/bundletool.jar" \
+              "https://github.com/google/bundletool/releases/download/$BUNDLETOOL_VERSION/bundletool-all-$BUNDLETOOL_VERSION.jar"
+            export BZ_BUNDLETOOL="$RUNNER_TEMP/bundletool.jar" BZ_AAB="$PWD/apk/BreezeCAD-android.aab"
+          fi
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/bz.p12"
             export BZ_KEYSTORE="$RUNNER_TEMP/bz.p12"
@@ -117,7 +124,7 @@ jobs:
           bash scripts/android/package-apk.sh build/$PRESET "$BZ_ANDROID_DEPS" ${{ matrix.abi }} apk/BreezeCAD-android-${{ matrix.abi }}.apk > apk.log 2>&1
           status=$?
           tail -3 apk.log
-          echo "::notice title=APK ${{ matrix.abi }}::$(tail -1 apk.log | grep . || echo "no output, exit $status")"
+          echo "::notice title=APK ${{ matrix.abi }}::$(grep -E '^(APK|AAB):' apk.log | tr '\n' ' ' | grep . || echo "no output, exit $status")"
           rm -f "$RUNNER_TEMP/bz.p12"
           exit $status
       - name: Report failures
@@ -164,7 +171,7 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: bash scripts/android/run-tests.sh stage > test.log 2>&1; status=$?; tail -5 test.log; echo "::notice title=bz_tests on Android x86_64::$(grep -m1 '^device:' test.log) — $(grep -E '^\[doctest\] (test cases|assertions)' test.log | tr '\n' ' ')"; bash scripts/android/smoke-apk.sh apk/BreezeCAD-android-x86_64.apk shots > smoke.log 2>&1; smoke=$?; cat smoke.log; echo "::notice title=APK on the emulator::$(grep -E '^(built|alive|smoke)' smoke.log | tr '\n' ' ')"; exit $((status | smoke))
+          script: bash scripts/android/run-tests.sh stage > test.log 2>&1; status=$?; tail -5 test.log; echo "::notice title=bz_tests on Android x86_64::$(grep -m1 '^device:' test.log) — $(grep -E '^\[doctest\] (test cases|assertions)' test.log | tr '\n' ' ')"; bash scripts/android/smoke-apk.sh apk/BreezeCAD-android-x86_64.apk shots > smoke.log 2>&1; smoke=$?; cat smoke.log; echo "::notice title=APK on the emulator::$(grep -E '^(screen|step|smoke)' smoke.log | tr '\n' ' ')"; exit $((status | smoke))
       - name: Report failures
         if: failure()
         run: bash scripts/ci-annotate.sh test.log smoke.log shots/errors.log
@@ -194,20 +201,24 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           mv release/BreezeCAD-android-arm64-v8a.apk release/BreezeCAD-android.apk
-          cp shots/1-start.png release/emulator-1-start.png
-          cp shots/2-turned.png release/emulator-2-turned.png
+          ls release
+          for f in shots/*.png; do cp "$f" "release/emulator-$(basename "$f")"; done
           notes="Сборка для Android: ветка ${GITHUB_REF_NAME}, коммит ${GITHUB_SHA::7}, версия ${{ github.run_number }}, $(date -u '+%Y-%m-%d %H:%M') UTC.
 
           BreezeCAD-android.apk — телефоны и планшеты на ARM (64-бит), Android 9 и новее.
+          BreezeCAD-android.aab — пакет для будущей публикации в Google Play (ставить на телефон не нужно).
           Установка: открыть ссылку на телефоне → скачать → открыть файл → разрешить установку из этого источника.
           Новая версия ставится поверх прежней (если сборка подписана постоянным ключом).
 
-          Пока это шаг 2 порта: 3D-вид с примером детали, без интерфейса.
-          Один палец — вращение, два — сдвиг и масштаб щипком, двойное касание — показать всё.
+          Полная программа: мобильная раскладка на телефоне (блоки 1–5, курсор-капля, нампад),
+          десктопная на планшете. Файлы — через папку проектов; «Поделиться» — в меню логотипа.
 
-          emulator-*.png — снимки с эмулятора CI: запуск и после свайпа."
+          emulator-*.png — снимки с эмулятора CI: главная, деталь, поворот, эскиз с курсором,
+          левша, планшет, видовой куб."
           if ! gh release view android-build >/dev/null 2>&1; then
             gh release create android-build --prerelease --target "$GITHUB_SHA" --title "BreezeCAD для Android — свежая сборка" --notes "$notes"
           fi
-          gh release upload android-build release/BreezeCAD-android.apk release/emulator-1-start.png release/emulator-2-turned.png --clobber
+          # The old step-2 pictures go: the new set has other names.
+          for old in emulator-1-start.png emulator-2-turned.png; do gh release delete-asset android-build "$old" -y 2>/dev/null || true; done
+          gh release upload android-build release/BreezeCAD-android.apk release/BreezeCAD-android.aab release/emulator-*.png --clobber
           gh release edit android-build --notes "$notes"
