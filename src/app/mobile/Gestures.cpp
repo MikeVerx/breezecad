@@ -1,6 +1,7 @@
 #include "app/mobile/Gestures.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace bz::app::mobile {
@@ -73,6 +74,25 @@ void GestureRecognizer::Move(int id, Vec2 at, double) {
     const Vec2   delta = centre - myLastCentre;
     const int    n = static_cast<int>(myFingers.size());
 
+    // A drag as the user set it: turn, move, or zoom (up brings closer).
+    const auto apply = [&](FingerDrag what, Vec2 at0) {
+        switch (what) {
+            case FingerDrag::Orbit:
+                if (!myOrbiting) {
+                    myOrbiting = true;
+                    myStep.orbitStart = at0;
+                }
+                myStep.orbit = myStep.orbit + delta;
+                break;
+            case FingerDrag::Pan: myStep.pan = myStep.pan + delta; break;
+            case FingerDrag::Zoom:
+                myStep.zoom *= std::pow(1.006, -delta.y);
+                myStep.zoomAt = myFingers.size() == 1 ? myFingers[0].start : centre;
+                break;
+            case FingerDrag::None: break;
+        }
+    };
+
     if (n == 1) {
         if (myCursorLeading) {
             myStep.cursorFinger = at;   // 1:1 from the first touch, slop or not
@@ -83,27 +103,14 @@ void GestureRecognizer::Move(int id, Vec2 at, double) {
             }
             myStep.boxTo = at;
         } else if (myMoved && (!myMode.cursorOn || myMode.fingersOnlyNavigate)) {
-            if (!myOrbiting) {
-                myOrbiting = true;
-                myStep.orbitStart = f->start;
-            }
-            myStep.orbit = myStep.orbit + delta;
+            // A stylus near: one finger turns whatever the set says (it cannot lead the cursor).
+            apply(myMode.fingersOnlyNavigate && myMode.drags.one == FingerDrag::None ? FingerDrag::Orbit : myMode.drags.one, f->start);
         }
     } else {
-        // Two fingers turn with the cursor on (one finger is the cursor's),
-        // pan with it off; three always pan. A pinch zooms either way.
-        const bool turn = myMode.cursorOn && !myMode.fingersOnlyNavigate && n == 2;
+        // Two or three fingers: as the set says. A pinch zooms on top.
         if (myMoved) {
-            if (turn) {
-                if (!myOrbiting) {
-                    myOrbiting = true;
-                    myStep.orbitStart = centre;
-                }
-                myStep.orbit = myStep.orbit + delta;
-            } else {
-                myStep.pan = myStep.pan + delta;
-            }
-            if (n == 2 && myLastSpread > 1.0 && spread > 1.0) {
+            apply(n == 2 ? myMode.drags.two : myMode.drags.three, centre);
+            if (n == 2 && myMode.drags.pinch && myLastSpread > 1.0 && spread > 1.0) {
                 myStep.zoom *= spread / myLastSpread;
                 myStep.zoomAt = centre;
             }
@@ -129,8 +136,8 @@ void GestureRecognizer::Up(int id, Vec2 at, double time) {
         // With the cursor on, a tap only moves it there (it already did): no click.
         if (quick && !myMode.fingersOnlyNavigate && !myCursorLeading && myMaxFingers == 1) myStep.tap = at;
         if (quick) {
-            if (myMaxFingers == 2) myStep.undo = true;
-            if (myMaxFingers == 3) myStep.redo = true;
+            if (myMaxFingers == 2) myStep.tap2 = true;
+            if (myMaxFingers == 3) myStep.tap3 = true;
         }
         Reset();
         return;

@@ -3,14 +3,17 @@
 // as plain logic: fingers in, what they mean out. No ImGui, no OCCT —
 // tests/app/GestureTests.cpp drives it with made-up touches.
 //
+// What dragging fingers do is the user's (Settings → "Жесты", one set with
+// the cursor off, one with it on); the defaults:
+//
 //                       cursor off            cursor on
 //   tap                 select (click there)  move the cursor there
-//   drag, 1 finger      orbit                 drag the cursor
-//   2 fingers           pan                   orbit
-//   3 fingers           —                     pan
+//   drag, 1 finger      orbit                 drag the cursor (always)
+//   2 fingers           pan                   pan
+//   3 fingers           pan                   orbit
 //   pinch               zoom                  zoom
 //   long press          context menu          context menu
-//   always: a tap with 2 fingers — undo, with 3 — redo.
+//   a tap with 2 fingers — undo, with 3 — redo (TouchInput runs what the user chose).
 //
 // A tap: the fingers barely moved (Tuning::tapSlop) and left before the long
 // press; a tap of two or three fingers also within kTapSeconds.
@@ -26,19 +29,30 @@ inline constexpr double kTapSeconds = 0.35;        ///< a tap of two or three fi
 inline constexpr double kTapSlopDp = 10.0;         ///< a tap moves less (default; Tuning)
 inline constexpr double kLongPressSeconds = 0.5;   ///< a press held this long, still: the context menu (default; Tuning)
 
+/// What dragging fingers do to the view.
+enum class FingerDrag : unsigned char { None, Orbit, Pan, Zoom };
+
+/// The drags of one set ("курсор выкл" or "курсор вкл").
+struct DragMap {
+    FingerDrag one = FingerDrag::Orbit;   ///< one finger (with the cursor on it always leads the cursor)
+    FingerDrag two = FingerDrag::Pan;
+    FingerDrag three = FingerDrag::Pan;   ///< three or more
+    bool       pinch = true;              ///< two fingers apart or together zoom
+};
+
 /// What a gesture did since the last Take(): deltas to apply, events to run.
 struct GestureStep {
     Vec2   orbit{0, 0};   ///< turn the view by this many dp of finger travel
     Vec2   pan{0, 0};     ///< move the view by this many dp
-    double zoom = 1.0;    ///< scale the view by this about zoomAt (pinch)
+    double zoom = 1.0;    ///< scale the view by this about zoomAt (pinch, or a drag set to zoom)
     Vec2   zoomAt{0, 0};
     /// A new orbit started (or another turn after a pause): pick its pivot here.
     std::optional<Vec2> orbitStart;
 
     std::optional<Vec2> tap;         ///< one finger tapped here
     std::optional<Vec2> longPress;   ///< one finger held still here
-    bool undo = false;               ///< two fingers tapped
-    bool redo = false;               ///< three fingers tapped
+    bool tap2 = false;               ///< two fingers tapped (default: undo)
+    bool tap3 = false;               ///< three fingers tapped (default: redo)
 
     /// The finger that leads the cursor (cursor on, one finger), where it is now.
     std::optional<Vec2> cursorFinger;
@@ -54,7 +68,7 @@ struct GestureStep {
 
     bool Empty() const {
         return orbit.x == 0 && orbit.y == 0 && pan.x == 0 && pan.y == 0 && zoom == 1.0 && !orbitStart && !tap && !longPress &&
-               !undo && !redo && !cursorFinger && !cursorEnded && !cursorRevert && !boxTo && !boxEnded;
+               !tap2 && !tap3 && !cursorFinger && !cursorEnded && !cursorRevert && !boxTo && !boxEnded;
     }
 };
 
@@ -64,7 +78,13 @@ public:
         bool cursorOn = false;   ///< the drop cursor is on (sketch: always)
         bool boxMode = false;    ///< "Выделение рамкой" is on (cursor off: one finger draws the frame)
         bool fingersOnlyNavigate = false;   ///< a stylus is near (palm rejection): no taps, cursor or frames
+        DragMap drags;                      ///< what drags do now (the set for the cursor's state)
     };
+
+    /// The defaults of the two sets.
+    static DragMap DefaultDrags(bool cursorOn) {
+        return cursorOn ? DragMap{FingerDrag::Orbit, FingerDrag::Pan, FingerDrag::Orbit, true} : DragMap{};
+    }
 
     /// How the fingers are read (the user's "Отзывчивость" settings).
     struct Tuning {

@@ -116,8 +116,26 @@ Settings FromJson(const nlohmann::json& j) {
         o.iconsOnly = m->value("iconsOnly", o.iconsOnly);
         o.labelScale = std::clamp(m->value("labelScale", o.labelScale), 0.6, 2.5);
         o.volumeZoom = m->value("volumeZoom", o.volumeZoom);
-        o.magnifier = m->value("magnifier", o.magnifier);
         o.fingerOrbit = std::clamp(m->value("fingerOrbit", o.fingerOrbit), 0.25, 4.0);
+        o.fingerPan = std::clamp(m->value("fingerPan", o.fingerPan), 0.25, 4.0);
+        o.fingerZoom = std::clamp(m->value("fingerZoom", o.fingerZoom), 0.25, 4.0);
+        // The gesture sets: drags 0 none, 1 orbit, 2 pan, 3 zoom; taps — FingerTap.
+        const auto readSet = [&](const char* key, FingerGestures& g) {
+            const auto it = m->find(key);
+            if (it == m->end() || !it->is_object()) return;
+            const auto drag = [&](const char* k, mobile::FingerDrag& d) {
+                d = static_cast<mobile::FingerDrag>(std::clamp(it->value(k, static_cast<int>(d)), 0, 3));
+            };
+            const auto tap = [&](const char* k, FingerTap& t) { t = static_cast<FingerTap>(std::clamp(it->value(k, static_cast<int>(t)), 0, 4)); };
+            drag("one", g.drags.one);
+            drag("two", g.drags.two);
+            drag("three", g.drags.three);
+            g.drags.pinch = it->value("pinch", g.drags.pinch);
+            tap("tap2", g.tap2);
+            tap("tap3", g.tap3);
+        };
+        readSet("gesturesOff", o.gesturesOff);
+        readSet("gesturesOn", o.gesturesOn);
         o.tapSlop = std::clamp(m->value("tapSlop", o.tapSlop), 3, 40);
         o.longPress = std::clamp(m->value("longPress", o.longPress), 0.2, 2.0);
         o.cursorSpeed = std::clamp(m->value("cursorSpeed", o.cursorSpeed), 0.1, 1.0);
@@ -161,6 +179,11 @@ nlohmann::json ShortcutsJson(const std::vector<std::pair<std::string, std::strin
     nlohmann::json out = nlohmann::json::object();
     for (const auto& [id, chord] : shortcuts) out[id] = chord;
     return out;
+}
+nlohmann::json GestureSetJson(const FingerGestures& g) {
+    return {{"one", static_cast<int>(g.drags.one)},     {"two", static_cast<int>(g.drags.two)},
+            {"three", static_cast<int>(g.drags.three)}, {"pinch", g.drags.pinch},
+            {"tap2", static_cast<int>(g.tap2)},         {"tap3", static_cast<int>(g.tap3)}};
 }
 } // namespace
 
@@ -218,8 +241,11 @@ bool Settings::Save(const std::filesystem::path& file) const {
                     {"iconsOnly", mobile.iconsOnly},
                     {"labelScale", mobile.labelScale},
                     {"volumeZoom", mobile.volumeZoom},
-                    {"magnifier", mobile.magnifier},
                     {"fingerOrbit", mobile.fingerOrbit},
+                    {"fingerPan", mobile.fingerPan},
+                    {"fingerZoom", mobile.fingerZoom},
+                    {"gesturesOff", GestureSetJson(mobile.gesturesOff)},
+                    {"gesturesOn", GestureSetJson(mobile.gesturesOn)},
                     {"tapSlop", mobile.tapSlop},
                     {"longPress", mobile.longPress},
                     {"cursorSpeed", mobile.cursorSpeed},

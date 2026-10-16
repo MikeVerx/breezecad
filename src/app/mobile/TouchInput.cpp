@@ -38,6 +38,27 @@ bool UiAt(ImVec2 p) {
     return false;
 }
 
+/// Whether the panel at `p` (the topmost window there) can scroll up and
+/// down. One that cannot (the big cube, a small island) takes a drag in any
+/// direction as a drag: an upward pull on the cube turned nothing before.
+bool ScrollsAt(ImVec2 p) {
+    const ImGuiContext& g = *GImGui;
+    for (int i = g.Windows.Size - 1; i >= 0; --i) {
+        const ImGuiWindow* w = g.Windows[i];
+        if (!w->WasActive || w->Hidden || !w->Rect().Contains(p) || (w->Flags & ImGuiWindowFlags_Tooltip)) continue;
+        // A child list inside: its own scroll counts.
+        for (const ImGuiWindow* c = w; c; c = c->ParentWindow)
+            if (c->ScrollMax.y > 0.0f) return true;
+        // The window's children (lists) under the point.
+        for (int k = i + 1; k < g.Windows.Size; ++k) {
+            const ImGuiWindow* c = g.Windows[k];
+            if (c->RootWindow == w && c->WasActive && !c->Hidden && c->Rect().Contains(p) && c->ScrollMax.y > 0.0f) return true;
+        }
+        return false;
+    }
+    return true;
+}
+
 ImVec2 TipOf(const MobileState& m, ImVec2 finger, float reach) {
     ImVec2 tip{finger.x, finger.y - reach};
     // Its invisible hit box never leaves the work area.
@@ -112,8 +133,9 @@ void TouchInput::BeginFrame(AppContext& app, double now) {
     MobileState& m = app.shell.mobile;
     if (myQueued > 0) --myQueued;
     if (m.penNear && myPenId < 0 && now - m.penSeenAt > kPenAway) m.penNear = false;
-    myGestures.SetMode({CursorActive(app), m.boxMode && !CursorActive(app), m.penNear});
     const MobileSettings& tune = app.settings.mobile;
+    const bool cursor = CursorActive(app);
+    myGestures.SetMode({cursor, m.boxMode && !cursor, m.penNear, (cursor ? tune.gesturesOn : tune.gesturesOff).drags});
     mySlop = static_cast<float>(tune.tapSlop);
     myScrollSpeed = static_cast<float>(tune.scrollSpeed);
     myGestures.SetTuning({static_cast<double>(tune.tapSlop), tune.longPress});
@@ -175,7 +197,7 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
         // One line per touch: where it went (phone reports, the emulator's check).
         log::Info("Touch: finger at {:.0f},{:.0f} -> {}", at.x, at.y, route == Route::Ui ? "panel" : route == Route::View ? "view" : "ignored");
         if (route == Route::Ui) {
-            myUi = {e.id, at, at, e.time, UiFinger::Mode::Undecided};
+            myUi = {e.id, at, at, e.time, UiFinger::Mode::Undecided, !ScrollsAt(at)};
             Pos(at);   // hover first: the button goes down on a tap or a sideways drag
         } else if (route == Route::View) {
             myGestures.Down(e.id, ToVec(at), e.time);
@@ -218,7 +240,7 @@ void TouchInput::UiEvent(const PointerEvent& e) {
             if (myUi.mode == UiFinger::Mode::Undecided && std::hypot(dx, dy) > mySlop) {
                 // Up or down scrolls the list under the finger; sideways is a
                 // drag (sliders, the projects strip, a value dragged).
-                if (std::abs(dy) >= std::abs(dx)) {
+                if (std::abs(dy) >= std::abs(dx) && !myUi.dragOnly) {
                     myUi.mode = UiFinger::Mode::Scroll;
                 } else {
                     myUi.mode = UiFinger::Mode::Drag;
@@ -392,8 +414,15 @@ void TouchInput::ApplyGestures(AppContext& app) {
         Click(at, ImGuiMouseButton_Right);   // the context menu
         mon::Action("touch", "зажатие");
     }
-    if (step.undo) app.Later([&app] { app.actions.Run("edit.undo"); });
-    if (step.redo) app.Later([&app] { app.actions.Run("edit.redo"); });
+    // Two- and three-finger taps: as the user set them for this cursor state.
+    const FingerGestures& set = CursorActive(app) ? app.settings.mobile.gesturesOn : app.settings.mobile.gesturesOff;
+    const auto runTap = [&app](FingerTap t) {
+        const char* id = t == FingerTap::Undo ? "edit.undo" : t == FingerTap::Redo ? "edit.redo" : t == FingerTap::Fit ? "view.fit"
+                       : t == FingerTap::Home ? "view.home" : nullptr;
+        if (id) app.Later([&app, id] { app.actions.Run(id); });
+    };
+    if (step.tap2) runTap(set.tap2);
+    if (step.tap3) runTap(set.tap3);
     if (step.boxFrom) {
         Pos(ToIm(*step.boxFrom));
         Button(ImGuiMouseButton_Left, true);

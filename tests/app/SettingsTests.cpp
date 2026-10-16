@@ -87,3 +87,25 @@ TEST_CASE("Mobile settings: saved and read back, out-of-range values clamped") {
     CHECK(wild.mobile.labelScale == doctest::Approx(0.6));
     std::filesystem::remove_all(file.parent_path());
 }
+
+TEST_CASE("Mobile settings: the gesture sets and sensitivity are saved") {
+    using bz::app::mobile::FingerDrag;
+    const auto file = WriteSettings("{}");
+    Settings s = Settings::Load(file);
+    // Defaults: with the cursor on two fingers move, three turn.
+    CHECK(s.mobile.gesturesOn.drags.two == FingerDrag::Pan);
+    CHECK(s.mobile.gesturesOn.drags.three == FingerDrag::Orbit);
+    CHECK(s.mobile.gesturesOff.drags.one == FingerDrag::Orbit);
+    s.mobile.gesturesOff.drags.two = FingerDrag::Zoom;
+    s.mobile.gesturesOff.drags.pinch = false;
+    s.mobile.gesturesOn.tap2 = bz::app::FingerTap::Fit;
+    s.mobile.fingerPan = 1.75;
+    REQUIRE(s.Save(file));
+    const Settings back = Settings::Load(file);
+    CHECK(back.mobile.gesturesOff.drags.two == FingerDrag::Zoom);
+    CHECK_FALSE(back.mobile.gesturesOff.drags.pinch);
+    CHECK(back.mobile.gesturesOn.tap2 == bz::app::FingerTap::Fit);
+    CHECK(back.mobile.gesturesOn.drags.three == FingerDrag::Orbit);
+    CHECK(back.mobile.fingerPan == doctest::Approx(1.75));
+    std::filesystem::remove_all(file.parent_path());
+}

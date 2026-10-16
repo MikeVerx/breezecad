@@ -135,11 +135,12 @@ bool NavigateFingers(AppContext& app, const ViewportFrame& vf) {
         moved = true;
     }
     if (g.pan.x != 0 || g.pan.y != 0) {
-        app.viewport.Pan(g.pan.x, g.pan.y);
+        const double k = app.settings.mobile.fingerPan;
+        app.viewport.Pan(g.pan.x * k, g.pan.y * k);
         moved = true;
     }
     if (g.zoom != 1.0) {
-        app.viewport.ZoomAt(g.zoom, vf.ToLocal({static_cast<float>(g.zoomAt.x), static_cast<float>(g.zoomAt.y)}));
+        app.viewport.ZoomAt(std::pow(g.zoom, app.settings.mobile.fingerZoom), vf.ToLocal({static_cast<float>(g.zoomAt.x), static_cast<float>(g.zoomAt.y)}));
         moved = true;
     }
     return moved;

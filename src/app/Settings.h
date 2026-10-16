@@ -2,6 +2,7 @@
 
 #include "app/MouseNavigation.h"
 #include "app/TouchNavigation.h"
+#include "app/mobile/Gestures.h"
 
 #include <filesystem>
 #include <string>
@@ -10,6 +11,16 @@
 namespace bz::app {
 
 enum class ThemeChoice : unsigned char { System, Light, Dark };
+
+/// What a quick tap of two or three fingers does on the touch screen.
+enum class FingerTap : unsigned char { None, Undo, Redo, Fit, Home };
+
+/// One set of finger gestures ("Жесты" → "Курсор выкл" / "Курсор вкл").
+struct FingerGestures {
+    mobile::DragMap drags;
+    FingerTap       tap2 = FingerTap::Undo;
+    FingerTap       tap3 = FingerTap::Redo;
+};
 
 /// The phone layout and touch (docs/ADR/0004-mobile-touch-ui.md); used on
 /// Android, kept in the file everywhere.
@@ -21,9 +32,12 @@ struct MobileSettings {
     bool   iconsOnly = false;     ///< block 2 shows icons without names (20 / 70 / 10)
     double labelScale = 1.0;      ///< labels in the view (cursor, dimensions), apart from the panels
     bool   volumeZoom = false;    ///< the volume keys zoom the view
-    bool   magnifier = true;      ///< the magnifier at the cursor's tip in a sketch
     // Touch responsiveness ("Управление → Сенсор → Отзывчивость")
     double fingerOrbit = 1.0;     ///< the view turns this much per finger travel (1 = as the mouse)
+    double fingerPan = 1.0;       ///< the view moves this much per finger travel (1 = the model under the fingers)
+    double fingerZoom = 1.0;      ///< a pinch (or a zoom drag) zooms this much stronger
+    FingerGestures gesturesOff{};                                                         ///< the cursor off
+    FingerGestures gesturesOn{mobile::GestureRecognizer::DefaultDrags(true)};          ///< the cursor on
     int    tapSlop = 10;          ///< dp a finger may move and still tap (more: taps on a shaky hand; less: quicker drags)
     double longPress = 0.5;       ///< s held still for the context menu
     double cursorSpeed = 1.0;     ///< the cursor's tip moves this part of the finger's travel (less: precise)

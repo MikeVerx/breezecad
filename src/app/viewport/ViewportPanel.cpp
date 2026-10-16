@@ -211,7 +211,8 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
     // Fingers on a touch screen (the phone): their gestures, already sorted out.
     if (app.shell.mobile.touchScreen && NavigateFingers(app, vf)) return true;
     // Fingers on a touchpad come as a wheel too: their gestures take it.
-    const bool touchTookWheel = NavigateTouch(app, vf, sceneHovered && !busy);
+    // Not on a touch screen: there is no touchpad there, its gestures are the fingers'.
+    const bool touchTookWheel = !app.shell.mobile.touchScreen && NavigateTouch(app, vf, sceneHovered && !busy);
     if (sceneHovered && io.MouseWheel != 0.0f && !touchTookWheel) {
         static double lastWheel = -10.0;   // one action per burst of wheel turns
         if (app.now - lastWheel > 1.0) mon::Action("view", "колесо");
@@ -389,7 +390,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     // button that opens a big one (mobile/MobileLayout); the triad stays here.
     if (app.shell.mobile.phone) {
         if (app.settings.showTriad) ui::DrawAxisTriad(ui, vf.projection, {pos.x + ui.S(44), pos.y + size.y - ui.S(44)});
-        // On top of the islands too (a separate layer: the magnifier copies the view without it).
+        // On top of the islands too (the foreground layer).
         ImDrawList* front = ImGui::GetForegroundDrawList();
         front->PushClipRect(pos, {pos.x + size.x, pos.y + size.y + ui.S(60)});
         mobile::DrawDropCursor(app, front);

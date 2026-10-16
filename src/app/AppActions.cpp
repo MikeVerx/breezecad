@@ -130,15 +130,24 @@ void RegisterActions(AppContext& app) {
     {
         // The touch settings, found by search: what people call them.
         Action touch{"app.settingsTouch", N_("Настройки сенсора"), "ui-sliders", 0,
-                     N_("Отзывчивость: вращение пальцем, порог касания, долгое нажатие, скорость курсора, прокрутка"), {},
+                     N_("Чувствительность: вращение, сдвиг, масштаб, курсор, прокрутка; порог касания, долгое нажатие"), {},
                      [&app] {
                          app.shell.showSettings = true;
                          app.shell.settingsTab = 1;
                          app.shell.settingsSub = 2;
                      }};
         touch.keywords = "сенсор сенсорный экран отзывчивость чувствительность скорость курсор касание тап палец пальцы вращение "
-                         "прокрутка долгое нажатие жесты рука левша блоки лупа громкость";
+                         "прокрутка долгое нажатие рука левша блоки громкость сдвиг масштаб";
         a.Add(std::move(touch));
+        Action gestures{"app.settingsGestures", N_("Настройки жестов"), "ui-sliders", 0,
+                        N_("Что делают один, два, три пальца и тапы — с курсором и без"), {},
+                        [&app] {
+                            app.shell.showSettings = true;
+                            app.shell.settingsTab = 1;
+                            app.shell.settingsSub = 3;
+                        }};
+        gestures.keywords = "жесты пальцы два три пальца щипок тап отмена повтор курсор управление";
+        a.Add(std::move(gestures));
     }
 #endif
     a.Add({"app.about", N_("О программе"), "ui-info", 0, {}, {}, [&app] { app.shell.showAbout = true; }});

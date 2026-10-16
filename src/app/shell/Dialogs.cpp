@@ -1038,7 +1038,7 @@ void DrawTouchScreenSettings(AppContext& app, float width) {
         m.rightWidth = rightValues[static_cast<std::size_t>(n)];
     }
     gap();
-    ui::FieldLabel(ui, Tr("Подписи в рабочей области (курсор, лупа)"));
+    ui::FieldLabel(ui, Tr("Подписи в рабочей области (курсор)"));
     static constexpr std::array<const char*, 4> labels{"80%", "100%", "125%", "150%"};
     static constexpr std::array<double, 4> labelValues{0.8, 1.0, 1.25, 1.5};
     int s = 1;
@@ -1046,9 +1046,38 @@ void DrawTouchScreenSettings(AppContext& app, float width) {
         if (std::abs(labelValues[i] - m.labelScale) < 1e-6) s = static_cast<int>(i);
     if (const int n = ui::Segmented(ui, "label-scale", labels, s, 4, width); n != s) m.labelScale = labelValues[static_cast<std::size_t>(n)];
     gap();
-    ui::FieldLabel(ui, Tr("Лупа у курсора в эскизе"));
-    static constexpr std::array<const char*, 2> onOff{N_("Включена"), N_("Выключена")};
-    if (const int n = ui::Segmented(ui, "magnifier", onOff, m.magnifier ? 0 : 1, 2, width); n != (m.magnifier ? 0 : 1)) m.magnifier = n == 0;
+    const auto hintText = [&](const char* hint) {
+        ui::FontScope small(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+        ImGui::TextUnformatted(hint);
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    };
+    // Sensitivity: sliders, as in games (a value between the marks is fine).
+    ImGui::Dummy({0, ui.S(6)});
+    {
+        ui::FontScope font(ui.fonts.medium);
+        ImGui::TextUnformatted(Tr("Чувствительность"));
+    }
+    gap();
+    const auto slider = [&](const char* id, const char* label, double& value, double lo, double hi) {
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        ui::FieldLabel(ui, label);
+        const std::string shown = std::format("{:.0f}%", value * 100.0);
+        const ImVec2 ts = ImGui::CalcTextSize(shown.c_str());
+        ImGui::GetWindowDrawList()->AddText({at.x + width - ts.x, at.y}, ui::ToU32(ui.C().textSecondary), shown.c_str());
+        float t = static_cast<float>((value - lo) / (hi - lo));
+        if (ui::Slider(ui, id, t, width)) value = std::round((lo + t * (hi - lo)) * 20.0) / 20.0;   // 5% steps
+        gap();
+    };
+    slider("##finger-orbit", Tr("Вращение"), m.fingerOrbit, 0.25, 4.0);
+    slider("##finger-pan", Tr("Сдвиг"), m.fingerPan, 0.25, 3.0);
+    slider("##finger-zoom", Tr("Масштаб (щипок)"), m.fingerZoom, 0.25, 3.0);
+    slider("##scroll-speed", Tr("Прокрутка списков"), m.scrollSpeed, 0.25, 3.0);
+    slider("##cursor-speed", Tr("Скорость курсора"), m.cursorSpeed, 0.1, 1.0);
+    hintText(Tr("100% — кончик идёт за пальцем. Меньше — точный режим: кончик проходит часть пути пальца, "
+                "тап по-прежнему ставит его в точку касания."));
     gap();
     // Responsiveness: how the fingers are read (mobile/Gestures, mobile/TouchInput).
     ImGui::Dummy({0, ui.S(6)});
@@ -1065,19 +1094,9 @@ void DrawTouchScreenSettings(AppContext& app, float width) {
         const int shown = at < 0 ? 0 : at;
         if (const int n = ui::Segmented(ui, id, names, shown, static_cast<int>(names.size()), width); n != shown)
             value = values[static_cast<std::size_t>(n)];
-        if (hint) {
-            ui::FontScope small(ui.fonts.caption);
-            ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
-            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
-            ImGui::TextUnformatted(hint);
-            ImGui::PopTextWrapPos();
-            ImGui::PopStyleColor();
-        }
+        if (hint) hintText(hint);
         gap();
     };
-    static constexpr std::array<const char*, 5> orbitNames{"50%", "75%", "100%", "150%", "200%"};
-    static constexpr std::array<double, 5> orbitValues{0.5, 0.75, 1.0, 1.5, 2.0};
-    choice("finger-orbit", Tr("Вращение пальцем"), nullptr, m.fingerOrbit, orbitNames, orbitValues);
     static constexpr std::array<const char*, 4> slopNames{N_("Чуткий"), N_("Обычный"), N_("Спокойный"), N_("Твёрдый")};
     static constexpr std::array<int, 4> slopValues{6, 10, 16, 24};
     choice("tap-slop", Tr("Порог касания"),
@@ -1087,29 +1106,89 @@ void DrawTouchScreenSettings(AppContext& app, float width) {
     static constexpr std::array<const char*, 4> pressNames{"0,3 с", "0,5 с", "0,7 с", "1 с"};
     static constexpr std::array<double, 4> pressValues{0.3, 0.5, 0.7, 1.0};
     choice("long-press", Tr("Долгое нажатие (контекстное меню)"), nullptr, m.longPress, pressNames, pressValues);
-    static constexpr std::array<const char*, 4> cursorNames{"25%", "50%", "75%", "100%"};
-    static constexpr std::array<double, 4> cursorValues{0.25, 0.5, 0.75, 1.0};
-    choice("cursor-speed", Tr("Скорость курсора"),
-           Tr("100% — кончик идёт за пальцем. Меньше — точный режим: кончик проходит часть пути пальца, "
-              "тап по-прежнему ставит его в точку касания."),
-           m.cursorSpeed, cursorNames, cursorValues);
     static constexpr std::array<const char*, 4> reachNames{"32 dp", "48 dp", "64 dp", "80 dp"};
     static constexpr std::array<int, 4> reachValues{32, 48, 64, 80};
     choice("cursor-reach", Tr("Кончик курсора над пальцем"), nullptr, m.cursorReach, reachNames, reachValues);
-    static constexpr std::array<const char*, 4> scrollNames{"50%", "100%", "150%", "200%"};
-    static constexpr std::array<double, 4> scrollValues{0.5, 1.0, 1.5, 2.0};
-    choice("scroll-speed", Tr("Прокрутка списков"), nullptr, m.scrollSpeed, scrollNames, scrollValues);
 
     ui::FieldLabel(ui, Tr("Кнопки громкости"));
     static constexpr std::array<const char*, 2> volume{N_("Громкость"), N_("Масштаб вида")};
     if (const int n = ui::Segmented(ui, "volume", volume, m.volumeZoom ? 1 : 0, 2, width); n != (m.volumeZoom ? 1 : 0)) m.volumeZoom = n == 1;
     gap();
-    if (ui::SecondaryButton(ui, "##reset-mobile", Tr("Сбросить"), nullptr, {ui.S(140), ui.S(34)})) {
-        const bool asked = m.askedNotifications;
-        const std::string folder = m.projectsFolderName;
-        m = MobileSettings{};
-        m.askedNotifications = asked;
-        m.projectsFolderName = folder;
+    if (ui::SecondaryButton(ui, "##reset-mobile", Tr("Сбросить настройки"), nullptr, {ui.S(180), ui.S(34)})) {
+        // Everything on this page; the gestures have their own tab and button.
+        MobileSettings fresh;
+        fresh.askedNotifications = m.askedNotifications;
+        fresh.projectsFolderName = m.projectsFolderName;
+        fresh.hotbar = m.hotbar;
+        fresh.gesturesOff = m.gesturesOff;
+        fresh.gesturesOn = m.gesturesOn;
+        m = fresh;
+    }
+}
+
+/// "Управление" → "Жесты" (Android): what fingers do over the view, one set
+/// with the cursor off and one with it on (the author's idea, 17.10.2026).
+void DrawGestureSettings(AppContext& app, float width) {
+    ui::Ui& ui = app.ui;
+    MobileSettings& m = app.settings.mobile;
+    const auto gap = [&] { ImGui::Dummy({0, ui.S(6)}); };
+    static int cursorTab = 0;
+    static constexpr std::array<const char*, 2> sets{N_("Курсор выкл"), N_("Курсор вкл")};
+    cursorTab = ui::Segmented(ui, "gesture-set", sets, cursorTab, 2, width);
+    gap();
+    const bool on = cursorTab == 1;
+    FingerGestures& g = on ? m.gesturesOn : m.gesturesOff;
+
+    static constexpr std::array<const char*, 4> drags{N_("Вращение"), N_("Сдвиг"), N_("Масштаб"), N_("Нет")};
+    // FingerDrag: None 0, Orbit 1, Pan 2, Zoom 3 — shown Orbit, Pan, Zoom, None.
+    const auto dragRow = [&](const char* id, const char* label, mobile::FingerDrag& d) {
+        ui::FieldLabel(ui, label);
+        const int shown = d == mobile::FingerDrag::None ? 3 : static_cast<int>(d) - 1;
+        if (const int n = ui::Segmented(ui, id, drags, shown, 4, width); n != shown)
+            d = n == 3 ? mobile::FingerDrag::None : static_cast<mobile::FingerDrag>(n + 1);
+        gap();
+    };
+    if (on) {
+        ui::FieldLabel(ui, Tr("Один палец"));
+        ui::FontScope small(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+        ImGui::TextUnformatted(Tr("Ведёт курсор — это право первого пальца, пока курсор включён. Тап ставит кончик в точку."));
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+        gap();
+    } else {
+        dragRow("drag-1", Tr("Один палец"), g.drags.one);
+    }
+    dragRow("drag-2", Tr("Два пальца"), g.drags.two);
+    dragRow("drag-3", Tr("Три пальца"), g.drags.three);
+    ui::FieldLabel(ui, Tr("Щипок"));
+    static constexpr std::array<const char*, 2> pinch{N_("Масштаб"), N_("Нет")};
+    if (const int n = ui::Segmented(ui, "pinch", pinch, g.drags.pinch ? 0 : 1, 2, width); n != (g.drags.pinch ? 0 : 1)) g.drags.pinch = n == 0;
+    gap();
+    static constexpr std::array<const char*, 5> taps{N_("Отменить"), N_("Повторить"), N_("Показать всё"), N_("Домой"), N_("Нет")};
+    // FingerTap: None 0, Undo 1, Redo 2, Fit 3, Home 4 — shown Undo, Redo, Fit, Home, None.
+    const auto tapRow = [&](const char* id, const char* label, FingerTap& t) {
+        ui::FieldLabel(ui, label);
+        const int shown = t == FingerTap::None ? 4 : static_cast<int>(t) - 1;
+        if (const int n = ui::Segmented(ui, id, taps, shown, 3, width); n != shown)
+            t = n == 4 ? FingerTap::None : static_cast<FingerTap>(n + 1);
+        gap();
+    };
+    tapRow("tap-2", Tr("Тап двумя пальцами"), g.tap2);
+    tapRow("tap-3", Tr("Тап тремя пальцами"), g.tap3);
+    {
+        ui::FontScope small(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+        ImGui::TextUnformatted(Tr("Тап одним пальцем — выбор (без курсора), долгое нажатие — контекстное меню."));
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    }
+    gap();
+    if (ui::SecondaryButton(ui, "##reset-gestures", Tr("Сбросить жесты"), nullptr, {ui.S(180), ui.S(34)})) {
+        m.gesturesOff = FingerGestures{};
+        m.gesturesOn = FingerGestures{mobile::GestureRecognizer::DefaultDrags(true)};
     }
 }
 #endif
@@ -1169,11 +1248,11 @@ void DrawSettings(AppContext& app) {
     if (app.shell.settingsTab == 1) {
 #if defined(__ANDROID__)
         // A touch screen instead of a touchpad (ADR-0004): layout, hand, sizes, cursor.
-        static constexpr std::array<const char*, 3> subs{N_("Клавиатура"), N_("Мышь"), N_("Сенсор")};
+        static constexpr std::array<const char*, 4> subs{N_("Клавиатура"), N_("Мышь"), N_("Сенсор"), N_("Жесты")};
 #else
         static constexpr std::array<const char*, 3> subs{N_("Клавиатура"), N_("Мышь"), N_("Тачпад")};
 #endif
-        app.shell.settingsSub = ui::Segmented(ui, "settings-sub", subs, app.shell.settingsSub, 3, width);
+        app.shell.settingsSub = ui::Segmented(ui, "settings-sub", subs, app.shell.settingsSub, static_cast<int>(subs.size()), width);
         ImGui::Dummy({0, ui.S(4)});
     } else if (app.shell.settingsTab == 2) {
         static constexpr std::array<const char*, 3> subs{N_("Внешний вид"), N_("Качество"), N_("Производительность")};
@@ -1187,6 +1266,7 @@ void DrawSettings(AppContext& app) {
             if (app.shell.settingsSub == 1) DrawMouseSettings(app, width);
 #if defined(__ANDROID__)
             else if (app.shell.settingsSub == 2) DrawTouchScreenSettings(app, width);
+            else if (app.shell.settingsSub == 3) DrawGestureSettings(app, width);
 #else
             else if (app.shell.settingsSub == 2) DrawTouchpadSettings(app, width);
 #endif

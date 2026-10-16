@@ -49,6 +49,7 @@ private:
         ImVec2 start{0, 0}, at{0, 0};
         double since = 0;
         enum class Mode : unsigned char { Undecided, Scroll, Drag, Held } mode = Mode::Undecided;
+        bool dragOnly = false;   ///< the panel there does not scroll: any direction drags (the cube)
     };
 
     void Route1(AppContext& app, const PointerEvent& e);
