@@ -204,6 +204,21 @@ void SaveFramebufferPpm(GLFWwindow* window, const std::filesystem::path& file) {
         out.write(reinterpret_cast<const char*>(pixels.data()) + static_cast<std::ptrdiff_t>(row) * rowBytes, rowBytes);
 }
 
+void SaveFramebufferPpm(const Window& window, const std::filesystem::path& file) { SaveFramebufferPpm(window.Handle(), file); }
+
+double Window::Time() { return glfwGetTime(); }
+
+float Window::CurrentFramebufferScale() {
+    int winW = 1, fbW = 1, h = 1;
+    glfwGetWindowSize(glfwGetCurrentContext(), &winW, &h);
+    glfwGetFramebufferSize(glfwGetCurrentContext(), &fbW, &h);
+    return winW > 0 ? static_cast<float>(fbW) / static_cast<float>(winW) : 1.0f;
+}
+
+void Window::WindowSize(int& width, int& height) const { glfwGetWindowSize(myWindow, &width, &height); }
+void Window::FramebufferSize(int& width, int& height) const { glfwGetFramebufferSize(myWindow, &width, &height); }
+bool Window::CanDraw() const { return true; }
+
 void Window::WaitEvents(double timeoutSeconds) { glfwWaitEventsTimeout(timeoutSeconds); }
 void Window::PollEvents() { glfwPollEvents(); }
 void Window::PostEmptyEvent() { glfwPostEmptyEvent(); }

@@ -1,6 +1,10 @@
 #include "platform/SystemInfo.h"
 
+#if !defined(__ANDROID__)
 #include <GLFW/glfw3.h>
+#else
+#include <sys/system_properties.h>
+#endif
 
 #include <algorithm>
 #include <format>
@@ -100,7 +104,7 @@ void Windows(std::vector<SystemFact>& out) {
 
 #else
 
-#if !defined(__APPLE__)
+#if !defined(__APPLE__) && !defined(__ANDROID__)
 std::string FirstLineWith(const char* file, const std::string& prefix) {
     std::ifstream in(file);
     for (std::string line; std::getline(in, line);)
@@ -125,6 +129,20 @@ void Unix(std::vector<SystemFact>& out) {
     std::uint64_t bytes = 0;
     size = sizeof bytes;
     if (sysctlbyname("hw.memsize", &bytes, &size, nullptr, 0) == 0) out.push_back({"memory", std::format("{} MB", bytes >> 20)});
+#elif defined(__ANDROID__)
+    const auto property = [](const char* name) {
+        char value[PROP_VALUE_MAX] = "";
+        __system_property_get(name, value);
+        return std::string(value);
+    };
+    out.push_back({"os", std::format("Android {} (API {}, {} {})", property("ro.build.version.release"), property("ro.build.version.sdk"),
+                                     u.release, u.machine)});
+    out.push_back({"model", property("ro.product.manufacturer") + " " + property("ro.product.model")});
+    out.push_back({"cpu", property("ro.soc.manufacturer") + " " + property("ro.soc.model")});
+    const long pages = sysconf(_SC_PHYS_PAGES), avail = sysconf(_SC_AVPHYS_PAGES), page = sysconf(_SC_PAGE_SIZE);
+    if (pages > 0 && page > 0)
+        out.push_back({"memory", std::format("{} MB, free {} MB", (static_cast<unsigned long long>(pages) * static_cast<unsigned long long>(page)) >> 20,
+                                             (static_cast<unsigned long long>(avail) * static_cast<unsigned long long>(page)) >> 20)});
 #else
     std::string pretty = FirstLineWith("/etc/os-release", "PRETTY_NAME=");
     if (pretty.size() > 1 && pretty.front() == '"') pretty = pretty.substr(1, pretty.size() - 2);
@@ -154,6 +172,7 @@ std::vector<SystemFact> DescribeSystem(const std::filesystem::path& disk) {
     std::error_code ec;
     if (const auto space = std::filesystem::space(disk, ec); !ec)
         out.push_back({"disk.free", std::format("{} MB", space.available >> 20)});
+#if !defined(__ANDROID__)
     // Screens (GLFW is up by the time reports are written).
     int count = 0;
     if (GLFWmonitor** monitors = glfwGetMonitors(&count))
@@ -167,6 +186,7 @@ std::vector<SystemFact> DescribeSystem(const std::filesystem::path& disk) {
                                        mode ? mode->refreshRate : 0, sx * 100)});
         }
     out.push_back({"glfw", glfwGetVersionString()});
+#endif
     return out;
 }
 

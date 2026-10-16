@@ -1,3 +1,26 @@
+if(ANDROID)
+    # Android (docs/ADR/0004-mobile-touch-ui.md): the window is EGL on the
+    # activity's surface; the glue runs android_main on a thread of its own.
+    set(BZ_GLUE_DIR ${ANDROID_NDK}/sources/android/native_app_glue)
+    add_library(bz_android_glue STATIC ${BZ_GLUE_DIR}/android_native_app_glue.c)
+    target_include_directories(bz_android_glue SYSTEM PUBLIC ${BZ_GLUE_DIR})
+    add_library(bz_platform STATIC
+        Android.cpp
+        FileDialogs_android.cpp
+        Launch.cpp
+        Paths.cpp
+        Process.cpp
+        ProcessInfo.cpp
+        SystemInfo.cpp
+        SystemTheme.cpp
+        Touchpad_android.cpp
+        Window_android.cpp)
+    target_link_libraries(bz_platform PUBLIC bz::core bz_android_glue PRIVATE android EGL GLESv3 log)
+    bz_set_warnings(bz_platform)
+    add_library(bz::platform ALIAS bz_platform)
+    return()
+endif()
+
 add_library(bz_platform STATIC
     FileDialogs.cpp
     Launch.cpp

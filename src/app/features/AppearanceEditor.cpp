@@ -17,7 +17,7 @@
 
 #include "core/Image.h"
 
-#include <GLFW/glfw3.h>
+#include "ui/Gl.h"
 #include <imgui.h>
 
 #include <format>

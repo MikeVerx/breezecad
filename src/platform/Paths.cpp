@@ -3,6 +3,9 @@
 #include <cstdlib>
 #include <system_error>
 
+#if defined(__ANDROID__)
+#include "platform/Android.h"
+#endif
 #if defined(_WIN32)
 #include <windows.h>
 #include <shlobj.h>
@@ -54,6 +57,9 @@ std::filesystem::path Ensure(const std::filesystem::path& dir) {
 } // namespace
 
 std::filesystem::path AssetsDir() {
+#if defined(__ANDROID__)
+    return android::DataDir() / "assets";   // unpacked from the APK at start (android::UnpackAssets)
+#endif
     const std::filesystem::path exe = ExecutableDir();
     for (const auto& candidate : {exe / "assets", exe / ".." / "share" / "breezecad" / "assets",
                                   exe / ".." / "Resources" / "assets"}) {
@@ -64,7 +70,9 @@ std::filesystem::path AssetsDir() {
 }
 
 std::filesystem::path ConfigDir() {
-#if defined(_WIN32)
+#if defined(__ANDROID__)
+    return Ensure(android::DataDir());
+#elif defined(_WIN32)
     PWSTR path = nullptr;
     std::filesystem::path base;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &path))) base = path;
@@ -82,7 +90,9 @@ std::filesystem::path ConfigDir() {
 std::filesystem::path AutosaveDir() { return Ensure(ConfigDir() / "autosave"); }
 
 std::filesystem::path DocumentsDir() {
-#if defined(_WIN32)
+#if defined(__ANDROID__)
+    return Ensure(android::CacheDir() / "documents");   // local copies; the user's files are in the projects folder (SAF)
+#elif defined(_WIN32)
     PWSTR path = nullptr;
     std::filesystem::path docs;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &path))) docs = path;
