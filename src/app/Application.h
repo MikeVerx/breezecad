@@ -116,6 +116,7 @@ private:
     bool AndroidBetweenFrames(double now);
     void CheckLastExit();
     void RunTestCommands();
+    void RenderWithMagnifier(int framebufferHeight);
     mobile::TouchInput myTouch;
     mobile::Magnifier  myMagnifier;
     int    myScreenRevision = -1;

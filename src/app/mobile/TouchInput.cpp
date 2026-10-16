@@ -2,6 +2,7 @@
 
 #include "app/Operations.h"
 #include "app/mobile/MobileLayout.h"
+#include "core/Log.h"
 #include "core/Monitor.h"
 
 #include <imgui_internal.h>
@@ -138,6 +139,8 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
         Route route = Route::View;
         if (UiAt(at) || !Inside(at, m.viewMin, m.viewMax)) route = myUi.id < 0 ? Route::Ui : Route::Ignored;
         myRoutes[e.id] = route;
+        // One line per touch: where it went (phone reports, the emulator's check).
+        log::Info("Touch: finger at {:.0f},{:.0f} -> {}", at.x, at.y, route == Route::Ui ? "panel" : route == Route::View ? "view" : "ignored");
         if (route == Route::Ui) {
             myUi = {e.id, at, at, e.time, UiFinger::Mode::Undecided};
             Pos(at);   // hover first: the button goes down on a tap or a sideways drag
@@ -326,7 +329,10 @@ void TouchInput::ApplyGestures(AppContext& app) {
         Button(ImGuiMouseButton_Left, true);
     }
     if (step.boxTo) Pos(ToIm(*step.boxTo));
-    if (step.boxEnded) Button(ImGuiMouseButton_Left, false);
+    if (step.boxEnded) {
+        Button(ImGuiMouseButton_Left, false);
+        m.boxMode = false;   // one frame, then the finger turns the view again (a mode left on looked like "rotation is broken")
+    }
     m.gestures = step;
 }
 
@@ -340,6 +346,7 @@ void TouchInput::RunRowButtons(AppContext& app) {
             Pos(m.cursorTip);
             Button(ImGuiMouseButton_Left, !m.boxHeld);
             m.boxHeld = !m.boxHeld;
+            if (!m.boxHeld) m.boxMode = false;   // the second corner: done, one frame per press of the button
         } else if (cursor) {
             Click(m.cursorTip, ImGuiMouseButton_Left);
         } else {

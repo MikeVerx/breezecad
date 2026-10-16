@@ -108,10 +108,16 @@ right=$(( w - b2 ))
 adb shell input tap $((right - $(dp 30))) $(dp 30)
 shot 8-cube
 check cube
+# A face of the big cube (its middle, a little left: "Спереди") — the view turns to it.
+cube=$(( (h - $(dp 70)) < $(dp 230) ? (h - $(dp 70)) : $(dp 230) ))
+adb shell input tap $((right - $(dp 8) - cube / 2 - cube / 8)) $(( $(dp 58) + cube / 2 + cube / 10 ))
+shot 9-cube-face
+check cube-face
 
 adb logcat -d -s BreezeCAD:* > "$OUT/breezecad.log"
 adb logcat -d '*:E' > "$OUT/errors.log"
 grep -E "OpenGL ES|Window:|ERROR|WARN|test commands" "$OUT/breezecad.log" | head -20
+echo "touch: $(grep -o 'Touch: [^\r]*' "$OUT/breezecad.log" | tail -12 | tr '\n' ';')"
 if [ $failed -ne 0 ] || [ -z "$(alive)" ]; then
     echo "the app died:"; grep -E "FATAL|DEBUG|libbreezecad|backtrace|#[0-9]+ pc|AndroidRuntime" "$OUT/errors.log" | head -60
     exit 1

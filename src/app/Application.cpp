@@ -720,9 +720,10 @@ void Application::Frame() {
     const Color bg = myTheme.colors.appBackground;
     glClearColor(bg.r, bg.g, bg.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 #if defined(__ANDROID__)
-    myMagnifier.Capture(app, myFramebufferScale, fbH);   // for the next frame's magnifier
+    RenderWithMagnifier(fbH);   // the magnifier copies the picture before the cursor is drawn over it
+#else
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 #endif
     if (myFrameIndex == myScreenshotFrame) TakeScreenshot(myScreenshotFile);
     if (!myPendingShot.empty()) {

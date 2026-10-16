@@ -171,7 +171,7 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: bash scripts/android/run-tests.sh stage > test.log 2>&1; status=$?; tail -5 test.log; echo "::notice title=bz_tests on Android x86_64::$(grep -m1 '^device:' test.log) — $(grep -E '^\[doctest\] (test cases|assertions)' test.log | tr '\n' ' ')"; bash scripts/android/smoke-apk.sh apk/BreezeCAD-android-x86_64.apk shots > smoke.log 2>&1; smoke=$?; cat smoke.log; echo "::notice title=APK on the emulator::$(grep -E '^(screen|step|smoke)' smoke.log | tr '\n' ' ')"; exit $((status | smoke))
+          script: bash scripts/android/run-tests.sh stage > test.log 2>&1; status=$?; tail -5 test.log; echo "::notice title=bz_tests on Android x86_64::$(grep -m1 '^device:' test.log) — $(grep -E '^\[doctest\] (test cases|assertions)' test.log | tr '\n' ' ')"; bash scripts/android/smoke-apk.sh apk/BreezeCAD-android-x86_64.apk shots > smoke.log 2>&1; smoke=$?; cat smoke.log; echo "::notice title=APK on the emulator::$(grep -E '^(screen|step|smoke|touch)' smoke.log | tr '\n' ' ')"; exit $((status | smoke))
       - name: Report failures
         if: failure()
         run: bash scripts/ci-annotate.sh test.log smoke.log shots/errors.log

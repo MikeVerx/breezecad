@@ -101,7 +101,8 @@ bool Window::Create(const WindowConfig& config) {
     if (config.visible) Show();
     glfwMakeContextCurrent(myWindow);
     glfwSwapInterval(1);
-    glfwSetWindowSizeLimits(myWindow, 800, 500, GLFW_DONT_CARE, GLFW_DONT_CARE);
+    // BZ_PHONE_LAYOUT (a test hook): the window may be as small as a phone held sideways.
+    if (!std::getenv("BZ_PHONE_LAYOUT")) glfwSetWindowSizeLimits(myWindow, 800, 500, GLFW_DONT_CARE, GLFW_DONT_CARE);
     if (const auto* version = reinterpret_cast<const char*>(glGetString(GL_VERSION))) myGLVersion = version;
     if (const auto* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR))) myGLVendor = vendor;
     if (const auto* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER))) myGLRenderer = renderer;

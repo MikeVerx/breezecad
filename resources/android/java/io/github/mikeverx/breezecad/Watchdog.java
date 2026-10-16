@@ -121,6 +121,13 @@ public class Watchdog extends Service {
         }
     }
 
+    static void writeState(Context c, String text) {
+        File d = dir(c);
+        d.mkdirs();
+        writeState(new File(d, "state"), text);
+        writeState(new File(d, "beat"), "start");   // a fresh beat: the program needs a few seconds before its own
+    }
+
     private static void writeState(File state, String text) {
         try (java.io.FileOutputStream out = new java.io.FileOutputStream(state)) {
             out.write(text.getBytes(StandardCharsets.UTF_8));

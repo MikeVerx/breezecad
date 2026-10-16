@@ -333,6 +333,14 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
     // Footer: Отмена / Применить / Готово.
     ui::Divider(ui, c.dividerSoft);
     const ImVec2 fp = ImGui::GetCursorScreenPos();
+    if (app.shell.mobile.phone) {
+        // The phone: "Отмена" and "ОК" are the row under block 1 (ADR-0004); only
+        // "Применить" stays here, full width — three buttons do not fit 180 dp.
+        ImGui::SetCursorScreenPos({fp.x + ui.S(10), fp.y + ui.S(10)});
+        if (ui::SecondaryButton(ui, "##apply", Tr("Применить"), nullptr, {width - ui.S(20), ui.S(40)}))
+            app.Later([&app, &session, this] { Apply(app, session); });
+        return;
+    }
     const float bw = (width - ui.S(28) - ui.S(16)) / 3.0f;
     const float bh = ui.S(36);
     ImGui::SetCursorScreenPos({fp.x + ui.S(14), fp.y + ui.S(12)});

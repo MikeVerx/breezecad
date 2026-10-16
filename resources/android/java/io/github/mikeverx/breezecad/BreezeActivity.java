@@ -89,6 +89,9 @@ public class BreezeActivity extends NativeActivity {
             return v.onApplyWindowInsets(insets);
         });
         applyImmersive();
+        // This run's state at once: the watchdog must not read the last run's
+        // ("fg" with a dead pid) and cry crash before the program writes its own.
+        Watchdog.writeState(this, "fg " + android.os.Process.myPid());
         Watchdog.start(this);
     }
 

@@ -393,7 +393,11 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     // button that opens a big one (mobile/MobileLayout); the triad stays here.
     if (app.shell.mobile.phone) {
         if (app.settings.showTriad) ui::DrawAxisTriad(ui, vf.projection, {pos.x + ui.S(44), pos.y + size.y - ui.S(44)});
-        mobile::DrawDropCursor(app, ImGui::GetWindowDrawList());
+        // On top of the islands too (a separate layer: the magnifier copies the view without it).
+        ImDrawList* front = ImGui::GetForegroundDrawList();
+        front->PushClipRect(pos, {pos.x + size.x, pos.y + size.y + ui.S(60)});
+        mobile::DrawDropCursor(app, front);
+        front->PopClipRect();
     } else {
         const ui::ViewCubeAction cube = ui::DrawViewCube(ui, vf.projection, pos, {pos.x + size.x, pos.y + size.y}, app.settings.showTriad);
         if (cube.lookFrom) LookFrom(app, cube.lookFrom->first, cube.lookFrom->second);

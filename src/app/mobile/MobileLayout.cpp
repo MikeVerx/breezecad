@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 #if defined(__ANDROID__)
@@ -98,38 +99,21 @@ void DrawCameraPanel(AppContext& app, ImVec2 pos, ImVec2 size) {
         ImGui::SetCursorScreenPos({x, y});
         y += b + ui.S(4);
     };
-    // The logo: the main menu.
+    // The logo (the main menu) and the colours on top, as in the mockup.
     place();
     const ImVec2 lp = ImGui::GetCursorScreenPos();
     if (ImGui::InvisibleButton("##logo", {b, b})) ImGui::OpenPopup("##main-menu");
     ui.icons.Draw(dl, "brand-mark", {lp.x + (b - ui.S(24)) / 2, lp.y + (b - ui.S(24)) / 2}, ui.S(24), {1, 1, 1, 1});
     MainMenuPopup(app);
-    // "+": a command to the hotbar.
     place();
-    if (ui::IconButton(ui, "##hotbar-add", "ui-plus", b, 18, Tr("Добавить кнопку")))
-        ImGui::OpenPopup("##hotbar-pick");
-    {
-        ui::MenuStyle style(ui);
-        if (ImGui::BeginPopup("##hotbar-pick")) {
-            for (const char* id : kHotbarChoices) {
-                const Action* a = app.actions.Find(id);
-                if (!a) continue;
-                auto& bar = app.settings.mobile.hotbar;
-                const bool there = std::find(bar.begin(), bar.end(), id) != bar.end();
-                if (ui::MenuItem(ui, a->Label(), nullptr, a->icon, there)) {
-                    if (there) bar.erase(std::remove(bar.begin(), bar.end(), id), bar.end());
-                    else bar.emplace_back(id);
-                }
-            }
-            ImGui::EndPopup();
-        }
-    }
-    // The user's buttons; a long press takes one away.
-    const float bottomReserve = b + ui.S(8) + m.insets.bottom;
+    if (ui::IconButton(ui, "##colours", "ui-palette", b, 20, Tr("Внешний вид"), true, app.ops.appearance.IsOpen()))
+        Run(app, "view.appearance");
+    // The user's buttons; a long press takes one away. "+" adds one, at the bottom.
+    const float plusY = pos.y + size.y - b - ui.S(6) - m.insets.bottom;
     std::vector<std::string>& bar = app.settings.mobile.hotbar;
     for (std::size_t i = 0; i < bar.size(); ++i) {
         clear(b);
-        if (y + b > pos.y + size.y - bottomReserve) break;
+        if (y + b > plusY - ui.S(4)) break;
         ImGui::SetCursorScreenPos({x, y});
         ImGui::PushID(static_cast<int>(i));
         const Action* a = app.actions.Find(bar[i]);
@@ -144,10 +128,23 @@ void DrawCameraPanel(AppContext& app, ImVec2 pos, ImVec2 size) {
         ImGui::PopID();
         y += b + ui.S(4);
     }
-    // The colours at the bottom.
-    ImGui::SetCursorScreenPos({x, pos.y + size.y - b - ui.S(6) - m.insets.bottom});
-    if (ui::IconButton(ui, "##colours", "ui-palette", b, 20, Tr("Внешний вид"), true, app.ops.appearance.IsOpen()))
-        Run(app, "view.appearance");
+    ImGui::SetCursorScreenPos({x, plusY});
+    if (ui::IconButton(ui, "##hotbar-add", "ui-plus", b, 18, Tr("Добавить кнопку"))) ImGui::OpenPopup("##hotbar-pick");
+    {
+        ui::MenuStyle style(ui);
+        if (ImGui::BeginPopup("##hotbar-pick")) {
+            for (const char* id : kHotbarChoices) {
+                const Action* a = app.actions.Find(id);
+                if (!a) continue;
+                const bool there = std::find(bar.begin(), bar.end(), id) != bar.end();
+                if (ui::MenuItem(ui, a->Label(), nullptr, a->icon, there)) {
+                    if (there) bar.erase(std::remove(bar.begin(), bar.end(), id), bar.end());
+                    else bar.emplace_back(id);
+                }
+            }
+            ImGui::EndPopup();
+        }
+    }
     EndArea();
 }
 
@@ -202,7 +199,7 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
         ImGui::SetCursorScreenPos({x, by});
         const ImVec2 lp = ImGui::GetCursorScreenPos();
         if (ImGui::InvisibleButton("##logo", ui.S(36, 36))) ImGui::OpenPopup("##main-menu");
-        ui.icons.Draw(dl, "brand-mark", {lp.x + ui.S(7), lp.y + ui.S(7)}, ui.S(22), {1, 1, 1, 1});
+        ui.icons.Draw(dl, "brand-app", {lp.x + ui.S(5), lp.y + ui.S(5)}, ui.S(26), {1, 1, 1, 1});
         MainMenuPopup(app);
         x += ui.S(40);
     }
@@ -218,13 +215,41 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
     if (tool && !m.hadToolPanel) m.block1Tab = 1;
     if (!tool && m.hadToolPanel && m.block1Tab == 1) m.block1Tab = 0;
     m.hadToolPanel = tool;
-    const char* tabs[] = {Tr("Дерево"), Tr("Инструмент"), Tr("Размеры")};
-    ImGui::SetCursorScreenPos({pos.x + ui.S(6) + pad, y + ui.S(2)});
-    const int chosen = ui::Segmented(ui, "##block1-tabs", tabs, m.block1Tab, 3, (size.x - ui.S(12) - pad) / ui.scale,
-                                     session.assembly ? 0b100 : 0);
-    if (chosen != m.block1Tab) {
-        // Leaving the tool's tab while an operation is open keeps it open: back to it any time.
-        m.block1Tab = chosen;
+    {
+        // The mockup: a strip of three; the chosen tab shows its name, the others an icon.
+        const struct {
+            const char* icon;
+            const char* name;
+        } tabs[] = {{"ui-tree", Tr("Дерево")}, {"ui-wrench", Tr("Инструмент")},
+                    {"ui-dimension", session.assembly ? Tr("Свойства") : Tr("Размеры")}};
+        const ImVec2 t0{pos.x + pad, y};
+        const float th = ui.S(kTabs), iconW = ui.S(40);
+        dl->AddRectFilled(t0, {pos.x + size.x - 1, y + th}, ui::ToU32(c.segmentTrack));
+        const float wide = size.x - pad - 1 - ui.S(6) - 2 * iconW;
+        float tx = t0.x + ui.S(3);
+        for (int i = 0; i < 3; ++i) {
+            const bool on = m.block1Tab == i;
+            const float w = on ? wide : iconW;
+            const ImVec2 a{tx, y + ui.S(3)}, bb{tx + w, y + th - ui.S(3)};
+            ImGui::SetCursorScreenPos(a);
+            ImGui::PushID(i);
+            if (ImGui::InvisibleButton("##block1-tab", {w, bb.y - a.y})) m.block1Tab = i;
+            ImGui::PopID();
+            if (on) dl->AddRectFilled(a, bb, ui::ToU32(c.panel), ui.S(6));
+            const float is = ui.S(16);
+            if (on) {
+                const ImVec2 ts = ui.fonts.medium->CalcTextSizeA(ui.S(12.5f), FLT_MAX, 0, tabs[i].name);
+                const float total = is + ui.S(6) + ts.x;
+                const float sx = a.x + std::max(ui.S(4), (w - total) / 2);
+                ui.icons.Draw(dl, tabs[i].icon, {sx, (a.y + bb.y - is) / 2}, is, c.text);
+                ImGui::PushClipRect(a, bb, true);
+                dl->AddText(ui.fonts.medium, ui.S(12.5f), {sx + is + ui.S(6), (a.y + bb.y - ts.y) / 2}, ui::ToU32(c.text), tabs[i].name);
+                ImGui::PopClipRect();
+            } else {
+                ui.icons.Draw(dl, tabs[i].icon, {a.x + (w - is) / 2, (a.y + bb.y - is) / 2}, is, c.textSecondary);
+            }
+            tx += w;
+        }
     }
     y += ui.S(kTabs);
 
@@ -320,12 +345,26 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
 
     // Beard: what is going on (and what to do next, as the status bar says).
     std::string beard = CurrentTask(app, session);
+    if (CursorActive(app) && m.cursorShown && session.mode != EditMode::Sketch) {
+        // The model point under the tip (read again only when the tip moved).
+        static ImVec2 pickedAt{-1, -1};
+        static std::optional<Vec3> picked;
+        if (pickedAt.x != m.cursorTip.x || pickedAt.y != m.cursorTip.y) {
+            pickedAt = m.cursorTip;
+            const auto hit = app.viewport.Pick({m.cursorTip.x - m.viewMin.x, m.cursorTip.y - m.viewMin.y});
+            picked = hit ? std::optional<Vec3>(hit->point) : std::nullopt;
+        }
+        if (picked) beard = std::format("X {:.1f}  Y {:.1f}  Z {:.1f}", picked->x, picked->y, picked->z) + (beard.empty() ? "" : " · " + beard);
+    }
     if (const OperationEditor* op = app.ops.Active()) {
         if (const std::string hint = op->Hint(); !hint.empty()) beard += " · " + hint;
     }
     if (CursorActive(app) && m.cursorShown && m.boxMode) beard += m.boxHeld ? Tr(" · рамка: второй угол — ОК") : Tr(" · рамка: первый угол — ОК");
-    dl->AddText(ui.fonts.bodySmall, ui.S(11), {pos.x + ui.S(10) + pad, bottom + (ui.S(kBeard) - ui.S(11)) / 2},
-                ui::ToU32(c.textMuted), beard.c_str());
+    dl->AddRectFilled({pos.x, bottom}, {pos.x + size.x, pos.y + size.y}, ui::ToU32(c.statusBar));
+    ImGui::PushClipRect({pos.x, bottom}, {pos.x + size.x - ui.S(4), pos.y + size.y}, true);
+    dl->AddText(ui.fonts.mono, ui.S(10.5f), {pos.x + ui.S(10) + pad, bottom + (ui.S(kBeard) - ui.S(11)) / 2},
+                ui::ToU32(c.textSecondary), beard.c_str());
+    ImGui::PopClipRect();
     (void)edge;
     EndArea();
 }
@@ -371,14 +410,26 @@ void DrawBlock2(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
     const float inner = size.x - pad;
     const float top = pos.y + std::max(0.0f, m.insets.top);
 
-    // Brow: frames per second · search.
-    const std::string fps = std::format("{:.0f} fps", app.stats.fps);
-    if (!iconsOnly) dl->AddText(ui.fonts.mono, ui.S(11), {pos.x + ui.S(10), top + (ui.S(kBrow) - ui.S(11)) / 2}, ui::ToU32(c.textMuted), fps.c_str());
-    ImGui::SetCursorScreenPos({pos.x + inner - ui.S(42), top + ui.S(4)});
-    if (ui::IconButton(ui, "##search", "ui-search", 36, 18, Tr("Поиск команд"), true, app.shell.paletteOpen)) {
+    // Brow: frames per second · search (a field; icons only: a button).
+    const std::string fps = iconsOnly ? std::format("{:.0f}", app.stats.fps) : std::format("{:.0f} fps", app.stats.fps);
+    const float fpsW = ui.fonts.mono->CalcTextSizeA(ui.S(11), FLT_MAX, 0, fps.c_str()).x;
+    dl->AddText(ui.fonts.mono, ui.S(11), {pos.x + ui.S(8), top + (ui.S(kBrow) - ui.S(11)) / 2}, ui::ToU32(c.success), fps.c_str());
+    const auto toggleSearch = [&] {
         app.shell.paletteOpen = !app.shell.paletteOpen;
         app.shell.focusPalette = app.shell.paletteOpen;
         app.shell.paletteQuery.clear();
+    };
+    if (iconsOnly) {
+        ImGui::SetCursorScreenPos({pos.x + inner - ui.S(40), top + ui.S(4)});
+        if (ui::IconButton(ui, "##search", "ui-search", 36, 18, Tr("Поиск команд"), true, app.shell.paletteOpen)) toggleSearch();
+    } else {
+        const ImVec2 a{pos.x + ui.S(14) + fpsW, top + ui.S(7)}, b{pos.x + inner - ui.S(6), top + ui.S(kBrow) - ui.S(7)};
+        ImGui::SetCursorScreenPos(a);
+        if (ImGui::InvisibleButton("##search", {b.x - a.x, b.y - a.y})) toggleSearch();
+        dl->AddRectFilled(a, b, ui::ToU32(c.field), ui.S(8));
+        dl->AddRect(a, b, ui::ToU32(app.shell.paletteOpen ? c.accent : c.fieldBorder), ui.S(8));
+        ui.icons.Draw(dl, "ui-search", {a.x + ui.S(8), (a.y + b.y - ui.S(13)) / 2}, ui.S(13), c.textMuted);
+        dl->AddText(ui.fonts.body, ui.S(12.5f), {a.x + ui.S(27), (a.y + b.y - ui.S(13)) / 2}, ui::ToU32(c.textMuted), Tr("Поиск"));
     }
     float y = top + ui.S(kBrow);
     const float bottom = pos.y + size.y - ui.S(kBeard) - m.insets.bottom;
@@ -409,18 +460,23 @@ void DrawBlock2(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
         EndArea();
     }
 
-    // Beard: a long rebuild's progress ("74/100").
-    if (session.Rebuilding()) {
-        const kernel::Model::Progress p = session.RebuildProgress();
-        if (p.total > 0) {
-            const std::string text = std::format("{}/{}", p.done, p.total);
-            const float w = inner - ui.S(20);
-            const float fy = bottom + ui.S(kBeard) / 2;
-            dl->AddRectFilled({pos.x + ui.S(10), fy - ui.S(2)}, {pos.x + ui.S(10) + w, fy + ui.S(2)}, ui::ToU32(c.segmentTrack), ui.S(2));
-            dl->AddRectFilled({pos.x + ui.S(10), fy - ui.S(2)},
-                              {pos.x + ui.S(10) + w * static_cast<float>(p.done) / static_cast<float>(p.total), fy + ui.S(2)},
-                              ui::ToU32(c.accent), ui.S(2));
-            if (!iconsOnly) dl->AddText(ui.fonts.mono, ui.S(10), {pos.x + ui.S(10), fy - ui.S(13)}, ui::ToU32(c.textMuted), text.c_str());
+    // Beard: "Готово" and an empty bar, or a rebuild's progress ("74/100").
+    {
+        dl->AddRectFilled({pos.x, bottom}, {pos.x + size.x, pos.y + size.y}, ui::ToU32(c.statusBar));
+        const kernel::Model::Progress p = session.Rebuilding() ? session.RebuildProgress() : kernel::Model::Progress{};
+        const std::string text = p.total > 0 ? std::format("{}/{}", p.done, p.total) : std::string(Tr("Готово"));
+        const float fy = bottom + ui.S(kBeard) / 2;
+        float barX = pos.x + ui.S(8);
+        if (!iconsOnly) {
+            dl->AddText(ui.fonts.bodySmall, ui.S(10.5f), {pos.x + ui.S(10), fy - ui.S(6.5f)}, ui::ToU32(c.textSecondary), text.c_str());
+            barX += ui.fonts.bodySmall->CalcTextSizeA(ui.S(10.5f), FLT_MAX, 0, text.c_str()).x + ui.S(10);
+        }
+        const float barEnd = pos.x + inner - ui.S(10);
+        if (barEnd > barX) {
+            dl->AddRectFilled({barX, fy - ui.S(2)}, {barEnd, fy + ui.S(2)}, ui::ToU32(c.fieldBorder), ui.S(2));
+            if (p.total > 0)
+                dl->AddRectFilled({barX, fy - ui.S(2)}, {barX + (barEnd - barX) * static_cast<float>(p.done) / static_cast<float>(p.total), fy + ui.S(2)},
+                                  ui::ToU32(c.accent), ui.S(2));
         }
     }
     EndArea();
@@ -441,6 +497,15 @@ void DrawTabsIsland(AppContext& app, Session& session, ImVec2 at, float maxWidth
     const std::span<const Tab> tabs = session.assembly ? std::span<const Tab>(asmTabs) : std::span<const Tab>(partTabs);
     if (session.assembly && app.shell.ribbonTab == RibbonTab::Sketch) app.shell.ribbonTab = RibbonTab::Model;
     const float h = ui.S(kIsland), arrow = ui.S(34);
+    if (m.tabsFolded) {
+        // Folded: only the arrow, its own island before undo/redo (the mockup).
+        if (BeginIsland(ui, "##island-tabs", at, {ui.S(36) + ui.S(4), h})) {
+            ImGui::SetCursorScreenPos({at.x + ui.S(2), at.y + ui.S(4)});
+            if (ui::IconButton(ui, "##fold-tabs", "ui-chevron-right", 34, 14, Tr("Показать вкладки"))) m.tabsFolded = false;
+        }
+        EndIsland();
+        return;
+    }
     float width = arrow;
     if (!m.tabsFolded)
         for (const Tab& t : tabs) width += ui.fonts.medium->CalcTextSizeA(ui.S(13), FLT_MAX, 0, t.label).x + ui.S(24);
@@ -451,10 +516,9 @@ void DrawTabsIsland(AppContext& app, Session& session, ImVec2 at, float maxWidth
     }
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGui::SetCursorScreenPos({at.x + ui.S(2), at.y + ui.S(4)});
-    if (ui::IconButton(ui, "##fold-tabs", m.tabsFolded ? "ui-chevron-right" : "ui-chevron-down", 32, 12,
-                       m.tabsFolded ? Tr("Показать вкладки") : Tr("Свернуть вкладки")))
-        m.tabsFolded = !m.tabsFolded;
-    if (!m.tabsFolded) {
+    if (ui::IconButton(ui, "##fold-tabs", "ui-arrow-left", 32, 14, Tr("Свернуть вкладки"))) m.tabsFolded = true;
+    dl->AddLine({at.x + arrow + ui.S(1), at.y + ui.S(8)}, {at.x + arrow + ui.S(1), at.y + h - ui.S(8)}, ui::ToU32(c.dividerSoft));
+    {
         float x = at.x + arrow;
         for (const Tab& t : tabs) {
             const bool on = app.shell.ribbonTab == t.tab;
@@ -486,6 +550,19 @@ float DrawUndoIsland(AppContext& app, ImVec2 at) {
     return w;
 }
 
+/// A small hint over the model, in a rounded box (the mockup's chips).
+void Chip(AppContext& app, ImVec2 at, const char* text) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    const float fs = ui.S(11.5f);
+    const ImVec2 ts = ui.fonts.body->CalcTextSizeA(fs, FLT_MAX, 0, text);
+    const ImVec2 b{at.x + ts.x + ui.S(20), at.y + ui.S(24)};
+    dl->AddRectFilled(at, b, ui::ToU32(c.panel.WithAlpha(0.95f)), ui.S(8));
+    dl->AddRect(at, b, ui::ToU32(c.divider), ui.S(8));
+    dl->AddText(ui.fonts.body, fs, {at.x + ui.S(10), at.y + (ui.S(24) - ts.y) / 2}, ui::ToU32(c.textSecondary), text);
+}
+
 void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
     ui::Ui& ui = app.ui;
     MobileState& m = app.shell.mobile;
@@ -495,7 +572,10 @@ void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
     // big cube; a long press goes straight home.
     if (BeginIsland(ui, "##island-cube", at, {b, b})) {
         ImGui::SetCursorScreenPos(at);
-        if (ui::IconButton(ui, "##cube", "ui-cube", 44, 24, Tr("Видовой куб"), true, m.cubeOpen)) m.cubeOpen = !m.cubeOpen;
+        if (ui::IconButton(ui, "##cube", "ui-cube", 44, 24, Tr("Видовой куб"), true, m.cubeOpen)) {
+            m.cubeOpen = !m.cubeOpen;
+            log::Info("Touch: cube {}", m.cubeOpen ? "opened" : "folded");
+        }
         if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
             HomeView(app);
             m.cubeOpen = false;
@@ -507,14 +587,16 @@ void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
     // Open: a big cube for the finger (bigger regions for edges and
     // corners), turned with one finger, with "home"; it folds itself after
     // a choice or a tap elsewhere.
-    const float s = std::min(ui.S(230), std::min(viewMax.x - viewMin.x, viewMax.y - viewMin.y) - ui.S(70));
+    const float foot = ui.S(56);   // "Домой" and the hint under the cube (the mockup)
+    const float s = std::max(ui.S(120), std::min(ui.S(230), std::min(viewMax.x - viewMin.x, viewMax.y - viewMin.y - foot) - ui.S(64)));
     const ImVec2 p{viewMax.x - s - ui.S(8), at.y + b + ui.S(6)};
     bool inside = false;
-    if (BeginIsland(ui, "##island-cube-big", p, {s, s})) {
+    if (BeginIsland(ui, "##island-cube-big", p, {s, s + foot})) {
         ui::Ui big = ui;
         big.scale = ui.scale * s / ui.S(172);   // the cube is laid out in a 172-unit corner
         const ui::ViewCubeAction cube = ui::DrawViewCube(big, app.viewport.Projection(), p, {p.x + s, p.y + s}, false);
         if (cube.lookFrom) {
+            log::Info("Touch: cube view chosen");
             LookFrom(app, cube.lookFrom->first, cube.lookFrom->second);
             m.cubeOpen = false;
         }
@@ -524,12 +606,25 @@ void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
         }
         if (cube.dragYaw != 0 || cube.dragPitch != 0)
             app.viewport.Orbit(cube.dragYaw, cube.dragPitch, app.viewport.ModelCenter(), app.settings.turntableOrbit);
+        // Under it: "Домой" and what one finger does here.
+        const ui::ThemeColors& c = ui.C();
+        ImGui::SetCursorScreenPos({p.x + ui.S(14), p.y + s + ui.S(8)});
+        if (ui::SecondaryButton(ui, "##cube-home", Tr("Домой"), nullptr, ui.S(96, 40))) {
+            HomeView(app);
+            m.cubeOpen = false;
+        }
+        ImGui::GetWindowDrawList()->AddText(ui.fonts.bodySmall, ui.S(11), {p.x + ui.S(120), p.y + s + ui.S(15)},
+                                            ui::ToU32(c.textMuted), Tr("1 палец —\nвращение"));
         inside = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) || ImGui::IsAnyItemActive();
     }
     EndIsland();
+    Chip(app, {viewMin.x + ui.S(84), viewMax.y - ui.S(34)}, Tr("тап вне кубика — свернуть"));
     const ImVec2 mouse = ImGui::GetMousePos();
     const bool onButton = mouse.x >= at.x && mouse.y >= at.y && mouse.x < at.x + b && mouse.y < at.y + b;
-    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !inside && !onButton) m.cubeOpen = false;
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !inside && !onButton) {
+        m.cubeOpen = false;
+        log::Info("Touch: cube folded by a tap at {:.0f},{:.0f}", mouse.x, mouse.y);
+    }
 }
 
 // --- Block 4: the projects ---------------------------------------------------------
@@ -570,7 +665,7 @@ void DrawStrip(AppContext& app, ImVec2 pos, ImVec2 size) {
         const std::string title = s.Title();
         ImFont* font = active ? ui.fonts.medium : ui.fonts.body;
         const float tw = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, title.c_str()).x;
-        const float w = tw + ui.S(40);
+        const float w = tw + ui.S(s.IsModified() ? 40 : 30);
         ImGui::SetCursorScreenPos({x, pos.y});
         ImGui::PushID(static_cast<int>(i));
         if (ImGui::InvisibleButton("##project", {w, h}) && !dragged) {
@@ -582,13 +677,13 @@ void DrawStrip(AppContext& app, ImVec2 pos, ImVec2 size) {
             app.Later([&app, index] { RequestClose(app, index); });
         }
         ImGui::PopID();
-        if (active) {
-            dl->AddRectFilled({x + ui.S(2), pos.y + ui.S(5)}, {x + w - ui.S(2), pos.y + h - ui.S(5)}, ui::ToU32(c.panel), ui.S(8));
-            dl->AddRect({x + ui.S(2), pos.y + ui.S(5)}, {x + w - ui.S(2), pos.y + h - ui.S(5)}, ui::ToU32(c.accentSoftBorder), ui.S(8));
-        }
-        dl->AddText(font, ui.S(13), {x + ui.S(14), pos.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(active ? c.text : c.textSecondary),
+        // Every project a pill; the open one tinted (the mockup).
+        const ImVec2 a{x + ui.S(2), pos.y + ui.S(5)}, bb{x + w - ui.S(2), pos.y + h - ui.S(5)};
+        dl->AddRectFilled(a, bb, ui::ToU32(active ? c.accentSoft : c.panel), ui.S(8));
+        dl->AddRect(a, bb, ui::ToU32(active ? c.accentSoftBorder : c.fieldBorder), ui.S(8));
+        dl->AddText(font, ui.S(13), {x + ui.S(14), pos.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(active ? c.accent : c.text),
                     title.c_str());
-        if (s.IsModified()) dl->AddCircleFilled({x + ui.S(14) + tw + ui.S(10), pos.y + h / 2}, ui.S(3), ui::ToU32(c.accent));
+        if (s.IsModified()) dl->AddCircleFilled({x + ui.S(14) + tw + ui.S(10), pos.y + h / 2}, ui.S(3), ui::ToU32(c.warning));
         x += w + ui.S(2);
     }
     ImGui::PopClipRect();
@@ -673,9 +768,12 @@ bool WantsPhoneLayout(const Settings& settings, const platform::Window& window) 
     window.WindowSize(w, h);
     return w > 0 && h > 0 && std::min(w, h) < 600;   // dp: Android's own line between phones and tablets
 #else
+    // Test hook: BZ_PHONE_LAYOUT=1 shows the phone layout on the desktop (Xvfb
+    // screenshots of it, scripts/ui-test); never set for a person.
     (void)settings;
     (void)window;
-    return false;
+    static const bool forced = std::getenv("BZ_PHONE_LAYOUT") != nullptr;
+    return forced;
 #endif
 }
 
@@ -748,8 +846,13 @@ void DrawPhoneRoot(AppContext& app) {
 
     // Over the model: undo/redo (5), the tabs (3), the cube.
     const ImVec2 islandAt{vx0 + ui.S(8), viewPos.y + ui.S(8)};
-    const float undoW = DrawUndoIsland(app, islandAt);
-    DrawTabsIsland(app, *session, {islandAt.x + undoW + ui.S(6), islandAt.y}, viewSize.x - undoW - ui.S(80));
+    if (m.tabsFolded) {
+        DrawTabsIsland(app, *session, islandAt, ui.S(60));
+        DrawUndoIsland(app, {islandAt.x + ui.S(46), islandAt.y});
+    } else {
+        const float undoW = DrawUndoIsland(app, islandAt);
+        DrawTabsIsland(app, *session, {islandAt.x + undoW + ui.S(6), islandAt.y}, viewSize.x - undoW - ui.S(80));
+    }
     DrawCube(app, viewPos, {vx1, viewPos.y + viewSize.y});
 }
 
