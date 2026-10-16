@@ -21,7 +21,8 @@
 #include "ui/ViewCube.h"
 #include "ui/Widgets.h"
 
-#include <GLFW/glfw3.h>
+#include "app/mobile/Cursor.h"
+#include "platform/Window.h"
 
 #include <algorithm>
 #include <cmath>
@@ -211,6 +212,8 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
             nav.button = -1;
         }
     }
+    // Fingers on a touch screen (the phone): their gestures, already sorted out.
+    if (app.shell.mobile.touchScreen && NavigateFingers(app, vf)) return true;
     // Fingers on a touchpad come as a wheel too: their gestures take it.
     const bool touchTookWheel = NavigateTouch(app, vf, sceneHovered && !busy);
     if (sceneHovered && io.MouseWheel != 0.0f && !touchTookWheel) {
@@ -238,11 +241,11 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     ImDrawList* dl = BeginArea("##viewport", pos, size, ui.C().viewportBottom);
     app.shell.viewportMax = {pos.x + size.x, pos.y + size.y};
 
+    app.shell.mobile.viewMin = pos;
+    app.shell.mobile.viewMax = app.shell.viewportMax;
+
     // Size the 3D view and give each document its own camera.
-    int winW = 1, fbW = 1, h = 1;
-    glfwGetWindowSize(glfwGetCurrentContext(), &winW, &h);
-    glfwGetFramebufferSize(glfwGetCurrentContext(), &fbW, &h);
-    app.viewport.SetSize(size.x, size.y, winW > 0 ? static_cast<double>(fbW) / winW : 1.0);
+    app.viewport.SetSize(size.x, size.y, platform::Window::CurrentFramebufferScale());
     if (app.shell.viewportSession != &session) {
         app.shell.viewportSession = &session;
         if (!session.hasCamera) {
@@ -302,9 +305,9 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const bool hoverMatters =
         projecting || (session.mode != EditMode::Sketch && (!operation || pickingOriginal || operation->PicksFaces()));
     {
-        const double start = glfwGetTime();
+        const double start = platform::Window::Time();
         app.viewport.Hover(vf.hovered && hoverMatters ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);
-        app.stats.hoverMs = app.stats.hoverMs * 0.9 + (glfwGetTime() - start) * 100.0;   // ms, smoothed
+        app.stats.hoverMs = app.stats.hoverMs * 0.9 + (platform::Window::Time() - start) * 100.0;   // ms, smoothed
     }
     // Faces chosen with the left button (a click, Shift/Ctrl, a frame).
     UpdateFaceSelection(app, session, vf);
@@ -386,11 +389,17 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     DrawMarkingMenu(app, session);
     app.viewport.SetPlanes(app.shell.planeQuads);
 
-    // View cube and triad on top of everything.
-    const ui::ViewCubeAction cube = ui::DrawViewCube(ui, vf.projection, pos, {pos.x + size.x, pos.y + size.y}, app.settings.showTriad);
-    if (cube.lookFrom) LookFrom(app, cube.lookFrom->first, cube.lookFrom->second);
-    if (cube.home) HomeView(app);
-    if (cube.dragYaw != 0 || cube.dragPitch != 0) app.viewport.Orbit(cube.dragYaw, cube.dragPitch, app.viewport.ModelCenter(), app.settings.turntableOrbit);
+    // View cube and triad on top of everything. The phone has the cube as a
+    // button that opens a big one (mobile/MobileLayout); the triad stays here.
+    if (app.shell.mobile.phone) {
+        if (app.settings.showTriad) ui::DrawAxisTriad(ui, vf.projection, {pos.x + ui.S(44), pos.y + size.y - ui.S(44)});
+        mobile::DrawDropCursor(app, ImGui::GetWindowDrawList());
+    } else {
+        const ui::ViewCubeAction cube = ui::DrawViewCube(ui, vf.projection, pos, {pos.x + size.x, pos.y + size.y}, app.settings.showTriad);
+        if (cube.lookFrom) LookFrom(app, cube.lookFrom->first, cube.lookFrom->second);
+        if (cube.home) HomeView(app);
+        if (cube.dragYaw != 0 || cube.dragPitch != 0) app.viewport.Orbit(cube.dragYaw, cube.dragPitch, app.viewport.ModelCenter(), app.settings.turntableOrbit);
+    }
 
     session.camera = app.viewport.Camera();
     EndArea();

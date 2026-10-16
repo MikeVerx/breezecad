@@ -21,4 +21,9 @@ void ChooseOrbitPivot(AppContext& app, const ViewportFrame& vf, ImVec2 at);
 /// the system reports them as a mouse wheel too, which must then not zoom.
 bool NavigateTouch(AppContext& app, const ViewportFrame& vf, bool sceneHovered);
 
+/// Applies this frame's finger gestures on a touch screen (turn, move,
+/// pinch; app.shell.mobile.gestures, sorted out by mobile/TouchInput).
+/// Returns true while the view is being turned or moved.
+bool NavigateFingers(AppContext& app, const ViewportFrame& vf);
+
 } // namespace bz::app
