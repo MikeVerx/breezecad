@@ -668,9 +668,6 @@ void Application::Frame() {
         else DrawRoot();
         DrawDialogs(app);
         mobile::DrawLastCrash(app);   // Android: the last run crashed or hung (never set on the desktop)
-#if defined(__ANDROID__)
-        myMagnifier.Draw(app);
-#endif
     }
     const ImVec2 corner = myShell.viewportMax.x > 0 && !myWorkspace.ShowsHome() ? myShell.viewportMax : ImGui::GetIO().DisplaySize;
     myBusy = myNotes.Draw(*myUi, corner, now) || myBusy || myShell.animateUi;
@@ -720,11 +717,7 @@ void Application::Frame() {
     const Color bg = myTheme.colors.appBackground;
     glClearColor(bg.r, bg.g, bg.b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-#if defined(__ANDROID__)
-    RenderWithMagnifier(fbH);   // the magnifier copies the picture before the cursor is drawn over it
-#else
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-#endif
     if (myFrameIndex == myScreenshotFrame) TakeScreenshot(myScreenshotFile);
     if (!myPendingShot.empty()) {
         TakeScreenshot(myPendingShot);

@@ -192,29 +192,6 @@ void Application::CheckLastExit() {
     log::Warn("Android: the last run ended badly ({}), code {}", reason.empty() ? "a report was left" : reason, c.code);
 }
 
-void Application::RenderWithMagnifier(int framebufferHeight) {
-    // Everything but the foreground layer (the drop cursor, the magnifier)
-    // first; the magnifier copies that; then the foreground on top. A copy
-    // with the cursor in it showed the cursor's own tip four times bigger.
-    ImDrawData* all = ImGui::GetDrawData();
-    ImDrawList* front = ImGui::GetForegroundDrawList();
-    ImDrawData under = *all, over = *all;
-    under.CmdLists.clear();
-    over.CmdLists.clear();
-    under.TotalVtxCount = under.TotalIdxCount = over.TotalVtxCount = over.TotalIdxCount = 0;
-    for (ImDrawList* list : all->CmdLists) {
-        ImDrawData& into = list == front ? over : under;
-        into.CmdLists.push_back(list);
-        into.TotalVtxCount += list->VtxBuffer.Size;
-        into.TotalIdxCount += list->IdxBuffer.Size;
-    }
-    under.CmdListsCount = under.CmdLists.Size;
-    over.CmdListsCount = over.CmdLists.Size;
-    ImGui_ImplOpenGL3_RenderDrawData(&under);
-    myMagnifier.Capture(*myContext, myFramebufferScale, framebufferHeight);
-    if (over.CmdListsCount > 0) ImGui_ImplOpenGL3_RenderDrawData(&over);
-}
-
 void Application::RunTestCommands() {
     // A test run on the emulator (scripts/android/smoke-apk.sh): what to open
     // and do, so its screenshots show the program at work. Never set by a person.

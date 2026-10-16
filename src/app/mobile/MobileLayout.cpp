@@ -551,19 +551,6 @@ float DrawUndoIsland(AppContext& app, ImVec2 at) {
     return w;
 }
 
-/// A small hint over the model, in a rounded box (the mockup's chips).
-void Chip(AppContext& app, ImVec2 at, const char* text) {
-    ui::Ui& ui = app.ui;
-    const ui::ThemeColors& c = ui.C();
-    ImDrawList* dl = ImGui::GetForegroundDrawList();
-    const float fs = ui.S(11.5f);
-    const ImVec2 ts = ui.fonts.body->CalcTextSizeA(fs, FLT_MAX, 0, text);
-    const ImVec2 b{at.x + ts.x + ui.S(20), at.y + ui.S(24)};
-    dl->AddRectFilled(at, b, ui::ToU32(c.panel.WithAlpha(0.95f)), ui.S(8));
-    dl->AddRect(at, b, ui::ToU32(c.divider), ui.S(8));
-    dl->AddText(ui.fonts.body, fs, {at.x + ui.S(10), at.y + (ui.S(24) - ts.y) / 2}, ui::ToU32(c.textSecondary), text);
-}
-
 bool cubeLogged = false;   ///< the big cube's place written to the log since it opened
 
 void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
@@ -589,15 +576,15 @@ void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
     if (!m.cubeOpen) return;
 
     // Open: a big cube for the finger (bigger regions for edges and
-    // corners), turned with one finger, with "home"; it folds itself after
-    // a choice or a tap elsewhere.
-    const float foot = ui.S(56);   // "Домой" and the hint under the cube (the mockup)
-    const float s = std::max(ui.S(120), std::min(ui.S(230), std::min(viewMax.x - viewMin.x, viewMax.y - viewMin.y - foot) - ui.S(64)));
+    // corners), turned with one finger. As on the desktop: one "home" — the
+    // cube's own house icon (the author: no second button, no hints). It
+    // folds itself after a choice or a tap elsewhere.
+    const float s = std::max(ui.S(120), std::min(ui.S(200), std::min(viewMax.x - viewMin.x, viewMax.y - viewMin.y) - ui.S(70)));
     const ImVec2 p{viewMax.x - s - ui.S(8), at.y + b + ui.S(6)};
     bool inside = false;
     if (!cubeLogged) log::Info("Touch: cube panel at {:.0f},{:.0f} size {:.0f}", p.x, p.y, s);   // the emulator's check taps a face
     cubeLogged = true;
-    if (BeginIsland(ui, "##island-cube-big", p, {s, s + foot})) {
+    if (BeginIsland(ui, "##island-cube-big", p, {s, s})) {
         ui::Ui big = ui;
         big.scale = ui.scale * s / ui.S(172);   // the cube is laid out in a 172-unit corner
         const ui::ViewCubeAction cube = ui::DrawViewCube(big, app.viewport.Projection(), p, {p.x + s, p.y + s}, false);
@@ -612,22 +599,9 @@ void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
         }
         if (cube.dragYaw != 0 || cube.dragPitch != 0)
             app.viewport.Orbit(cube.dragYaw, cube.dragPitch, app.viewport.ModelCenter(), app.settings.turntableOrbit);
-        // Under it: "Домой" and what one finger does here.
-        const ui::ThemeColors& c = ui.C();
-        ImGui::SetCursorScreenPos({p.x + ui.S(14), p.y + s + ui.S(8)});
-        if (ui::SecondaryButton(ui, "##cube-big-home", Tr("Домой"), nullptr, ui.S(96, 40))) {
-            HomeView(app);
-            m.cubeOpen = false;
-        }
-        ImGui::GetWindowDrawList()->AddText(ui.fonts.bodySmall, ui.S(11), {p.x + ui.S(120), p.y + s + ui.S(15)},
-                                            ui::ToU32(c.textMuted), Tr("1 палец —\nвращение"));
         inside = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) || ImGui::IsAnyItemActive();
     }
     EndIsland();
-    // The hint at the view's bottom, left of the panel when there is room (a narrow view: none).
-    const char* chip = Tr("тап вне кубика — свернуть");
-    const float chipW = ui.fonts.body->CalcTextSizeA(ui.S(11.5f), FLT_MAX, 0, chip).x + ui.S(20);
-    if (viewMin.x + ui.S(84) + chipW < p.x - ui.S(8)) Chip(app, {viewMin.x + ui.S(84), viewMax.y - ui.S(34)}, chip);
     const ImVec2 mouse = ImGui::GetMousePos();
     const bool onButton = mouse.x >= at.x && mouse.y >= at.y && mouse.x < at.x + b && mouse.y < at.y + b;
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !inside && !onButton) {
