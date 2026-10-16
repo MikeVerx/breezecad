@@ -183,9 +183,10 @@ jobs:
           retention-days: 14
 
   publish:
-    # A push or manual run that built and passed everything refreshes the pre-release
-    # "android-build": the phone APK and the emulator's screenshots.
-    needs: [build, test]
+    # A push or manual run refreshes the pre-release "android-build" as soon
+    # as the phone APK is built (the author installs it at once; 2026-10-16).
+    # The emulator runs meanwhile: its screenshots follow in "publish-shots".
+    needs: [build]
     if: ${{ github.event_name != 'pull_request' }}   # push or a manual run
     runs-on: ubuntu-24.04
     permissions:
@@ -193,16 +194,12 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with: { name: BreezeCAD-android-arm64-v8a, path: release }
-      - uses: actions/download-artifact@v4
-        with: { name: android-emulator-shots, path: shots }
-      - name: Publish the android-build pre-release
+      - name: Publish the APK to android-build
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           mv release/BreezeCAD-android-arm64-v8a.apk release/BreezeCAD-android.apk
-          ls release
-          for f in shots/*.png; do cp "$f" "release/emulator-$(basename "$f")"; done
           notes="Сборка для Android: ветка ${GITHUB_REF_NAME}, коммит ${GITHUB_SHA::7}, версия ${{ github.run_number }}, $(date -u '+%Y-%m-%d %H:%M') UTC.
 
           BreezeCAD-android.apk — телефоны и планшеты на ARM (64-бит), Android 9 и новее.
@@ -210,15 +207,33 @@ jobs:
           Установка: открыть ссылку на телефоне → скачать → открыть файл → разрешить установку из этого источника.
           Новая версия ставится поверх прежней (если сборка подписана постоянным ключом).
 
-          Полная программа: мобильная раскладка на телефоне (блоки 1–5, курсор-капля, нампад),
-          десктопная на планшете. Файлы — через папку проектов; «Поделиться» — в меню логотипа.
-
-          emulator-*.png — снимки с эмулятора CI: главная, деталь, поворот, эскиз с курсором,
-          левша, планшет, видовой куб."
+          APK выкладывается сразу после сборки; проверка на эмуляторе идёт следом,
+          её снимки (emulator-*.png) появятся здесь, если она прошла: главная, деталь,
+          поворот, эскиз с курсором, левша, планшет, видовой куб."
           if ! gh release view android-build >/dev/null 2>&1; then
             gh release create android-build --prerelease --target "$GITHUB_SHA" --title "BreezeCAD для Android — свежая сборка" --notes "$notes"
           fi
-          # The old step-2 pictures go: the new set has other names.
-          for old in emulator-1-start.png emulator-2-turned.png; do gh release delete-asset android-build "$old" -y 2>/dev/null || true; done
-          gh release upload android-build release/BreezeCAD-android.apk release/BreezeCAD-android.aab release/emulator-*.png --clobber
+          # Pictures of an older build would mislead: they go until this one's arrive.
+          for old in $(gh release view android-build --json assets --jq '.assets[].name' | grep '^emulator-'); do
+            gh release delete-asset android-build "$old" -y || true
+          done
+          gh release upload android-build release/BreezeCAD-android.apk release/BreezeCAD-android.aab --clobber
           gh release edit android-build --notes "$notes"
+
+  publish-shots:
+    # The emulator passed: its screenshots next to the APK.
+    needs: [publish, test]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: android-emulator-shots, path: shots }
+      - name: Add the emulator's screenshots to android-build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p up
+          for f in shots/*.png; do cp "$f" "up/emulator-$(basename "$f")"; done
+          gh release upload android-build up/*.png --clobber
