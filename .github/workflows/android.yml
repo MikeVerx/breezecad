@@ -176,10 +176,10 @@ jobs:
           retention-days: 14
 
   publish:
-    # A push that built and passed everything refreshes the pre-release
+    # A push or manual run that built and passed everything refreshes the pre-release
     # "android-build": the phone APK and the emulator's screenshots.
     needs: [build, test]
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ github.event_name != 'pull_request' }}   # push or a manual run
     runs-on: ubuntu-24.04
     permissions:
       contents: write
