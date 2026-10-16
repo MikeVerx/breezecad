@@ -246,8 +246,11 @@ void Window::SetInputHandler(std::function<int(const void*)> handler) { myInput 
 void Window::SetChangeHandler(std::function<void()> handler) { myChanged = std::move(handler); }
 
 double Window::Time() {
-    static const auto start = std::chrono::steady_clock::now();
-    return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    // The same clock as render::Viewport's animations (steady_clock from its
+    // epoch): with "seconds since start" here the camera animation began
+    // "in the future", never ended and put the view back every frame — the
+    // view froze after "Домой", the cube or a sketch start.
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
 float Window::CurrentFramebufferScale() { return gDensity; }
