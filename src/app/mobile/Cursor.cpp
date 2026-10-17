@@ -11,7 +11,7 @@ namespace bz::app::mobile {
 void DrawDropCursor(AppContext& app, ImDrawList* dl) {
     // As in the approved mockup (canvas "BreezeCAD Mobile — макет", board 2):
     // an outlined drop, its point the tip and its round end under the finger
-    // (a dashed ring marks the finger's spot), the tip a dot in the sketch's
+    // (a ring marks the finger's spot), the tip a dot in the sketch's
     // highlight colour with a white rim.
     const MobileState& m = app.shell.mobile;
     if (!CursorActive(app) || !m.cursorShown) return;
@@ -34,20 +34,20 @@ void DrawDropCursor(AppContext& app, ImDrawList* dl) {
         const float a0 = std::atan2(r.y, r.x);
         dl->PathArcTo(centre, radius, a0, a0 + 3.14159265f, 28);
         dl->PathBezierCubicCurveTo(at(-24 * k, 32 * k), at(-12 * k, 18 * k), tip);
+        // The path came back to the tip: that last point repeats the first. The
+        // concave fill drew a light seam from the tip into the drop along it
+        // ("a stripe inside the cursor"); the drop is convex, filled as such.
+        if (dl->_Path.Size > 1) dl->_Path.pop_back();
     };
     outline();
-    dl->PathFillConcave(ui::ToU32(Color{1, 1, 1, m.cursorDragging ? 0.55f : 0.4f}));
+    dl->PathFillConvex(ui::ToU32(Color{1, 1, 1, m.cursorDragging ? 0.55f : 0.4f}));
     outline();
     dl->PathStroke(ui::ToU32(c.accent), ImDrawFlags_Closed, 2.0f * k);
 
-    // The finger's spot: a dashed ring.
+    // The finger's spot: a plain ring (it was dashed — looked broken).
     const float ring = 12.0f * k;
-    dl->AddCircleFilled(centre, ring, ui::ToU32(Color{1, 1, 1, 0.75f}), 24);
-    for (int i = 0; i < 12; i += 2) {
-        const float a = static_cast<float>(i) * 3.14159265f / 6.0f;
-        dl->PathArcTo(centre, ring, a, a + 3.14159265f / 6.0f, 4);
-        dl->PathStroke(ui::ToU32(c.accent), ImDrawFlags_None, 1.2f * k);
-    }
+    dl->AddCircleFilled(centre, ring, ui::ToU32(Color{1, 1, 1, 0.75f}), 32);
+    dl->AddCircle(centre, ring, ui::ToU32(c.accent), 32, 1.5f * k);
 
     // The tip.
     dl->AddCircleFilled(tip, 4.5f * k + 2.0f * k, ui::ToU32(Color{1, 1, 1, 1}), 16);
