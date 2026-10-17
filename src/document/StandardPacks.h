@@ -14,6 +14,7 @@
 // built-in ones.
 
 #include "core/Expected.h"
+#include "document/Document.h"
 
 #include <array>
 #include <filesystem>
@@ -117,7 +118,7 @@ struct PackStandard {
     std::string title;    ///< "ГОСТ 30245-2003"
     std::string kind;     ///< PackKind::id
     std::string note;
-    std::string family;   ///< "ГОСТ", "ISO" or "DIN"; empty: by the title
+    std::string family;   ///< "ГОСТ", "ISO" or "DIN"; "*": every tab of the window; empty: by the title
     /// How a size is written, from the columns: "{h}×{b}×{t}".
     std::string size;
     /// Designation; {size}, {L}, {title}, {noun} and columns are replaced.
@@ -194,5 +195,31 @@ unsigned PacksGeneration();
 /// replacing an older copy of the same pack. Returns the copy's path; the
 /// caller reloads the packs.
 Expected<std::filesystem::path> InstallPack(const std::filesystem::path& file, const std::filesystem::path& folder);
+
+// --- The user's own library ----------------------------------------------------
+
+/// The pack the program writes for parts the user saves («Мои изделия»).
+inline constexpr std::string_view kUserPackId = "user";
+inline constexpr std::string_view kUserPackFile = "user.bzlib";
+
+/// A part of the user saved as a library item: its variables named in
+/// `variables` become the table's columns, each row a size. A variable "L"
+/// is the length instead: any, the part's value offered first.
+struct UserItem {
+    std::string title;                   ///< "Кронштейн" (also the row in the folder)
+    std::string group = "Мои изделия";   ///< folder of the library window
+    std::string standard = "Свои";       ///< the standard's title in the list
+    std::vector<std::string>         variables;
+    std::vector<std::vector<double>> rows;
+};
+
+/// Adds the item to the user's pack `file` (created when missing) and
+/// returns the new standard's id. The pack is checked like any other before
+/// it is written; the caller reloads the packs.
+Expected<std::string> AddUserItem(const std::filesystem::path& file, const Document& part, const UserItem& item);
+/// Takes a standard (and its kind, when nothing else uses it) out of the user's pack.
+Status RemoveUserItem(const std::filesystem::path& file, std::string_view standardId);
+/// The standard belongs to the user's pack.
+bool IsUserStandard(std::string_view standardId);
 
 } // namespace bz::doc::parts

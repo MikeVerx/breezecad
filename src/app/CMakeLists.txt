@@ -54,6 +54,7 @@ add_executable(breezecad WIN32
     shell/Bars.cpp
     shell/CrashWindow.cpp
     shell/Dialogs.cpp
+    shell/SaveToLibrary.cpp
     shell/NewDocumentDialog.cpp
     shell/Header.cpp
     shell/HomeScreen.cpp

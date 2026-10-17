@@ -328,3 +328,62 @@ TEST_CASE("pack recipes: rounded polygon corners, typed inputs, a saved part as 
     CHECK(mine60->doc.info.designation == "Уголок 60x6 Мой");
     ClearPacks();
 }
+
+TEST_CASE("the user's library: a part saved with its variables as a table") {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "bz-user-library";
+    fs::remove_all(dir);
+    const fs::path file = dir / std::string(kUserPackFile);
+    // The part to save: a ГОСТ 30245 profile, its variables a, t, R, L.
+    const fs::path shipped[] = {fs::path(BZ_SOURCE_DIR) / "assets" / "library"};
+    REQUIRE(LoadPacks(shipped).problems.empty());
+    Expected<Made> profile = MakePart({"gost30245.square", "40x40x2", 500});
+    REQUIRE(profile);
+
+    UserItem item;
+    item.title = "Стойка";
+    item.variables = {"a", "t", "R", "L"};
+    item.rows = {{40, 2, 4, 500}, {60, 3, 6, 500}};
+    Expected<std::string> id = AddUserItem(file, profile->doc, item);
+    REQUIRE(id);
+    CHECK(*id == "user.1");
+    CHECK_FALSE(AddUserItem(file, profile->doc, UserItem{"Без переменных", "Мои изделия", "Свои", {}, {}}));
+    CHECK_FALSE(AddUserItem(file, profile->doc, UserItem{"Нет такой", "Мои изделия", "Свои", {"zz"}, {}}));
+    // A second item: the part as it is (one row), no length.
+    UserItem one;
+    one.title = "Стойка короткая";
+    one.variables = {"a", "t"};
+    REQUIRE(AddUserItem(file, profile->doc, one));
+
+    const fs::path folders[] = {dir, fs::path(BZ_SOURCE_DIR) / "assets" / "library"};
+    const PacksLoaded loaded = LoadPacks(folders);
+    for (const std::string& p : loaded.problems) INFO(p);
+    REQUIRE(loaded.problems.empty());
+    const StandardInfo* mine = FindStandard("user.1");
+    REQUIRE(mine);
+    CHECK(InEveryFamily(*mine));
+    CHECK(KindOf(mine->kind).title == "Стойка");
+    REQUIRE(FreeLength(*mine));
+    CHECK(FreeLength(*mine)->preset == 500);
+    CHECK(Sizes(*mine) == std::vector<std::string>{"40\xC3\x97" "2\xC3\x97" "4", "60\xC3\x97" "3\xC3\x97" "6"});
+    // Built from the saved tree with the row's values: as heavy as the
+    // standard's 60×60×3 (5,19 kg/m).
+    Expected<Made> made = MakePart({"user.1", "60x3x6", 1000});
+    REQUIRE(made);
+    CHECK(made->doc.info.designation == "Стойка 60\xC3\x97" "3\xC3\x97" "6, L=1000");
+    kernel::Model model;
+    model.Rebuild(made->doc);
+    CHECK(model.Volume() * 7.85e-6 == doctest::Approx(5.19).epsilon(0.01));
+    const StandardInfo* small = FindStandard("user.2");
+    REQUIRE(small);
+    CHECK(Sizes(*small) == std::vector<std::string>{"40\xC3\x97" "2"});
+    CHECK_FALSE(FreeLength(*small));
+
+    // Taking them out: the file goes with the last one.
+    REQUIRE(RemoveUserItem(file, "user.1"));
+    CHECK_FALSE(RemoveUserItem(file, "user.1"));
+    REQUIRE(RemoveUserItem(file, "user.2"));
+    CHECK_FALSE(fs::exists(file));
+    ClearPacks();
+    fs::remove_all(dir);
+}

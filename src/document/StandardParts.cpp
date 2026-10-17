@@ -991,9 +991,14 @@ std::span<const GroupInfo> Groups() { return Cat().groups; }
 
 Family FamilyOf(const StandardInfo& s) {
     std::string_view by = s.title;
-    if (const PackStandard* p = PackOf(s); p && !p->family.empty()) by = p->family;
+    if (const PackStandard* p = PackOf(s); p && !p->family.empty() && p->family != "*") by = p->family;
     if (by.starts_with("ГОСТ")) return Family::Gost;
     return by.starts_with("DIN") ? Family::Din : Family::Iso;
+}
+
+bool InEveryFamily(const StandardInfo& s) {
+    const PackStandard* p = PackOf(s);
+    return p && p->family == "*";
 }
 
 std::string ShortName(const StandardInfo& s) { return std::format("{} {}", KindOf(s.kind).noun, s.title); }

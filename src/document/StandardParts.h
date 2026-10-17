@@ -78,6 +78,8 @@ const KindInfo& KindOf(PartKind kind);
 /// The folders of the library window, in order.
 std::span<const GroupInfo> Groups();
 Family FamilyOf(const StandardInfo& standard);
+/// Shown under every standards body of the window (the user's own parts).
+bool InEveryFamily(const StandardInfo& standard);
 /// "Болт ГОСТ 7798-70": for the list of recent parts.
 std::string ShortName(const StandardInfo& standard);
 /// Standards of the same kind other than this one (the analogues).

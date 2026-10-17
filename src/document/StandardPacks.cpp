@@ -239,7 +239,8 @@ Expected<PackStandard> ReadStandard(const Json& j) {
         !r.String(j, "family", s.family, false, err) || !r.String(j, "size", s.size, false, err) ||
         !r.String(j, "designation", s.designation, false, err))
         return err;
-    if (!s.family.empty() && s.family != "ГОСТ" && s.family != "ISO" && s.family != "DIN") return r.Fail("«family»: ГОСТ, ISO или DIN");
+    if (!s.family.empty() && s.family != "ГОСТ" && s.family != "ISO" && s.family != "DIN" && s.family != "*")
+        return r.Fail("«family»: ГОСТ, ISO, DIN или * (во всех вкладках)");
 
     const auto cols = j.find("columns");
     if (cols == j.end() || !cols->is_array() || cols->empty()) return r.Fail("нужен список столбцов «columns»");
@@ -724,6 +725,140 @@ Expected<std::filesystem::path> InstallPack(const std::filesystem::path& file, c
     std::filesystem::copy_file(file, target, std::filesystem::copy_options::overwrite_existing, ec);
     if (ec) return Error{"Не удалось скопировать пакет в папку библиотеки"};
     return target;
+}
+
+// --- The user's own library ----------------------------------------------------
+
+namespace {
+
+/// Writes `text` to `file` through a temporary copy: a crash midway leaves the old file.
+Status WriteAtomically(const std::filesystem::path& file, const std::string& text) {
+    std::error_code ec;
+    std::filesystem::create_directories(file.parent_path(), ec);
+    std::filesystem::path temp = file;
+    temp += ".tmp";
+    {
+        std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+        if (!out || !(out << text) || !out.flush()) return Error{"Не удалось записать файл библиотеки"};
+    }
+    std::filesystem::rename(temp, file, ec);
+    if (ec) return Error{"Не удалось записать файл библиотеки"};
+    return Status::Ok();
+}
+
+Expected<Pack> UserPack(const std::filesystem::path& file) {
+    std::error_code ec;
+    if (!std::filesystem::exists(file, ec)) {
+        Pack pack;
+        pack.id = std::string(kUserPackId);
+        pack.title = "Мои изделия";
+        pack.source = "детали пользователя";
+        return pack;
+    }
+    Expected<Pack> pack = ReadPack(file);
+    if (!pack) return Error{std::format("Моя библиотека повреждена: {}", pack.GetError().message)};
+    if (pack->id != kUserPackId) return Error{"Файл моей библиотеки — чужой пакет"};
+    return pack;
+}
+
+} // namespace
+
+bool IsUserStandard(std::string_view id) { return id.starts_with("user."); }
+
+Expected<std::string> AddUserItem(const std::filesystem::path& file, const Document& part, const UserItem& item) {
+    if (item.title.empty()) return Error{"Нужно название изделия"};
+    if (item.variables.empty()) return Error{"Выберите переменные детали — они станут столбцами таблицы размеров"};
+    Expected<Pack> loaded = UserPack(file);
+    if (!loaded) return loaded.GetError();
+    Pack pack = std::move(*loaded);
+
+    // The next free number for the ids.
+    int n = 1;
+    const auto taken = [&](int k) {
+        const std::string tail = "." + std::to_string(k);
+        return std::ranges::any_of(pack.kinds, [&](const PackKind& x) { return x.id.ends_with(tail); }) ||
+               std::ranges::any_of(pack.standards, [&](const PackStandard& x) { return x.id.ends_with(tail); });
+    };
+    while (taken(n)) ++n;
+
+    PackKind kind;
+    kind.id = std::format("user.kind.{}", n);
+    kind.group = item.group.empty() ? std::string("Мои изделия") : item.group;
+    kind.variety = item.title;
+    kind.title = item.title;
+    kind.noun = item.title;
+    kind.material = part.info.material.empty() ? std::string("Сталь") : part.info.material;
+    kind.document = DocumentToJson(part);
+
+    PackStandard st;
+    st.id = std::format("user.{}", n);
+    st.title = item.standard.empty() ? std::string("Свои") : item.standard;
+    st.kind = kind.id;
+    st.family = "*";
+    std::vector<std::size_t> columns;   // positions in item.variables that are columns (not L)
+    std::string size;
+    for (std::size_t i = 0; i < item.variables.size(); ++i) {
+        const std::string& name = item.variables[i];
+        const auto v = std::ranges::find(part.variables, name, &Parameter::name);
+        if (v == part.variables.end()) return Error{std::format("В детали нет переменной «{}»", name)};
+        if (name == "L") {   // the length: any, the part's value first
+            st.length.mode = PackLength::Mode::Free;
+            st.length.min = std::min(1.0, v->value);
+            st.length.max = std::max(100000.0, v->value);
+            st.length.preset = v->value;
+            continue;
+        }
+        columns.push_back(i);
+        st.columns.push_back({name, name, true});
+        size += (size.empty() ? "{" : "\xC3\x97{") + name + "}";
+    }
+    if (st.columns.empty()) return Error{"Кроме L нужна хотя бы одна переменная — размер в таблице"};
+    st.size = size;
+    std::string names;
+    for (const PackColumn& c : st.columns) names += (names.empty() ? "" : "\xC3\x97") + c.name;
+    kind.sizeTitle = std::format("Размер {}, мм", names);
+    st.designation = st.length.mode == PackLength::Mode::Free ? "{noun} {size}, L={L}" : "{noun} {size}";
+    std::vector<std::vector<double>> rows = item.rows;
+    if (rows.empty()) {   // the part as it is: one size
+        std::vector<double> row;
+        for (const std::string& name : item.variables) row.push_back(std::ranges::find(part.variables, name, &Parameter::name)->value);
+        rows.push_back(std::move(row));
+    }
+    for (const std::vector<double>& row : rows) {
+        if (row.size() != item.variables.size()) return Error{"В строке таблицы не столько чисел, сколько выбрано переменных"};
+        std::vector<double> values;
+        for (const std::size_t i : columns) {
+            if (!std::isfinite(row[i])) return Error{"В таблице не число"};
+            values.push_back(row[i]);
+        }
+        st.rows.push_back(std::move(values));
+    }
+    pack.kinds.push_back(std::move(kind));
+    pack.standards.push_back(st);
+
+    // Written as the file is read back: the same checks as any pack.
+    const std::string text = PackToJson(pack);
+    if (const Expected<Pack> check = ParsePack(text); !check) return check.GetError();
+    if (const Status ok = WriteAtomically(file, text); !ok) return ok.GetError();
+    return st.id;
+}
+
+Status RemoveUserItem(const std::filesystem::path& file, std::string_view standardId) {
+    Expected<Pack> loaded = UserPack(file);
+    if (!loaded) return loaded.GetError();
+    Pack pack = std::move(*loaded);
+    const auto it = std::ranges::find(pack.standards, standardId, &PackStandard::id);
+    if (it == pack.standards.end()) return Error{"Такого изделия нет в моей библиотеке"};
+    const std::string kind = it->kind;
+    pack.standards.erase(it);
+    if (std::ranges::none_of(pack.standards, [&](const PackStandard& s) { return s.kind == kind; }))
+        std::erase_if(pack.kinds, [&](const PackKind& k) { return k.id == kind; });
+    if (pack.standards.empty()) {   // nothing left: no pack (a pack needs a standard)
+        std::error_code ec;
+        std::filesystem::remove(file, ec);
+        return ec ? Status(Error{"Не удалось удалить файл моей библиотеки"}) : Status::Ok();
+    }
+    return WriteAtomically(file, PackToJson(pack));
 }
 
 } // namespace bz::doc::parts

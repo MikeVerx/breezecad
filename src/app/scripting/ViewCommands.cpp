@@ -219,7 +219,7 @@ Json LibraryList(AppContext&, const Json& args) {
         for (const doc::parts::PartKind k : g.kinds) {
             Json standards = Json::array();
             for (const doc::parts::StandardInfo* st : doc::parts::StandardsOf(k)) {
-                if (!family.empty() && family != FamilyName(doc::parts::FamilyOf(*st))) continue;
+                if (!family.empty() && family != FamilyName(doc::parts::FamilyOf(*st)) && !doc::parts::InEveryFamily(*st)) continue;
                 Json j = {{"standard", st->id}, {"title", st->title}};
                 if (!st->note.empty()) j["note"] = Tr(std::string(st->note));
                 standards.push_back(std::move(j));
@@ -263,6 +263,34 @@ Json LibrarySizes(AppContext&, const Json& args) {
         out["note"] = "Длина — любая из диапазона length_range, мм.";
     }
     return out;
+}
+
+/// Saves the active part into the user's library: chosen variables become the table.
+Json LibrarySavePart(AppContext& app, const Json& args) {
+    const Session* s = app.Doc();
+    if (!s || s->assembly) Fail("Активный документ — не деталь");
+    doc::parts::UserItem item;
+    item.title = Text(args, "title");
+    item.group = Text(args, "group", "Мои изделия");
+    if (const auto v = args.find("variables"); v != args.end() && v->is_array())
+        for (const Json& name : *v)
+            if (name.is_string()) item.variables.push_back(name.get<std::string>());
+    if (const auto rows = args.find("rows"); rows != args.end() && rows->is_array())
+        for (const Json& row : *rows) {
+            if (!row.is_array()) Fail("rows — список строк [числа по переменным]");
+            std::vector<double> values;
+            for (const Json& x : row) {
+                if (!x.is_number()) Fail("В rows — только числа, мм");
+                values.push_back(x.get<double>());
+            }
+            item.rows.push_back(std::move(values));
+        }
+    const Expected<std::string> id = doc::parts::AddUserItem(StandardPackDir() / std::string(doc::parts::kUserPackFile), s->doc, item);
+    if (!id) Fail(id.GetError().message);
+    LoadStandardPacks(app);
+    const doc::parts::StandardInfo* st = doc::parts::FindStandard(*id);
+    return {{"standard", *id}, {"sizes", st ? doc::parts::Sizes(*st) : std::vector<std::string>{}},
+            {"note", "Изделие в моей библиотеке: library.make_part с этим standard."}};
 }
 
 /// Adds a pack of standard parts (.bzlib) to the user's library and reloads the packs.
@@ -369,6 +397,16 @@ void AddViewCommands(Commands& out) {
                                        {"description", "Размеры, которые вводятся (inputs из library.sizes): {\"B\": 1250}, мм."}}}},
                           {"standard", "size"}),
                    true, &LibraryMake});
+    out.push_back({"library.save_part",
+                   "Сохраняет активную деталь в мою библиотеку: выбранные переменные детали становятся столбцами таблицы "
+                   "размеров (переменная L — длина, любая), rows — размеры. Без rows — одна строка: деталь как есть.",
+                   Schema({{"title", StringArg("Название изделия.")},
+                           {"group", StringArg("Папка в окне «Библиотека» (по умолчанию «Мои изделия»).")},
+                           {"variables", {{"type", "array"}, {"items", {{"type", "string"}}}, {"description", "Имена переменных детали."}}},
+                           {"rows", {{"type", "array"}, {"items", {{"type", "array"}, {"items", {{"type", "number"}}}}},
+                                     {"description", "Строки: значения переменных в порядке variables, мм."}}}},
+                          {"title", "variables"}),
+                   true, &LibrarySavePart});
     out.push_back({"library.add_pack",
                    "Добавляет в библиотеку пакет стандартных изделий (файл .bzlib: таблицы размеров и рецепт построения — "
                    "docs/ADR/0006-standard-part-packs.md). Файл проверяется и копируется в папку библиотеки пользователя.",

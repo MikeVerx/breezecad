@@ -15,6 +15,7 @@
 #include "core/Version.h"
 #include "document/Commands.h"
 #include "app/assembly/AssemblyUi.h"
+#include "document/StandardPacks.h"
 #include "document/StandardParts.h"
 #include "core/PathText.h"
 #include "modules/ModuleManager.h"
@@ -33,7 +34,6 @@
 #include <vector>
 
 namespace bz::app {
-namespace {
 
 bool BeginDialog(ui::Ui& ui, const char* id, bool& open, float width) {
     if (open && !ImGui::IsPopupOpen(id)) ImGui::OpenPopup(id);
@@ -48,6 +48,8 @@ bool BeginDialog(ui::Ui& ui, const char* id, bool& open, float width) {
     if (!visible) open = false;
     return visible;
 }
+
+namespace {
 
 /// Label on the left, value on the right in the number font.
 void ValueRow(ui::Ui& ui, const char* label, const std::string& value) {
@@ -451,6 +453,28 @@ void DrawLibraryPart(AppContext& app, const parts::StandardInfo& standard, float
         LibraryNote(ui, lib.realThread ? Tr("Резьба вырезается в модели: тяжелее, и её грани мешают позиционировать деталь в сборке.")
                                        : Tr("Резьба рисуется на гладком цилиндре; при экспорте в STEP/STL вырезается настоящая."));
     }
+
+    // The user's own item: it can be taken out (a second click confirms).
+    if (doc::parts::IsUserStandard(standard.id)) {
+        ImGui::Dummy({0, ui.S(10)});
+        const bool asked = lib.confirmRemove == standard.id;
+        if (ui::SecondaryButton(ui, "##user-remove", asked ? Tr("Нажмите ещё раз — удалить") : Tr("Удалить из моей библиотеки"), nullptr,
+                                {ui.S(260), ui.S(32)})) {
+            if (!asked) lib.confirmRemove = std::string(standard.id);
+            else {
+                const std::string id(standard.id);   // the library is rebuilt below: no pointers into it after this
+                lib.confirmRemove.clear();
+                if (const Status ok = doc::parts::RemoveUserItem(StandardPackDir() / std::string(doc::parts::kUserPackFile), id); !ok)
+                    app.notes.Error(Trf("Не удалось удалить: {}", ok.GetError().message));
+                else {
+                    LoadStandardPacks(app);
+                    lib.chosen = {};
+                    std::erase_if(lib.recent, [&](const auto& r) { return r.standard == id; });
+                    app.notes.Success(Tr("Изделие удалено из моей библиотеки"));
+                }
+            }
+        }
+    }
 }
 
 /// "Выбор стандартного изделия": recent parts, the standards filter, the
@@ -524,7 +548,7 @@ void DrawLibrary(AppContext& app) {
                 const parts::KindInfo& kind = parts::KindOf(k);
                 std::vector<const parts::StandardInfo*> items;
                 for (const parts::StandardInfo* s : parts::StandardsOf(k))
-                    if (static_cast<int>(parts::FamilyOf(*s)) == lib.family) items.push_back(s);
+                    if (static_cast<int>(parts::FamilyOf(*s)) == lib.family || parts::InEveryFamily(*s)) items.push_back(s);
                 const bool kindOpen = lib.openKinds.contains(static_cast<int>(k));
                 ImGui::PushID(static_cast<int>(k));
                 if (TreeRow(ui, "##kind", 1, kindOpen ? "ui-chevron-down" : "ui-chevron-right", nullptr, Tr(kind.variety.data()), nullptr,
@@ -594,6 +618,15 @@ void DrawLibrary(AppContext& app) {
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", Tr("Щёлкните по кромке отверстия в сборке: диаметр — по отверстию, длина — по пакету деталей"));
         ImGui::SameLine(0, ui.S(8));
+    }
+    // A part of one's own into the library ("В библиотеку"): from a part, not an assembly.
+    if (!intoAssembly && app.Doc() && !app.workspace.ShowsHome()) {
+        ImGui::SetCursorPosY(rowY);
+        if (ui::SecondaryButton(ui, "##library-save", Tr("Моя деталь — в библиотеку…"), nullptr, {ui.S(230), ui.S(36)})) {
+            close();
+            OpenSaveToLibrary(app);
+        }
+        ui::ItemTooltip(ui, Tr("Сохранить открытую деталь в мою библиотеку: её переменные станут таблицей размеров"));
     }
     ImGui::SetCursorPosY(rowY);
     ImGui::SetCursorPosX(rowX + rowW - 2 * bw - ui.S(8));
@@ -1288,6 +1321,7 @@ void DrawDialogs(AppContext& app) {
 
     DrawMassProperties(app);
     DrawLibrary(app);
+    DrawSaveToLibrary(app);
     DrawBackgroundMenu(app);
 
     DrawSettings(app);
