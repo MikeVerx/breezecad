@@ -16,6 +16,11 @@ void  DrawProjectTabs(AppContext& app, ImVec2 pos, float width);
 void  DrawStatusBar(AppContext& app, ImVec2 pos, float width);
 void  DrawHomeScreen(AppContext& app, ImVec2 pos, ImVec2 size);
 void  DrawDialogs(AppContext& app);
+/// "В библиотеку" (SaveToLibrary.cpp): opens the window for the active part.
+void  OpenSaveToLibrary(AppContext& app);
+void  DrawSaveToLibrary(AppContext& app);
+/// A centred modal window of the house style; false when it is not shown.
+bool  BeginDialog(ui::Ui& ui, const char* id, bool& open, float width);
 /// The "Создать" window (NewDocumentDialog.cpp); opened by OpenNewDocumentDialog.
 void  DrawNewDocumentDialog(AppContext& app);
 
