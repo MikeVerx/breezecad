@@ -236,7 +236,7 @@ Expected<PackStandard> ReadStandard(const Json& j) {
     r = Reader(std::format("стандарт «{}»", s.id));
     if (!ValidId(s.id)) return r.Fail("id — латиница, цифры, «.», «-», «_», до 64 знаков");
     if (!r.String(j, "title", s.title, true, err) || !r.String(j, "kind", s.kind, true, err) || !r.String(j, "note", s.note, false, err) ||
-        !r.String(j, "family", s.family, false, err) || !r.String(j, "size", s.size, true, err) ||
+        !r.String(j, "family", s.family, false, err) || !r.String(j, "size", s.size, false, err) ||
         !r.String(j, "designation", s.designation, false, err))
         return err;
     if (!s.family.empty() && s.family != "ГОСТ" && s.family != "ISO" && s.family != "DIN") return r.Fail("«family»: ГОСТ, ISO или DIN");
@@ -278,6 +278,14 @@ Expected<PackStandard> ReadStandard(const Json& j) {
         s.rows.push_back(std::move(values));
     }
 
+    if (const auto labels = j.find("labels"); labels != j.end()) {
+        if (!labels->is_array() || labels->size() != s.rows.size()) return r.Fail("«labels» — имя на каждую строку таблицы");
+        for (const Json& l : *labels) {
+            if (!l.is_string() || l.get<std::string>().empty()) return r.Fail("имя строки в «labels» — непустая строка");
+            s.labels.push_back(l.get<std::string>());
+        }
+    }
+    if (s.size.empty() && s.labels.empty()) return r.Fail("нужен «size» (как писать размер) или «labels» (имена строк)");
     if (const auto inputs = j.find("inputs"); inputs != j.end()) {
         if (!inputs->is_array()) return r.Fail("«inputs» — список {name, title, min, max, default}");
         for (const Json& in : *inputs) {
@@ -500,6 +508,7 @@ std::string PackToJson(const Pack& pack) {
         }
         j["columns"] = std::move(cols);
         j["rows"] = st.rows;
+        if (!st.labels.empty()) j["labels"] = st.labels;
         if (st.length.mode == PackLength::Mode::List) j["lengths"] = st.length.list;
         else if (st.length.mode == PackLength::Mode::Free)
             j["length"] = {{"min", st.length.min}, {"max", st.length.max}, {"default", st.length.preset}};
@@ -515,7 +524,10 @@ std::string PackToJson(const Pack& pack) {
     return root.dump(2);
 }
 
-std::string PackSize(const PackStandard& s, std::size_t row) { return FillPackTemplate(s.size, s, row, {}); }
+std::string PackSize(const PackStandard& s, std::size_t row) {
+    if (row < s.labels.size()) return s.labels[row];
+    return FillPackTemplate(s.size, s, row, {});
+}
 
 Status CheckStandard(const PackStandard& s, const PackKind& k) {
     const auto fail = [&](std::string_view what) { return Error{std::format("стандарт «{}»: {}", s.id, what)}; };

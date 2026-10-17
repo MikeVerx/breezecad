@@ -126,6 +126,9 @@ struct PackStandard {
     std::string designation;
     std::vector<PackColumn>          columns;
     std::vector<std::vector<double>> rows;
+    /// Names of the rows ("10П", "20Б1") written instead of `size` when the
+    /// standard names its sizes by number; empty: by `size`.
+    std::vector<std::string>         labels;
     PackLength                       length;
     std::vector<PackInput>           inputs;
 };

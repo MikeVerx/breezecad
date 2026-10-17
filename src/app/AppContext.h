@@ -90,6 +90,8 @@ struct ShellState {
         std::string      appearance;        ///< empty: the default of the kind
         std::vector<Pick> recent;           ///< newest first
         bool             sizeListOpen = false;   ///< the list of sizes is dropped down: Esc closes it, not the window
+        std::string      sizeFilter;             ///< typed in that list: only the sizes containing it
+        bool             sizeFilterActive = false;   ///< that filter had the keyboard last frame
     } library;
 
     render::DisplayStyle displayStyle = render::DisplayStyle::ShadedWithEdges;

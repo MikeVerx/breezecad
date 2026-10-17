@@ -162,7 +162,7 @@ TEST_CASE("the shipped packs read and pass their checks") {
     const PacksLoaded loaded = LoadPacks(folders);
     for (const std::string& p : loaded.problems) INFO(p);
     CHECK(loaded.problems.empty());
-    CHECK(loaded.packs >= 1);
+    CHECK(loaded.packs >= 6);   // profiles, tubes, sheets, angles, channels, beams
     const StandardInfo* square = FindStandard("gost30245.square");
     REQUIRE(square);
     CHECK(MatchSize(*square, "40x40x2") == "40\xC3\x97" "40\xC3\x97" "2");

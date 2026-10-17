@@ -312,10 +312,34 @@ void DrawLibraryPart(AppContext& app, const parts::StandardInfo& standard, float
         ImGui::SetNextItemWidth(width);
         lib.sizeListOpen = ImGui::BeginCombo("##size-list", lib.chosen.size.c_str(), ImGuiComboFlags_HeightLarge);
         if (lib.sizeListOpen) {
+            // A filter over the list: "57" or "57x4" finds 57×4 among a thousand tubes.
+            if (ImGui::IsWindowAppearing()) lib.sizeFilter.clear();
+            // Typing goes into the filter at once: the field takes the focus a
+            // frame later, so the keys of this frame are added by hand.
+            if (ImGui::IsWindowAppearing()) lib.sizeFilterActive = false;
+            if (!lib.sizeFilterActive) {
+                ImGuiIO& io = ImGui::GetIO();
+                for (const ImWchar ch : io.InputQueueCharacters) {   // UTF-8 by hand: Cyrillic letters of a size too
+                    const auto u = static_cast<unsigned>(ch);
+                    if (u < 0x80) lib.sizeFilter += static_cast<char>(u);
+                    else if (u < 0x800) lib.sizeFilter += {static_cast<char>(0xC0 | (u >> 6)), static_cast<char>(0x80 | (u & 0x3F))};
+                    else
+                        lib.sizeFilter += {static_cast<char>(0xE0 | (u >> 12)), static_cast<char>(0x80 | ((u >> 6) & 0x3F)),
+                                           static_cast<char>(0x80 | (u & 0x3F))};
+                }
+                io.InputQueueCharacters.resize(0);
+                ImGui::SetKeyboardFocusHere();
+            }
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputTextWithHint("##size-filter", Tr("Найти размер"), &lib.sizeFilter);
+            lib.sizeFilterActive = ImGui::IsItemActive();
+            std::string want;
+            for (const char ch : lib.sizeFilter) want += ch == 'x' || ch == 'X' || ch == '*' ? std::string("\xC3\x97") : ch == ',' ? std::string(".") : std::string(1, ch);
             for (const std::string& size : sizes) {
+                if (!want.empty() && size.find(want) == std::string::npos) continue;
                 const bool on = size == lib.chosen.size;
                 if (ImGui::Selectable(size.c_str(), on)) lib.chosen.size = size;
-                if (on) ImGui::SetItemDefaultFocus();
+                if (on && want.empty() && ImGui::IsWindowAppearing()) ImGui::SetScrollHereY();
             }
             ImGui::EndCombo();
         }
@@ -580,7 +604,7 @@ void DrawLibrary(AppContext& app) {
     // In an assembly the part goes into it (its file next to the assembly).
     if ((ui::PrimaryButton(ui, "##library-create", intoAssembly ? Tr("Вставить в сборку") : Tr("Создать деталь"), "Enter",
                            {bw, ui.S(36)}, standard != nullptr) ||
-         (standard && ui::EnterPressed())) &&
+         (standard && ui::EnterPressed() && !lib.sizeListOpen && !listWasOpen)) &&
         standard && (intoAssembly ? PlaceStandardPart(app, request) : CreateStandardPart(app, request)))
         close();
     ImGui::EndPopup();
