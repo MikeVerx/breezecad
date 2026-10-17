@@ -16,9 +16,9 @@ def icon(name, size=18, color='#AEB4BD', style=''):
 
 
 CSS = """
-@font-face{font-family:Plex;src:url(IBMPlexSans-Regular.ttf);font-weight:400}
-@font-face{font-family:Plex;src:url(IBMPlexSans-Medium.ttf);font-weight:500}
-@font-face{font-family:Plex;src:url(IBMPlexSans-SemiBold.ttf);font-weight:600}
+@font-face{font-family:Plex;src:url(file:///home/claude/breezecad/assets/fonts/IBMPlexSans-Regular.ttf);font-weight:400}
+@font-face{font-family:Plex;src:url(file:///home/claude/breezecad/assets/fonts/IBMPlexSans-Medium.ttf);font-weight:500}
+@font-face{font-family:Plex;src:url(file:///home/claude/breezecad/assets/fonts/IBMPlexSans-SemiBold.ttf);font-weight:600}
 :root{--bg:#16181C;--ribbon:#1D2025;--panel:#1B1E22;--field:#23272D;--border:#353A42;--div:#262A30;--text:#E6E8EB;--t2:#AEB4BD;--mut:#9AA1AB;--acc:#3F6FEA;--accSoft:#1F2A40;--accB:#3A5BA0;--warn:#F5A524;--red:#F06A6E;--sel:#6E9BFF}
 *{box-sizing:border-box;margin:0;padding:0}
 body{width:915px;height:412px;background:var(--bg);font-family:Plex;color:var(--text);overflow:hidden;position:relative;font-size:12.5px}
@@ -282,6 +282,56 @@ pages['5b-first-start-nav'] = page(camera() + block1() + view('', 'background:#1
     f'<div class="abs next" style="left:350px;bottom:52px">Дальше: раскладка {icon("ui-chevron-right", 16, "#fff")}</div>' +
     note('Ползунки переехали в центр, блоки и кнопки на месте и живые:<br>листаешь дерево и список инструментов, жмёшь — подбираешь<br>прокрутку и нажатия. Много ползунков — окно листается.', 'left:236px;top:8px;display:none'),
     WIZ_CSS)
+
+
+# 6. The strip over the view — three looks to choose from (17.10, after "the strip looks bad").
+# Shared: opened from СОЗДАТЬ's "›", ends at the view's edge (never over block 1), scrolls sideways.
+STRIP_CSS = COMPACT_CSS + """
+.fa{left:234px;right:188px;top:112px;height:86px;border-radius:16px;background:rgba(29,32,37,.97);border:1px solid var(--border);
+    box-shadow:0 10px 28px rgba(0,0,0,.45);display:flex;align-items:center;gap:4px;padding:0 10px;overflow:hidden;z-index:20}
+.fa .ti{width:76px;height:68px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:10.5px;color:var(--t2);flex:none}
+.fa .ti.on{background:var(--accSoft);color:#cfdcff;outline:1px solid var(--accB)}
+.fa .h{position:absolute;left:14px;top:-1px;font-size:9.5px;letter-spacing:.8px;color:var(--mut)}
+.tail{width:14px;height:14px;background:rgba(29,32,37,.97);border-right:1px solid var(--border);border-top:1px solid var(--border);transform:rotate(45deg);z-index:21}
+.fadeL,.fadeR{position:absolute;top:0;bottom:0;width:44px;pointer-events:none}
+.fadeR{right:0;background:linear-gradient(90deg,transparent,rgba(29,32,37,.98))}
+.fadeL{left:0;background:linear-gradient(270deg,transparent,rgba(29,32,37,.98))}
+.pills{left:236px;right:190px;top:118px;height:70px;display:flex;gap:8px;overflow:hidden;z-index:20;align-items:center}
+.pills .p{flex:none;height:62px;width:74px;border-radius:31px/22px;background:rgba(35,39,45,.94);border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;color:var(--t2);box-shadow:0 6px 16px rgba(0,0,0,.45)}
+.pills .p.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.dots{left:0;right:0;display:flex;justify-content:center;gap:5px;z-index:21}
+.dots i{width:6px;height:6px;border-radius:3px;background:#4a505a}.dots i.on{width:16px;background:var(--sel)}
+.dr{right:180px;top:96px;height:112px;left:226px;background:var(--panel);border:1px solid var(--div);border-right:none;border-radius:14px 0 0 14px;z-index:20;box-shadow:-10px 8px 24px rgba(0,0,0,.4)}
+.dr .hd{height:30px;display:flex;align-items:center;padding:0 10px 0 14px;font-size:10.5px;letter-spacing:.8px;color:var(--mut);border-bottom:1px solid var(--div)}
+.dr .rw{display:flex;gap:4px;padding:6px 8px;overflow:hidden;position:relative}
+.dr .ti{width:74px;height:66px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-size:10.5px;color:var(--t2);flex:none;background:var(--field)}
+.dr .ti.on{background:var(--accSoft);color:#cfdcff}
+.b2c-open .cg:nth-child(3){background:var(--panel)}
+"""
+def b2c_with(extra=''):
+    return f'''<div class="abs b2" style="{extra}"><div class="brow" style="gap:8px;padding:0 10px"><span style="font-size:11px;color:#4CBB7F;font-family:monospace">60 fps</span><div class="search">{icon('ui-search', 14)}Поиск</div></div>
+{cgroup('ЭСКИЗ', ['sketch', 'sk-project', 'work-plane'])}{cgroup('СОЗДАТЬ', ['extrude', 'revolve', 'hole'], True)}{cgroup('ИЗМЕНИТЬ', ['fillet', 'chamfer', 'shell'])}{cgroup('МАССИВ', ['pattern-rect', 'pattern-circular', 'mirror'])}
+<div class="abs beard">Готово<div style="flex:1;height:3px;border-radius:2px;background:var(--field)"></div></div></div>'''
+items6 = [('extrude', 'Выдавить'), ('revolve', 'Вращение'), ('hole', 'Отверстие'), ('loft', 'По сечениям'), ('sweep', 'Сдвиг'), ('coil', 'Пружина'), ('thread', 'Резьба')]
+
+# A. Tray: a floating rounded card with a little tail pointing at the "›" that opened it; fades at the ends.
+tray = '<div class="abs fa"><div class="fadeL"></div>' + ''.join(f'<div class="ti{" on" if n == "extrude" else ""}">{icon(n, 28, "#fff")}{t}</div>' for n, t in items6) + '<div class="fadeR"></div></div>' + \
+       '<div class="abs tail" style="right:182px;top:159px"></div>'
+pages['6a-strip-tray'] = page(camera() + block1() + view() + b2c_with() + strip() + tray +
+    note('<b>А. «Лоток»</b> — карточка со скруглением и тенью, «хвостик» указывает на стрелку,<br>из которой выехала. Края гаснут — видно, что листается.<br>Не доходит до блока 1 (поля 8 dp).', 'left:240px;top:262px'), STRIP_CSS)
+
+# B. Pills: no common plate — separate floating buttons, the model shows between them; a page indicator under them.
+pills = '<div class="abs pills">' + ''.join(f'<div class="p{" on" if n == "extrude" else ""}">{icon(n, 24, "#fff")}{t}</div>' for n, t in items6) + '</div>' + \
+        '<div class="abs dots" style="left:226px;right:180px;top:194px"><i class="on"></i><i></i></div>'
+pages['6b-strip-pills'] = page(camera() + block1() + view() + b2c_with() + strip() + pills +
+    note('<b>Б. «Пилюли»</b> — без общей подложки: каждая кнопка<br>парит над моделью с тенью, модель видна сильнее всего.<br> Под ними — точки прокрутки.', 'left:240px;top:262px'), STRIP_CSS)
+
+# C. Drawer: the strip is block 2 pulled out over the view — same colour, no gap, the group's name and ✕.
+drawer = f'''<div class="abs dr"><div class="hd">СОЗДАТЬ<span style="margin-left:auto">{icon('ui-close', 14)}</span></div>
+<div class="rw">''' + ''.join(f'<div class="ti{" on" if n == "extrude" else ""}">{icon(n, 26, "#fff")}{t}</div>' for n, t in items6) + \
+         '<div class="fadeR" style="background:linear-gradient(90deg,transparent,var(--panel))"></div></div></div>'
+pages['6c-strip-drawer'] = page(camera() + block1() + view() + b2c_with() + strip() + drawer +
+    note('<b>В. «Ящик»</b> — полоса выдвигается из блока 2 как его продолжение:<br>тот же цвет, без зазора, сверху имя группы и ✕.<br> Читается как одна панель.', 'left:240px;top:262px'), STRIP_CSS)
 
 
 if __name__ == '__main__':
