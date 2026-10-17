@@ -313,5 +313,8 @@ C++20 · Dear ImGui · OCCT · GLFW + OpenGL 3.3. Ядро переноситс�
 
 ## Следующий шаг
 
-Проверка автором на телефоне (список — в PR). Дальше по ADR-0004: подписи в рабочей области в
-масштабе `labelScale` (сейчас — только курсор и лупа), сборка AAB с x86_64, флаг «для магазина».
+См. `docs/dev/MOBILE-NEXT.md` (17.10.2026): правила работы, открытые ошибки, план редизайна управления.
+Хост-тесты без OCCT (пример): `g++ -std=c++23 -Isrc -Ithird_party/doctest -Ithird_party/doctest/doctest
+-Ithird_party/nlohmann -Ithird_party/nlohmann/include -Ithird_party/imgui main.cpp tests/app/DimensionArrangeTests.cpp
+src/app/sketch/DimensionArrange.cpp src/app/sketch/DimensionLayout.cpp src/app/Format.cpp src/sketch/*.cpp
+src/core/{Expression,I18n,Log,Units,Monitor}.cpp` (main.cpp — `DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN`).
