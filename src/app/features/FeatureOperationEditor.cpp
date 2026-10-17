@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace bz::app {
 
@@ -249,12 +250,14 @@ bool FeatureOperationEditor::ParameterField(AppContext& app, Session& session, c
     ui::Ui& ui = app.ui;
     ImGui::PushID(id);
     if (app.shell.mobile.phone) {
-        // Where the field is, once per field: the emulator's check taps it (smoke-apk.sh).
-        static std::vector<ImGuiID> logged;
+        // Where the field is, whenever that changes: the emulator's check taps it (smoke-apk.sh).
+        static std::vector<std::pair<ImGuiID, ImVec2>> logged;
         const ImGuiID gid = ImGui::GetID("value");
-        if (std::find(logged.begin(), logged.end(), gid) == logged.end()) {
-            logged.push_back(gid);
-            const ImVec2 at = ImGui::GetCursorScreenPos();
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        auto known = std::find_if(logged.begin(), logged.end(), [gid](const auto& e) { return e.first == gid; });
+        if (known == logged.end() || std::abs(known->second.x - at.x) > 1 || std::abs(known->second.y - at.y) > 1) {
+            if (known == logged.end()) logged.emplace_back(gid, at);
+            else known->second = at;
             log::Info("Touch: field {} at {:.0f},{:.0f} size {:.0f}x{:.0f}", id, at.x, at.y, width,
                       ui.S(ui.theme.metrics.fieldHeight));
         }
