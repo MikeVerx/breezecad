@@ -107,6 +107,60 @@ Settings FromJson(const nlohmann::json& j) {
         s.touch.invert = t->value("invert", s.touch.invert);
         s.touch.smoothIsTouchpad = t->value("smoothIsTouchpad", s.touch.smoothIsTouchpad);
     }
+    if (const auto m = j.find("mobile"); m != j.end() && m->is_object()) {
+        MobileSettings& o = s.mobile;
+        o.layout = std::clamp(m->value("layout", o.layout), 0, 2);
+        o.leftHanded = m->value("leftHanded", o.leftHanded);
+        o.leftWidth = std::clamp(m->value("leftWidth", o.leftWidth), 12, 40);
+        o.rightWidth = std::clamp(m->value("rightWidth", o.rightWidth), 8, 40);
+        o.iconsOnly = m->value("iconsOnly", o.iconsOnly);
+        o.labelScale = std::clamp(m->value("labelScale", o.labelScale), 0.6, 2.5);
+        o.volumeZoom = m->value("volumeZoom", o.volumeZoom);
+        o.fingerOrbit = std::clamp(m->value("fingerOrbit", o.fingerOrbit), 0.25, 4.0);
+        o.fingerPan = std::clamp(m->value("fingerPan", o.fingerPan), 0.25, 4.0);
+        o.fingerZoom = std::clamp(m->value("fingerZoom", o.fingerZoom), 0.25, 4.0);
+        // The gesture sets: drags 0 none, 1 orbit, 2 pan, 3 zoom; taps — FingerTap.
+        const auto readSet = [&](const char* key, FingerGestures& g) {
+            const auto it = m->find(key);
+            if (it == m->end() || !it->is_object()) return;
+            const auto drag = [&](const char* k, mobile::FingerDrag& d) {
+                d = static_cast<mobile::FingerDrag>(std::clamp(it->value(k, static_cast<int>(d)), 0, 3));
+            };
+            const auto tap = [&](const char* k, FingerTap& t) { t = static_cast<FingerTap>(std::clamp(it->value(k, static_cast<int>(t)), 0, 4)); };
+            drag("one", g.drags.one);
+            drag("two", g.drags.two);
+            drag("three", g.drags.three);
+            g.drags.pinch = it->value("pinch", g.drags.pinch);
+            tap("tap2", g.tap2);
+            tap("tap3", g.tap3);
+        };
+        o.toolsList = m->value("toolsList", o.toolsList);
+        o.hotbarWidth = std::clamp(m->value("hotbarWidth", o.hotbarWidth), 0, 120);
+        o.stripHeight = std::clamp(m->value("stripHeight", o.stripHeight), 32, 80);
+        o.firstStartDone = m->value("firstStartDone", o.firstStartDone);
+        const auto readIsland = [&](const char* key, IslandPlace& p) {
+            const auto it = m->find(key);
+            if (it == m->end() || !it->is_object()) return;
+            p.bottom = it->value("bottom", p.bottom);
+            p.along = std::clamp(it->value("along", p.along), -1.0, 1.0);
+            p.scale = std::clamp(it->value("scale", p.scale), 0.8, 1.4);
+        };
+        readIsland("undoIsland", o.undoIsland);
+        readIsland("tabsIsland", o.tabsIsland);
+        readIsland("cubeIsland", o.cubeIsland);
+        readSet("gesturesOff", o.gesturesOff);
+        readSet("gesturesOn", o.gesturesOn);
+        o.tapSlop = std::clamp(m->value("tapSlop", o.tapSlop), 3, 40);
+        o.longPress = std::clamp(m->value("longPress", o.longPress), 0.2, 2.0);
+        o.cursorSpeed = std::clamp(m->value("cursorSpeed", o.cursorSpeed), 0.1, 1.0);
+        o.cursorReach = std::clamp(m->value("cursorReach", o.cursorReach), 16, 120);
+        o.scrollSpeed = std::clamp(m->value("scrollSpeed", o.scrollSpeed), 0.25, 4.0);
+        o.askedNotifications = m->value("askedNotifications", o.askedNotifications);
+        o.projectsFolderName = m->value("projectsFolderName", o.projectsFolderName);
+        o.hotbar.clear();
+        for (const auto& id : m->value("hotbar", nlohmann::json::array()))
+            if (id.is_string()) o.hotbar.push_back(id.get<std::string>());
+    }
     s.shortcutsCustom = j.value("shortcutsCustom", s.shortcutsCustom);
     // Named: items() of a temporary would outlive it (ASan: stack-use-after-scope).
     const nlohmann::json shortcuts = j.value("shortcuts", nlohmann::json::object());
@@ -139,6 +193,12 @@ nlohmann::json ShortcutsJson(const std::vector<std::pair<std::string, std::strin
     nlohmann::json out = nlohmann::json::object();
     for (const auto& [id, chord] : shortcuts) out[id] = chord;
     return out;
+}
+nlohmann::json IslandJson(const IslandPlace& p) { return {{"bottom", p.bottom}, {"along", p.along}, {"scale", p.scale}}; }
+nlohmann::json GestureSetJson(const FingerGestures& g) {
+    return {{"one", static_cast<int>(g.drags.one)},     {"two", static_cast<int>(g.drags.two)},
+            {"three", static_cast<int>(g.drags.three)}, {"pinch", g.drags.pinch},
+            {"tap2", static_cast<int>(g.tap2)},         {"tap3", static_cast<int>(g.tap3)}};
 }
 } // namespace
 
@@ -189,6 +249,33 @@ bool Settings::Save(const std::filesystem::path& file) const {
                       {"speed", touch.speed},
                       {"invert", touch.invert},
                       {"smoothIsTouchpad", touch.smoothIsTouchpad}}},
+        {"mobile", {{"layout", mobile.layout},
+                    {"leftHanded", mobile.leftHanded},
+                    {"leftWidth", mobile.leftWidth},
+                    {"rightWidth", mobile.rightWidth},
+                    {"iconsOnly", mobile.iconsOnly},
+                    {"labelScale", mobile.labelScale},
+                    {"volumeZoom", mobile.volumeZoom},
+                    {"fingerOrbit", mobile.fingerOrbit},
+                    {"fingerPan", mobile.fingerPan},
+                    {"fingerZoom", mobile.fingerZoom},
+                    {"toolsList", mobile.toolsList},
+                    {"hotbarWidth", mobile.hotbarWidth},
+                    {"stripHeight", mobile.stripHeight},
+                    {"firstStartDone", mobile.firstStartDone},
+                    {"undoIsland", IslandJson(mobile.undoIsland)},
+                    {"tabsIsland", IslandJson(mobile.tabsIsland)},
+                    {"cubeIsland", IslandJson(mobile.cubeIsland)},
+                    {"gesturesOff", GestureSetJson(mobile.gesturesOff)},
+                    {"gesturesOn", GestureSetJson(mobile.gesturesOn)},
+                    {"tapSlop", mobile.tapSlop},
+                    {"longPress", mobile.longPress},
+                    {"cursorSpeed", mobile.cursorSpeed},
+                    {"cursorReach", mobile.cursorReach},
+                    {"scrollSpeed", mobile.scrollSpeed},
+                    {"hotbar", mobile.hotbar},
+                    {"askedNotifications", mobile.askedNotifications},
+                    {"projectsFolderName", mobile.projectsFolderName}}},
         {"shortcutsCustom", shortcutsCustom},
         {"recentFiles", recent},
     };

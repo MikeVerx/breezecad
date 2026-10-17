@@ -1,6 +1,7 @@
 #include "app/sketch/SketchEditor.h"
 
 #include "app/Format.h"
+#include "app/sketch/DimensionArrange.h"
 #include "app/sketch/DimensionLayout.h"
 #include "app/sketch/SketchOverlay.h"
 #include "core/I18n.h"
@@ -262,7 +263,7 @@ void SketchEditor::SetTool(AppContext& app, Session& session, SketchTool tool) {
     if (tool >= SketchTool::Coincident) TryApplyToSelection(app, session);
 }
 
-void SketchEditor::Escape(AppContext& app, Session& session) {
+void SketchEditor::Escape(AppContext& app, Session& session, bool mayFinish) {
     if (myEditDimension) {
         myEditDimension = {};
     } else if (myEditedText) {
@@ -275,9 +276,28 @@ void SketchEditor::Escape(AppContext& app, Session& session) {
         myTool = SketchTool::Select;
     } else if (!mySelection.empty()) {
         mySelection.clear();
-    } else {
+    } else if (mayFinish) {
         Finish(app, session);
     }
+}
+
+bool SketchEditor::HasDimensions(Session& session) const {
+    const doc::SketchFeature* f = Active(session);
+    if (!f) return false;
+    return std::any_of(f->sketch.constraints.begin(), f->sketch.constraints.end(),
+                       [](const sketch::Constraint& c) { return sketch::IsDimensional(c.type); });
+}
+
+void SketchEditor::ArrangeDimensions(AppContext& app, Session& session) {
+    doc::SketchFeature* f = Active(session);
+    if (!f) return;
+    auto before = f->Clone();
+    const int moved = app::ArrangeDimensions(f->sketch, session.doc.units, {myMmPerPixel, app.ui.scale});
+    if (moved == 0) {
+        app.notes.Info(Tr("Размеры уже не мешают друг другу"));
+        return;
+    }
+    session.CommitInPlaceEdit(std::move(before), Tr("Упорядочить размеры"));
 }
 
 void SketchEditor::DeleteSelection(Session& session) {

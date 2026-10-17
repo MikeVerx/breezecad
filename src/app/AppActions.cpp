@@ -126,6 +126,30 @@ void RegisterActions(AppContext& app) {
            [&app] { app.shell.showMassProperties = true; }});
     a.Add({"app.settings", N_("Настройки"), "ui-sliders", 0, N_("Масштаб интерфейса, оформление, сочетания клавиш"), {},
            [&app] { app.shell.showSettings = true; }});
+#if defined(__ANDROID__)
+    {
+        // The touch settings, found by search: what people call them.
+        Action touch{"app.settingsTouch", N_("Настройки сенсора"), "ui-sliders", 0,
+                     N_("Чувствительность: вращение, сдвиг, масштаб, курсор, прокрутка; порог касания, долгое нажатие"), {},
+                     [&app] {
+                         app.shell.showSettings = true;
+                         app.shell.settingsTab = 1;
+                         app.shell.settingsSub = 2;
+                     }};
+        touch.keywords = "сенсор сенсорный экран отзывчивость чувствительность скорость курсор касание тап палец пальцы вращение "
+                         "прокрутка долгое нажатие рука левша блоки громкость сдвиг масштаб";
+        a.Add(std::move(touch));
+        Action gestures{"app.settingsGestures", N_("Настройки жестов"), "ui-sliders", 0,
+                        N_("Что делают один, два, три пальца и тапы — с курсором и без"), {},
+                        [&app] {
+                            app.shell.showSettings = true;
+                            app.shell.settingsTab = 1;
+                            app.shell.settingsSub = 3;
+                        }};
+        gestures.keywords = "жесты пальцы два три пальца щипок тап отмена повтор курсор управление";
+        a.Add(std::move(gestures));
+    }
+#endif
     a.Add({"app.about", N_("О программе"), "ui-info", 0, {}, {}, [&app] { app.shell.showAbout = true; }});
     // The testers' build: a report of this session, with a few words.
     a.Add({"app.reportProblem", N_("Сообщить о проблеме…"), "ui-info", 0, N_("Собрать отчёт о том, что сейчас не так, для разработчика"),
@@ -202,6 +226,10 @@ void RegisterActions(AppContext& app) {
            N_("Сделать выбранные отрезки осевыми (штрихпунктир): ось для вращения и пружины, контур ограничивают как обычные"),
            [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasSelection(); },
            [&app] { app.sketch.ToggleCenterline(*app.Doc()); }});
+    a.Add({"sketch.arrangeDimensions", N_("Упорядочить"), "dim-arrange", ImGuiKey_None,
+           N_("Упорядочить размеры: тексты разносятся так, чтобы не налезали друг на друга и на линии эскиза"),
+           [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasDimensions(*app.Doc()); },
+           [&app] { app.sketch.ArrangeDimensions(app, *app.Doc()); }});
     a.Add({"sketch.showConstraints", N_("Показать все зависимости"), "c-show-all", ImGuiKey_F8,
            N_("Значки всех зависимостей эскиза (F8). Скрытые видны у выделенного"), inSketch,
            [&app] { app.settings.showAllConstraints = true; }});

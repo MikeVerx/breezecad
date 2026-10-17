@@ -3,6 +3,8 @@
 #include "app/AppContext.h"
 #include "app/Settings.h"
 #include "app/features/OperationEditors.h"
+#include "app/mobile/Cursor.h"
+#include "app/mobile/TouchInput.h"
 #include "app/sketch/SketchEditor.h"
 #include "platform/Window.h"
 #include "render/Viewport.h"
@@ -102,6 +104,25 @@ private:
     std::unique_ptr<AppContext> myContext;
     std::unique_ptr<modules::ModuleManager> myModules;   ///< unloaded first in ~Application
     void StartModules();
+    bool myScaledForPhone = false;   ///< the scale was chosen for the phone layout
+
+#if defined(__ANDROID__)
+    // Android (docs/ADR/0004-mobile-touch-ui.md); Application_android.cpp.
+    void StartAndroid();
+    void InstallAndroidClipboard();
+    /// Between frames: the system's answers (insets, keyboard text, a picked
+    /// file), the keyboard shown or hidden, the background. False when the
+    /// system is closing the app.
+    bool AndroidBetweenFrames(double now);
+    void CheckLastExit();
+    void RunTestCommands();
+    mobile::TouchInput myTouch;
+    int    myScreenRevision = -1;
+    bool   myKeyboardUp = false;
+    bool   myTestTouchKeys = false;   ///< test command "touchkeys": a keyboard plugged in is ignored (emulator)
+    bool   myInBackground = false;
+    double myStartedAt = 0.0;
+#endif
 
     InputTap myInput;
     int    myFramesToDraw = 3;

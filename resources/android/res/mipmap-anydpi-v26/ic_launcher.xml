@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive launcher icon (Android 8+): the B-mark on the brand blue; the
+     launcher crops it to its own shape. Monochrome: themed icons (Android 13+).
+     The foreground is made from assets/brand/breezecad-mark-white.svg
+     (docs/dev/MOBILE-PORT.md, "Иконка"). Older systems use mipmap-*/ic_launcher.png. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

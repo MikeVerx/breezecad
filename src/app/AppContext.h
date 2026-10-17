@@ -7,6 +7,7 @@
 #include "app/Notifications.h"
 #include "app/Settings.h"
 #include "app/Workspace.h"
+#include "app/mobile/MobileState.h"
 #include "core/ViewProjection.h"
 #include "platform/Touchpad.h"
 #include "render/Viewport.h"
@@ -160,6 +161,7 @@ struct ShellState {
     bool           animateUi = false;           ///< something in the interface moves by itself this frame
     const Session* viewportSession = nullptr;   ///< whose camera the viewport shows
     ImVec2         viewportMax{0, 0};           ///< bottom-right of the scene, for notifications
+    mobile::MobileState mobile;                 ///< phone layout and touch (Android); unused on the desktop
 };
 
 /// The viewport rectangle and camera of the current frame.
@@ -168,6 +170,7 @@ struct ViewportFrame {
     ImVec2         max;
     ViewProjection projection;
     bool           hovered = false;   ///< mouse over the scene, not over overlays
+    float          promptTop = 0;     ///< where prompts over the view start (under the phone's islands); 0: min.y + 14
 
     Vec2 ToLocal(ImVec2 screen) const { return {screen.x - min.x, screen.y - min.y}; }
     ImVec2 ToScreen(Vec2 local) const { return {static_cast<float>(local.x) + min.x, static_cast<float>(local.y) + min.y}; }

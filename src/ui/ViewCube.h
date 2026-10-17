@@ -25,6 +25,9 @@ struct ViewCubeAction {
 /// bottom-left corner.
 ViewCubeAction DrawViewCube(Ui& ui, const ViewProjection& view, ImVec2 topLeft, ImVec2 bottomRight, bool showTriad = true);
 
+/// The axis triad (X red, Y green, Z blue) around `origin`, as the view sees them.
+void DrawAxisTriad(Ui& ui, const ViewProjection& view, ImVec2 origin);
+
 /// Home view direction (from the model toward the camera): front-right-top.
 inline constexpr Vec3 kHomeDirection{1.0, -1.0, 1.0};
 

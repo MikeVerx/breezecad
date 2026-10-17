@@ -4,6 +4,7 @@
 #include "app/BetaTesting.h"
 #include "app/Operations.h"
 #include "app/features/OperationEditors.h"
+#include "app/mobile/MobileLayout.h"
 #include "app/shell/Shell.h"
 #include "core/I18n.h"
 #include "ui/Menus.h"
@@ -67,6 +68,11 @@ void MainMenu(AppContext& app) {
         MenuAction(app, "file.export3mf");
         ImGui::EndMenu();
     }
+#if defined(__ANDROID__)
+    // The phone: files go to and come from the projects folder; "share"
+    // hands a document or an export to another app (a slicer, a messenger).
+    mobile::PhoneFileMenu(app);
+#endif
     ImGui::Separator();
     MenuAction(app, "app.settings");
     if (ui::BeginSubmenu(ui, Tr("Оформление"), "theme")) {
@@ -197,6 +203,8 @@ void CommandSearch(AppContext& app, ImVec2 pos, float width) {
 }
 
 } // namespace
+
+void MainMenuPopup(AppContext& app) { MainMenu(app); }
 
 void DrawHeader(AppContext& app, ImVec2 pos, float width) {
     ui::Ui& ui = app.ui;

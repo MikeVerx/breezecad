@@ -2,6 +2,7 @@
 
 #include "app/Format.h"
 #include "app/features/OperationEditors.h"
+#include "app/mobile/PhoneHome.h"
 #include "app/sketch/SketchEditor.h"
 #include "core/I18n.h"
 #include "core/Log.h"
@@ -92,7 +93,10 @@ void SaveDocument(AppContext& app, bool saveAs) {
     Session* s = app.Doc();
     if (!s) return;
     app.ops.Close(app, *s);
-    if (app.workspace.Save(*s, saveAs, app.notes, app.settings)) app.autosave.Discard(*s);
+    if (app.workspace.Save(*s, saveAs, app.notes, app.settings)) {
+        app.autosave.Discard(*s);
+        if (app.shell.mobile.phone) mobile::SaveThumbnail(app, *s);   // the card's picture on the phone's home page
+    }
 }
 
 void ExportDocument(AppContext& app, ExportFormat format) {
@@ -382,6 +386,15 @@ void KeepInView(AppContext& app, const Box3& box) {
     const render::CameraState now = app.viewport.Camera();
     const render::CameraState target = app.viewport.FitCamera(now.center - now.eye, now.up, box, 1.25);
     app.viewport.AnimateTo(target, app.settings.animations ? 0.35 : 0.0);
+}
+
+void CancelPressed(AppContext& app) {
+    Session* s = app.Doc();
+    if (s && !app.shell.paletteOpen && !app.ops.Active() && !app.shell.measuring && s->mode == EditMode::Sketch) {
+        app.sketch.Escape(app, *s, false);
+        return;
+    }
+    EscapePressed(app);
 }
 
 void EscapePressed(AppContext& app) {

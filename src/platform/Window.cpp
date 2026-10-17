@@ -101,7 +101,8 @@ bool Window::Create(const WindowConfig& config) {
     if (config.visible) Show();
     glfwMakeContextCurrent(myWindow);
     glfwSwapInterval(1);
-    glfwSetWindowSizeLimits(myWindow, 800, 500, GLFW_DONT_CARE, GLFW_DONT_CARE);
+    // BZ_PHONE_LAYOUT (a test hook): the window may be as small as a phone held sideways.
+    if (!std::getenv("BZ_PHONE_LAYOUT")) glfwSetWindowSizeLimits(myWindow, 800, 500, GLFW_DONT_CARE, GLFW_DONT_CARE);
     if (const auto* version = reinterpret_cast<const char*>(glGetString(GL_VERSION))) myGLVersion = version;
     if (const auto* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR))) myGLVendor = vendor;
     if (const auto* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER))) myGLRenderer = renderer;
@@ -203,6 +204,21 @@ void SaveFramebufferPpm(GLFWwindow* window, const std::filesystem::path& file) {
     for (int row = h - 1; row >= 0; --row)   // OpenGL's rows go up, the picture's down
         out.write(reinterpret_cast<const char*>(pixels.data()) + static_cast<std::ptrdiff_t>(row) * rowBytes, rowBytes);
 }
+
+void SaveFramebufferPpm(const Window& window, const std::filesystem::path& file) { SaveFramebufferPpm(window.Handle(), file); }
+
+double Window::Time() { return glfwGetTime(); }
+
+float Window::CurrentFramebufferScale() {
+    int winW = 1, fbW = 1, h = 1;
+    glfwGetWindowSize(glfwGetCurrentContext(), &winW, &h);
+    glfwGetFramebufferSize(glfwGetCurrentContext(), &fbW, &h);
+    return winW > 0 ? static_cast<float>(fbW) / static_cast<float>(winW) : 1.0f;
+}
+
+void Window::WindowSize(int& width, int& height) const { glfwGetWindowSize(myWindow, &width, &height); }
+void Window::FramebufferSize(int& width, int& height) const { glfwGetFramebufferSize(myWindow, &width, &height); }
+bool Window::CanDraw() const { return true; }
 
 void Window::WaitEvents(double timeoutSeconds) { glfwWaitEventsTimeout(timeoutSeconds); }
 void Window::PollEvents() { glfwPollEvents(); }

@@ -44,6 +44,10 @@ public:
     /// True when the operation draws the work points itself (it picks them).
     virtual bool DrawsPoints() const { return false; }
 
+    /// True when "Применить" (commit and stay open) differs from "Готово"; the
+    /// phone shows it in block 1's bottom line then.
+    virtual bool HasApply() const { return true; }
+
     virtual const char* Title() const = 0;    ///< "Выдавливание", shown in the status bar
     virtual std::string Hint() const = 0;     ///< what to do, for the status bar
 };

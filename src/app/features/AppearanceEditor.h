@@ -42,6 +42,7 @@ public:
     bool        CanEdit(const doc::Feature&) const override { return false; }
     void        EditExisting(AppContext&, Session&, ObjectId) override {}
     void        Apply(AppContext& app, Session& session) override { Done(app, session); }
+    bool        HasApply() const override { return false; }
     void        Done(AppContext& app, Session& session) override;
     void        Cancel(AppContext& app, Session& session) override;
     void        DrawPanel(AppContext& app, Session& session) override;

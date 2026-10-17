@@ -70,6 +70,9 @@ void KeepInView(AppContext& app, const Box3& box);
 
 /// Keys with meaning that depends on what is going on.
 void EscapePressed(AppContext& app);
+/// The phone's ✕: Esc one step at a time (the action, then the tool), but it
+/// never leaves the sketch — "Завершить эскиз" does that.
+void CancelPressed(AppContext& app);
 void EnterPressed(AppContext& app);
 void DeletePressed(AppContext& app);
 

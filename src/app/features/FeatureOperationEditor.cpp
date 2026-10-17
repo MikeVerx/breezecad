@@ -5,6 +5,7 @@
 #include "app/sketch/SketchEditor.h"
 #include "app/viewport/Planes.h"
 #include "core/I18n.h"
+#include "core/Log.h"
 #include "document/Commands.h"
 #include "document/LoftFeature.h"
 #include "document/Origin.h"
@@ -14,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace bz::app {
 
@@ -247,6 +249,19 @@ bool FeatureOperationEditor::ParameterField(AppContext& app, Session& session, c
                                             Parameter& parameter, float width, bool focus, bool showFx) {
     ui::Ui& ui = app.ui;
     ImGui::PushID(id);
+    if (app.shell.mobile.phone) {
+        // Where the field is, whenever that changes: the emulator's check taps it (smoke-apk.sh).
+        static std::vector<std::pair<ImGuiID, ImVec2>> logged;
+        const ImGuiID gid = ImGui::GetID("value");
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        auto known = std::find_if(logged.begin(), logged.end(), [gid](const auto& e) { return e.first == gid; });
+        if (known == logged.end() || std::abs(known->second.x - at.x) > 1 || std::abs(known->second.y - at.y) > 1) {
+            if (known == logged.end()) logged.emplace_back(gid, at);
+            else known->second = at;
+            log::Info("Touch: field {} at {:.0f},{:.0f} size {:.0f}x{:.0f}", id, at.x, at.y, width,
+                      ui.S(ui.theme.metrics.fieldHeight));
+        }
+    }
     const ui::FieldResult r = ui::ExpressionField(ui, "value", text, UnitLabel(parameter.quantity, session.doc.units),
                                                   parameter.error, width, focus, showFx);
     bool changed = false;
@@ -296,8 +311,8 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(48);
         ui.icons.Draw(dl, Icon(), {p.x + ui.S(14), p.y + (h - ui.S(24)) / 2}, ui.S(24), {1, 1, 1, 1});
-        dl->AddText(ui.fonts.title, ui.S(14), {p.x + ui.S(48), p.y + (h - ui.S(14)) / 2 - ui.S(1)}, ui::ToU32(c.text),
-                    myIsNew ? Title() : f->name.c_str());
+        ui::FittedText(dl, ui.fonts.title, ui.S(14), {p.x + ui.S(48), p.y + (h - ui.S(14)) / 2 - ui.S(1)}, p.x + width - ui.S(40),
+                       ui::ToU32(c.text), myIsNew ? Title() : f->name.c_str());
         ImGui::SetCursorScreenPos({p.x + width - ui.S(38), p.y + ui.S(9)});
         if (ui::IconButton(ui, "##close-op", "ui-close", 30, 14, Tr("Отмена (Esc)")))
             app.Later([&app, &session, this] { Cancel(app, session); });
@@ -305,7 +320,9 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
         ui::Divider(ui, c.dividerSoft);
     }
 
-    const float footer = ui.S(62);
+    // The phone has no footer: Отмена/ОК are the row under block 1, "Применить" its bottom line.
+    const bool phone = app.shell.mobile.phone;
+    const float footer = phone ? 0.0f : ui.S(62);
     ImGui::BeginChild("##operation-body", {width, ImGui::GetContentRegionAvail().y - footer}, ImGuiChildFlags_None);
     ImGui::SetCursorPos({ui.S(14), ui.S(14)});
     ImGui::BeginGroup();
@@ -330,6 +347,7 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
     ImGui::EndGroup();
     ImGui::EndChild();
 
+    if (phone) return;
     // Footer: Отмена / Применить / Готово.
     ui::Divider(ui, c.dividerSoft);
     const ImVec2 fp = ImGui::GetCursorScreenPos();

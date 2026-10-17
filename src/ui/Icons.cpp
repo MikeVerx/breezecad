@@ -2,7 +2,7 @@
 
 #include "core/Log.h"
 
-#include <GLFW/glfw3.h>
+#include "ui/Gl.h"
 #include <lunasvg.h>
 
 #include <cmath>

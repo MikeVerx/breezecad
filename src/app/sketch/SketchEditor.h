@@ -104,12 +104,21 @@ public:
     void SetProjectLinked(bool linked) { myOptions.projectLinked = linked; }
     void SetTool(AppContext& app, Session& session, SketchTool tool);
     /// Esc: drops the current step, then the tool, then leaves the sketch.
-    void Escape(AppContext& app, Session& session);
+    /// Esc: one step back — the field, the clicks of the tool, the tool, the
+    /// selection, then (mayFinish) the sketch itself.
+    void Escape(AppContext& app, Session& session, bool mayFinish = true);
     void DeleteSelection(Session& session);
     void ToggleConstruction(Session& session);
     /// Makes the selected lines осевые (or normal again).
     void ToggleCenterline(Session& session);
     bool HasSelection() const { return !mySelection.empty(); }
+    /// The phone: each new dimension's text is placed clear of the others
+    /// (a finger cannot nudge it the way a mouse can). Set every frame.
+    void SetAutoArrange(bool on) { myAutoArrange = on; }
+    /// The active sketch has a dimension to lay out.
+    bool HasDimensions(Session& session) const;
+    /// "Упорядочить размеры": every dimension of the sketch laid out anew, one undo step.
+    void ArrangeDimensions(AppContext& app, Session& session);
 
     /// A drawing tool is active: the left area shows its panel.
     bool HasToolPanel() const;
@@ -222,6 +231,7 @@ private:
     bool                  myMirrorAxisStep = false;   ///< Зеркало: the next click picks the mirror line
     std::string           mySidesError;          ///< polygon side count that is not a whole number
     double                myMmPerPixel = 0.1;   ///< of the last frame, to place automatic dimension labels
+    bool                  myAutoArrange = false;   ///< SetAutoArrange
     std::vector<PointRef> myClicks;
     /// A chain of lines: where it began and where the next line starts. A
     /// line that ends where the chain began closes it, and the chain stops.
