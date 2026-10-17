@@ -458,7 +458,7 @@ bool NextButton(ui::Ui& ui, const char* id, const char* label, ImVec2 at) {
 }
 
 /// A panel of the setup (its own window: touches on it are not the view's).
-bool BeginPanel(ui::Ui& ui, const char* id, ImVec2 pos, ImVec2 size) {
+bool BeginPanel(ui::Ui& ui, const char* id, ImVec2 pos, ImVec2 size, bool clear = false) {
     const ui::ThemeColors& c = ui.C();
     ImGui::SetNextWindowPos(pos);
     ImGui::SetNextWindowSize(size);
@@ -469,7 +469,8 @@ bool BeginPanel(ui::Ui& ui, const char* id, ImVec2 pos, ImVec2 size) {
     ImGui::PushStyleColor(ImGuiCol_Border, ui::ToVec4(c.fieldBorder));
     const bool open = ImGui::Begin(id, nullptr,
                                    ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-                                       ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollWithMouse);
+                                       ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollWithMouse |
+                                       (clear ? ImGuiWindowFlags_NoBackground : 0));
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(3);
     ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
@@ -614,13 +615,13 @@ void DrawSetup(AppContext& app) {
     }
     // The tabs, the cross and "next": small panels of their own.
     const float tabsW = SetupTabsWidth(ui);
-    if (BeginPanel(ui, "##setup-tabs", {(v.min.x + v.max.x - tabsW) / 2, v.min.y + ui.S(8)}, {tabsW, ui.S(42)})) {
+    if (BeginPanel(ui, "##setup-tabs", {(v.min.x + v.max.x - tabsW) / 2, v.min.y + ui.S(8)}, {tabsW, ui.S(42)}, true)) {
         SetupTabs(app, {(v.min.x + v.max.x) / 2, v.min.y + ui.S(8)});
     }
     ImGui::End();
     {
         const ImVec2 cs = ui.S(40, 40);
-        if (BeginPanel(ui, "##setup-close", {io.DisplaySize.x - cs.x - ui.S(10), ui.S(10)}, cs)) close = CloseButton(ui, "##setup-x");
+        if (BeginPanel(ui, "##setup-close", {io.DisplaySize.x - cs.x - ui.S(10), ui.S(10)}, cs, true)) close = CloseButton(ui, "##setup-x");
         ImGui::End();
     }
     {
@@ -628,12 +629,12 @@ void DrawSetup(AppContext& app) {
         const float bw = ui.fonts.strong->CalcTextSizeA(ui.S(14), FLT_MAX, 0, label).x + ui.S(54);
         const ImVec2 corner = m.setupStep == 1 ? ImVec2{v.max.x - ui.S(12), v.max.y - ui.S(12)}
                                                : ImVec2{(v.min.x + v.max.x + bw) / 2, v.max.y - ui.S(12)};
-        if (BeginPanel(ui, "##setup-next", {corner.x - bw, corner.y - ui.S(42)}, {bw, ui.S(42)})) next = NextButton(ui, "##next", label, corner);
+        if (BeginPanel(ui, "##setup-next", {corner.x - bw, corner.y - ui.S(42)}, {bw, ui.S(42)}, true)) next = NextButton(ui, "##next", label, corner);
         ImGui::End();
     }
     if (m.setupStep == 1) {
         // What the fingers do, under the tabs.
-        if (BeginPanel(ui, "##setup-hint", {(v.min.x + v.max.x) / 2 - ui.S(170), v.min.y + ui.S(56)}, {ui.S(340), ui.S(26)}))
+        if (BeginPanel(ui, "##setup-hint", {(v.min.x + v.max.x) / 2 - ui.S(170), v.min.y + ui.S(56)}, {ui.S(340), ui.S(26)}, true))
             Tag(ui, {(v.min.x + v.max.x) / 2, v.min.y + ui.S(69)}, Tr("1 палец — вращение · 2 — сдвиг · щипок — масштаб"));
         ImGui::End();
     }

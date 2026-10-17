@@ -191,8 +191,8 @@ COMPACT_CSS = """
 """
 def cgroup(title, icons_, opened=False):
     cells = ''.join(f'<div>{icon(i, 22, "#fff")}</div>' for i in icons_[:3])
-    more = f'<div class="more">{icon("ui-chevron-right", 16, "#9db6ff")}</div>' if not opened else f'<div class="more" style="background:var(--acc);border-color:var(--acc)">{icon("ui-chevron-right", 16, "#fff", "transform:rotate(180deg)")}</div>'
-    return f'<div class="cg"><div class="h">{title}</div><div class="r">{cells}{more}</div></div>'
+    more = f'<div class="more">{icon("ui-arrow-left", 16, "#9db6ff")}</div>' if not opened else f'<div class="more" style="background:var(--acc);border-color:var(--acc)">{icon("ui-chevron-right", 16, "#fff")}</div>'
+    return f'<div class="cg"><div class="h">{title}</div><div class="r">{more}{cells}</div></div>'
 
 b2c = f'''<div class="abs b2"><div class="brow" style="gap:8px;padding:0 10px"><span style="font-size:11px;color:#4CBB7F;font-family:monospace">60 fps</span><div class="search">{icon('ui-search', 14)}Поиск</div></div>
 {cgroup('ЭСКИЗ', ['sketch', 'sk-project', 'work-plane'])}{cgroup('СОЗДАТЬ', ['extrude', 'revolve', 'hole'], True)}{cgroup('ИЗМЕНИТЬ', ['fillet', 'chamfer', 'shell'])}{cgroup('МАССИВ', ['pattern-rect', 'pattern-circular', 'mirror'])}
@@ -201,7 +201,7 @@ fly_items = [('extrude', 'Выдавить'), ('revolve', 'Вращение'), (
 fly = '<div class="abs fly">' + ''.join(f'<div class="ti{" on" if n == "extrude" else ""}">{icon(n, 26, "#fff")}{t}</div>' for n, t in fly_items) + \
       '<div class="abs" style="right:0;top:0;bottom:0;width:40px;background:linear-gradient(90deg,transparent,rgba(27,30,34,.97))"></div></div>'
 pages['3-block2-compact'] = page(camera() + block1() + view() + b2c + strip() + fly +
-    note('Компактный режим (по умолчанию): на группу — 4 равные кнопки,<br>ближняя к виду кнопка ›  открывает полосу поверх вида (не залезая на блок 1).<br>Полоса листается вбок; тап вне — закрыть.', 'left:240px;top:250px'),
+    note('Компактный режим (по умолчанию): на группу — 4 равные кнопки,<br>ближняя к виду кнопка ← открывает полосу поверх вида (не залезая на блок 1).<br>Полоса листается вбок; тап вне — закрыть.', 'left:240px;top:250px'),
     COMPACT_CSS)
 
 # 4. Settings, Minecraft-like: big tabs on the left, a two-column grid of wide buttons/sliders.
