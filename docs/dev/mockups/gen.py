@@ -284,6 +284,81 @@ pages['5b-first-start-nav'] = page(camera() + block1() + view('', 'background:#1
     WIZ_CSS)
 
 
+# 6. The library on the phone: full screen, as the settings (PR #39 packs, 17.10).
+LIB_CSS = SET_CSS + """
+.fam{display:flex;gap:4px;background:var(--panel);border:1px solid var(--div);border-radius:10px;padding:3px;margin:0 2px 4px}
+.fam div{flex:1;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:var(--t2)}
+.fam .on{background:var(--field);color:var(--text)}
+.st .tb{height:40px;font-size:12.5px}
+.mid{left:254px;top:0;bottom:0;width:190px;border-right:1px solid var(--div);padding:14px 10px;display:flex;flex-direction:column;gap:6px}
+.mid .v{font-size:10.5px;letter-spacing:.8px;color:var(--mut);padding:6px 6px 2px}
+.mid .s{height:48px;border-radius:12px;background:var(--panel);border:1px solid var(--div);padding:6px 12px;display:flex;flex-direction:column;justify-content:center}
+.mid .s small{color:var(--mut);font-size:10.5px}
+.mid .s.on{background:var(--accSoft);border-color:var(--accB)}
+.part{left:460px;right:16px;top:14px;bottom:0}
+.part h2{font-size:15px;font-weight:600;line-height:1.25;padding-right:48px}
+.lb{font-size:11px;color:var(--mut);margin:10px 0 6px}
+.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.chips div{height:34px;border-radius:9px;background:var(--panel);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px}
+.chips .on{background:var(--accSoft);border-color:var(--accB);color:#9db6ff}
+.fld{height:40px;border-radius:12px;background:var(--panel);border:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:8px;font-size:13px}
+.go{position:absolute;left:0;right:0;bottom:12px;height:44px;border-radius:12px;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;gap:8px}
+.desig{position:absolute;left:0;right:0;bottom:64px;font-size:11px;color:var(--t2);font-family:monospace}
+.fade{left:0;right:0;height:28px;background:linear-gradient(transparent,var(--ribbon))}
+.sw2{display:flex;gap:6px}
+.sw2 i{width:24px;height:24px;border-radius:6px;display:block;border:1px solid var(--border)}
+"""
+rclose = f'<div class="abs" style="right:12px;top:10px;width:36px;height:36px;border-radius:10px;background:#E5484D;display:flex;align-items:center;justify-content:center">{icon("ui-close", 18, "#fff")}</div>'
+folders = ['Болты', 'Гайки', 'Шайбы', 'Уголки', 'Двутавры', 'Профили', 'Трубы', 'Листы', 'Мои изделия']
+fl = ''.join(f'<div class="tb{" on" if f == "Профили" else ""}">{icon("ui-folder", 16, "#9db6ff" if f == "Профили" else "#AEB4BD")}{f}</div>' for f in folders)
+lib_left = f'''<div class="abs st" style="width:214px;gap:6px;overflow:hidden"><h1 style="margin-bottom:4px">Библиотека</h1>
+<div class="fam"><div class="on">ГОСТ</div><div>ISO</div><div>DIN</div></div>{fl}
+<div class="abs fade" style="bottom:56px"></div>
+<div class="abs" style="left:12px;right:12px;bottom:0;height:68px;background:var(--ribbon)"></div>
+<div class="abs" style="left:12px;right:12px;bottom:12px;height:40px;border-radius:12px;border:1px solid var(--border);background:var(--panel);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;color:var(--t2)">{icon("ui-plus", 14)}Пакет / моя деталь</div></div>'''
+lib_mid = '''<div class="abs mid"><div class="v">КВАДРАТНЫЕ ЗАМКНУТЫЕ</div><div class="s on">ГОСТ 30245-2003<small>длина — любая</small></div>
+<div class="v">ПРЯМОУГОЛЬНЫЕ ЗАМКНУТЫЕ</div><div class="s">ГОСТ 30245-2003<small>длина — любая</small></div></div>'''
+sizes = ['40×40×2', '40×40×2,5', '40×40×3', '40×40×3,5', '50×50×2', '50×50×3', '50×50×4', '60×60×3']
+chips = ''.join(f'<div class="{"on" if z == "40×40×3" else ""}">{z}</div>' for z in sizes)
+lib_part = f'''<div class="abs part"><h2>Профиль гнутый замкнутый сварной квадратный ГОСТ 30245-2003</h2>
+<div class="lb" style="display:flex;justify-content:space-between;align-items:center">Сечение a×a×t, мм <span class="search" style="flex:none;width:170px;height:28px">{icon('ui-search', 13)}Найти размер</span></div>
+<div class="chips">{chips}</div>
+<div style="display:flex;gap:10px;align-items:flex-end"><div style="flex:1"><div class="lb">Длина, мм (1–13000)</div><div class="fld">1000<span style="margin-left:auto;color:var(--mut);font-size:11px">нампад</span></div></div>
+<div><div class="lb">Вид</div><div class="sw2" style="height:40px;align-items:center"><i style="background:#C8CDD4;border-color:var(--sel)"></i><i style="background:#8E959F"></i><i style="background:#2A2F38"></i><i style="background:#C87A3F"></i></div></div></div>
+<div class="desig">Профиль 40×40×3 ГОСТ 30245-2003, L=1000</div>
+<div class="go">{icon('ui-check', 18, '#fff')}Создать деталь</div></div>'''
+pages['6a-library'] = page(camera() + '<div class="abs sw"></div>' + lib_left + lib_mid + lib_part + rclose +
+    note('Как настройки: во весь экран, три столбца — папки · стандарты · изделие.<br>Размеры — плитками (листаются); «Найти размер» — системная клавиатура;<br>длина — нампадом. В сборке кнопка — «Вставить в сборку».', 'left:260px;top:248px;width:186px;font-size:10px;padding:4px 7px'),
+    LIB_CSS)
+
+# 6b. "В мою библиотеку" on the phone: the open part, its variables as a table.
+SAVE_CSS = LIB_CSS + """
+.vars{display:flex;flex-wrap:wrap;gap:6px}
+.vars div{height:34px;padding:0 14px;border-radius:17px;display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);font-size:12.5px}
+.vars .on{background:var(--accSoft);border-color:var(--accB);color:#9db6ff}
+.tbl{display:grid;grid-template-columns:repeat(3,1fr) 34px;gap:6px;align-items:center}
+.tbl .h{font-size:11px;color:var(--mut);padding-left:4px}
+.tbl .c{height:36px;border-radius:10px;background:var(--panel);border:1px solid var(--border);display:flex;align-items:center;padding:0 12px;font-size:13px}
+.tbl .c.on{border-color:var(--sel)}
+.tbl .x{width:34px;height:34px;display:flex;align-items:center;justify-content:center}
+"""
+chk = icon('ui-check', 13, '#9db6ff')
+save_left = f'''<div class="abs st" style="width:300px;gap:2px"><h1>В мою библиотеку</h1>
+<div class="lb">Название изделия</div><div class="fld">Стойка</div>
+<div class="lb">Папка</div><div class="fld">Мои изделия</div>
+<div class="lb">Переменные детали → столбцы (L — длина, любая)</div>
+<div class="vars"><div class="on">{chk}a</div><div class="on">{chk}t</div><div class="on">{chk}R</div><div class="on">{chk}L</div><div>k</div></div></div>'''
+rows = [('40', '2', '4'), ('60', '3', '6'), ('80', '4', '8')]
+tb = '<div class="h">a</div><div class="h">t</div><div class="h">R</div><div></div>' + ''.join(
+    ''.join(f'<div class="c{" on" if (r, k) == (1, 0) else ""}">{v}</div>' for k, v in enumerate(row)) + f'<div class="x">{icon("ui-close", 14)}</div>'
+    for r, row in enumerate(rows))
+save_right = f'''<div class="abs part" style="left:356px"><h2>Размеры</h2><div class="lb">Первая строка — деталь как есть. Тап по ячейке — нампад.</div>
+<div class="tbl">{tb}</div>
+<div style="margin-top:8px;height:36px;border-radius:10px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;gap:6px;color:#9db6ff;font-size:12.5px">{icon('ui-plus', 13, '#9db6ff')}Добавить размер</div>
+<div class="go">{icon('ui-check', 18, '#fff')}Сохранить в библиотеку</div></div>'''
+pages['6b-save-to-library'] = page(camera() + '<div class="abs sw"></div>' + save_left + save_right + rclose, SAVE_CSS)
+
+
 if __name__ == '__main__':
     only = sys.argv[1:]
     with sync_playwright() as p:
