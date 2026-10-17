@@ -105,7 +105,7 @@ bool Application::AndroidBetweenFrames(double now) {
                     std::max(screen.cutout.right, screen.bars.right),
                     std::max({screen.cutout.bottom, screen.bars.bottom, screen.gestures.bottom * 0.5f})};
         m.keyboardHeight = screen.ime.bottom;
-        m.hardKeyboard = screen.hardKeyboard;
+        m.hardKeyboard = screen.hardKeyboard && !myTestTouchKeys;   // the emulator has one; its check needs the numpad
         myFramesToDraw = std::max(myFramesToDraw, 3);
     }
     android::FeedTypedText();
@@ -131,6 +131,11 @@ bool Application::AndroidBetweenFrames(double now) {
     const bool typing = ImGui::GetCurrentContext() && ImGui::GetIO().WantTextInput;
     const bool words = myShell.paletteOpen || myShell.renaming || myShell.treeSearch || m.fullKeyboard || !m.phone;
     myUi->keyHints = m.hardKeyboard;   // Ctrl+N or Esc mean nothing on a touch screen without a keyboard
+    static bool wasTyping = false;   // the log: a field took or left the keyboard
+    if (typing != wasTyping) {
+        log::Info("Keyboard: typing {}", typing ? "on" : "off");
+        wasTyping = typing;
+    }
     const bool hadNumpad = m.numpad;
     m.numpad = m.phone && typing && !words && !m.hardKeyboard;
     // A value left any way (↵, the OK button, another field): it is "пред." for the next one.
@@ -232,6 +237,8 @@ void Application::RunTestCommands() {
             mySettings.mobile.layout = 2;
         } else if (c == "settings") {
             myShell.showSettings = true;
+        } else if (c == "touchkeys") {
+            myTestTouchKeys = true;   // as on a phone with no keyboard plugged in
         } else if (c == "extrude") {
             myActions.Run("feature.extrude");   // its distance field: the emulator taps it (smoke-apk.sh)
         } else if (c == "numpad") {

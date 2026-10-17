@@ -250,10 +250,10 @@ bool FeatureOperationEditor::ParameterField(AppContext& app, Session& session, c
     ImGui::PushID(id);
     if (app.shell.mobile.phone) {
         // Where the field is, once per field: the emulator's check taps it (smoke-apk.sh).
-        static ImGuiID logged = 0;
+        static std::vector<ImGuiID> logged;
         const ImGuiID gid = ImGui::GetID("value");
-        if (gid != logged) {
-            logged = gid;
+        if (std::find(logged.begin(), logged.end(), gid) == logged.end()) {
+            logged.push_back(gid);
             const ImVec2 at = ImGui::GetCursorScreenPos();
             log::Info("Touch: field {} at {:.0f},{:.0f} size {:.0f}x{:.0f}", id, at.x, at.y, width,
                       ui.S(ui.theme.metrics.fieldHeight));

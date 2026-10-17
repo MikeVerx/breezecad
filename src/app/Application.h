@@ -119,6 +119,7 @@ private:
     mobile::TouchInput myTouch;
     int    myScreenRevision = -1;
     bool   myKeyboardUp = false;
+    bool   myTestTouchKeys = false;   ///< test command "touchkeys": a keyboard plugged in is ignored (emulator)
     bool   myInBackground = false;
     double myStartedAt = 0.0;
 #endif

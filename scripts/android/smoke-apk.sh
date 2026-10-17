@@ -161,15 +161,16 @@ check strip-tap
 # 14. Extrude (a new part, an empty sketch: the example has no unused sketch): the field loses the focus it opens with (a tap on the model),
 # then a tap on the field opens the numpad, and it is still open 3 s later.
 adb logcat -c
-start new,sketch,extrude 30
+start touchkeys,new,sketch,extrude 30
 read -r fx fy fw fh < <(blog | sed -n 's/.*Touch: field .* at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' | head -1)
 if [ -n "${fh:-}" ]; then
     adb shell input tap $((w / 2)) $((h / 3))
     sleep 2
     adb shell input tap $(dp $(( fx + fw / 3 ))) $(dp $(( fy + fh / 2 )))
     shot 14-extrude-numpad 3
-    seq=$(blog | grep -o 'Keyboard: numpad [a-z]*' | tr '\n' ';')
-    if [ "$(blog | grep -o 'Keyboard: numpad [a-z]*' | tail -1)" = "Keyboard: numpad on" ]; then
+    seq=$(blog | grep -o 'Keyboard: [a-z]* [a-z]*' | tr '\n' ';')
+    if [ "$(blog | grep -o 'Keyboard: typing [a-z]*' | tail -1)" = "Keyboard: typing on" ] &&
+       [ "$(blog | grep -o 'Keyboard: numpad [a-z]*' | tail -1)" = "Keyboard: numpad on" ]; then
         echo "step extrude-field: the numpad is open ($seq)"
     else
         echo "step extrude-field: FAILED — the numpad is not open ($seq)"; broken=1
