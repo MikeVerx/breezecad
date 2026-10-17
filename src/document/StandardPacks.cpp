@@ -1,0 +1,553 @@
+#include "document/StandardPacks.h"
+
+#include "core/Expression.h"
+#include "core/Folders.h"
+#include "document/StandardParts.h"
+
+#include <nlohmann/json.hpp>
+
+#include <algorithm>
+#include <cmath>
+#include <format>
+#include <fstream>
+#include <iterator>
+#include <map>
+#include <set>
+#include <sstream>
+
+namespace bz::doc::parts {
+
+using Json = nlohmann::json;
+
+namespace {
+
+/// Packs bigger than this are refused: a library table is kilobytes.
+constexpr std::uintmax_t kMaxPackBytes = 16u << 20;
+
+bool ValidId(std::string_view id) {
+    if (id.empty() || id.size() > 64) return false;
+    const char first = id.front();
+    if (!((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || (first >= '0' && first <= '9'))) return false;
+    return std::ranges::all_of(id, [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.';
+    });
+}
+
+/// Names the document gives its dimensions ("d12") would clash with a column.
+bool LooksLikeDimension(std::string_view name) {
+    return name.size() > 1 && name[0] == 'd' && std::ranges::all_of(name.substr(1), [](char c) { return c >= '0' && c <= '9'; });
+}
+
+/// Reading JSON without exceptions: each Read* returns false on a wrong type.
+class Reader {
+public:
+    explicit Reader(std::string place) : myPlace(std::move(place)) {}
+
+    Error Fail(std::string_view what) const { return Error{std::format("{}: {}", myPlace, what)}; }
+
+    bool String(const Json& j, const char* key, std::string& out, bool required, Error& err) const {
+        const auto it = j.find(key);
+        if (it == j.end() || it->is_null()) {
+            if (required) err = Fail(std::format("нет поля «{}»", key));
+            return !required;
+        }
+        if (!it->is_string()) {
+            err = Fail(std::format("«{}» должно быть строкой", key));
+            return false;
+        }
+        out = it->get<std::string>();
+        if (required && out.empty()) {
+            err = Fail(std::format("«{}» пустое", key));
+            return false;
+        }
+        return true;
+    }
+
+    /// An expression: a string, or a number written as one.
+    bool Expr(const Json& j, const char* key, std::string& out, bool required, Error& err) const {
+        const auto it = j.find(key);
+        if (it != j.end() && it->is_number()) {
+            out = PackNumber(it->get<double>());
+            return true;
+        }
+        return String(j, key, out, required, err);
+    }
+
+private:
+    std::string myPlace;
+};
+
+std::string ExprOf(const Json& v) { return v.is_number() ? PackNumber(v.get<double>()) : v.is_string() ? v.get<std::string>() : std::string{}; }
+
+Expected<PackShape> ReadShape(const Json& j, const Reader& r) {
+    if (!j.is_object() || j.size() != 1) return r.Fail("фигура — объект с одним ключом: rect, circle, polygon, hexagon или axis");
+    const auto& [type, body] = *j.items().begin();
+    PackShape s;
+    Error err;
+    const Reader in(std::format("фигура {}", type));
+    if (!body.is_object()) return in.Fail("параметры фигуры — объект");
+    if (type == "rect") {
+        s.type = PackShape::Type::Rect;
+        if (!in.Expr(body, "w", s.w, true, err) || !in.Expr(body, "h", s.h, true, err) || !in.Expr(body, "r", s.r, false, err) ||
+            !in.Expr(body, "x", s.x, false, err) || !in.Expr(body, "y", s.y, false, err))
+            return err;
+    } else if (type == "circle") {
+        s.type = PackShape::Type::Circle;
+        if (!in.Expr(body, "d", s.d, true, err) || !in.Expr(body, "x", s.x, false, err) || !in.Expr(body, "y", s.y, false, err))
+            return err;
+    } else if (type == "hexagon") {
+        s.type = PackShape::Type::Hexagon;
+        if (!in.Expr(body, "s", s.s, true, err)) return err;
+    } else if (type == "polygon" || type == "axis") {
+        const bool polygon = type == "polygon";
+        s.type = polygon ? PackShape::Type::Polygon : PackShape::Type::Axis;
+        const char* key = polygon ? "points" : "ends";
+        const auto pts = body.find(key);
+        if (pts == body.end() || !pts->is_array() || (polygon ? pts->size() < 3 : pts->size() != 2))
+            return in.Fail(polygon ? "нужно «points»: не меньше трёх точек [x, y]" : "нужно «ends»: две точки [x, y]");
+        for (const Json& p : *pts) {
+            if (!p.is_array() || p.size() != 2 || ExprOf(p[0]).empty() || ExprOf(p[1]).empty())
+                return in.Fail("точка — пара [x, y] (числа или выражения)");
+            s.points.push_back({ExprOf(p[0]), ExprOf(p[1])});
+        }
+        if (const auto a = body.find("axis"); polygon && a != body.end()) {
+            if (!a->is_boolean()) return in.Fail("«axis» — true или false");
+            s.axis = a->get<bool>();
+        }
+    } else {
+        return r.Fail(std::format("неизвестная фигура «{}» (rect, circle, polygon, hexagon, axis)", type));
+    }
+    return s;
+}
+
+Expected<PackStep> ReadStep(const Json& j, const Reader& r) {
+    if (!j.is_object() || j.size() != 1) return r.Fail("шаг — объект с одним ключом: sketch, extrude или revolve");
+    const auto& [type, body] = *j.items().begin();
+    PackStep step;
+    Error err;
+    const Reader in(std::format("шаг {}", type));
+    if (!body.is_object()) return in.Fail("параметры шага — объект");
+    const auto readOperation = [&]() -> bool {
+        std::string op;
+        if (!in.String(body, "operation", op, false, err)) return false;
+        if (op.empty()) return true;
+        if (op == "new") step.operation = PackStep::Operation::New;
+        else if (op == "join") step.operation = PackStep::Operation::Join;
+        else if (op == "cut") step.operation = PackStep::Operation::Cut;
+        else {
+            err = in.Fail(std::format("«operation»: new, join или cut, а не «{}»", op));
+            return false;
+        }
+        return true;
+    };
+    if (type == "sketch") {
+        step.type = PackStep::Type::Sketch;
+        if (!in.String(body, "plane", step.plane, true, err)) return err;
+        if (step.plane != "XY" && step.plane != "XZ" && step.plane != "YZ") return in.Fail("«plane»: XY, XZ или YZ");
+        const auto shapes = body.find("shapes");
+        if (shapes == body.end() || !shapes->is_array() || shapes->empty()) return in.Fail("нужен непустой список «shapes»");
+        for (const Json& s : *shapes) {
+            Expected<PackShape> shape = ReadShape(s, in);
+            if (!shape) return shape.GetError();
+            step.shapes.push_back(std::move(*shape));
+        }
+    } else if (type == "extrude") {
+        step.type = PackStep::Type::Extrude;
+        std::string dir;
+        if (!in.Expr(body, "distance", step.distance, true, err) || !in.String(body, "direction", dir, false, err) || !readOperation())
+            return err;
+        if (dir.empty() || dir == "normal") step.direction = PackStep::Direction::Normal;
+        else if (dir == "reversed") step.direction = PackStep::Direction::Reversed;
+        else if (dir == "symmetric") step.direction = PackStep::Direction::Symmetric;
+        else return in.Fail("«direction»: normal, reversed или symmetric");
+    } else if (type == "revolve") {
+        step.type = PackStep::Type::Revolve;
+        if (!readOperation()) return err;
+    } else {
+        return r.Fail(std::format("неизвестный шаг «{}» (sketch, extrude, revolve)", type));
+    }
+    return step;
+}
+
+Expected<PackKind> ReadKind(const Json& j) {
+    PackKind k;
+    Error err;
+    if (!j.is_object()) return Error{"вид изделия — объект"};
+    Reader r("вид изделия");
+    if (!r.String(j, "id", k.id, true, err)) return err;
+    r = Reader(std::format("вид «{}»", k.id));
+    if (!ValidId(k.id)) return r.Fail("id — латиница, цифры, «.», «-», «_», до 64 знаков");
+    if (!r.String(j, "group", k.group, true, err) || !r.String(j, "variety", k.variety, true, err) ||
+        !r.String(j, "title", k.title, true, err) || !r.String(j, "noun", k.noun, true, err) ||
+        !r.String(j, "size_title", k.sizeTitle, false, err) || !r.String(j, "appearance", k.appearance, false, err) ||
+        !r.String(j, "material", k.material, false, err))
+        return err;
+    if (k.appearance.empty()) k.appearance = "std.steel";
+    if (k.material.empty()) k.material = "Сталь";
+    const auto build = j.find("build");
+    if (build == j.end() || !build->is_array() || build->empty()) return r.Fail("нужен непустой список шагов «build»");
+    bool sketch = false, solid = false, axis = false;
+    for (const Json& s : *build) {
+        Expected<PackStep> step = ReadStep(s, r);
+        if (!step) return Error{std::format("вид «{}», {}", k.id, step.GetError().message)};
+        if (step->type == PackStep::Type::Sketch) {
+            sketch = true;
+            axis = std::ranges::any_of(step->shapes, [](const PackShape& sh) { return sh.type == PackShape::Type::Axis || sh.axis; });
+        } else if (!sketch) return r.Fail("операция до первого эскиза");
+        else if (step->type == PackStep::Type::Revolve && !axis) return r.Fail("вращение: в эскизе перед ним нет осевой (axis)");
+        else {
+            const bool explicitOp = s.begin()->contains("operation");
+            if (!solid && explicitOp && step->operation != PackStep::Operation::New) return r.Fail("первая операция должна создавать тело (new)");
+            if (solid && !explicitOp) step->operation = PackStep::Operation::Join;   // later ones join by default
+            solid = true;
+        }
+        k.build.push_back(std::move(*step));
+    }
+    if (!solid) return r.Fail("рецепт не создаёт тела (нет extrude или revolve)");
+    if (const auto e = j.find("envelope"); e != j.end()) {
+        if (!e->is_array() || e->size() != 3) return r.Fail("«envelope» — три выражения [x, y, z]");
+        for (std::size_t i = 0; i < 3; ++i) k.envelope[i] = ExprOf((*e)[i]);
+    }
+    return k;
+}
+
+Expected<PackStandard> ReadStandard(const Json& j) {
+    PackStandard s;
+    Error err;
+    if (!j.is_object()) return Error{"стандарт — объект"};
+    Reader r("стандарт");
+    if (!r.String(j, "id", s.id, true, err)) return err;
+    r = Reader(std::format("стандарт «{}»", s.id));
+    if (!ValidId(s.id)) return r.Fail("id — латиница, цифры, «.», «-», «_», до 64 знаков");
+    if (!r.String(j, "title", s.title, true, err) || !r.String(j, "kind", s.kind, true, err) || !r.String(j, "note", s.note, false, err) ||
+        !r.String(j, "family", s.family, false, err) || !r.String(j, "size", s.size, true, err) ||
+        !r.String(j, "designation", s.designation, false, err))
+        return err;
+    if (!s.family.empty() && s.family != "ГОСТ" && s.family != "ISO" && s.family != "DIN") return r.Fail("«family»: ГОСТ, ISO или DIN");
+
+    const auto cols = j.find("columns");
+    if (cols == j.end() || !cols->is_array() || cols->empty()) return r.Fail("нужен список столбцов «columns»");
+    std::set<std::string> names;
+    for (const Json& c : *cols) {
+        PackColumn col;
+        if (c.is_string()) col.name = c.get<std::string>();
+        else if (c.is_object()) {
+            if (!r.String(c, "name", col.name, true, err) || !r.String(c, "title", col.title, false, err)) return err;
+            if (const auto l = c.find("length"); l != c.end()) {
+                if (!l->is_boolean()) return r.Fail("«length» столбца — true или false");
+                col.length = l->get<bool>();
+            }
+        } else return r.Fail("столбец — имя или объект {name, title, length}");
+        // A size column becomes a variable of the part; a reference one (mass…)
+        // only needs a name for templates.
+        if (col.length && (!IsValidVariableName(col.name) || col.name == "L" || LooksLikeDimension(col.name)))
+            return r.Fail(std::format("имя столбца «{}» не годится для переменной (буква в начале; не единица измерения, "
+                                      "не L и не d1, d2…)", col.name));
+        if (!col.length && (col.name.empty() || col.name.find_first_of("{} ") != std::string::npos))
+            return r.Fail(std::format("имя столбца «{}» — без пробелов и скобок", col.name));
+        if (!names.insert(col.name).second) return r.Fail(std::format("столбец «{}» повторяется", col.name));
+        s.columns.push_back(std::move(col));
+    }
+
+    const auto rows = j.find("rows");
+    if (rows == j.end() || !rows->is_array() || rows->empty()) return r.Fail("нужна таблица размеров «rows»");
+    for (const Json& row : *rows) {
+        if (!row.is_array() || row.size() != s.columns.size())
+            return r.Fail(std::format("строка {} — не {} чисел", row.dump(), s.columns.size()));
+        std::vector<double> values;
+        for (const Json& v : row) {
+            if (!v.is_number() || !std::isfinite(v.get<double>())) return r.Fail(std::format("строка {}: не число", row.dump()));
+            values.push_back(v.get<double>());
+        }
+        s.rows.push_back(std::move(values));
+    }
+
+    const auto list = j.find("lengths");
+    const auto range = j.find("length");
+    if (list != j.end() && range != j.end()) return r.Fail("либо «lengths» (список), либо «length» (диапазон)");
+    if (list != j.end()) {
+        if (!list->is_array() || list->empty()) return r.Fail("«lengths» — непустой список длин, мм");
+        s.length.mode = PackLength::Mode::List;
+        for (const Json& v : *list) {
+            if (!v.is_number() || v.get<double>() <= 0) return r.Fail("длины в «lengths» — положительные числа");
+            s.length.list.push_back(v.get<double>());
+        }
+    } else if (range != j.end()) {
+        if (!range->is_object()) return r.Fail("«length» — {min, max, default}");
+        const auto num = [&](const char* key, double& out) {
+            const auto it = range->find(key);
+            if (it == range->end() || !it->is_number()) return false;
+            out = it->get<double>();
+            return std::isfinite(out);
+        };
+        s.length.mode = PackLength::Mode::Free;
+        if (!num("min", s.length.min) || !num("max", s.length.max)) return r.Fail("в «length» нужны числа min и max");
+        if (!num("default", s.length.preset)) s.length.preset = s.length.min;
+        if (s.length.min <= 0 || s.length.max < s.length.min || s.length.preset < s.length.min || s.length.preset > s.length.max)
+            return r.Fail("«length»: 0 < min ≤ default ≤ max");
+    }
+    return s;
+}
+
+/// Placeholders "{name}" of a template.
+std::vector<std::string> Placeholders(std::string_view text) {
+    std::vector<std::string> out;
+    for (std::size_t i = text.find('{'); i != std::string_view::npos; i = text.find('{', i + 1)) {
+        const std::size_t end = text.find('}', i);
+        if (end == std::string_view::npos) break;
+        out.emplace_back(text.substr(i + 1, end - i - 1));
+    }
+    return out;
+}
+
+/// The value of a column (or L) in an expression.
+NameLookup RowLookup(const PackStandard& s, std::size_t row, double length) {
+    return [&s, row, length](std::string_view name) -> std::optional<NamedValue> {
+        if (name == "L" && s.length.mode != PackLength::Mode::None) return NamedValue{length, Quantity::Length};
+        for (std::size_t i = 0; i < s.columns.size(); ++i)
+            if (s.columns[i].length && s.columns[i].name == name) return NamedValue{s.rows[row][i], Quantity::Length};
+        return std::nullopt;
+    };
+}
+
+/// Every expression of the recipe, with what it must be (a size > 0, or any coordinate).
+template <class F>
+void ForEachExpression(const PackKind& k, F&& f) {
+    for (const PackStep& step : k.build) {
+        if (step.type == PackStep::Type::Extrude) f(step.distance, true);
+        for (const PackShape& sh : step.shapes) {
+            for (const std::string* e : {&sh.w, &sh.h, &sh.d, &sh.s})
+                if (!e->empty()) f(*e, true);
+            for (const std::string* e : {&sh.r, &sh.x, &sh.y})
+                if (!e->empty()) f(*e, false);
+            for (const auto& p : sh.points) f(p[0], false), f(p[1], false);
+        }
+    }
+    for (const std::string& e : k.envelope)
+        if (!e.empty()) f(e, true);
+}
+
+} // namespace
+
+std::string PackNumber(double v) {
+    std::string s = std::format("{:.3f}", v);
+    while (s.back() == '0') s.pop_back();
+    if (s.back() == '.') s.pop_back();
+    if (s == "-0") s = "0";
+    return s;
+}
+
+std::string FillPackTemplate(std::string_view text, const PackStandard& s, std::size_t row,
+                             std::span<const std::pair<std::string, std::string>> extra) {
+    std::string out;
+    std::size_t i = 0;
+    while (i < text.size()) {
+        const std::size_t open = text.find('{', i);
+        const std::size_t close = open == std::string_view::npos ? open : text.find('}', open);
+        if (close == std::string_view::npos) {
+            out += text.substr(i);
+            break;
+        }
+        out += text.substr(i, open - i);
+        const std::string_view name = text.substr(open + 1, close - open - 1);
+        bool done = false;
+        for (const auto& [key, value] : extra)
+            if (key == name) out += value, done = true;
+        for (std::size_t c = 0; !done && c < s.columns.size(); ++c)
+            if (s.columns[c].name == name) out += PackNumber(s.rows[row][c]), done = true;
+        if (!done) out += text.substr(open, close - open + 1);
+        i = close + 1;
+    }
+    return out;
+}
+
+std::string PackSize(const PackStandard& s, std::size_t row) { return FillPackTemplate(s.size, s, row, {}); }
+
+Status CheckStandard(const PackStandard& s, const PackKind& k) {
+    const auto fail = [&](std::string_view what) { return Error{std::format("стандарт «{}»: {}", s.id, what)}; };
+    std::set<std::string> known;
+    for (const PackColumn& c : s.columns)
+        if (c.length) known.insert(c.name);
+    if (s.length.mode != PackLength::Mode::None) known.insert("L");
+    // Placeholders of the size and the designation.
+    for (const std::string& p : Placeholders(s.size))
+        if (std::ranges::none_of(s.columns, [&](const PackColumn& c) { return c.name == p; }))
+            return fail(std::format("в «size» нет столбца «{}»", p));
+    for (const std::string& p : Placeholders(s.designation))
+        if (p != "size" && p != "L" && p != "title" && p != "noun" && std::ranges::none_of(s.columns, [&](const PackColumn& c) { return c.name == p; }))
+            return fail(std::format("в «designation» неизвестное поле «{}»", p));
+    std::set<std::string> sizes;
+    for (std::size_t row = 0; row < s.rows.size(); ++row)
+        if (!sizes.insert(PackSize(s, row)).second) return fail(std::format("размер «{}» повторяется", PackSize(s, row)));
+    // Expressions name known variables and give sizes > 0 for every row.
+    std::string problem;
+    ForEachExpression(k, [&](const std::string& e, bool) {
+        if (!problem.empty()) return;
+        for (const std::string& name : ReferencedNames(e))
+            if (!known.contains(name)) problem = std::format("выражение «{}» вида «{}»: нет переменной «{}»", e, k.id, name);
+    });
+    if (!problem.empty()) return fail(problem);
+    const double length = s.length.mode == PackLength::Mode::List ? s.length.list.front() : s.length.preset;
+    for (std::size_t row = 0; row < s.rows.size() && problem.empty(); ++row) {
+        const NameLookup lookup = RowLookup(s, row, length);
+        ForEachExpression(k, [&](const std::string& e, bool positive) {
+            if (!problem.empty()) return;
+            const Expected<double> v = EvaluateExpression(e, Quantity::Length, UnitSystem{}, lookup);
+            if (!v) problem = std::format("размер «{}», «{}»: {}", PackSize(s, row), e, v.GetError().message);
+            else if (positive && !(*v > 0)) problem = std::format("размер «{}»: «{}» = {} — должно быть больше нуля", PackSize(s, row), e, *v);
+        });
+    }
+    if (!problem.empty()) return fail(problem);
+    return Status::Ok();
+}
+
+Expected<Pack> ParsePack(std::string_view text) {
+    const Json root = Json::parse(text, nullptr, false);
+    if (root.is_discarded() || !root.is_object()) return Error{"Пакет — не JSON-объект (файл повреждён?)"};
+    Pack pack;
+    Error err;
+    const Reader r("пакет");
+    std::string format;
+    if (!r.String(root, "format", format, true, err)) return err;
+    if (format != kPackFormat) return r.Fail(std::format("«format» должен быть «{}»", kPackFormat));
+    const auto version = root.find("version");
+    if (version == root.end() || !version->is_number_integer()) return r.Fail("нет «version» (целое число)");
+    if (version->get<int>() > kPackVersion) return r.Fail("пакет новее этой версии BreezeCAD — обновите программу");
+    if (version->get<int>() < 1) return r.Fail("«version» — с 1");
+    if (!r.String(root, "id", pack.id, true, err) || !r.String(root, "title", pack.title, true, err) ||
+        !r.String(root, "source", pack.source, false, err) || !r.String(root, "author", pack.author, false, err) ||
+        !r.String(root, "version_of_data", pack.version, false, err))
+        return err;
+    if (!ValidId(pack.id)) return r.Fail("id — латиница, цифры, «.», «-», «_», до 64 знаков");
+
+    if (const auto kinds = root.find("kinds"); kinds != root.end()) {
+        if (!kinds->is_array()) return r.Fail("«kinds» — список");
+        for (const Json& k : *kinds) {
+            Expected<PackKind> kind = ReadKind(k);
+            if (!kind) return kind.GetError();
+            if (std::ranges::any_of(pack.kinds, [&](const PackKind& o) { return o.id == kind->id; }))
+                return r.Fail(std::format("вид «{}» повторяется", kind->id));
+            pack.kinds.push_back(std::move(*kind));
+        }
+    }
+    const auto standards = root.find("standards");
+    if (standards == root.end() || !standards->is_array() || standards->empty()) return r.Fail("нужен непустой список «standards»");
+    for (const Json& s : *standards) {
+        Expected<PackStandard> standard = ReadStandard(s);
+        if (!standard) return standard.GetError();
+        if (std::ranges::any_of(pack.standards, [&](const PackStandard& o) { return o.id == standard->id; }))
+            return r.Fail(std::format("стандарт «{}» повторяется", standard->id));
+        // Kinds of this pack are checked now; kinds of other packs when it is added.
+        const auto kind = std::ranges::find(pack.kinds, standard->kind, &PackKind::id);
+        if (kind != pack.kinds.end())
+            if (const Status ok = CheckStandard(*standard, *kind); !ok) return ok.GetError();
+        pack.standards.push_back(std::move(*standard));
+    }
+    return pack;
+}
+
+Expected<Pack> ReadPack(const std::filesystem::path& file) {
+    std::error_code ec;
+    const std::uintmax_t size = std::filesystem::file_size(file, ec);
+    if (ec) return Error{"Не удалось открыть файл пакета"};
+    if (size > kMaxPackBytes) return Error{"Файл пакета слишком большой (больше 16 МБ)"};
+    std::ifstream in(file, std::ios::binary);
+    if (!in) return Error{"Не удалось открыть файл пакета"};
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    Expected<Pack> pack = ParsePack(text);
+    if (pack) pack->file = file;
+    return pack;
+}
+
+// --- Loaded packs ------------------------------------------------------------
+
+namespace {
+
+struct Registry {
+    std::vector<std::unique_ptr<Pack>> packs;
+    unsigned                           generation = 1;
+};
+
+Registry& Loaded() {
+    static Registry registry;
+    return registry;
+}
+
+} // namespace
+
+const PackKind* FindPackKind(std::string_view id) {
+    for (const auto& p : Loaded().packs)
+        for (const PackKind& k : p->kinds)
+            if (k.id == id) return &k;
+    return nullptr;
+}
+
+Status AddPack(Pack pack) {
+    Registry& reg = Loaded();
+    const auto fail = [&](std::string_view what) { return Error{std::format("пакет «{}»: {}", pack.id, what)}; };
+    for (const auto& p : reg.packs)
+        if (p->id == pack.id) return fail("уже загружен пакет с таким id");
+    for (const PackKind& k : pack.kinds)
+        if (FindPackKind(k.id)) return fail(std::format("вид «{}» уже есть в другом пакете", k.id));
+    for (const PackStandard& s : pack.standards) {
+        if (FindStandard(s.id)) return fail(std::format("стандарт «{}» уже есть в библиотеке", s.id));
+        const auto own = std::ranges::find(pack.kinds, s.kind, &PackKind::id);
+        if (own != pack.kinds.end()) continue;   // checked by ParsePack
+        const PackKind* other = FindPackKind(s.kind);
+        if (!other) return fail(std::format("стандарт «{}»: нет вида «{}»", s.id, s.kind));
+        if (const Status ok = CheckStandard(s, *other); !ok) return fail(ok.GetError().message);
+    }
+    reg.packs.push_back(std::make_unique<Pack>(std::move(pack)));
+    ++reg.generation;
+    return Status::Ok();
+}
+
+void ClearPacks() {
+    Registry& reg = Loaded();
+    reg.packs.clear();
+    ++reg.generation;
+}
+
+std::span<const std::unique_ptr<Pack>> LoadedPacks() { return Loaded().packs; }
+
+unsigned PacksGeneration() { return Loaded().generation; }
+
+PacksLoaded LoadPacks(std::span<const std::filesystem::path> folders) {
+    ClearPacks();
+    PacksLoaded out;
+    for (const std::filesystem::path& folder : folders) {
+        std::vector<std::filesystem::path> files;
+        for (const auto& e : FolderEntries(folder))
+            if (IsFile(e) && e.path().extension() == kPackExtension) files.push_back(e.path());
+        std::ranges::sort(files);   // the same order on every system
+        for (const std::filesystem::path& f : files) {
+            const std::u8string name = f.filename().u8string();
+            const std::string shown(name.begin(), name.end());
+            Expected<Pack> pack = ReadPack(f);
+            if (!pack) {
+                out.problems.push_back(std::format("{}: {}", shown, pack.GetError().message));
+                continue;
+            }
+            // The same pack in a later folder (the shipped copy of one the user
+            // installed, maybe older): the first one stays, without a word.
+            if (std::ranges::any_of(Loaded().packs, [&](const auto& p) { return p->id == pack->id; })) continue;
+            if (const Status ok = AddPack(std::move(*pack)); !ok) out.problems.push_back(std::format("{}: {}", shown, ok.GetError().message));
+            else ++out.packs;
+        }
+    }
+    return out;
+}
+
+Expected<std::filesystem::path> InstallPack(const std::filesystem::path& file, const std::filesystem::path& folder) {
+    Expected<Pack> pack = ReadPack(file);
+    if (!pack) return pack.GetError();
+    std::error_code ec;
+    std::filesystem::create_directories(folder, ec);
+    const std::filesystem::path target = folder / (pack->id + std::string(kPackExtension));
+    if (std::filesystem::exists(target, ec) && std::filesystem::equivalent(file, target, ec)) return target;   // already there
+    std::filesystem::copy_file(file, target, std::filesystem::copy_options::overwrite_existing, ec);
+    if (ec) return Error{"Не удалось скопировать пакет в папку библиотеки"};
+    return target;
+}
+
+} // namespace bz::doc::parts

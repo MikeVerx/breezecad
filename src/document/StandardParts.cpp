@@ -1,14 +1,17 @@
 #include "document/StandardParts.h"
 
+#include "core/Expression.h"
 #include "document/ExtrudeFeature.h"
 #include "document/Origin.h"
 #include "document/RevolveFeature.h"
 #include "document/SketchFeature.h"
+#include "document/StandardPacks.h"
 #include "document/ThreadFeature.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <deque>
 #include <format>
 #include <optional>
 
@@ -237,7 +240,104 @@ constexpr StandardInfo kStandards[] = {
     {"iso1234", "ISO 1234", PartKind::CotterPin, ""},
 };
 
-bool IsGost(const StandardInfo& s) { return s.title.starts_with("ГОСТ"); }
+// ===========================================================================
+// Kinds and standards of the loaded packs (StandardPacks.h), next to the
+// built-in ones. Rebuilt when the packs change.
+// ===========================================================================
+
+struct Catalogue {
+    unsigned                          generation = 0;
+    std::vector<KindInfo>             kinds;           ///< built-in, then the packs'
+    std::vector<const PackKind*>      packKinds;       ///< by PartKind - kFirstPackKind
+    std::vector<StandardInfo>         standards;       ///< the packs'
+    std::vector<const PackStandard*>  packStandards;   ///< parallel to `standards`
+    std::vector<GroupInfo>            groups;          ///< built-in folders, then new ones of the packs
+    std::deque<std::vector<PartKind>> groupKinds;      ///< what `groups` point into
+};
+
+const Catalogue& Cat() {
+    static Catalogue c;
+    if (c.generation == PacksGeneration()) return c;
+    c = Catalogue{};
+    c.generation = PacksGeneration();
+    c.kinds.assign(std::begin(kKinds), std::end(kKinds));
+    for (const GroupInfo& g : kGroups) {
+        c.groupKinds.emplace_back(g.kinds.begin(), g.kinds.end());
+        c.groups.push_back({g.name, {}});
+    }
+    for (const auto& pack : LoadedPacks())
+        for (const PackKind& k : pack->kinds) {
+            if (kFirstPackKind + c.packKinds.size() > 255) break;   // PartKind is a byte
+            const auto kind = static_cast<PartKind>(kFirstPackKind + c.packKinds.size());
+            c.packKinds.push_back(&k);
+            c.kinds.push_back({kind, k.variety, k.title, k.noun});
+            auto g = std::ranges::find(c.groups, std::string_view(k.group), &GroupInfo::name);
+            if (g == c.groups.end()) {
+                c.groupKinds.emplace_back();
+                c.groups.push_back({k.group, {}});
+                g = c.groups.end() - 1;
+            }
+            c.groupKinds[static_cast<std::size_t>(g - c.groups.begin())].push_back(kind);
+        }
+    for (std::size_t i = 0; i < c.groups.size(); ++i) c.groups[i].kinds = c.groupKinds[i];
+    for (const auto& pack : LoadedPacks())
+        for (const PackStandard& s : pack->standards) {
+            const auto k = std::ranges::find_if(c.packKinds, [&](const PackKind* p) { return p->id == s.kind; });
+            if (k == c.packKinds.end()) continue;
+            c.standards.push_back({s.id, s.title, static_cast<PartKind>(kFirstPackKind + (k - c.packKinds.begin())), s.note});
+            c.packStandards.push_back(&s);
+        }
+    return c;
+}
+
+/// The pack data of a standard; nullptr for a built-in one.
+const PackStandard* PackOf(const StandardInfo& s) {
+    if (!IsPackKind(s.kind)) return nullptr;
+    const Catalogue& c = Cat();
+    for (std::size_t i = 0; i < c.standards.size(); ++i)
+        if (c.standards[i].id == s.id) return c.packStandards[i];
+    return nullptr;
+}
+
+const PackKind* PackKindOf(PartKind kind) {
+    if (!IsPackKind(kind)) return nullptr;
+    const std::size_t i = static_cast<unsigned>(kind) - kFirstPackKind;
+    const Catalogue& c = Cat();
+    return i < c.packKinds.size() ? c.packKinds[i] : nullptr;
+}
+
+/// Built-in standards, then the packs'.
+template <class F>
+void ForEachStandard(F&& f) {
+    for (const StandardInfo& s : kStandards) f(s);
+    for (const StandardInfo& s : Cat().standards) f(s);
+}
+
+/// "40x20x2", "40 х 20 х 2,5" -> "40×20×2.5": how a size of a pack may be typed.
+std::string NormalSize(std::string_view size) {
+    std::string out;
+    for (std::size_t i = 0; i < size.size(); ++i) {
+        const char c = size[i];
+        if (c == ' ') continue;
+        if (c == 'x' || c == 'X' || c == '*') out += "\xC3\x97";
+        else if (c == ',') out += '.';
+        else if (size.substr(i).starts_with("\xD1\x85") || size.substr(i).starts_with("\xD0\xA5")) {   // Cyrillic х, Х
+            out += "\xC3\x97";
+            ++i;
+        } else out += c;
+    }
+    return out;
+}
+
+/// The row of a pack standard with this size, or nullopt.
+std::optional<std::size_t> PackRow(const PackStandard& p, std::string_view size) {
+    const std::string want = NormalSize(size);
+    for (std::size_t i = 0; i < p.rows.size(); ++i)
+        if (NormalSize(PackSize(p, i)) == want) return i;
+    return std::nullopt;
+}
+
+bool IsGost(const StandardInfo& s) { return FamilyOf(s) == Family::Gost; }
 
 /// A number as written in a size or a designation: "10", "2.5".
 std::string Num(double v) {
@@ -354,8 +454,10 @@ public:
     Builder(Document& d) : myDoc(d) {}
 
     /// A user variable; returns it for use in expressions.
-    X Var(const std::string& name, double value, Quantity q = Quantity::Length) {
-        myDoc.variables.push_back(Parameter{.name = name, .expression = Num(value), .quantity = q, .value = value, .error = {}});
+    X Var(const std::string& name, double value, Quantity q = Quantity::Length) { return Var(name, value, Num(value), q); }
+    /// The same with the value written as `text` (a pack's table: every digit kept).
+    X Var(const std::string& name, double value, const std::string& text, Quantity q = Quantity::Length) {
+        myDoc.variables.push_back(Parameter{.name = name, .expression = text, .quantity = q, .value = value, .error = {}});
         return {name, value};
     }
 
@@ -510,6 +612,9 @@ private:
 public:
     /// The feature that made the body (its look is set on it).
     ObjectId FirstBody() const { return myFirstBody; }
+    IdGenerator& Ids() { return myDoc.Ids(); }
+    /// A constraint without a value between two entities.
+    void Align(SketchFeature& sk, sketch::ConstraintType type, ObjectId a, ObjectId b) { Geometric(sk, type, a, b); }
     void     RealThread(bool real) { myRealThread = real; }
 
     /// A circle centred at `centre` (held by dimensions) with a diameter dimension.
@@ -548,31 +653,275 @@ void Finish(Document& d, std::string name, std::string designation) {
     d.MarkChanged(0);
 }
 
+// --- Parts of packs: a recipe of simple shapes over the table's variables ------
+
+/// A signed coordinate with the expression that gives it ("-(b/2)", -20).
+struct S {
+    std::string text;
+    double      v = 0;
+};
+
+/// A + or - at the top level of `t` (not inside parentheses, not a sign).
+bool HasAddSub(std::string_view t) {
+    int depth = 0;
+    char before = '(';   // the last non-space character: a sign follows an operator or '('
+    for (const char c : t) {
+        if (c == ' ') continue;
+        if (c == '(') ++depth;
+        else if (c == ')') --depth;
+        else if ((c == '+' || c == '-') && depth == 0 && std::string_view("+-*/(").find(before) == std::string_view::npos) return true;
+        before = c;
+    }
+    return false;
+}
+/// The whole of `t` is one group in parentheses.
+bool WholeGroup(std::string_view t) {
+    if (t.size() < 2 || t.front() != '(' || t.back() != ')') return false;
+    int depth = 0;
+    for (std::size_t i = 0; i + 1 < t.size(); ++i) {
+        depth += t[i] == '(' ? 1 : t[i] == ')' ? -1 : 0;
+        if (depth == 0) return false;   // "(a) * (b)": the first group closes early
+    }
+    return true;
+}
+std::string Paren(const std::string& t) { return HasAddSub(t) ? "(" + t + ")" : t; }
+
+/// The expression with the opposite sign, kept readable: "-b/2" -> "b/2",
+/// "R - b/2" -> "b/2 - R", "a + b" -> "-(a + b)".
+std::string Negated(const std::string& t) {
+    if (t.starts_with("-")) {
+        const std::string rest = t.substr(1);
+        if (WholeGroup(rest)) return rest.substr(1, rest.size() - 2);
+        if (!HasAddSub(rest)) return rest;
+    }
+    // One subtraction at the top level: swap its sides.
+    int depth = 0, subs = 0;
+    std::size_t at = std::string::npos;
+    char before = '(';
+    for (std::size_t i = 0; i < t.size(); ++i) {
+        const char c = t[i];
+        if (c == ' ') continue;
+        if (c == '(') ++depth;
+        else if (c == ')') --depth;
+        else if ((c == '+' || c == '-') && depth == 0 && std::string_view("+-*/(").find(before) == std::string_view::npos) {
+            if (c == '+') subs = 99;
+            else ++subs, at = i;
+        }
+        before = c;
+    }
+    if (subs == 1 && t[0] != '-') {
+        std::string a = t.substr(0, at), b = t.substr(at + 1);
+        while (!a.empty() && a.back() == ' ') a.pop_back();
+        while (!b.empty() && b.front() == ' ') b.erase(0, 1);
+        return b + " - " + Paren(a);
+    }
+    return HasAddSub(t) ? "-(" + t + ")" : "-" + t;
+}
+
+bool IsZero(const S& a) { return std::abs(a.v) < 1e-12 && (a.text.empty() || a.text == "0"); }
+S Minus(const S& a, const S& b) {
+    if (IsZero(b)) return a;
+    if (IsZero(a)) return {Negated(b.text), -b.v};
+    return {a.text + " - " + Paren(b.text), a.v - b.v};
+}
+S Plus(const S& a, const S& b) {
+    if (IsZero(a)) return b;
+    if (IsZero(b)) return a;
+    if (b.text.starts_with("-") && !HasAddSub(b.text.substr(1))) return Minus(a, {b.text.substr(1), -b.v});
+    if (a.text.starts_with("-") && !HasAddSub(a.text.substr(1))) {   // -x + b
+        const std::string x = a.text.substr(1);
+        if (a.v + b.v < 0) return {"-(" + x + " - " + Paren(b.text) + ")", a.v + b.v};   // its magnitude reads "x - b"
+        return Minus(b, {x, -a.v});
+    }
+    return {a.text + " + " + b.text, a.v + b.v};
+}
+S HalfOf(const S& a) { return {Paren(a.text) + "/2", a.v / 2}; }
+
+/// The point (x, y) as the builder holds it: magnitudes with directions.
+P PointOf(const S& x, const S& y) {
+    const auto mag = [](const S& a) { return X{a.v < 0 ? Negated(a.text) : (a.text.empty() ? std::string("0") : a.text), std::abs(a.v)}; };
+    return {mag(x), mag(y), x.v < 0, y.v < 0};
+}
+
+class PackBuilder {
+public:
+    PackBuilder(Builder& b, const PackStandard& s, std::size_t row, double length) : myB(b), myStandard(s) {
+        for (std::size_t i = 0; i < s.columns.size(); ++i)
+            if (s.columns[i].length) myValues.emplace_back(s.columns[i].name, s.rows[row][i]);
+        if (s.length.mode != PackLength::Mode::None) myValues.emplace_back("L", length);
+        for (const auto& [name, value] : myValues) myB.Var(name, value, std::format("{}", value));   // shortest exact form
+    }
+
+    /// An expression of the recipe; empty text is 0.
+    Expected<S> Ex(const std::string& text) const {
+        if (text.empty()) return S{"0", 0};
+        const Expected<double> v = EvaluateExpression(text, Quantity::Length, UnitSystem{}, [this](std::string_view name) -> std::optional<NamedValue> {
+            for (const auto& [n, value] : myValues)
+                if (n == name) return NamedValue{value, Quantity::Length};
+            return std::nullopt;
+        });
+        if (!v) return Error{std::format("{}: «{}»: {}", myStandard.id, text, v.GetError().message)};
+        return S{text, *v};
+    }
+
+    Status Shape(SketchFeature& sk, const PackShape& shape, ObjectId& axis) {
+        switch (shape.type) {
+            case PackShape::Type::Rect: {
+                const Expected<S> w = Ex(shape.w), h = Ex(shape.h), r = Ex(shape.r), cx = Ex(shape.x), cy = Ex(shape.y);
+                for (const Expected<S>* e : {&w, &h, &r, &cx, &cy})
+                    if (!*e) return e->GetError();
+                Rect(sk, *w, *h, *r, *cx, *cy);
+                return Status::Ok();
+            }
+            case PackShape::Type::Circle: {
+                const Expected<S> d = Ex(shape.d), cx = Ex(shape.x), cy = Ex(shape.y);
+                for (const Expected<S>* e : {&d, &cx, &cy})
+                    if (!*e) return e->GetError();
+                if (IsZero(*cx) && IsZero(*cy)) myB.Circle(sk, X{d->text, d->v});
+                else myB.CircleAt(sk, PointOf(*cx, *cy), X{d->text, d->v});
+                return Status::Ok();
+            }
+            case PackShape::Type::Hexagon: {
+                const Expected<S> across = Ex(shape.s);
+                if (!across) return across.GetError();
+                myB.Hexagon(sk, X{across->text, across->v});
+                return Status::Ok();
+            }
+            case PackShape::Type::Axis: {
+                const Expected<S> x0 = Ex(shape.points[0][0]), y0 = Ex(shape.points[0][1]), x1 = Ex(shape.points[1][0]),
+                                  y1 = Ex(shape.points[1][1]);
+                for (const Expected<S>* e : {&x0, &y0, &x1, &y1})
+                    if (!*e) return e->GetError();
+                axis = myB.Axis(sk, PointOf(*x0, *y0), PointOf(*x1, *y1));
+                return Status::Ok();
+            }
+            case PackShape::Type::Polygon: {
+                std::vector<P> points;
+                for (const auto& [px, py] : shape.points) {
+                    const Expected<S> x = Ex(px), y = Ex(py);
+                    if (!x) return x.GetError();
+                    if (!y) return y.GetError();
+                    points.push_back(PointOf(*x, *y));
+                }
+                const std::vector<ObjectId> lines = myB.Polygon(sk, points);
+                if (shape.axis) {
+                    Builder::MarkAxis(sk, lines.back());
+                    axis = lines.back();
+                }
+                return Status::Ok();
+            }
+        }
+        return Status::Ok();
+    }
+
+private:
+    /// w × h centred on (cx, cy); corners rounded by r unless r is 0. Each
+    /// arc's centre is held under its end on the horizontal side; the
+    /// solver's equal radii place it.
+    void Rect(SketchFeature& sk, const S& w, const S& h, const S& r, const S& cx, const S& cy) {
+        const S hw = HalfOf(w), hh = HalfOf(h);
+        const S right = Plus(cx, hw), left = Minus(cx, hw), top = Plus(cy, hh), bottom = Minus(cy, hh);
+        if (r.v < 1e-9) {
+            myB.Polygon(sk, {PointOf(right, bottom), PointOf(right, top), PointOf(left, top), PointOf(left, bottom)});
+            return;
+        }
+        const S innerR = Minus(right, r), innerL = Plus(left, r), innerT = Minus(top, r), innerB = Plus(bottom, r);
+        // Counter-clockwise from the bottom of the right side.
+        const ObjectId a1 = myB.Point(sk, PointOf(right, innerB)), a2 = myB.Point(sk, PointOf(right, innerT));
+        const ObjectId b1 = myB.Point(sk, PointOf(innerR, top)), b2 = myB.Point(sk, PointOf(innerL, top));
+        const ObjectId c1 = myB.Point(sk, PointOf(left, innerT)), c2 = myB.Point(sk, PointOf(left, innerB));
+        const ObjectId d1 = myB.Point(sk, PointOf(innerL, bottom)), d2 = myB.Point(sk, PointOf(innerR, bottom));
+        IdGenerator& ids = myB.Ids();
+        sk.sketch.AddLine(ids, a1, a2);
+        Corner(sk, a2, b1, b1, {innerR.v, innerT.v});
+        sk.sketch.AddLine(ids, b1, b2);
+        Corner(sk, b2, c1, b2, {innerL.v, innerT.v});
+        sk.sketch.AddLine(ids, c1, c2);
+        Corner(sk, c2, d1, d1, {innerL.v, innerB.v});
+        sk.sketch.AddLine(ids, d1, d2);
+        Corner(sk, d2, a1, d2, {innerR.v, innerB.v});
+    }
+
+    /// An arc from `start` to `end` counter-clockwise; its centre at `at`, held vertically under `under`.
+    void Corner(SketchFeature& sk, ObjectId start, ObjectId end, ObjectId under, Vec2 at) {
+        const ObjectId centre = sk.sketch.AddPoint(myB.Ids(), at);
+        myB.Align(sk, sketch::ConstraintType::Vertical, under, centre);
+        sk.sketch.AddArc(myB.Ids(), centre, start, end);
+    }
+
+    Builder&                                     myB;
+    const PackStandard&                          myStandard;
+    std::vector<std::pair<std::string, double>>  myValues;
+};
+
+/// Builds a part of a pack's kind from a row of its standard.
+Status BuildPack(Builder& b, const PackKind& kind, const PackStandard& standard, std::size_t row, double length, Envelope& envelope) {
+    PackBuilder pb(b, standard, row, length);
+    SketchFeature* sketch = nullptr;
+    ObjectId axis;
+    for (const PackStep& step : kind.build) {
+        const auto op = step.operation == PackStep::Operation::Cut    ? BooleanOp::Cut
+                        : step.operation == PackStep::Operation::Join ? BooleanOp::Join
+                                                                      : BooleanOp::NewBody;
+        switch (step.type) {
+            case PackStep::Type::Sketch: {
+                const ObjectId plane = step.plane == "XZ" ? origin::kPlaneXZ : step.plane == "YZ" ? origin::kPlaneYZ : origin::kPlaneXY;
+                sketch = &b.Sketch(plane);
+                axis = {};
+                for (const PackShape& shape : step.shapes)
+                    if (const Status ok = pb.Shape(*sketch, shape, axis); !ok) return ok;
+                break;
+            }
+            case PackStep::Type::Extrude: {
+                const Expected<S> d = pb.Ex(step.distance);
+                if (!d) return d.GetError();
+                b.Extrude(*sketch, X{d->text, d->v}, op, step.direction == PackStep::Direction::Reversed,
+                          step.direction == PackStep::Direction::Symmetric ? ExtentType::Symmetric : ExtentType::Distance);
+                break;
+            }
+            case PackStep::Type::Revolve:
+                if (!axis) return Error{std::format("{}: вращение без осевой (polygon с «axis»: true)", kind.id)};
+                b.Revolve(*sketch, axis, op);
+                break;
+        }
+    }
+    double* out[] = {&envelope.x, &envelope.y, &envelope.z};
+    for (std::size_t i = 0; i < 3; ++i) {
+        const Expected<S> e = pb.Ex(kind.envelope[i]);
+        if (!e) return e.GetError();
+        *out[i] = e->v;
+    }
+    return Status::Ok();
+}
+
 }   // namespace
 
 // ===========================================================================
 
-std::span<const KindInfo> Kinds() { return kKinds; }
+std::span<const KindInfo> Kinds() { return Cat().kinds; }
 
 const KindInfo& KindOf(PartKind kind) {
-    for (const KindInfo& k : kKinds)
+    for (const KindInfo& k : Cat().kinds)
         if (k.kind == kind) return k;
     return kKinds[0];
 }
 
-std::span<const GroupInfo> Groups() { return kGroups; }
+std::span<const GroupInfo> Groups() { return Cat().groups; }
 
 Family FamilyOf(const StandardInfo& s) {
-    if (IsGost(s)) return Family::Gost;
-    return s.title.starts_with("DIN") ? Family::Din : Family::Iso;
+    std::string_view by = s.title;
+    if (const PackStandard* p = PackOf(s); p && !p->family.empty()) by = p->family;
+    if (by.starts_with("ГОСТ")) return Family::Gost;
+    return by.starts_with("DIN") ? Family::Din : Family::Iso;
 }
 
 std::string ShortName(const StandardInfo& s) { return std::format("{} {}", KindOf(s.kind).noun, s.title); }
 
 std::vector<const StandardInfo*> Analogues(const StandardInfo& standard) {
     std::vector<const StandardInfo*> out;
-    for (const StandardInfo& s : kStandards)
+    ForEachStandard([&](const StandardInfo& s) {
         if (s.kind == standard.kind && s.id != standard.id) out.push_back(&s);
+    });
     return out;
 }
 
@@ -589,6 +938,7 @@ bool HasThread(PartKind kind) {
 }
 
 std::string_view DefaultAppearance(PartKind kind) {
+    if (const PackKind* k = PackKindOf(kind)) return k->appearance;
     switch (kind) {
         case PartKind::SpringWasher:
         case PartKind::RingExternal:
@@ -600,19 +950,26 @@ std::string_view DefaultAppearance(PartKind kind) {
 
 std::vector<const StandardInfo*> StandardsOf(PartKind kind) {
     std::vector<const StandardInfo*> out;
-    for (const StandardInfo& s : kStandards)
+    ForEachStandard([&](const StandardInfo& s) {
         if (s.kind == kind) out.push_back(&s);
+    });
     return out;
 }
 
 const StandardInfo* FindStandard(std::string_view id) {
-    for (const StandardInfo& s : kStandards)
-        if (s.id == id) return &s;
-    return nullptr;
+    const StandardInfo* found = nullptr;
+    ForEachStandard([&](const StandardInfo& s) {
+        if (!found && s.id == id) found = &s;
+    });
+    return found;
 }
 
 std::vector<std::string> Sizes(const StandardInfo& s) {
     std::vector<std::string> out;
+    if (const PackStandard* p = PackOf(s)) {
+        for (std::size_t i = 0; i < p->rows.size(); ++i) out.push_back(PackSize(*p, i));
+        return out;
+    }
     const auto threads = [&](auto rows) {
         for (const auto& r : rows) out.push_back(ThreadName(s, r.d));
     };
@@ -652,6 +1009,10 @@ std::vector<std::string> Sizes(const StandardInfo& s) {
 std::string MatchingSize(const StandardInfo& from, std::string_view size, const StandardInfo& to) {
     const std::vector<std::string> sizes = Sizes(to);
     if (sizes.empty()) return {};
+    if (const PackStandard* p = PackOf(to)) {   // the same size if the other table has it
+        const std::optional<std::size_t> row = PackRow(*p, size);
+        return row ? sizes[*row] : sizes.front();
+    }
     if (from.kind == PartKind::BallBearing && to.kind == PartKind::BallBearing) {
         // Through the ISO number: 204 (ГОСТ) = 6204.
         for (const BearingRow& r : kBearings) {
@@ -669,6 +1030,10 @@ std::string MatchingSize(const StandardInfo& from, std::string_view size, const 
 std::string MatchSize(const StandardInfo& standard, std::string_view given) {
     const std::vector<std::string> sizes = Sizes(standard);
     if (std::ranges::find(sizes, given) != sizes.end()) return std::string(given);
+    if (const PackStandard* p = PackOf(standard)) {   // "40x20x2", "40×20×2,5"
+        const std::optional<std::size_t> row = PackRow(*p, given);
+        return row ? sizes[*row] : std::string(given);
+    }
     if (given.starts_with("M") || given.starts_with("m")) {   // a Latin M typed for «М»
         const std::string cyrillic = "\xD0\x9C" + std::string(given.substr(1));
         if (std::ranges::find(sizes, cyrillic) != sizes.end()) return cyrillic;
@@ -681,6 +1046,7 @@ std::string MatchSize(const StandardInfo& standard, std::string_view given) {
 }
 
 std::vector<double> Lengths(const StandardInfo& s, std::string_view size) {
+    if (const PackStandard* p = PackOf(s)) return p->length.mode == PackLength::Mode::List ? p->length.list : std::vector<double>{};
     const std::optional<double> d = SizeNumber(size);
     if (!d) return {};
     switch (s.kind) {
@@ -713,6 +1079,17 @@ std::vector<double> Lengths(const StandardInfo& s, std::string_view size) {
     return {};
 }
 
+std::optional<LengthRange> FreeLength(const StandardInfo& s) {
+    const PackStandard* p = PackOf(s);
+    if (!p || p->length.mode != PackLength::Mode::Free) return std::nullopt;
+    return LengthRange{p->length.min, p->length.max, p->length.preset};
+}
+
+std::string_view SizeTitle(const StandardInfo& s) {
+    const PackKind* k = PackKindOf(s.kind);
+    return k ? std::string_view(k->sizeTitle) : std::string_view{};
+}
+
 namespace {
 std::string DesignationOf(const Request& q);
 }
@@ -729,6 +1106,17 @@ namespace {
 std::string DesignationOf(const Request& q) {
     const StandardInfo* s = FindStandard(q.standard);
     if (!s) return {};
+    if (const PackStandard* p = PackOf(*s)) {
+        const std::optional<std::size_t> row = PackRow(*p, q.size);
+        if (!row) return {};
+        const PackKind* kind = PackKindOf(s->kind);
+        const bool length = p->length.mode != PackLength::Mode::None;
+        std::string pattern = p->designation;
+        if (pattern.empty()) pattern = length ? "{noun} {size}\xC3\x97{L} {title}" : "{noun} {size} {title}";
+        const std::pair<std::string, std::string> extra[] = {
+            {"size", PackSize(*p, *row)}, {"L", PackNumber(q.length)}, {"title", p->title}, {"noun", kind ? kind->noun : std::string{}}};
+        return FillPackTemplate(pattern, *p, *row, extra);
+    }
     const std::string title(s->title);
     const bool gost = IsGost(*s);
     const auto withLength = [&](const char* noun) {
@@ -776,6 +1164,12 @@ Expected<Made> MakePart(const Request& asked) {
     const std::vector<double> lengths = Lengths(*s, q.size);
     if (!lengths.empty() && std::ranges::none_of(lengths, [&](double l) { return std::abs(l - q.length) < 1e-9; }))
         return Error{std::format("{} {}: нет длины {} мм", s->title, q.size, Num(q.length))};
+    if (const std::optional<LengthRange> range = FreeLength(*s)) {
+        if (q.length <= 0) q.length = range->preset;   // not given: the usual one
+        if (q.length < range->min - 1e-9 || q.length > range->max + 1e-9)
+            return Error{std::format("{} {}: длина {} мм вне диапазона {}–{} мм", s->title, q.size, Num(q.length), Num(range->min),
+                                     Num(range->max))};
+    }
 
     Made made;
     Document& doc = made.doc;
@@ -784,7 +1178,14 @@ Expected<Made> MakePart(const Request& asked) {
     const double dn = SizeNumber(q.size).value_or(0);
     const std::string designation = Designation(q);
 
-    switch (s->kind) {
+    if (const PackStandard* p = PackOf(*s)) {
+        const PackKind* kind = PackKindOf(s->kind);
+        const std::optional<std::size_t> row = PackRow(*p, q.size);
+        if (!kind || !row) return Error{std::format("{}: нет размера «{}»", s->title, q.size)};
+        if (const Status built = BuildPack(b, *kind, *p, *row, q.length, made.envelope); !built) return built.GetError();
+        Finish(doc, kind->noun, designation);
+        doc.info.material = kind->material;
+    } else switch (s->kind) {
         case PartKind::HexBolt: {
             const BoltRow& r = *FindRow(BoltRows(s->id), dn);
             const X d = b.Var("d", r.d), L = b.Var("L", q.length), P_ = b.Var("P", Pitch(r.d));
@@ -1034,6 +1435,7 @@ namespace bz::doc::parts {
 double ThreadPitch(double d) { return Pitch(d); }
 
 std::string SizeForHole(const StandardInfo& standard, double diameter) {
+    if (IsPackKind(standard.kind)) return {};   // pack parts are not put into holes
     std::string best;
     double bestD = 0;
     for (const std::string& size : Sizes(standard)) {
