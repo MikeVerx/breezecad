@@ -83,6 +83,7 @@ struct MobileState {
         int    code = 0;   ///< a character, or one of the Numpad* codes below
     };
     std::vector<NumpadKey> numpadKeys;
+    ImVec2 numpadMin{0, 0}, numpadMax{0, 0};   ///< the whole plate: a touch between keys goes nowhere
     int numpadDown = -1;   ///< the key under a finger now (drawn pressed)
 
     // --- Value input ---

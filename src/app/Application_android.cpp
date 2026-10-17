@@ -135,9 +135,11 @@ bool Application::AndroidBetweenFrames(double now) {
     m.numpad = m.phone && typing && !words && !m.hardKeyboard;
     // A value left any way (↵, the OK button, another field): it is "пред." for the next one.
     if (hadNumpad && !m.numpad && !m.editingText.empty()) m.previousValue = m.editingText;
+    if (hadNumpad != m.numpad) log::Info("Keyboard: numpad {}", m.numpad ? "on" : "off");
     const bool keyboard = typing && words && !m.hardKeyboard;
     if (!typing) m.fullKeyboard = false;
     if (keyboard != myKeyboardUp) {
+        log::Info("Keyboard: system {}", keyboard ? "on" : "off");
         droid::ShowKeyboard(keyboard);
         myKeyboardUp = keyboard;
     }
@@ -230,6 +232,8 @@ void Application::RunTestCommands() {
             mySettings.mobile.layout = 2;
         } else if (c == "settings") {
             myShell.showSettings = true;
+        } else if (c == "extrude") {
+            myActions.Run("feature.extrude");   // its distance field: the emulator taps it (smoke-apk.sh)
         } else if (c == "numpad") {
             myShell.mobile.block1Tab = 1;
         } else if (c == "strip") {

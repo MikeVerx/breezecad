@@ -264,15 +264,16 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
     const float rowTop = bottom - ui.S(kRow);
     const float padH = m.numpad ? NumpadHeight(ui) : 0.0f;
     const float contentH = rowTop - padH - y;
-    // The numpad takes the block when there is no room for both (a low
-    // phone screen). The content is still drawn then, 1 px high: the value
-    // being typed lives in it, and a field ImGui does not see for a frame
-    // loses focus — the numpad (and ⌨) closed as soon as it opened.
-    // ImGui skips a child that is clipped away entirely, hence 1 px, not 0.
+    // The numpad takes the block when there is no room for both (a low phone
+    // screen). The content is drawn anyway, at full height, under it: the value
+    // being typed lives in a field there, and a field ImGui does not see for a
+    // frame loses focus — the numpad (and ⌨) closed as soon as it opened. The
+    // numpad is drawn over it on the foreground layer, opaque; its keys are
+    // taken by the touch input before ImGui, so nothing reaches the panel below.
     const bool room = contentH >= ui.S(40);
-    if (room || m.numpad) {
+    {
         const ImVec2 cp{pos.x + pad, y};
-        BeginArea("##block1-content", cp, {size.x - pad - 1, room ? contentH : 1.0f}, c.panel, true);
+        BeginArea("##block1-content", cp, {size.x - pad - 1, room ? contentH : rowTop - y}, c.panel, true);
         const float width = size.x - pad - 1;
         switch (m.block1Tab) {
             case 0:

@@ -5,6 +5,7 @@
 #include "app/sketch/SketchEditor.h"
 #include "app/viewport/Planes.h"
 #include "core/I18n.h"
+#include "core/Log.h"
 #include "document/Commands.h"
 #include "document/LoftFeature.h"
 #include "document/Origin.h"
@@ -247,6 +248,17 @@ bool FeatureOperationEditor::ParameterField(AppContext& app, Session& session, c
                                             Parameter& parameter, float width, bool focus, bool showFx) {
     ui::Ui& ui = app.ui;
     ImGui::PushID(id);
+    if (app.shell.mobile.phone) {
+        // Where the field is, once per field: the emulator's check taps it (smoke-apk.sh).
+        static ImGuiID logged = 0;
+        const ImGuiID gid = ImGui::GetID("value");
+        if (gid != logged) {
+            logged = gid;
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            log::Info("Touch: field {} at {:.0f},{:.0f} size {:.0f}x{:.0f}", id, at.x, at.y, width,
+                      ui.S(ui.theme.metrics.fieldHeight));
+        }
+    }
     const ui::FieldResult r = ui::ExpressionField(ui, "value", text, UnitLabel(parameter.quantity, session.doc.units),
                                                   parameter.error, width, focus, showFx);
     bool changed = false;

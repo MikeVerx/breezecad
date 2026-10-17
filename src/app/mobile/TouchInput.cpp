@@ -214,6 +214,11 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
             myQueued = std::max(myQueued, 2);
             return;
         }
+        // Between the keys: the panel drawn under the numpad must not get it.
+        if (Inside(at, m.numpadMin, m.numpadMax)) {
+            myRoutes[e.id] = Route::Ignored;
+            return;
+        }
     }
     if (e.action == PointerAction::Down) {
         myFlingX = myFlingY = 0;   // a finger stops a flung list
@@ -466,7 +471,16 @@ void TouchInput::RunRowButtons(AppContext& app) {
     const bool cursor = CursorActive(app) && m.cursorShown;
     if (m.okPressed) {
         m.okPressed = false;
-        if (cursor && m.boxMode) {
+        if (ImGui::GetIO().WantTextInput) {
+            // A value being typed: ✓ enters it (as ↵), never a click at the tip —
+            // that click landed off the field and the value was lost (17.10, the
+            // circle's 20 mm). The next ✓ goes on as usual.
+            ImGuiIO& io = ImGui::GetIO();
+            if (!m.editingText.empty()) m.previousValue = m.editingText;
+            io.AddKeyEvent(ImGuiKey_Enter, true);
+            io.AddKeyEvent(ImGuiKey_Enter, false);
+            myQueued = std::max(myQueued, 3);
+        } else if (cursor && m.boxMode) {
             // A frame with the cursor: OK at one corner, OK at the other.
             Pos(m.cursorTip);
             Button(ImGuiMouseButton_Left, !m.boxHeld);

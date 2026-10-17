@@ -11,6 +11,7 @@
 
 #include "app/shell/Shell.h"
 #include "core/I18n.h"
+#include "core/Log.h"
 #include "ui/Widgets.h"
 
 #include <algorithm>
@@ -344,6 +345,11 @@ private:
             ImGui::SetCursorScreenPos(a);
             ImGui::PushID(slot);
             if (more && slot == chevronSlot) {
+                static std::string loggedMore;   // once: the emulator's check taps the first «›»
+                if (loggedMore.empty()) {
+                    loggedMore = myCaption;
+                    log::Info("Touch: more {} at {:.0f},{:.0f} size {:.0f}", myCaption, a.x, a.y, cell);
+                }
                 const bool clicked = ImGui::InvisibleButton("##more", {cell, h});
                 const bool held = ImGui::IsItemActive();
                 dl->AddRectFilled(a, {a.x + cell, a.y + h}, ui::ToU32(open ? c.accent : held ? c.pressed : c.accentSoft), myUi.S(9));
@@ -353,8 +359,16 @@ private:
                 myUi.icons.Draw(dl, pointLeft ? "ui-arrow-left" : "ui-chevron-right", {a.x + (cell - is) / 2, a.y + (h - is) / 2}, is,
                                 open ? c.textOnAccent : c.accent);
                 if (clicked) {
+                    // The strip is drawn later in this same frame: it needs the items now.
+                    // (Without them it took the group for gone and closed at once — «›»
+                    // did nothing on the phone, 17.10; the emulator's test path set them.)
                     m.flyGroup = open ? std::string() : myCaption;
                     m.flyScroll = 0;
+                    if (open) m.flyItems.clear();
+                    else {
+                        m.flyItems = myItems;
+                        m.flyY = p.y;
+                    }
                 }
             } else {
                 const int index = more ? (myViewOnLeft ? slot - 1 : slot) : slot;
@@ -401,9 +415,17 @@ void DrawToolList(AppContext& app, Session& session, float width, bool iconsOnly
 
 void DrawToolStrip(AppContext& app, ImVec2 viewMin, ImVec2 viewMax, bool blockOnRight) {
     MobileState& m = app.shell.mobile;
+    static std::string shownGroup;   // for the log: the strip opened / closed
+    if (m.flyGroup != shownGroup && !(m.flyGroup.empty() && shownGroup.empty())) {
+        if (!m.flyGroup.empty() && !m.flyItems.empty()) log::Info("Strip: open {} ({} commands)", m.flyGroup, m.flyItems.size());
+        else if (m.flyGroup.empty()) log::Info("Strip: closed");
+        shownGroup = m.flyGroup;
+    }
     if (m.flyGroup.empty()) return;
     if (m.flyItems.empty()) {   // the group is not in block 2 any more (another tab)
+        log::Info("Strip: no commands for {}, closed", m.flyGroup);
         m.flyGroup.clear();
+        shownGroup.clear();
         return;
     }
     ui::Ui& ui = app.ui;

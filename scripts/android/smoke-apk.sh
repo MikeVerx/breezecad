@@ -134,12 +134,61 @@ start example,layout 25
 shot 12-layout-editor
 check layout-editor
 
+# 13–14. Real taps, as a finger does them (17.10: the author's «›» and the
+# extrude field did nothing, while the test commands above opened them fine).
+# The app logs where the first «›» and the operation's fields are, in dp.
+broken=0
+adb logcat -d -s BreezeCAD:* > "$OUT/breezecad-1.log"   # steps 1–12: the log is cleared below
+blog() { adb logcat -d -s BreezeCAD:* | tr -d '\r'; }
+
+# 13. «›» of compact block 2 tapped: its strip opens and stays.
+adb logcat -c
+start example 25
+read -r mx my ms < <(blog | sed -n 's/.*Touch: more .* at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\).*/\1 \2 \3/p' | head -1)
+if [ -n "${ms:-}" ]; then
+    adb shell input tap $(dp $(( mx + ms / 2 ))) $(dp $(( my + ms / 2 )))
+    shot 13-strip-tapped 3
+    if blog | grep -q "Strip: open"; then
+        echo "step strip-tap: the strip opened ($(blog | grep -o 'Strip: .*' | tr '\n' ';'))"
+    else
+        echo "step strip-tap: FAILED — the strip did not open ($(blog | grep -o 'Strip: .*' | tr '\n' ';'))"; broken=1
+    fi
+else
+    echo "step strip-tap: FAILED — no «›» in the log"; broken=1
+fi
+check strip-tap
+
+# 14. Extrude: the field loses the focus it opens with (a tap on the model),
+# then a tap on the field opens the numpad, and it is still open 3 s later.
+adb logcat -c
+start example,extrude 30
+read -r fx fy fw fh < <(blog | sed -n 's/.*Touch: field .* at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' | head -1)
+if [ -n "${fh:-}" ]; then
+    adb shell input tap $((w / 2)) $((h / 3))
+    sleep 2
+    adb shell input tap $(dp $(( fx + fw / 3 ))) $(dp $(( fy + fh / 2 )))
+    shot 14-extrude-numpad 3
+    seq=$(blog | grep -o 'Keyboard: numpad [a-z]*' | tr '\n' ';')
+    if [ "$(blog | grep -o 'Keyboard: numpad [a-z]*' | tail -1)" = "Keyboard: numpad on" ]; then
+        echo "step extrude-field: the numpad is open ($seq)"
+    else
+        echo "step extrude-field: FAILED — the numpad is not open ($seq)"; broken=1
+    fi
+else
+    echo "step extrude-field: FAILED — no field in the log"; broken=1
+fi
+check extrude-field
+
 adb logcat -d -s BreezeCAD:* > "$OUT/breezecad.log"
 adb logcat -d '*:E' > "$OUT/errors.log"
 grep -E "OpenGL ES|Window:|ERROR|WARN|test commands" "$OUT/breezecad.log" | head -20
 echo "touch: $(tr -d '\r' < "$OUT/breezecad.log" | grep -o 'Touch: .*' | tail -12 | tr '\n' ';')"
 if [ $failed -ne 0 ] || [ -z "$(alive)" ]; then
     echo "the app died:"; grep -E "FATAL|DEBUG|libbreezecad|backtrace|#[0-9]+ pc|AndroidRuntime" "$OUT/errors.log" | head -60
+    exit 1
+fi
+if [ $broken -ne 0 ]; then
+    echo "a tap check failed (steps 13–14 above)"
     exit 1
 fi
 echo "smoke test passed"
