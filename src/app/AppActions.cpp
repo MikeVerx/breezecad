@@ -6,6 +6,7 @@
 #include "app/Operations.h"
 #include "app/assembly/AssemblyUi.h"
 #include "app/features/OperationEditors.h"
+#include "app/shell/Shell.h"
 #include "core/I18n.h"
 #include "document/Origin.h"
 
@@ -183,6 +184,9 @@ void RegisterActions(AppContext& app) {
            [&app] { StartWorkPlane(app); }});
     a.Add({"feature.workAxis", N_("Ось"), "work-axis", 0, N_("Рабочая ось: по оси цилиндра, по ребру или на пересечении плоскостей"), inModel,
            [&app] { StartWorkAxis(app); }});
+    a.Add({"parts.saveToLibrary", N_("В библиотеку"), "ui-save", 0,
+           N_("Сохранить открытую деталь в мою библиотеку: её переменные станут таблицей размеров"), partDoc,
+           [&app] { OpenSaveToLibrary(app); }});
     a.Add({"parts.library", N_("Библиотека"), "library", 0,
            N_("Стандартные изделия: болты, винты, гайки, шайбы, подшипники, стопорные кольца — новой деталью"), {},
            [&app] { app.shell.showLibrary = true; }});

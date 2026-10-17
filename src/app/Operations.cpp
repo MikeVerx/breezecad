@@ -12,6 +12,7 @@
 #include "document/SketchFeature.h"
 #include "app/assembly/AssemblyUi.h"
 #include "document/DocumentTypes.h"
+#include "document/StandardPacks.h"
 #include "document/StandardParts.h"
 #include "document/WorkPlaneFeature.h"
 #include "modules/ModuleManager.h"
@@ -64,11 +65,49 @@ void InstallModule(AppContext& app, std::optional<std::filesystem::path> package
     app.shell.settingsTab = 3;   // "Модули"
 }
 
+std::filesystem::path StandardPackDir() { return platform::ConfigDir() / "library"; }
+
+void LoadStandardPacks(AppContext& app) {
+    const std::filesystem::path folders[] = {StandardPackDir(), platform::AssetsDir() / "library"};
+    const doc::parts::PacksLoaded loaded = doc::parts::LoadPacks(folders);
+    log::Info("Standard part packs: {} loaded, {} skipped", loaded.packs, loaded.problems.size());
+    for (const std::string& problem : loaded.problems) {
+        log::Error("Standard part pack: {}", problem);
+        app.notes.Error(Trf("Пакет стандартных изделий не загружен: {}", problem));
+    }
+}
+
+void InstallStandardPack(AppContext& app, std::optional<std::filesystem::path> file) {
+    if (!file) {
+        if (const std::string problem = platform::FileDialogProblem(); !problem.empty()) {
+            app.notes.Error(problem);
+            return;
+        }
+        file = platform::ShowOpenDialog(Tr("Добавить пакет стандартных изделий"), {{Tr("Пакет стандартных изделий"), "*.bzlib"}},
+                                        platform::DocumentsDir());
+        if (!file) return;
+    }
+    const Expected<std::filesystem::path> copy = doc::parts::InstallPack(*file, StandardPackDir());
+    if (!copy) {
+        app.notes.Error(Trf("Пакет не добавлен: {}", copy.GetError().message));
+        return;
+    }
+    LoadStandardPacks(app);
+    for (const auto& pack : doc::parts::LoadedPacks())
+        if (pack->file == *copy) {
+            app.notes.Success(Trf("Пакет «{}» добавлен в библиотеку", pack->title));
+            app.shell.showLibrary = true;   // there it is
+            return;
+        }
+    // Copied, but another pack has its kinds or standards: LoadStandardPacks said which.
+}
+
 void OpenDropped(AppContext& app, const std::filesystem::path& file) {
     std::u8string ext = file.extension().u8string();
     for (char8_t& ch : ext)
         if (ch >= u8'A' && ch <= u8'Z') ch = static_cast<char8_t>(ch - u8'A' + u8'a');
     if (ext == u8".bzmod" || ext == u8".zip") InstallModule(app, file);
+    else if (ext == u8".bzlib") InstallStandardPack(app, file);
     else OpenDocument(app, file);
 }
 

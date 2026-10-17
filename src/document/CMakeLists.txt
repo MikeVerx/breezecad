@@ -20,6 +20,7 @@ add_library(bz_document STATIC
     RevolveFeature.cpp
     SketchFeature.cpp
     SketchSolidFeature.cpp
+    StandardPacks.cpp
     StandardParts.cpp
     SweepFeature.cpp
     ThreadFeature.cpp
