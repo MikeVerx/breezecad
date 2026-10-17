@@ -10,6 +10,7 @@
 #include "app/Backgrounds.h"
 #include "app/shell/Shell.h"
 #include "app/shell/TouchpadSettings.h"
+#include "core/Expression.h"
 #include "core/I18n.h"
 #include "core/Version.h"
 #include "document/Commands.h"
@@ -185,6 +186,9 @@ void DrawMassProperties(AppContext& app) {
 
 namespace parts = doc::parts;
 
+/// Up to this many sizes are buttons; a longer table is a list.
+constexpr std::size_t kLibrarySizeButtons = 48;
+
 /// Chooses a standard part (and remembers it among the recent ones).
 void PickPart(AppContext& app, const ShellState::Library::Pick& pick) {
     auto& lib = app.shell.library;
@@ -209,6 +213,10 @@ ShellState::Library::Pick PickFor(const parts::StandardInfo& s, const ShellState
     ShellState::Library::Pick p{std::string(s.id), {}, 0};
     const parts::StandardInfo* old = parts::FindStandard(from.standard);
     p.size = old ? parts::MatchingSize(*old, from.size, s) : parts::Sizes(s).front();
+    if (const std::optional<parts::LengthRange> range = parts::FreeLength(s)) {   // any length: keep the one there was
+        p.length = from.length >= range->min && from.length <= range->max ? from.length : range->preset;
+        return p;
+    }
     const std::vector<double> lengths = parts::Lengths(s, p.size);
     if (!lengths.empty()) {
         p.length = lengths[lengths.size() / 2];
@@ -280,20 +288,43 @@ void DrawLibraryPart(AppContext& app, const parts::StandardInfo& standard, float
     // Parameters.
     const std::vector<std::string> sizes = parts::Sizes(standard);
     if (std::ranges::find(sizes, lib.chosen.size) == sizes.end()) lib.chosen.size = sizes.front();
-    LibraryHeading(ui, standard.kind == parts::PartKind::BallBearing    ? Tr("Подшипник")
-                       : standard.kind == parts::PartKind::RingExternal ? Tr("Диаметр вала, мм")
-                       : standard.kind == parts::PartKind::RingInternal ? Tr("Диаметр отверстия, мм")
-                       : parts::HasThread(standard.kind)                ? Tr("Резьба")
-                                                                        : Tr("Диаметр, мм"));
-    {
+    const std::string_view sizeTitle = parts::SizeTitle(standard);   // a pack names its sizes itself
+    const std::string heading = !sizeTitle.empty()                                   ? Tr(sizeTitle)
+                                : standard.kind == parts::PartKind::BallBearing    ? Tr("Подшипник")
+                                : standard.kind == parts::PartKind::RingExternal ? Tr("Диаметр вала, мм")
+                                : standard.kind == parts::PartKind::RingInternal ? Tr("Диаметр отверстия, мм")
+                                : parts::HasThread(standard.kind)                ? Tr("Резьба")
+                                                                                 : Tr("Диаметр, мм");
+    LibraryHeading(ui, heading.c_str());
+    if (sizes.size() <= kLibrarySizeButtons) {
         std::vector<const char*> labels;
         for (const std::string& s : sizes) labels.push_back(s.c_str());
         const int current = static_cast<int>(std::ranges::find(sizes, lib.chosen.size) - sizes.begin());
         if (const int chosen = ui::Segmented(ui, "size", labels, current, 6, width); chosen != current && chosen >= 0)
             lib.chosen.size = sizes[static_cast<std::size_t>(chosen)];
+    } else {   // a long table (profiles): a list instead of a wall of buttons
+        ImGui::SetNextItemWidth(width);
+        lib.sizeListOpen = ImGui::BeginCombo("##size-list", lib.chosen.size.c_str(), ImGuiComboFlags_HeightLarge);
+        if (lib.sizeListOpen) {
+            for (const std::string& size : sizes) {
+                const bool on = size == lib.chosen.size;
+                if (ImGui::Selectable(size.c_str(), on)) lib.chosen.size = size;
+                if (on) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
     }
     const std::vector<double> lengths = parts::Lengths(standard, lib.chosen.size);
-    if (!lengths.empty()) {
+    if (const std::optional<parts::LengthRange> range = parts::FreeLength(standard)) {
+        // Any length of the range: a profile cut to size.
+        LibraryHeading(ui, Trf("Длина, мм (от {:g} до {:g})", range->min, range->max).c_str());
+        if (lib.chosen.length < range->min || lib.chosen.length > range->max) lib.chosen.length = range->preset;
+        if (ui::CommitInput(ui, "##length-free", std::format("{:g}", lib.chosen.length), app.shell.edit, width, true)) {
+            const Expected<double> typed = EvaluateExpression(app.shell.edit.text, Quantity::Length, UnitSystem{}, {});
+            if (typed && *typed >= range->min && *typed <= range->max) lib.chosen.length = *typed;
+            else app.notes.Error(Trf("Длина — число от {:g} до {:g} мм", range->min, range->max));
+        }
+    } else if (!lengths.empty()) {
         LibraryHeading(ui, Tr("Длина, мм"));
         int current = -1;
         for (std::size_t i = 0; i < lengths.size(); ++i)
@@ -475,12 +506,17 @@ void DrawLibrary(AppContext& app) {
     }
     ImGui::EndChild();
     if (ui::SecondaryButton(ui, "##library-pack", Tr("Добавить пакет стандартных изделий"), nullptr, {left, ui.S(34)}))
-        app.notes.Info(Tr("Пакеты стандартных изделий появятся в следующих версиях"));
+        InstallStandardPack(app);   // reloads the packs: nothing above keeps a pointer into the library
+    ui::ItemTooltip(ui, Tr("Файл .bzlib — или просто перетащите его в окно"));
 
     // Right: the chosen part, or nothing.
     const parts::StandardInfo* standard = parts::FindStandard(lib.chosen.standard);
     ImGui::SameLine(0, gap);
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() - (height - ui.S(40)) - ImGui::GetStyle().ItemSpacing.y);
+    // ImGui closes a dropped list on Esc before this frame's widgets run: what
+    // was open last frame counts too, so that Esc does not close the window.
+    const bool listWasOpen = lib.sizeListOpen;
+    lib.sizeListOpen = false;   // DrawLibraryPart says if it is
     ImGui::BeginChild("##library-part", {0, height}, ImGuiChildFlags_None);
     if (standard) DrawLibraryPart(app, *standard, ImGui::GetContentRegionAvail().x - ui.S(8));
     ImGui::EndChild();
@@ -513,7 +549,8 @@ void DrawLibrary(AppContext& app) {
     }
     ImGui::SetCursorPosY(rowY);
     ImGui::SetCursorPosX(rowX + rowW - 2 * bw - ui.S(8));
-    if (ui::SecondaryButton(ui, "##library-cancel", Tr("Закрыть"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+    if (ui::SecondaryButton(ui, "##library-cancel", Tr("Закрыть"), "Esc", {bw, ui.S(36)}) ||
+        (ImGui::IsKeyPressed(ImGuiKey_Escape) && !lib.sizeListOpen && !listWasOpen))
         close();
     ImGui::SameLine(0, ui.S(8));
     // In an assembly the part goes into it (its file next to the assembly).

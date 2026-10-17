@@ -10,6 +10,7 @@
 #include "app/scripting/Commands.h"
 #include "core/I18n.h"
 #include "document/Commands.h"
+#include "document/StandardPacks.h"
 #include "document/StandardParts.h"
 #include "platform/Paths.h"
 
@@ -245,10 +246,36 @@ Json LibrarySizes(AppContext&, const Json& args) {
     const doc::parts::StandardInfo& st = StandardArg(args);
     if (Has(args, "size")) {
         const std::string size = SizeArg(st, args);
-        return {{"standard", st.id}, {"size", size}, {"lengths", doc::parts::Lengths(st, size)}};
+        Json out = {{"standard", st.id}, {"size", size}, {"lengths", doc::parts::Lengths(st, size)}};
+        if (const auto range = doc::parts::FreeLength(st))
+            out["length_range"] = {{"min", range->min}, {"max", range->max}, {"default", range->preset}};
+        return out;
     }
-    return {{"standard", st.id}, {"title", st.title}, {"sizes", doc::parts::Sizes(st)}, {"has_thread", doc::parts::HasThread(st.kind)},
-            {"note", "Длины размера — library.sizes с size."}};
+    Json out = {{"standard", st.id}, {"title", st.title}, {"sizes", doc::parts::Sizes(st)}, {"has_thread", doc::parts::HasThread(st.kind)},
+                {"note", "Длины размера — library.sizes с size."}};
+    if (const std::string_view title = doc::parts::SizeTitle(st); !title.empty()) out["size_title"] = Tr(title);
+    if (const auto range = doc::parts::FreeLength(st)) {
+        out["length_range"] = {{"min", range->min}, {"max", range->max}, {"default", range->preset}};
+        out["note"] = "Длина — любая из диапазона length_range, мм.";
+    }
+    return out;
+}
+
+/// Adds a pack of standard parts (.bzlib) to the user's library and reloads the packs.
+Json LibraryAddPack(AppContext& app, const Json& args) {
+    const std::string path = Text(args, "path");
+    const std::filesystem::path file{std::u8string(path.begin(), path.end())};
+    const Expected<std::filesystem::path> copy = doc::parts::InstallPack(file, StandardPackDir());
+    if (!copy) Fail(copy.GetError().message);
+    LoadStandardPacks(app);
+    for (const auto& pack : doc::parts::LoadedPacks())
+        if (pack->file == *copy) {
+            Json standards = Json::array();
+            for (const doc::parts::PackStandard& st : pack->standards) standards.push_back(st.id);
+            return {{"pack", pack->id}, {"title", pack->title}, {"standards", std::move(standards)},
+                    {"note", "Пакет в библиотеке: library.list, library.sizes, library.make_part."}};
+        }
+    Fail("Пакет скопирован, но не загружен: его виды или стандарты уже есть в другом пакете");
 }
 
 Json LibraryMake(AppContext& app, const Json& args) {
@@ -325,11 +352,16 @@ void AddViewCommands(Commands& out) {
                    "ГОСТ 7798-70»). Резьба по умолчанию условная.",
                    Schema({{"standard", StringArg("id стандарта.")},
                            {"size", StringArg("Размер из library.sizes.")},
-                           {"length", NumberArg("Длина из library.sizes (если у изделия есть длина).")},
+                           {"length", NumberArg("Длина из library.sizes (если у изделия есть длина; для length_range — любая "
+                                                "из диапазона, по умолчанию default).")},
                            {"real_thread", BoolArg("Настоящая (вырезанная) резьба.")},
                            {"appearance", StringArg("Внешний вид (id); по умолчанию — свой для вида изделия.")}},
                           {"standard", "size"}),
                    true, &LibraryMake});
+    out.push_back({"library.add_pack",
+                   "Добавляет в библиотеку пакет стандартных изделий (файл .bzlib: таблицы размеров и рецепт построения — "
+                   "docs/ADR/0006-standard-part-packs.md). Файл проверяется и копируется в папку библиотеки пользователя.",
+                   Schema({{"path", StringArg("Путь к файлу .bzlib.")}}, {"path"}), true, &LibraryAddPack});
 }
 
 } // namespace bz::app::scripting

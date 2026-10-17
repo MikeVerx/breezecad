@@ -88,6 +88,7 @@ struct ShellState {
         bool             dropWasher = true, dropNut = true;   ///< AutoDrop: add them with the screw
         std::string      appearance;        ///< empty: the default of the kind
         std::vector<Pick> recent;           ///< newest first
+        bool             sizeListOpen = false;   ///< the list of sizes is dropped down: Esc closes it, not the window
     } library;
 
     render::DisplayStyle displayStyle = render::DisplayStyle::ShadedWithEdges;
