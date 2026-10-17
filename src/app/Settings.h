@@ -22,6 +22,14 @@ struct FingerGestures {
     FingerTap       tap3 = FingerTap::Redo;
 };
 
+/// Where an island over the view is (the layout editor): stuck to the top or
+/// the bottom edge, at a part of the free length, at a size.
+struct IslandPlace {
+    bool   bottom = false;
+    double along = -1.0;   ///< 0 the left end … 1 the right end; < 0 its usual place
+    double scale = 1.0;    ///< 0.8 … 1.4
+};
+
 /// The phone layout and touch (docs/ADR/0004-mobile-touch-ui.md); used on
 /// Android, kept in the file everywhere.
 struct MobileSettings {
@@ -30,6 +38,11 @@ struct MobileSettings {
     int    leftWidth = 20;        ///< block 1, % of the window's width
     int    rightWidth = 20;       ///< block 2, %
     bool   iconsOnly = false;     ///< block 2 shows icons without names (20 / 70 / 10)
+    bool   toolsList = false;     ///< block 2 as the long list (default: compact — four buttons a group, the rest in a strip)
+    int    hotbarWidth = 0;       ///< dp of the panel at the camera; 0 its safe zone (not narrower than that)
+    int    stripHeight = 40;      ///< dp of the projects' strip
+    IslandPlace undoIsland, tabsIsland, cubeIsland;   ///< blocks 5, 3 and the cube's button
+    bool   firstStartDone = false;   ///< the first-start setup (sensitivity, then the layout) was shown
     double labelScale = 1.0;      ///< labels in the view (cursor, dimensions), apart from the panels
     bool   volumeZoom = false;    ///< the volume keys zoom the view
     // Touch responsiveness ("Управление → Сенсор → Отзывчивость")

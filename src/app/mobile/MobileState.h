@@ -90,6 +90,31 @@ struct MobileState {
     std::string previousValue;         ///< the value last confirmed in a field ("пред.")
     std::string editingText;           ///< what the active field holds now (shown above the numpad)
 
+    // --- "Скрыть управление" (the hotbar): only the view, the logo and the hotbar ---
+    bool controlsHidden = false;
+
+    // --- The layout editor and the first-start setup (docs/dev/mockups 2a–2d, 5a–5b) ---
+    enum class Part : unsigned char { None, Block1, Block2, Undo, Tabs, Cube, Hotbar, Strip };
+    bool layoutEditor = false;   ///< full screen: choose a control, change it
+    Part editing = Part::None;
+    int  setupStep = 0;          ///< first start: 1 the work layer, 2 navigation (then the layout editor); 0 none
+    bool setupOpenedDoc = false; ///< the setup opened the example part (closed again at the end)
+    struct Rect {
+        ImVec2 min{0, 0}, max{0, 0};
+        bool   Contains(ImVec2 p) const { return p.x >= min.x && p.y >= min.y && p.x < max.x && p.y < max.y; }
+    };
+    Rect rBlock1, rBlock2, rUndo, rTabs, rCube, rHotbar, rStrip, rView;   ///< last frame's places
+
+    // --- Block 2, compact: a group's strip over the view ---
+    struct FlyItem {
+        std::string id, label, icon;
+        bool        active = false;
+    };
+    std::string          flyGroup;     ///< the group whose strip is open (empty: none)
+    std::vector<FlyItem> flyItems;     ///< its commands (filled while block 2 is drawn)
+    float                flyY = 0;     ///< the group's row (the strip opens there)
+    float                flyScroll = 0;
+
     // --- View cube ---
     bool cubeOpen = false;   ///< the big cube panel is up
 

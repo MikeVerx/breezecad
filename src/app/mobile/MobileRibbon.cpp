@@ -14,6 +14,8 @@
 #include "ui/Widgets.h"
 
 #include <algorithm>
+#include <cfloat>
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -277,12 +279,193 @@ private:
     ImVec2            myGridOrigin{0, 0};
 };
 
+/// Block 2, compact (the author's default, 17.10.2026; mockup 3): a group is
+/// one row of four equal buttons. With more than four commands the one
+/// nearest the view is "›" — it opens the group as a strip over the view
+/// (DrawToolStrip), which scrolls sideways.
+class CompactSink final : public RibbonSink {
+public:
+    CompactSink(AppContext& app, float width, bool viewOnLeft) : myApp(app), myUi(app.ui), myWidth(width), myViewOnLeft(viewOnLeft) {}
+
+    AppContext& App() const override { return myApp; }
+    void BeginGroup(const char* caption) override {
+        Flush();
+        myCaption = caption ? caption : "";
+    }
+    void EndGroup() override { Flush(); }
+    void Large(const char* id, const char* caption, bool active) override { Add(id, caption, active); }
+    void Small(const char* id, const char* label, bool active) override { Add(id, label, active); }
+    void LargeLater(const char*, const char*) override {}
+    void SmallLater(const char*, const char*) override {}
+    void BeginColumn() override {}
+    void EndColumn() override {}
+    void BeginGrid(int) override {}
+    void Icon(const char* id, bool active) override { Add(id, nullptr, active); }
+    void EndGrid() override {}
+
+private:
+    void Add(const char* actionId, const char* label, bool active) {
+        const Action* a = myApp.actions.Find(actionId);
+        if (!a) return;
+        std::string text = label ? label : a->Label();
+        for (std::size_t at; (at = text.find("-\n")) != std::string::npos;) text.erase(at, 2);
+        std::replace(text.begin(), text.end(), '\n', ' ');
+        myItems.push_back({actionId, text, a->icon, active});
+    }
+
+    void Flush() {
+        if (myItems.empty()) return;
+        MobileState& m = myApp.shell.mobile;
+        const ui::ThemeColors& c = myUi.C();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        // The header, as in the list.
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        const std::string caps = Upper(myCaption);
+        dl->AddText(myUi.fonts.strong, myUi.S(10.5f), {p.x + myUi.S(12), p.y + myUi.S(10)}, ui::ToU32(c.textMuted), caps.c_str());
+        ImGui::Dummy({myWidth, myUi.S(26)});
+        p = ImGui::GetCursorScreenPos();
+        const bool more = myItems.size() > 4;
+        const bool open = more && m.flyGroup == myCaption;
+        if (open) {
+            m.flyItems = myItems;
+            m.flyY = p.y;
+        }
+        const float pad = myUi.S(8), gap = myUi.S(6);
+        const float cell = (myWidth - 2 * pad - 3 * gap) / 4;
+        const float h = cell;   // square, as IconButton draws them
+        for (int slot = 0; slot < 4; ++slot) {
+            // The "›" goes to the slot nearest the view; the commands fill the rest in order.
+            const int chevronSlot = myViewOnLeft ? 0 : 3;
+            const ImVec2 a{p.x + pad + static_cast<float>(slot) * (cell + gap), p.y};
+            ImGui::SetCursorScreenPos(a);
+            ImGui::PushID(slot);
+            if (more && slot == chevronSlot) {
+                const bool clicked = ImGui::InvisibleButton("##more", {cell, h});
+                const bool held = ImGui::IsItemActive();
+                dl->AddRectFilled(a, {a.x + cell, a.y + h}, ui::ToU32(open ? c.accent : held ? c.pressed : c.accentSoft), myUi.S(9));
+                if (!open) dl->AddRect(a, {a.x + cell, a.y + h}, ui::ToU32(c.accentSoftBorder), myUi.S(9));
+                const bool pointLeft = myViewOnLeft != open;   // toward the view to open, back to close
+                const float is = myUi.S(16);
+                myUi.icons.Draw(dl, pointLeft ? "ui-arrow-left" : "ui-chevron-right", {a.x + (cell - is) / 2, a.y + (h - is) / 2}, is,
+                                open ? c.textOnAccent : c.accent);
+                if (clicked) {
+                    m.flyGroup = open ? std::string() : myCaption;
+                    m.flyScroll = 0;
+                }
+            } else {
+                const int index = more ? (myViewOnLeft ? slot - 1 : slot) : slot;
+                if (index >= 0 && index < static_cast<int>(myItems.size())) {
+                    const MobileState::FlyItem& it = myItems[static_cast<std::size_t>(index)];
+                    const Action* act = myApp.actions.Find(it.id);
+                    const bool enabled = act && act->IsEnabled();
+                    if (ui::IconButton(myUi, it.id.c_str(), it.icon, cell / myUi.scale, 22, it.label.c_str(), enabled, it.active) && enabled) {
+                        AppContext& app = myApp;
+                        const std::string run = it.id;
+                        app.Later([&app, run] { app.actions.Run(run); });
+                    }
+                    // A square button wider than tall: drawn by IconButton as a square of `cell`; keep the row height.
+                }
+            }
+            ImGui::PopID();
+        }
+        ImGui::SetCursorScreenPos({p.x, p.y + std::max(h, cell) + myUi.S(4)});
+        ImGui::Dummy({myWidth, 0});
+        myItems.clear();
+    }
+
+    AppContext&                         myApp;
+    ui::Ui&                             myUi;
+    float                               myWidth;
+    bool                                myViewOnLeft;
+    std::string                         myCaption;
+    std::vector<MobileState::FlyItem>   myItems;
+};
+
 } // namespace
 
-void DrawToolList(AppContext& app, Session& session, float width, bool iconsOnly) {
-    ListSink sink(app, width, iconsOnly);
-    FillRibbon(app, session, sink, false);
+void DrawToolList(AppContext& app, Session& session, float width, bool iconsOnly, bool compact, bool viewOnLeft) {
+    if (compact && !iconsOnly) {
+        CompactSink sink(app, width, viewOnLeft);
+        FillRibbon(app, session, sink, false);
+    } else {
+        ListSink sink(app, width, iconsOnly);
+        FillRibbon(app, session, sink, false);
+    }
     ImGui::Dummy({width, app.ui.S(8)});
+}
+
+void DrawToolStrip(AppContext& app, ImVec2 viewMin, ImVec2 viewMax, bool blockOnRight) {
+    MobileState& m = app.shell.mobile;
+    if (m.flyGroup.empty()) return;
+    if (m.flyItems.empty()) {   // the group is not in block 2 any more (another tab)
+        m.flyGroup.clear();
+        return;
+    }
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    // Over the view, level with the group's row, from block 2 toward block 1 (never over it).
+    const float h = ui.S(78);
+    const float y = std::clamp(m.flyY - ui.S(16), viewMin.y + ui.S(56), std::max(viewMin.y + ui.S(56), viewMax.y - h - ui.S(4)));
+    const ImVec2 pos{viewMin.x, y}, size{viewMax.x - viewMin.x, h};
+    ImGui::SetNextWindowPos(pos);
+    ImGui::SetNextWindowSize(size);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ui::ToVec4(c.panel.WithAlpha(0.97f)));
+    const bool shown = ImGui::Begin("##tool-strip", nullptr,
+                                    ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                        ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(3);
+    bool inside = false;
+    if (shown) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddLine(pos, {pos.x + size.x, pos.y}, ui::ToU32(c.accentSoftBorder));
+        dl->AddLine({pos.x, pos.y + h - 1}, {pos.x + size.x, pos.y + h - 1}, ui::ToU32(c.accentSoftBorder));
+        const float tw = ui.S(76), th = ui.S(64), gap = ui.S(4), pad = ui.S(8);
+        const float content = pad * 2 + static_cast<float>(m.flyItems.size()) * (tw + gap);
+        m.flyScroll = std::clamp(m.flyScroll, 0.0f, std::max(0.0f, content - size.x));
+        // One surface for the whole strip: a drag scrolls it, a tap runs the command under it.
+        ImGui::SetCursorScreenPos(pos);
+        static float dragged = 0;
+        const bool clicked = ImGui::InvisibleButton("##strip-surface", size);
+        if (ImGui::IsItemActivated()) dragged = 0;
+        if (ImGui::IsItemActive()) {
+            const float dx = ImGui::GetIO().MouseDelta.x;
+            dragged += std::abs(dx);
+            m.flyScroll = std::clamp(m.flyScroll - dx, 0.0f, std::max(0.0f, content - size.x));
+        }
+        inside = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) || ImGui::IsItemActive();
+        // Laid out from block 2's side: its first command nearest block 2.
+        const ImVec2 mouse = ImGui::GetMousePos();
+        dl->PushClipRect(pos, {pos.x + size.x, pos.y + size.y}, true);
+        for (std::size_t i = 0; i < m.flyItems.size(); ++i) {
+            const MobileState::FlyItem& it = m.flyItems[i];
+            const float off = pad + static_cast<float>(i) * (tw + gap) - m.flyScroll;
+            const float x = blockOnRight ? pos.x + size.x - off - tw : pos.x + off;
+            const ImVec2 a{x, pos.y + (h - th) / 2}, b{x + tw, a.y + th};
+            const Action* act = app.actions.Find(it.id);
+            const bool enabled = act && act->IsEnabled();
+            const bool under = ImGui::IsItemActive() && mouse.x >= a.x && mouse.x < b.x && dragged < ui.S(8);
+            if (it.active || under) dl->AddRectFilled(a, b, ui::ToU32(it.active ? c.accentSoft : c.pressed), ui.S(10));
+            const float is = ui.S(26);
+            ui.icons.Draw(dl, it.icon, {x + (tw - is) / 2, a.y + ui.S(8)}, is, enabled ? Color{1, 1, 1, 1} : Color{1, 1, 1, 0.4f});
+            ui::FittedText(dl, ui.fonts.caption, ui.S(10.5f),
+                           {x + std::max(ui.S(4), (tw - ui.fonts.caption->CalcTextSizeA(ui.S(10.5f), FLT_MAX, 0, it.label.c_str()).x) / 2),
+                            a.y + ui.S(40)},
+                           x + tw - ui.S(3), ui::ToU32(enabled ? c.textSecondary : c.textDisabled), it.label.c_str());
+            if (clicked && dragged < ui.S(8) && mouse.x >= a.x && mouse.x < b.x && enabled) {
+                const std::string run = it.id;
+                app.Later([&app, run] { app.actions.Run(run); });
+                m.flyGroup.clear();   // the command chosen: the strip goes
+            }
+        }
+        dl->PopClipRect();
+    }
+    ImGui::End();
+    // A tap elsewhere (but not on block 2, whose "›" toggles it) closes it.
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !inside && !m.rBlock2.Contains(ImGui::GetMousePos())) m.flyGroup.clear();
 }
 
 } // namespace bz::app::mobile

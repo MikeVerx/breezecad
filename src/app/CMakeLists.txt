@@ -81,6 +81,7 @@ set(BZ_APP_SOURCES
     viewport/FaceSelection.cpp
     mobile/Cursor.cpp
     mobile/Gestures.cpp
+    mobile/LayoutEditor.cpp
     mobile/MobileLayout.cpp
     mobile/MobileRibbon.cpp
     mobile/Numpad.cpp

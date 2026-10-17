@@ -82,6 +82,7 @@ constexpr const char* kHotbarChoices[] = {
     "view.section",   "tools.measure", "view.home",       "view.fit",      "view.shaded",       "view.edges",
     "view.wireframe", "view.transparent", "sketch.lookAt", "sketch.dimension", "sketch.line",     "sketch.circle",
     "sketch.rectangle", "feature.extrude", "feature.fillet", "file.exportStl", "tools.massProperties", "view.background",
+    "view.appearance",
 };
 
 void DrawCameraPanel(AppContext& app, ImVec2 pos, ImVec2 size) {
@@ -100,21 +101,24 @@ void DrawCameraPanel(AppContext& app, ImVec2 pos, ImVec2 size) {
         ImGui::SetCursorScreenPos({x, y});
         y += b + ui.S(4);
     };
-    // The logo (the main menu) and the colours on top, as in the mockup.
+    // The logo (the main menu) on top, "+" under it, the user's buttons, and
+    // at the bottom "Скрыть управление" (the author, 17.10: it replaced the
+    // pinned palette — the palette can be added with "+").
     place();
     const ImVec2 lp = ImGui::GetCursorScreenPos();
     if (ImGui::InvisibleButton("##logo", {b, b})) ImGui::OpenPopup("##main-menu");
     ui.icons.Draw(dl, "brand-mark", {lp.x + (b - ui.S(24)) / 2, lp.y + (b - ui.S(24)) / 2}, ui.S(24), {1, 1, 1, 1});
     MainMenuPopup(app);
-    place();
-    if (ui::IconButton(ui, "##colours", "ui-palette", b, 20, Tr("Внешний вид"), true, app.ops.appearance.IsOpen()))
-        Run(app, "view.appearance");
-    // The user's buttons; a long press takes one away. "+" adds one, at the bottom.
-    const float plusY = pos.y + size.y - b - ui.S(6) - m.insets.bottom;
     std::vector<std::string>& bar = app.settings.mobile.hotbar;
+    if (!m.controlsHidden) {
+        place();
+        if (ui::IconButton(ui, "##hotbar-add", "ui-plus", b, 18, Tr("Добавить кнопку"))) ImGui::OpenPopup("##hotbar-pick");
+    }
+    // The user's buttons; a long press takes one away.
+    const float hideY = pos.y + size.y - b - ui.S(6) - m.insets.bottom;
     for (std::size_t i = 0; i < bar.size(); ++i) {
         clear(b);
-        if (y + b > plusY - ui.S(4)) break;
+        if (y + b > hideY - ui.S(4)) break;
         ImGui::SetCursorScreenPos({x, y});
         ImGui::PushID(static_cast<int>(i));
         const Action* a = app.actions.Find(bar[i]);
@@ -129,8 +133,10 @@ void DrawCameraPanel(AppContext& app, ImVec2 pos, ImVec2 size) {
         ImGui::PopID();
         y += b + ui.S(4);
     }
-    ImGui::SetCursorScreenPos({x, plusY});
-    if (ui::IconButton(ui, "##hotbar-add", "ui-plus", b, 18, Tr("Добавить кнопку"))) ImGui::OpenPopup("##hotbar-pick");
+    ImGui::SetCursorScreenPos({x, hideY});
+    if (ui::IconButton(ui, "##hide-controls", m.controlsHidden ? "ui-eye" : "ui-eye-off", b, 20,
+                       m.controlsHidden ? Tr("Показать управление") : Tr("Скрыть управление"), true, m.controlsHidden))
+        m.controlsHidden = !m.controlsHidden;
     {
         ui::MenuStyle style(ui);
         if (ImGui::BeginPopup("##hotbar-pick")) {
@@ -458,7 +464,8 @@ void DrawBlock2(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
             y += ui.S(52);
         }
         BeginArea("##block2-list", {pos.x + (onRight ? pad : 0), y}, {inner, bottom - y}, c.panel, true);
-        DrawToolList(app, session, inner, iconsOnly);
+        m.flyItems.clear();   // refilled by the open group, if it is still there
+        DrawToolList(app, session, inner, iconsOnly, !app.settings.mobile.toolsList, onRight);
         EndArea();
     }
 
@@ -485,6 +492,20 @@ void DrawBlock2(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
 }
 
 // --- Blocks 3 and 5, the cube --------------------------------------------------------
+
+/// The tabs island's width (as DrawTabsIsland lays it out).
+float TabsIslandWidth(AppContext& app, Session& session, float maxWidth) {
+    ui::Ui& ui = app.ui;
+    if (app.shell.mobile.tabsFolded) return ui.S(40);
+    const char* part[] = {Tr("3D-модель"), Tr("Эскиз"), Tr("Вид")};
+    const char* assembly[] = {Tr("Сборка"), Tr("Вид")};
+    float width = ui.S(34);
+    if (session.assembly)
+        for (const char* t : assembly) width += ui.fonts.medium->CalcTextSizeA(ui.S(13), FLT_MAX, 0, t).x + ui.S(24);
+    else
+        for (const char* t : part) width += ui.fonts.medium->CalcTextSizeA(ui.S(13), FLT_MAX, 0, t).x + ui.S(24);
+    return std::min(width + ui.S(4), maxWidth);
+}
 
 void DrawTabsIsland(AppContext& app, Session& session, ImVec2 at, float maxWidth) {
     ui::Ui& ui = app.ui;
@@ -554,11 +575,10 @@ float DrawUndoIsland(AppContext& app, ImVec2 at) {
 
 bool cubeLogged = false;   ///< the big cube's place written to the log since it opened
 
-void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
+void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax, ImVec2 at) {
     ui::Ui& ui = app.ui;
     MobileState& m = app.shell.mobile;
     const float b = ui.S(44);
-    const ImVec2 at{viewMax.x - b - ui.S(8), viewMin.y + ui.S(8)};
     // Folded: a button (the triad shows the orientation). A tap opens the
     // big cube; a long press goes straight home.
     if (BeginIsland(ui, "##island-cube", at, {b, b})) {
@@ -581,7 +601,9 @@ void DrawCube(AppContext& app, ImVec2 viewMin, ImVec2 viewMax) {
     // cube's own house icon (the author: no second button, no hints). It
     // folds itself after a choice or a tap elsewhere.
     const float s = std::max(ui.S(120), std::min(ui.S(200), std::min(viewMax.x - viewMin.x, viewMax.y - viewMin.y) - ui.S(70)));
-    const ImVec2 p{viewMax.x - s - ui.S(8), at.y + b + ui.S(6)};
+    // Under the button (or over it when the button is at the bottom), inside the view.
+    const bool below = at.y + b / 2 < (viewMin.y + viewMax.y) / 2;
+    const ImVec2 p{std::clamp(at.x + b - s, viewMin.x + ui.S(8), viewMax.x - s - ui.S(8)), below ? at.y + b + ui.S(6) : at.y - s - ui.S(6)};
     bool inside = false;
     if (!cubeLogged) log::Info("Touch: cube panel at {:.0f},{:.0f} size {:.0f}", p.x, p.y, s);   // the emulator's check taps a face
     cubeLogged = true;
@@ -697,6 +719,15 @@ void DrawPhoneRoot(AppContext& app) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     MobileState& m = app.shell.mobile;
+#if defined(__ANDROID__)
+    // The first start on a phone: the sensitivity, then the layout (the author, 17.10.2026).
+    // Not in the emulator's test runs (their commands drive the program themselves).
+    static bool setupChecked = false;
+    if (!setupChecked) {
+        setupChecked = true;
+        if (!app.settings.mobile.firstStartDone && !m.lastCrash.open && platform::android::TestCommands().empty()) StartSetup(app);
+    }
+#endif
     const ImGuiIO& io = ImGui::GetIO();
     const float W = io.DisplaySize.x, H = io.DisplaySize.y;
 
@@ -710,17 +741,26 @@ void DrawPhoneRoot(AppContext& app) {
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
 
-    // The camera's side gets the dark panel; the other side only its inset.
-    const float cameraW = m.cutoutSide != 0 ? std::max(ui.S(40), m.cutoutSide < 0 ? m.insets.left : m.insets.right) : 0.0f;
+    // The camera's side gets the dark panel (as wide as the user set, not
+    // narrower than its safe zone); the other side only its inset.
+    const MobileSettings& ms = app.settings.mobile;
+    const float safeW = m.cutoutSide != 0 ? std::max(ui.S(40), m.cutoutSide < 0 ? m.insets.left : m.insets.right) : 0.0f;
+    const float cameraW = safeW > 0 ? std::max(safeW, ui.S(static_cast<float>(ms.hotbarWidth))) : 0.0f;
     float x0 = m.cutoutSide < 0 ? cameraW : m.insets.left;
     float x1 = W - (m.cutoutSide > 0 ? cameraW : m.insets.right);
-    if (cameraW > 0) DrawCameraPanel(app, {m.cutoutSide < 0 ? 0.0f : W - cameraW, 0}, {cameraW, H});
+    m.rHotbar = {};
+    if (cameraW > 0) {
+        const ImVec2 cp{m.cutoutSide < 0 ? 0.0f : W - cameraW, 0};
+        DrawCameraPanel(app, cp, {cameraW, H});
+        m.rHotbar = {cp, {cp.x + cameraW, H}};
+    }
     const bool logoInBrow = cameraW == 0;
 
     Session* session = app.workspace.Active();
-    const float stripH = ui.S(kStrip);
+    const float stripH = ui.S(static_cast<float>(ms.stripHeight));
     const float stripBottom = H - m.insets.bottom;
-    if (app.workspace.ShowsHome() || !session) {
+    m.rBlock1 = m.rBlock2 = m.rUndo = m.rTabs = m.rCube = m.rStrip = m.rView = {};
+    if ((app.workspace.ShowsHome() || !session) && m.setupStep == 0 && !m.layoutEditor) {
         // The home page: a slim brow with the logo when there is no camera panel.
         float top = m.insets.top;
         if (logoInBrow) {
@@ -733,13 +773,39 @@ void DrawPhoneRoot(AppContext& app) {
         }
         DrawPhoneHome(app, {x0, top}, {x1 - x0, stripBottom - stripH - top});
         DrawStrip(app, {x0, stripBottom - stripH}, {x1 - x0, stripH});
+        m.rStrip = {{x0, stripBottom - stripH}, {x1, stripBottom}};
         ImGui::End();
+        DrawLayoutEditor(app);
+        return;
+    }
+    if (!session) {
+        ImGui::End();
+        DrawLayoutEditor(app);
+        return;
+    }
+
+    // Everything hidden ("Скрыть управление") or the first step of the setup:
+    // the view takes the whole width, nothing over it.
+    if (m.controlsHidden || m.setupStep == 1) {
+        const ImVec2 viewPos{x0, m.insets.top};
+        DrawViewport(app, *session, viewPos, {x1 - x0, stripBottom - m.insets.top});
+        m.rView = {viewPos, {x1, stripBottom}};
+        ImGui::End();
+        if (m.controlsHidden && cameraW == 0) {
+            // No camera panel to hold the button: a small one in the corner brings it all back.
+            const ImVec2 at{x0 + ui.S(8), m.insets.top + ui.S(8)};
+            if (BeginIsland(ui, "##island-show", at, ui.S(44, 44))) {
+                ImGui::SetCursorScreenPos(at);
+                if (ui::IconButton(ui, "##show-controls", "ui-eye", 44, 20, Tr("Показать управление"), true, true)) m.controlsHidden = false;
+            }
+            EndIsland();
+        }
+        DrawSetup(app);
         return;
     }
 
     // The blocks: 20 / 60 / 20 by default; block 1 widens while a value is
     // typed (the numpad's keys must fit a finger), block 2 narrows to icons.
-    const MobileSettings& ms = app.settings.mobile;
     const float span = x1 - x0;
     float w1 = std::max(ui.S(170), span * static_cast<float>(ms.leftWidth) / 100.0f);
     if (m.numpad) w1 = std::max(w1, ui.S(300));
@@ -758,18 +824,54 @@ void DrawPhoneRoot(AppContext& app) {
     DrawStrip(app, {vx0, stripBottom - stripH}, {vx1 - vx0, stripH});
     DrawBlock1(app, *session, {b1x, 0}, {w1, H}, !lefty, logoInBrow);
     DrawBlock2(app, *session, {b2x, 0}, {w2, H}, !lefty, ms.iconsOnly);
+    m.rView = {viewPos, {vx1, viewPos.y + viewSize.y}};
+    m.rStrip = {{vx0, stripBottom - stripH}, {vx1, stripBottom}};
+    m.rBlock1 = {{b1x, 0}, {b1x + w1, H}};
+    m.rBlock2 = {{b2x, 0}, {b2x + w2, H}};
     ImGui::End();
 
-    // Over the model: undo/redo (5), the tabs (3), the cube.
-    const ImVec2 islandAt{vx0 + ui.S(8), viewPos.y + ui.S(8)};
-    if (m.tabsFolded) {
-        DrawTabsIsland(app, *session, islandAt, ui.S(60));
-        DrawUndoIsland(app, {islandAt.x + ui.S(46), islandAt.y});
-    } else {
-        const float undoW = DrawUndoIsland(app, islandAt);
-        DrawTabsIsland(app, *session, {islandAt.x + undoW + ui.S(6), islandAt.y}, viewSize.x - undoW - ui.S(80));
+    // Over the model: undo/redo (5), the tabs (3), the cube — where the user
+    // put them (the layout editor): stuck to the top or the bottom edge, at a
+    // part of the free length, at a size. The setup's second step puts its
+    // own tabs where block 3 is.
+    const float viewBottom = viewPos.y + viewSize.y;
+    const auto place = [&](const IslandPlace& p, float w, float h, float usual) {
+        const float free = std::max(0.0f, viewSize.x - ui.S(16) - w);
+        const float along = p.along < 0 ? usual : static_cast<float>(p.along);
+        return ImVec2{vx0 + ui.S(8) + free * std::clamp(along, 0.0f, 1.0f), p.bottom ? viewBottom - ui.S(8) - h : viewPos.y + ui.S(8)};
+    };
+    const float baseScale = ui.scale;
+    const auto scaled = [&](const IslandPlace& p) { ui.scale = baseScale * static_cast<float>(p.scale); };
+    {
+        scaled(ms.undoIsland);
+        const float uw = ui.S(84), uh = ui.S(kIsland);
+        const ImVec2 at = place(ms.undoIsland, uw, uh, 0.0f);
+        DrawUndoIsland(app, at);
+        m.rUndo = {at, {at.x + uw, at.y + uh}};
     }
-    DrawCube(app, viewPos, {vx1, viewPos.y + viewSize.y});
+    if (m.setupStep != 2) {   // the setup's second step has its own tabs there
+        scaled(ms.tabsIsland);
+        const float tw = TabsIslandWidth(app, *session, viewSize.x - ui.S(80));
+        // Usually right after undo/redo.
+        const float free = std::max(1.0f, viewSize.x - ui.S(16) - tw);
+        const float usual = ms.tabsIsland.along < 0 && ms.undoIsland.along < 0 && ms.undoIsland.bottom == ms.tabsIsland.bottom
+                                ? std::min(1.0f, (m.rUndo.max.x - vx0 - ui.S(2)) / free)
+                                : 0.5f;
+        const ImVec2 at = place(ms.tabsIsland, tw, ui.S(kIsland), usual);
+        DrawTabsIsland(app, *session, at, viewSize.x - ui.S(80));
+        m.rTabs = {at, {at.x + tw, at.y + ui.S(kIsland)}};
+    }
+    {
+        scaled(ms.cubeIsland);
+        const float cb = ui.S(44);
+        const ImVec2 at = place(ms.cubeIsland, cb, cb, 1.0f);
+        DrawCube(app, viewPos, {vx1, viewBottom}, at);
+        m.rCube = {at, {at.x + cb, at.y + cb}};
+    }
+    ui.scale = baseScale;
+    DrawToolStrip(app, viewPos, {vx1, viewBottom}, !lefty);
+    DrawSetup(app);
+    DrawLayoutEditor(app);
 }
 
 void DrawLastCrash(AppContext& app) {

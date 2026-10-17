@@ -42,8 +42,18 @@ void DrawPhoneRoot(AppContext& app);
 /// The error screen after a crash or a hang last time (Android, layer 3).
 void DrawLastCrash(AppContext& app);
 
-/// Block 2's list of commands (MobileRibbon.cpp).
-void DrawToolList(AppContext& app, Session& session, float width, bool iconsOnly);
+/// Block 2's commands (MobileRibbon.cpp): compact (four buttons a group) or the long list.
+void DrawToolList(AppContext& app, Session& session, float width, bool iconsOnly, bool compact, bool viewOnLeft);
+/// Compact block 2: the open group's strip over the view.
+void DrawToolStrip(AppContext& app, ImVec2 viewMin, ImVec2 viewMax, bool blockOnRight);
+
+/// The layout editor (full screen, mockups 2a–2d) and the first-start setup
+/// (5a–5b): LayoutEditor.cpp. Drawn last, over everything.
+void DrawLayoutEditor(AppContext& app);
+void DrawSetup(AppContext& app);
+/// Opens the layout editor (from the settings) or the first-start setup.
+void OpenLayoutEditor(AppContext& app);
+void StartSetup(AppContext& app);
 
 /// The numpad (Numpad.cpp): its height, drawing it, and a key typed.
 float NumpadHeight(const ui::Ui& ui);

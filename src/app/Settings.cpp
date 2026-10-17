@@ -134,6 +134,20 @@ Settings FromJson(const nlohmann::json& j) {
             tap("tap2", g.tap2);
             tap("tap3", g.tap3);
         };
+        o.toolsList = m->value("toolsList", o.toolsList);
+        o.hotbarWidth = std::clamp(m->value("hotbarWidth", o.hotbarWidth), 0, 120);
+        o.stripHeight = std::clamp(m->value("stripHeight", o.stripHeight), 32, 80);
+        o.firstStartDone = m->value("firstStartDone", o.firstStartDone);
+        const auto readIsland = [&](const char* key, IslandPlace& p) {
+            const auto it = m->find(key);
+            if (it == m->end() || !it->is_object()) return;
+            p.bottom = it->value("bottom", p.bottom);
+            p.along = std::clamp(it->value("along", p.along), -1.0, 1.0);
+            p.scale = std::clamp(it->value("scale", p.scale), 0.8, 1.4);
+        };
+        readIsland("undoIsland", o.undoIsland);
+        readIsland("tabsIsland", o.tabsIsland);
+        readIsland("cubeIsland", o.cubeIsland);
         readSet("gesturesOff", o.gesturesOff);
         readSet("gesturesOn", o.gesturesOn);
         o.tapSlop = std::clamp(m->value("tapSlop", o.tapSlop), 3, 40);
@@ -180,6 +194,7 @@ nlohmann::json ShortcutsJson(const std::vector<std::pair<std::string, std::strin
     for (const auto& [id, chord] : shortcuts) out[id] = chord;
     return out;
 }
+nlohmann::json IslandJson(const IslandPlace& p) { return {{"bottom", p.bottom}, {"along", p.along}, {"scale", p.scale}}; }
 nlohmann::json GestureSetJson(const FingerGestures& g) {
     return {{"one", static_cast<int>(g.drags.one)},     {"two", static_cast<int>(g.drags.two)},
             {"three", static_cast<int>(g.drags.three)}, {"pinch", g.drags.pinch},
@@ -244,6 +259,13 @@ bool Settings::Save(const std::filesystem::path& file) const {
                     {"fingerOrbit", mobile.fingerOrbit},
                     {"fingerPan", mobile.fingerPan},
                     {"fingerZoom", mobile.fingerZoom},
+                    {"toolsList", mobile.toolsList},
+                    {"hotbarWidth", mobile.hotbarWidth},
+                    {"stripHeight", mobile.stripHeight},
+                    {"firstStartDone", mobile.firstStartDone},
+                    {"undoIsland", IslandJson(mobile.undoIsland)},
+                    {"tabsIsland", IslandJson(mobile.tabsIsland)},
+                    {"cubeIsland", IslandJson(mobile.cubeIsland)},
                     {"gesturesOff", GestureSetJson(mobile.gesturesOff)},
                     {"gesturesOn", GestureSetJson(mobile.gesturesOn)},
                     {"tapSlop", mobile.tapSlop},
