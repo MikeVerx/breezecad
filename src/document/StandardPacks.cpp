@@ -82,7 +82,10 @@ std::string ExprOf(const Json& v) { return v.is_number() ? PackNumber(v.get<doub
 
 Expected<PackShape> ReadShape(const Json& j, const Reader& r) {
     if (!j.is_object() || j.size() != 1) return r.Fail("фигура — объект с одним ключом: rect, circle, polygon, hexagon или axis");
-    const auto& [type, body] = *j.items().begin();
+    // The key and value of the object's only member (not through items():
+    // its iterator outlives the temporary it points into on libc++).
+    const std::string type = j.begin().key();
+    const Json&       body = j.begin().value();
     PackShape s;
     Error err;
     const Reader in(std::format("фигура {}", type));
@@ -130,7 +133,10 @@ Expected<PackShape> ReadShape(const Json& j, const Reader& r) {
 
 Expected<PackStep> ReadStep(const Json& j, const Reader& r) {
     if (!j.is_object() || j.size() != 1) return r.Fail("шаг — объект с одним ключом: sketch, extrude или revolve");
-    const auto& [type, body] = *j.items().begin();
+    // The key and value of the object's only member (not through items():
+    // its iterator outlives the temporary it points into on libc++).
+    const std::string type = j.begin().key();
+    const Json&       body = j.begin().value();
     PackStep step;
     Error err;
     const Reader in(std::format("шаг {}", type));
