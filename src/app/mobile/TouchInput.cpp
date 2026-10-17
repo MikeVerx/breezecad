@@ -2,6 +2,7 @@
 
 #include "app/Operations.h"
 #include "app/mobile/MobileLayout.h"
+#include "app/sketch/SketchEditor.h"
 #include "core/Log.h"
 #include "core/Monitor.h"
 
@@ -78,7 +79,32 @@ bool CursorActive(const AppContext& app) {
     if (!m.phone) return false;
     const Session* s = app.workspace.Active();
     if (!s || app.workspace.ShowsHome()) return false;
-    return s->mode == EditMode::Sketch || m.cursorIn3d;
+    if (s->mode == EditMode::Sketch) return m.cursorInSketch || SketchToolNeedsCursor(app);
+    return m.cursorIn3d;
+}
+
+bool SketchToolNeedsCursor(const AppContext& app) {
+    switch (app.sketch.Tool()) {
+        case SketchTool::Select:
+        case SketchTool::Dimension:
+        case SketchTool::Project:
+        case SketchTool::Trim:
+        case SketchTool::Extend:
+        case SketchTool::Split:
+        case SketchTool::Fillet:
+        case SketchTool::Coincident:
+        case SketchTool::Horizontal:
+        case SketchTool::Vertical:
+        case SketchTool::Parallel:
+        case SketchTool::Perpendicular:
+        case SketchTool::Equal:
+        case SketchTool::Tangent:
+        case SketchTool::Fix:
+        case SketchTool::Midpoint:
+        case SketchTool::Concentric:
+        case SketchTool::Symmetric: return false;
+        default: return true;
+    }
 }
 
 void TouchInput::Pos(ImVec2 at, ImGuiMouseSource source) {
@@ -464,8 +490,24 @@ void TouchInput::RunRowButtons(AppContext& app) {
             m.boxHeld = false;
         }
         ImGuiIO& io = ImGui::GetIO();
-        io.AddKeyEvent(ImGuiKey_Escape, true);
-        io.AddKeyEvent(ImGuiKey_Escape, false);
+        // A field being typed in or a menu on top takes it as the Esc key. Otherwise
+        // it is the command: the key alone reached nobody (shortcuts on the phone come
+        // as chords, like "Назад"), so ✕ did nothing in a sketch.
+        const bool keyTakers = io.WantTextInput || ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+        if (keyTakers) {
+            io.AddKeyEvent(ImGuiKey_Escape, true);
+            io.AddKeyEvent(ImGuiKey_Escape, false);
+            if (!io.WantTextInput) {   // a context menu: closed as HandleShortcuts does for Esc
+                ImGuiContext& g = *GImGui;
+                if (!g.OpenPopupStack.empty()) {
+                    const ImGuiWindow* top = g.OpenPopupStack.back().Window;
+                    if (!top || !(top->Flags & ImGuiWindowFlags_Modal)) ImGui::ClosePopupToLevel(g.OpenPopupStack.Size - 1, true);
+                }
+            }
+        } else {
+            mon::Action("touch", "отмена");
+            app.Later([&app] { CancelPressed(app); });
+        }
         myQueued = std::max(myQueued, 3);
     }
 }

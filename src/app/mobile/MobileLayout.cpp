@@ -265,10 +265,14 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
     const float padH = m.numpad ? NumpadHeight(ui) : 0.0f;
     const float contentH = rowTop - padH - y;
     // The numpad takes the block when there is no room for both (a low
-    // phone screen): the content waits under it rather than show through.
-    if (contentH >= ui.S(40)) {
+    // phone screen). The content is still drawn then, 1 px high: the value
+    // being typed lives in it, and a field ImGui does not see for a frame
+    // loses focus — the numpad (and ⌨) closed as soon as it opened.
+    // ImGui skips a child that is clipped away entirely, hence 1 px, not 0.
+    const bool room = contentH >= ui.S(40);
+    if (room || m.numpad) {
         const ImVec2 cp{pos.x + pad, y};
-        BeginArea("##block1-content", cp, {size.x - pad - 1, contentH}, c.panel, true);
+        BeginArea("##block1-content", cp, {size.x - pad - 1, room ? contentH : 1.0f}, c.panel, true);
         const float width = size.x - pad - 1;
         switch (m.block1Tab) {
             case 0:
@@ -327,11 +331,16 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
                     }
                     break;
                 case 1:
-                    // In a sketch the cursor is always on (the button says so, greyed).
-                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, cursorOn, false, !sketch, &clicked, nullptr);
+                    // A sketch has its own switch; a drawing tool keeps the cursor on whatever it says.
+                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, cursorOn, false, true, &clicked, nullptr);
+                    if (clicked && sketch && SketchToolNeedsCursor(app)) {
+                        app.notes.Info(Tr("Рисуют только с курсором. Без него — выбор, размеры, обрезка и зависимости."));
+                        clicked = false;
+                    }
                     if (clicked) {
-                        m.cursorIn3d = !m.cursorIn3d;
-                        if (m.cursorIn3d && !m.cursorShown) {   // first time: in the middle of the model
+                        bool& on = sketch ? m.cursorInSketch : m.cursorIn3d;
+                        on = !on;
+                        if (on && !m.cursorShown) {   // first time: in the middle of the model
                             m.cursorTip = {(m.viewMin.x + m.viewMax.x) / 2, (m.viewMin.y + m.viewMax.y) / 2};
                             m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + CursorReach(app)};
                             m.cursorShown = true;
@@ -369,10 +378,33 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
     }
     if (CursorActive(app) && m.cursorShown && m.boxMode) beard += m.boxHeld ? Tr(" · рамка: второй угол — ОК") : Tr(" · рамка: первый угол — ОК");
     dl->AddRectFilled({pos.x, bottom}, {pos.x + size.x, pos.y + size.y}, ui::ToU32(c.statusBar));
-    ImGui::PushClipRect({pos.x, bottom}, {pos.x + size.x - ui.S(4), pos.y + size.y}, true);
-    dl->AddText(ui.fonts.mono, ui.S(10.5f), {pos.x + ui.S(10) + pad, bottom + (ui.S(kBeard) - ui.S(11)) / 2},
-                ui::ToU32(c.textSecondary), beard.c_str());
-    ImGui::PopClipRect();
+    OperationEditor* applying = app.ops.Active();
+    if (applying && !applying->HasApply()) applying = nullptr;
+    if (applying) {
+        // An operation open: the bottom line is "Применить" (commit, stay for the next
+        // one) — the panel keeps its height for the fields. Отмена/ОК are the row above.
+        const ImVec2 a{pos.x + pad + ui.S(4), bottom + ui.S(2)}, b{pos.x + size.x - ui.S(4), bottom + ui.S(kBeard) - ui.S(2)};
+        ImGui::SetCursorScreenPos(a);
+        const bool clicked = ImGui::InvisibleButton("##beard-apply", {b.x - a.x, b.y - a.y});
+        const bool held = ImGui::IsItemActive();
+        dl->AddRectFilled(a, b, ui::ToU32(held ? c.pressed : c.accentSoft), ui.S(6));
+        dl->AddRect(a, b, ui::ToU32(c.accentSoftBorder), ui.S(6));
+        const char* label = Tr("Применить");
+        const float fs = ui.S(12.5f);
+        const ImVec2 ts = ui.fonts.medium->CalcTextSizeA(fs, FLT_MAX, 0, label);
+        dl->AddText(ui.fonts.medium, fs, {(a.x + b.x - ts.x) / 2, (a.y + b.y - ts.y) / 2}, ui::ToU32(c.accent), label);
+        if (clicked) {
+            Session& s = session;
+            app.Later([&app, &s, applying] {
+                if (app.ops.Active() == applying) applying->Apply(app, s);
+            });
+        }
+    } else {
+        ImGui::PushClipRect({pos.x, bottom}, {pos.x + size.x - ui.S(4), pos.y + size.y}, true);
+        dl->AddText(ui.fonts.mono, ui.S(10.5f), {pos.x + ui.S(10) + pad, bottom + (ui.S(kBeard) - ui.S(11)) / 2},
+                    ui::ToU32(c.textSecondary), beard.c_str());
+        ImGui::PopClipRect();
+    }
     (void)edge;
     EndArea();
 }

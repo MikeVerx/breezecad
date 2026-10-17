@@ -41,7 +41,8 @@ struct MobileState {
     bool touchScreen = false;   ///< fingers are the main input (Android)
 
     // --- The drop cursor (ADR-0004, "Курсор-капля") ---
-    bool   cursorIn3d = false;    ///< its button in the row under block 1 (a sketch has it always on)
+    bool   cursorIn3d = false;    ///< its button in the row under block 1, in the model
+    bool   cursorInSketch = true; ///< the same in a sketch; drawing tools have it on regardless (author, 17.10)
     bool   cursorShown = false;   ///< drawn: it was called at least once since it was switched on
     ImVec2 cursorFinger{0, 0};    ///< where its round part is (under the finger)
     ImVec2 cursorTip{0, 0};       ///< where it points (what the mouse is for ImGui)

@@ -841,7 +841,8 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
         ui::Divider(ui, c.dividerSoft);
     }
 
-    const float footer = ui.S(62);
+    const bool phone = app.shell.mobile.phone;   // Отмена/Готово: the row under block 1
+    const float footer = phone ? 0.0f : ui.S(62);
     ImGui::BeginChild("##look-body", {width, ImGui::GetContentRegionAvail().y - footer}, ImGuiChildFlags_None);
     ImGui::SetCursorPos({ui.S(14), ui.S(14)});
     ImGui::BeginGroup();
@@ -909,6 +910,10 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     ImGui::EndGroup();
     ImGui::EndChild();
 
+    if (phone) {
+        DrawCreateDialog(app, session);
+        return;
+    }
     // Footer: Отмена / Готово.
     ui::Divider(ui, c.dividerSoft);
     const ImVec2 fp = ImGui::GetCursorScreenPos();

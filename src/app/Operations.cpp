@@ -388,6 +388,15 @@ void KeepInView(AppContext& app, const Box3& box) {
     app.viewport.AnimateTo(target, app.settings.animations ? 0.35 : 0.0);
 }
 
+void CancelPressed(AppContext& app) {
+    Session* s = app.Doc();
+    if (s && !app.shell.paletteOpen && !app.ops.Active() && !app.shell.measuring && s->mode == EditMode::Sketch) {
+        app.sketch.Escape(app, *s, false);
+        return;
+    }
+    EscapePressed(app);
+}
+
 void EscapePressed(AppContext& app) {
     if (app.shell.paletteOpen) {
         app.shell.paletteOpen = false;
