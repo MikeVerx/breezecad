@@ -20,6 +20,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace bz::doc::parts {
@@ -109,6 +110,15 @@ struct LengthRange {
 };
 /// Nullopt unless the standard takes any length of a range (packs only).
 std::optional<LengthRange> FreeLength(const StandardInfo& standard);
+/// A size typed within a range besides the row and the length (a sheet's width).
+struct InputInfo {
+    std::string_view name;    ///< variable and key in Request::inputs: "B"
+    std::string_view title;   ///< "Ширина, мм"
+    double           min = 0, max = 0, preset = 0;
+};
+/// Such sizes of a standard (packs only); empty for most.
+std::vector<InputInfo> Inputs(const StandardInfo& standard);
+
 /// Caption of the sizes for the library window ("Сечение a×t, мм"); empty:
 /// the window chooses by the kind.
 std::string_view SizeTitle(const StandardInfo& standard);
@@ -122,6 +132,8 @@ struct Request {
     bool        realThread = false;
     /// Appearance of the body (doc::StandardAppearances id); empty: DefaultAppearance.
     std::string appearance{};
+    /// Values of Inputs() by name; one not given takes its preset.
+    std::vector<std::pair<std::string, double>> inputs{};
 };
 
 /// Outer size of the part as the table gives it (mm): across X, Y and along

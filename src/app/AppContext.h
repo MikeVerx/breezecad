@@ -79,6 +79,7 @@ struct ShellState {
         struct Pick {
             std::string standard, size;   ///< doc::parts ids
             double      length = 0;
+            std::vector<std::pair<std::string, double>> inputs{};   ///< typed sizes (a sheet's width), doc::parts::Inputs
         };
         int              family = 0;        ///< filter: 0 ГОСТ, 1 ISO, 2 DIN
         std::set<int>    openGroups;        ///< expanded folders (index in parts::Groups())

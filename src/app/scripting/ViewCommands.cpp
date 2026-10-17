@@ -254,6 +254,10 @@ Json LibrarySizes(AppContext&, const Json& args) {
     Json out = {{"standard", st.id}, {"title", st.title}, {"sizes", doc::parts::Sizes(st)}, {"has_thread", doc::parts::HasThread(st.kind)},
                 {"note", "Длины размера — library.sizes с size."}};
     if (const std::string_view title = doc::parts::SizeTitle(st); !title.empty()) out["size_title"] = Tr(title);
+    Json inputs = Json::array();
+    for (const doc::parts::InputInfo& in : doc::parts::Inputs(st))
+        inputs.push_back({{"name", in.name}, {"title", Tr(in.title)}, {"min", in.min}, {"max", in.max}, {"default", in.preset}});
+    if (!inputs.empty()) out["inputs"] = std::move(inputs);
     if (const auto range = doc::parts::FreeLength(st)) {
         out["length_range"] = {{"min", range->min}, {"max", range->max}, {"default", range->preset}};
         out["note"] = "Длина — любая из диапазона length_range, мм.";
@@ -286,6 +290,11 @@ Json LibraryMake(AppContext& app, const Json& args) {
     request.length     = Number(args, "length", 0.0);
     request.realThread = Flag(args, "real_thread", false);
     request.appearance = Text(args, "appearance", "");
+    if (const auto in = args.find("inputs"); in != args.end() && in->is_object())
+        for (const auto& [name, value] : in->items()) {
+            if (!value.is_number()) Fail(std::format("inputs.{} — число, мм", name));
+            request.inputs.emplace_back(name, value.get<double>());
+        }
     Expected<doc::parts::Made> made = doc::parts::MakePart(request);
     if (!made) Fail(Tr(made.GetError().message));
     Session& s = app.workspace.NewPart();
@@ -355,7 +364,9 @@ void AddViewCommands(Commands& out) {
                            {"length", NumberArg("Длина из library.sizes (если у изделия есть длина; для length_range — любая "
                                                 "из диапазона, по умолчанию default).")},
                            {"real_thread", BoolArg("Настоящая (вырезанная) резьба.")},
-                           {"appearance", StringArg("Внешний вид (id); по умолчанию — свой для вида изделия.")}},
+                           {"appearance", StringArg("Внешний вид (id); по умолчанию — свой для вида изделия.")},
+                           {"inputs", {{"type", "object"},
+                                       {"description", "Размеры, которые вводятся (inputs из library.sizes): {\"B\": 1250}, мм."}}}},
                           {"standard", "size"}),
                    true, &LibraryMake});
     out.push_back({"library.add_pack",

@@ -210,7 +210,13 @@ void PickPart(AppContext& app, const ShellState::Library::Pick& pick) {
 
 /// The pick for a standard keeping the current size and length where it has them.
 ShellState::Library::Pick PickFor(const parts::StandardInfo& s, const ShellState::Library::Pick& from) {
-    ShellState::Library::Pick p{std::string(s.id), {}, 0};
+    ShellState::Library::Pick p{std::string(s.id), {}, 0, {}};
+    for (const parts::InputInfo& in : parts::Inputs(s)) {   // typed sizes: keep a value that still fits
+        double v = in.preset;
+        for (const auto& [name, value] : from.inputs)
+            if (name == in.name && value >= in.min && value <= in.max) v = value;
+        p.inputs.emplace_back(std::string(in.name), v);
+    }
     const parts::StandardInfo* old = parts::FindStandard(from.standard);
     p.size = old ? parts::MatchingSize(*old, from.size, s) : parts::Sizes(s).front();
     if (const std::optional<parts::LengthRange> range = parts::FreeLength(s)) {   // any length: keep the one there was
@@ -341,6 +347,23 @@ void DrawLibraryPart(AppContext& app, const parts::StandardInfo& standard, float
             lib.chosen.length = lengths[static_cast<std::size_t>(chosen)];
     } else {
         lib.chosen.length = 0;
+    }
+
+    // Sizes typed within a range (a sheet's width).
+    for (const parts::InputInfo& in : parts::Inputs(standard)) {
+        auto it = std::ranges::find(lib.chosen.inputs, std::string(in.name), &std::pair<std::string, double>::first);
+        if (it == lib.chosen.inputs.end()) {
+            lib.chosen.inputs.emplace_back(std::string(in.name), in.preset);
+            it = lib.chosen.inputs.end() - 1;
+        }
+        LibraryHeading(ui, Trf("{} (от {:g} до {:g})", Tr(in.title), in.min, in.max).c_str());
+        ImGui::PushID(in.name.data(), in.name.data() + in.name.size());
+        if (ui::CommitInput(ui, "##input", std::format("{:g}", it->second), app.shell.edit, width, true)) {
+            const Expected<double> typed = EvaluateExpression(app.shell.edit.text, Quantity::Length, UnitSystem{}, {});
+            if (typed && *typed >= in.min && *typed <= in.max) it->second = *typed;
+            else app.notes.Error(Trf("{} — число от {:g} до {:g} мм", Tr(in.title), in.min, in.max));
+        }
+        ImGui::PopID();
     }
 
     // Look: the metals of the standard appearances.
@@ -524,7 +547,8 @@ void DrawLibrary(AppContext& app) {
     // Footer.
     ui::Divider(ui, c.dividerSoft);
     standard = parts::FindStandard(lib.chosen.standard);
-    const parts::Request request{lib.chosen.standard, lib.chosen.size, lib.chosen.length, lib.realThread, lib.appearance};
+    const parts::Request request{lib.chosen.standard, lib.chosen.size, lib.chosen.length, lib.realThread, lib.appearance,
+                                 lib.chosen.inputs};
     if (standard) ValueRow(ui, Tr("Обозначение"), parts::Designation(request));
     else ImGui::Dummy({0, ui.S(26)});
     ImGui::Dummy({0, ui.S(4)});

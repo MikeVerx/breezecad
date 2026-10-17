@@ -45,6 +45,9 @@ struct PackShape {
     Type        type = Type::Rect;
     std::string w, h, r, x, y, d, s;
     std::vector<std::array<std::string, 2>> points;   ///< Polygon; Axis: its two ends
+    /// Polygon: a radius for each corner (empty or "0": sharp), rounding it
+    /// tangent to both sides (the root and toe radii of an angle or a channel).
+    std::vector<std::string> radii;
     /// Polygon: its closing line (last point → first) is the осевая to revolve about.
     bool axis = false;
 };
@@ -75,6 +78,10 @@ struct PackKind {
     std::vector<PackStep> build;
     /// Outer size across X, Y and along Z (expressions; empty: not checked).
     std::array<std::string, 3> envelope;
+    /// Instead of a recipe: a part document (its JSON, as in a .bzc) whose
+    /// variables named like the table's columns take a row's values — a part
+    /// the user drew saved into the library ("Сохранить в библиотеку").
+    std::string document;
 };
 
 /// A column of a standard's table.
@@ -82,6 +89,14 @@ struct PackColumn {
     std::string name;     ///< variable name in the part and in expressions: "t"
     std::string title;    ///< "Толщина стенки"
     bool        length = true;   ///< mm, becomes a variable; false: kept for reference (mass of 1 m…)
+};
+
+/// A size the user types within a range, besides the table's row and the
+/// length (the width of a sheet).
+struct PackInput {
+    std::string name;    ///< variable: "B"
+    std::string title;   ///< "Ширина, мм"
+    double      min = 0, max = 0, preset = 0;
 };
 
 /// Lengths a part of the standard can have.
@@ -112,6 +127,7 @@ struct PackStandard {
     std::vector<PackColumn>          columns;
     std::vector<std::vector<double>> rows;
     PackLength                       length;
+    std::vector<PackInput>           inputs;
 };
 
 struct Pack {
@@ -124,6 +140,10 @@ struct Pack {
     std::vector<PackStandard> standards;
     std::filesystem::path     file;   ///< where it was read from (empty: from text)
 };
+
+/// The pack as JSON text (what ParsePack reads back): for packs the program
+/// writes itself, the user's library.
+std::string PackToJson(const Pack& pack);
 
 /// Reads a pack from JSON text. Checks everything the program relies on:
 /// ids, columns, rows, expressions name only the standard's columns and L.

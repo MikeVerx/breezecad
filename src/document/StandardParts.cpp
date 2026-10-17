@@ -1,6 +1,7 @@
 #include "document/StandardParts.h"
 
 #include "core/Expression.h"
+#include "document/BzcFile.h"
 #include "document/ExtrudeFeature.h"
 #include "document/Origin.h"
 #include "document/RevolveFeature.h"
@@ -615,6 +616,8 @@ public:
     IdGenerator& Ids() { return myDoc.Ids(); }
     /// A constraint without a value between two entities.
     void Align(SketchFeature& sk, sketch::ConstraintType type, ObjectId a, ObjectId b) { Geometric(sk, type, a, b); }
+    /// A dimension of one entity (a radius) driven by an expression.
+    void Measure(SketchFeature& sk, sketch::ConstraintType type, ObjectId a, const X& value) { Dimension(sk, type, a, {}, value); }
     void     RealThread(bool real) { myRealThread = real; }
 
     /// A circle centred at `centre` (held by dimensions) with a diameter dimension.
@@ -743,12 +746,29 @@ P PointOf(const S& x, const S& y) {
     return {mag(x), mag(y), x.v < 0, y.v < 0};
 }
 
+/// The variables of a pack part: the row's sizes, L, and the typed inputs
+/// (their presets when not given).
+std::vector<std::pair<std::string, double>> PackValues(const PackStandard& s, std::size_t row, double length,
+                                                       const std::vector<std::pair<std::string, double>>& inputs) {
+    std::vector<std::pair<std::string, double>> out;
+    for (std::size_t i = 0; i < s.columns.size(); ++i)
+        if (s.columns[i].length) out.emplace_back(s.columns[i].name, s.rows[row][i]);
+    if (s.length.mode != PackLength::Mode::None) out.emplace_back("L", length);
+    for (const PackInput& in : s.inputs) {
+        double v = in.preset;
+        for (const auto& [name, value] : inputs)
+            if (name == in.name) v = value;
+        out.emplace_back(in.name, v);
+    }
+    return out;
+}
+
 class PackBuilder {
 public:
-    PackBuilder(Builder& b, const PackStandard& s, std::size_t row, double length) : myB(b), myStandard(s) {
-        for (std::size_t i = 0; i < s.columns.size(); ++i)
-            if (s.columns[i].length) myValues.emplace_back(s.columns[i].name, s.rows[row][i]);
-        if (s.length.mode != PackLength::Mode::None) myValues.emplace_back("L", length);
+    PackBuilder(Builder& b, const PackStandard& s, std::size_t row, double length,
+                const std::vector<std::pair<std::string, double>>& inputs)
+        : myB(b), myStandard(s) {
+        myValues = PackValues(s, row, length, inputs);
         for (const auto& [name, value] : myValues) myB.Var(name, value, std::format("{}", value));   // shortest exact form
     }
 
@@ -803,6 +823,13 @@ public:
                     if (!y) return y.GetError();
                     points.push_back(PointOf(*x, *y));
                 }
+                std::vector<S> radii;
+                for (const std::string& r : shape.radii) {
+                    const Expected<S> v = Ex(r);
+                    if (!v) return v.GetError();
+                    radii.push_back(*v);
+                }
+                if (std::ranges::any_of(radii, [](const S& r) { return r.v > 1e-9; })) return Rounded(sk, points, radii);
                 const std::vector<ObjectId> lines = myB.Polygon(sk, points);
                 if (shape.axis) {
                     Builder::MarkAxis(sk, lines.back());
@@ -815,6 +842,59 @@ public:
     }
 
 private:
+    /// A closed polygon with some corners rounded. The sharp outline stays as
+    /// construction lines held by dimensions; each arc's ends lie on its two
+    /// sides, tangent to the lines between them, with a radius dimension.
+    Status Rounded(SketchFeature& sk, const std::vector<P>& points, const std::vector<S>& radii) {
+        const std::size_t n = points.size();
+        IdGenerator& ids = myB.Ids();
+        std::vector<ObjectId> corner(n), edge(n);
+        std::vector<Vec2> at(n);
+        for (std::size_t i = 0; i < n; ++i) {
+            corner[i] = myB.Point(sk, points[i]);
+            at[i] = sk.sketch.PositionOf(corner[i]);
+        }
+        for (std::size_t i = 0; i < n; ++i) edge[i] = sk.sketch.AddLine(ids, corner[i], corner[(i + 1) % n], true);   // i -> i+1
+        // Where each corner's arc starts (on the side from the previous corner) and ends.
+        std::vector<ObjectId> in(n), out(n);
+        std::vector<Vec2> centre(n);
+        for (std::size_t i = 0; i < n; ++i) {
+            const double r = radii[i].v;
+            if (r <= 1e-9) {
+                in[i] = out[i] = corner[i];
+                continue;
+            }
+            const Vec2 c = at[i], a = at[(i + n - 1) % n], b = at[(i + 1) % n];
+            const double la = (a - c).Length(), lb = (b - c).Length();
+            if (la < 1e-9 || lb < 1e-9) return Error{std::format("{}: совпадающие точки многоугольника", myStandard.id)};
+            const Vec2 u = (a - c) * (1 / la), v = (b - c) * (1 / lb);
+            const double half = std::acos(std::clamp(u.Dot(v), -1.0, 1.0)) / 2;
+            if (half < 1e-6 || half > kPi / 2 - 1e-6) return Error{std::format("{}: скругление угла в 180°", myStandard.id)};
+            const double along = r / std::tan(half);
+            if (along > la + 1e-9 || along > lb + 1e-9)
+                return Error{std::format("{}: радиус {} не помещается в угол", myStandard.id, PackNumber(r))};
+            in[i] = sk.sketch.AddPoint(ids, c + u * along);
+            out[i] = sk.sketch.AddPoint(ids, c + v * along);
+            centre[i] = c + (u + v).Normalized() * (r / std::sin(half));
+            myB.Align(sk, sketch::ConstraintType::PointOnCurve, in[i], edge[(i + n - 1) % n]);
+            myB.Align(sk, sketch::ConstraintType::PointOnCurve, out[i], edge[i]);
+        }
+        // Lines between the corners' arcs, then the arcs tangent to them.
+        std::vector<ObjectId> side(n);
+        for (std::size_t i = 0; i < n; ++i) side[i] = sk.sketch.AddLine(ids, out[i], in[(i + 1) % n]);
+        for (std::size_t i = 0; i < n; ++i) {
+            if (in[i] == out[i]) continue;
+            const ObjectId c = sk.sketch.AddPoint(ids, centre[i]);
+            const Vec2 pa = sk.sketch.PositionOf(in[i]), pb = sk.sketch.PositionOf(out[i]);
+            const bool ccw = (pa - centre[i]).Cross(pb - centre[i]) > 0;   // arcs run counter-clockwise
+            const ObjectId arc = sk.sketch.AddArc(ids, c, ccw ? in[i] : out[i], ccw ? out[i] : in[i]);
+            myB.Align(sk, sketch::ConstraintType::Tangent, side[(i + n - 1) % n], arc);
+            myB.Align(sk, sketch::ConstraintType::Tangent, side[i], arc);
+            myB.Measure(sk, sketch::ConstraintType::Radius, arc, X{radii[i].text, radii[i].v});
+        }
+        return Status::Ok();
+    }
+
     /// w × h centred on (cx, cy); corners rounded by r unless r is 0. Each
     /// arc's centre is held under its end on the horizontal side; the
     /// solver's equal radii place it.
@@ -855,8 +935,9 @@ private:
 };
 
 /// Builds a part of a pack's kind from a row of its standard.
-Status BuildPack(Builder& b, const PackKind& kind, const PackStandard& standard, std::size_t row, double length, Envelope& envelope) {
-    PackBuilder pb(b, standard, row, length);
+Status BuildPack(Builder& b, const PackKind& kind, const PackStandard& standard, std::size_t row, double length,
+                 const std::vector<std::pair<std::string, double>>& inputs, Envelope& envelope) {
+    PackBuilder pb(b, standard, row, length, inputs);
     SketchFeature* sketch = nullptr;
     ObjectId axis;
     for (const PackStep& step : kind.build) {
@@ -1085,6 +1166,13 @@ std::optional<LengthRange> FreeLength(const StandardInfo& s) {
     return LengthRange{p->length.min, p->length.max, p->length.preset};
 }
 
+std::vector<InputInfo> Inputs(const StandardInfo& s) {
+    std::vector<InputInfo> out;
+    if (const PackStandard* p = PackOf(s))
+        for (const PackInput& in : p->inputs) out.push_back({in.name, in.title, in.min, in.max, in.preset});
+    return out;
+}
+
 std::string_view SizeTitle(const StandardInfo& s) {
     const PackKind* k = PackKindOf(s.kind);
     return k ? std::string_view(k->sizeTitle) : std::string_view{};
@@ -1113,8 +1201,10 @@ std::string DesignationOf(const Request& q) {
         const bool length = p->length.mode != PackLength::Mode::None;
         std::string pattern = p->designation;
         if (pattern.empty()) pattern = length ? "{noun} {size}\xC3\x97{L} {title}" : "{noun} {size} {title}";
-        const std::pair<std::string, std::string> extra[] = {
+        std::vector<std::pair<std::string, std::string>> extra = {
             {"size", PackSize(*p, *row)}, {"L", PackNumber(q.length)}, {"title", p->title}, {"noun", kind ? kind->noun : std::string{}}};
+        for (const auto& [name, value] : PackValues(*p, *row, q.length, q.inputs))
+            if (std::ranges::any_of(p->inputs, [&](const PackInput& in) { return in.name == name; })) extra.emplace_back(name, PackNumber(value));
         return FillPackTemplate(pattern, *p, *row, extra);
     }
     const std::string title(s->title);
@@ -1182,7 +1272,21 @@ Expected<Made> MakePart(const Request& asked) {
         const PackKind* kind = PackKindOf(s->kind);
         const std::optional<std::size_t> row = PackRow(*p, q.size);
         if (!kind || !row) return Error{std::format("{}: нет размера «{}»", s->title, q.size)};
-        if (const Status built = BuildPack(b, *kind, *p, *row, q.length, made.envelope); !built) return built.GetError();
+        for (const PackInput& in : p->inputs)
+            for (const auto& [name, value] : q.inputs)
+                if (name == in.name && (value < in.min - 1e-9 || value > in.max + 1e-9))
+                    return Error{std::format("{}: {} = {} мм вне диапазона {}–{} мм", s->title, in.title, Num(value), Num(in.min),
+                                             Num(in.max))};
+        if (!kind->document.empty()) {
+            // A part the user saved: its own tree, its variables take the row.
+            Expected<Document> saved = DocumentFromJson(kind->document);
+            if (!saved) return saved.GetError();
+            doc = std::move(*saved);
+            for (const auto& [name, value] : PackValues(*p, *row, q.length, q.inputs))
+                for (Parameter& v : doc.variables)
+                    if (v.name == name) v.expression = std::format("{}", value), v.value = value;
+        } else if (const Status built = BuildPack(b, *kind, *p, *row, q.length, q.inputs, made.envelope); !built)
+            return built.GetError();
         Finish(doc, kind->noun, designation);
         doc.info.material = kind->material;
     } else switch (s->kind) {

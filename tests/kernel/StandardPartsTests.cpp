@@ -1,3 +1,4 @@
+#include "document/BzcFile.h"
 #include "document/Recompute.h"
 #include "document/StandardPacks.h"
 #include "document/StandardParts.h"
@@ -9,6 +10,7 @@
 #include <cmath>
 #include <filesystem>
 #include <string>
+#include <tuple>
 
 using namespace bz;
 using namespace bz::doc::parts;
@@ -228,5 +230,101 @@ TEST_CASE("pack recipes: revolve about an осевая, offset circles, hexagons
     CHECK(box->min.y == doctest::Approx(-15));
     CHECK(box->max.y == doctest::Approx(45));
     CHECK(box->max.z == doctest::Approx(4));
+    ClearPacks();
+}
+
+TEST_CASE("pack recipes: rounded polygon corners, typed inputs, a saved part as a kind") {
+    // An equal angle with ГОСТ 8509's radii: root R inside, toe r at the leg ends;
+    // its area is t(2b - t) + 0.2146(R² - 2r²). And a sheet with a typed width.
+    const std::string text = R"json({
+      "format": "breezecad-standard-parts", "version": 1, "id": "test.rolled", "title": "Прокат",
+      "kinds": [
+        {"id": "test.angle", "group": "Тест", "variety": "Уголки", "title": "Уголок", "noun": "Уголок",
+         "build": [
+           {"sketch": {"plane": "XY", "shapes": [{"polygon": {
+              "points": [[0, 0], ["b", 0], ["b", "t"], ["t", "t"], ["t", "b"], [0, "b"]],
+              "radii":  [0, 0, "r", "R", "r", 0]}}]}},
+           {"extrude": {"distance": "L"}}],
+         "envelope": ["b", "b", "L"]},
+        {"id": "test.sheet", "group": "Тест", "variety": "Листы", "title": "Лист", "noun": "Лист",
+         "build": [{"sketch": {"plane": "XY", "shapes": [{"rect": {"w": "L", "h": "B", "x": "L/2", "y": "B/2"}}]}},
+                   {"extrude": {"distance": "s"}}],
+         "envelope": ["L", "B", "s"]}],
+      "standards": [
+        {"id": "test.angle.a", "title": "ТУ 3", "kind": "test.angle", "size": "{b}x{t}",
+         "columns": ["b", "t", "R", "r"], "rows": [[50, 5, 5.5, 1.8], [100, 10, 12, 4]], "length": {"min": 1, "max": 12000, "default": 1000}},
+        {"id": "test.sheet.a", "title": "ТУ 4", "kind": "test.sheet", "size": "{s}", "designation": "Лист {s}×{B}×{L}",
+         "columns": ["s"], "rows": [[2], [3]], "length": {"min": 10, "max": 6000, "default": 2000},
+         "inputs": [{"name": "B", "title": "Ширина, мм", "min": 10, "max": 2500, "default": 1250}]}]
+    })json";
+    ClearPacks();
+    Expected<Pack> pack = ParsePack(text);
+    REQUIRE(pack);
+    // Written and read back, the pack is the same.
+    Expected<Pack> again = ParsePack(PackToJson(*pack));
+    REQUIRE(again);
+    CHECK(PackToJson(*again) == PackToJson(*pack));
+    REQUIRE(AddPack(std::move(*pack)));
+
+    for (const auto& [size, b, t, R, r] : {std::tuple{"50x5", 50.0, 5.0, 5.5, 1.8}, std::tuple{"100x10", 100.0, 10.0, 12.0, 4.0}}) {
+        CheckPart({"test.angle.a", size, 1000});
+        Expected<Made> made = MakePart({"test.angle.a", size, 1000});
+        REQUIRE(made);
+        kernel::Model model;
+        model.Rebuild(made->doc);
+        const double area = t * (2 * b - t) + 0.2146 * (R * R - 2 * r * r);
+        CHECK(model.Volume() == doctest::Approx(area * 1000).epsilon(0.001));
+    }
+
+    const StandardInfo* sheet = FindStandard("test.sheet.a");
+    REQUIRE(sheet);
+    REQUIRE(Inputs(*sheet).size() == 1);
+    CHECK(Inputs(*sheet)[0].preset == 1250);
+    Request q{"test.sheet.a", "3", 2000};
+    q.inputs = {{"B", 1500}};
+    CHECK(Designation(q) == "Лист 3×1500×2000");
+    Expected<Made> plate = MakePart(q);
+    REQUIRE(plate);
+    CHECK(plate->envelope.y == doctest::Approx(1500));
+    CheckPart(q);
+    q.inputs = {{"B", 9000}};
+    CHECK_FALSE(MakePart(q));   // wider than the range
+
+    // A part saved as a kind: the angle just made, its variables b, t take rows.
+    Expected<Made> angle = MakePart({"test.angle.a", "50x5", 300});
+    REQUIRE(angle);
+    Pack mine;
+    mine.id = "test.mine";
+    mine.title = "Мои";
+    PackKind k;
+    k.id = "test.mine.angle";
+    k.group = "Мои изделия";
+    k.variety = "Уголки";
+    k.title = "Уголок мой";
+    k.noun = "Уголок";
+    k.document = doc::DocumentToJson(angle->doc);
+    mine.kinds.push_back(k);
+    PackStandard st;
+    st.id = "test.mine.angle.a";
+    st.title = "Мой";
+    st.kind = k.id;
+    st.size = "{b}x{t}";
+    st.columns = {{"b", "", true}, {"t", "", true}};
+    st.rows = {{50, 5}, {60, 6}};
+    mine.standards.push_back(st);
+    Expected<Pack> read = ParsePack(PackToJson(mine));
+    REQUIRE(read);
+    REQUIRE(AddPack(std::move(*read)));
+    Expected<Made> mine60 = MakePart({"test.mine.angle.a", "60x6", 0});
+    REQUIRE(mine60);
+    kernel::Model model;
+    model.Rebuild(mine60->doc);
+    for (const auto& f : mine60->doc.Features()) {
+        INFO(f->name << ": " << f->status.message);
+        CHECK(f->status.state == FeatureState::Ok);
+    }
+    const double area = 6.0 * (2 * 60 - 6) + 0.2146 * (5.5 * 5.5 - 2 * 1.8 * 1.8);   // R, r stay the saved part's
+    CHECK(model.Volume() == doctest::Approx(area * 300).epsilon(0.001));
+    CHECK(mine60->doc.info.designation == "Уголок 60x6 Мой");
     ClearPacks();
 }
