@@ -1,6 +1,7 @@
 // Drawing, dimension and constraint tools of the sketch editor.
 
 #include "app/Format.h"
+#include "app/sketch/DimensionArrange.h"
 #include "app/sketch/DimensionLayout.h"
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
@@ -1643,6 +1644,8 @@ void SketchEditor::HandleDimension(AppContext& app, Session& session, const Sket
     c->parameter.value = c->type == ConstraintType::Angle ? *measured : value;
     c->parameter.expression = FormatValue(value, c->parameter.quantity, session.doc.units, 3);
     if (c->type == ConstraintType::Angle && *measured < 0) c->parameter.expression = "-" + c->parameter.expression;
+    // The phone: the tap chose the side, the text goes where it is clear.
+    if (myAutoArrange) ArrangeDimension(f->sketch, *c, session.doc.units, {myMmPerPixel, app.ui.scale});
     AddConstraint(app, session, *c, Tr("Размер"));
     (void)view;
 }

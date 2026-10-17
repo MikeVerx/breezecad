@@ -7,6 +7,8 @@
 #include "app/Operations.h"
 #include "app/android/AndroidInput.h"
 #include "app/mobile/MobileLayout.h"
+#include "app/mobile/TouchInput.h"
+#include "app/sketch/SketchPick.h"
 #include "core/CrashCode.h"
 #include "core/I18n.h"
 #include "core/Log.h"
@@ -123,6 +125,9 @@ bool Application::AndroidBetweenFrames(double now) {
     // system's keyboard for names and search (or when asked with ⌨); none
     // when a hardware keyboard is there.
     mobile::MobileState& m = myShell.mobile;
+    // A bare finger picks sketch lines from ~3 mm; the cursor's tip is precise.
+    SetPickScale(m.phone && !mobile::CursorActive(*myContext) ? 3.0f : 1.0f);
+    myContext->sketch.SetAutoArrange(m.phone);   // new dimensions placed clear of the others
     const bool typing = ImGui::GetCurrentContext() && ImGui::GetIO().WantTextInput;
     const bool words = myShell.paletteOpen || myShell.renaming || myShell.treeSearch || m.fullKeyboard || !m.phone;
     myUi->keyHints = m.hardKeyboard;   // Ctrl+N or Esc mean nothing on a touch screen without a keyboard

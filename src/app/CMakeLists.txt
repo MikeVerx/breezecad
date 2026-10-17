@@ -63,6 +63,7 @@ set(BZ_APP_SOURCES
     shell/Splash.cpp
     shell/TouchpadSettings.cpp
     shell/TreePanel.cpp
+    sketch/DimensionArrange.cpp
     sketch/DimensionLayout.cpp
     MouseNavigation.cpp
     ShortcutPresets.cpp
