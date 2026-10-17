@@ -158,10 +158,10 @@ else
 fi
 check strip-tap
 
-# 14. Extrude: the field loses the focus it opens with (a tap on the model),
+# 14. Extrude (a new part, an empty sketch: the example has no unused sketch): the field loses the focus it opens with (a tap on the model),
 # then a tap on the field opens the numpad, and it is still open 3 s later.
 adb logcat -c
-start example,extrude 30
+start new,sketch,extrude 30
 read -r fx fy fw fh < <(blog | sed -n 's/.*Touch: field .* at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' | head -1)
 if [ -n "${fh:-}" ]; then
     adb shell input tap $((w / 2)) $((h / 3))
