@@ -333,6 +333,9 @@ private:
         }
         const float pad = myUi.S(8), gap = myUi.S(6);
         const float cell = (myWidth - 2 * pad - 3 * gap) / 4;
+        // Every group has its own "›" and slots 0–3: the caption keeps their IDs apart
+        // (one shared ID made ImGui complain and the tap went nowhere).
+        ImGui::PushID(myCaption.c_str());
         const float h = cell;   // square, as IconButton draws them
         for (int slot = 0; slot < 4; ++slot) {
             // The "›" goes to the slot nearest the view; the commands fill the rest in order.
@@ -369,6 +372,7 @@ private:
             }
             ImGui::PopID();
         }
+        ImGui::PopID();
         ImGui::SetCursorScreenPos({p.x, p.y + std::max(h, cell) + myUi.S(4)});
         ImGui::Dummy({myWidth, 0});
         myItems.clear();
@@ -404,65 +408,119 @@ void DrawToolStrip(AppContext& app, ImVec2 viewMin, ImVec2 viewMax, bool blockOn
     }
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
-    // Over the view, level with the group's row, from block 2 toward block 1 (never over it).
-    const float h = ui.S(78);
-    const float y = std::clamp(m.flyY - ui.S(16), viewMin.y + ui.S(56), std::max(viewMin.y + ui.S(56), viewMax.y - h - ui.S(4)));
+    // "Ящик" (mockup 6c, chosen 17.10): block 2 pulled out over the view — its colour,
+    // no gap on its side, the group's name and ✕ on top. Level with the group's row,
+    // from block 2 toward block 1 (never over it); the commands scroll sideways.
+    const float headH = ui.S(30), tileW = ui.S(74), tileH = ui.S(66), gap = ui.S(4), pad = ui.S(8);
+    const float h = headH + tileH + 2 * ui.S(6);
+    const float y = std::clamp(m.flyY - ui.S(30), viewMin.y + ui.S(56), std::max(viewMin.y + ui.S(56), viewMax.y - h - ui.S(4)));
     const ImVec2 pos{viewMin.x, y}, size{viewMax.x - viewMin.x, h};
     ImGui::SetNextWindowPos(pos);
     ImGui::SetNextWindowSize(size);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ui::ToVec4(c.panel.WithAlpha(0.97f)));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0, 0, 0, 0});
     const bool shown = ImGui::Begin("##tool-strip", nullptr,
                                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                                         ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleColor();
-    ImGui::PopStyleVar(3);
+    ImGui::PopStyleVar(2);
     bool inside = false;
     if (shown) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        dl->AddLine(pos, {pos.x + size.x, pos.y}, ui::ToU32(c.accentSoftBorder));
-        dl->AddLine({pos.x, pos.y + h - 1}, {pos.x + size.x, pos.y + h - 1}, ui::ToU32(c.accentSoftBorder));
-        const float tw = ui.S(76), th = ui.S(64), gap = ui.S(4), pad = ui.S(8);
-        const float content = pad * 2 + static_cast<float>(m.flyItems.size()) * (tw + gap);
-        m.flyScroll = std::clamp(m.flyScroll, 0.0f, std::max(0.0f, content - size.x));
-        // One surface for the whole strip: a drag scrolls it, a tap runs the command under it.
-        ImGui::SetCursorScreenPos(pos);
+        const ImVec2 end{pos.x + size.x, pos.y + size.y};
+        // Rounded only away from block 2; a soft shadow on that side and below.
+        const ImDrawFlags farCorners = blockOnRight ? ImDrawFlags_RoundCornersLeft : ImDrawFlags_RoundCornersRight;
+        const float r = ui.S(14);
+        for (int i = 3; i >= 1; --i) {
+            const float sp = ui.S(3.0f * static_cast<float>(i));
+            dl->AddRectFilled({pos.x - (blockOnRight ? sp : 0), pos.y + sp * 0.6f}, {end.x + (blockOnRight ? 0 : sp), end.y + sp},
+                              ui::ToU32(Color{0, 0, 0, 0.10f}), r + sp, farCorners);
+        }
+        dl->AddRectFilled(pos, end, ui::ToU32(c.panel), r, farCorners);
+        // The outline, open on block 2's side: it reads as one panel with it.
+        const float x0 = pos.x + 0.5f, x1 = end.x - 0.5f, y0 = pos.y + 0.5f, y1 = end.y - 0.5f;
+        if (blockOnRight) {
+            dl->PathLineTo({x1, y0});
+            dl->PathArcTo({x0 + r, y0 + r}, r, -1.5707963f, -3.1415926f, 8);
+            dl->PathArcTo({x0 + r, y1 - r}, r, 3.1415926f, 1.5707963f, 8);
+            dl->PathLineTo({x1, y1});
+        } else {
+            dl->PathLineTo({x0, y0});
+            dl->PathArcTo({x1 - r, y0 + r}, r, -1.5707963f, 0.0f, 8);
+            dl->PathArcTo({x1 - r, y1 - r}, r, 0.0f, 1.5707963f, 8);
+            dl->PathLineTo({x0, y1});
+        }
+        dl->PathStroke(ui::ToU32(c.divider), ImDrawFlags_None, ui.S(1));
+
+        // The head: the group's name, ✕ on block 2's side.
+        const std::string caps = Upper(m.flyGroup);
+        dl->AddText(ui.fonts.strong, ui.S(10.5f), {blockOnRight ? pos.x + ui.S(14) : pos.x + ui.S(44), pos.y + (headH - ui.S(11)) / 2},
+                    ui::ToU32(c.textMuted), caps.c_str());
+        const float xs = ui.S(34);
+        const ImVec2 xa{blockOnRight ? end.x - xs - ui.S(4) : pos.x + ui.S(4), pos.y}, xb{xa.x + xs, pos.y + headH};
+        ImGui::SetCursorScreenPos(xa);
+        const bool closeClicked = ImGui::InvisibleButton("##strip-close", {xb.x - xa.x, xb.y - xa.y});
+        if (ImGui::IsItemActive()) dl->AddRectFilled({xa.x + ui.S(3), xa.y + ui.S(3)}, {xb.x - ui.S(3), xb.y - ui.S(3)}, ui::ToU32(c.pressed), ui.S(6));
+        const float cs = ui.S(14);
+        ui.icons.Draw(dl, "ui-close", {(xa.x + xb.x - cs) / 2, (xa.y + xb.y - cs) / 2}, cs, c.textSecondary);
+        const bool closeHovered = ImGui::IsItemHovered() || ImGui::IsItemActive();
+        dl->AddLine({pos.x + (blockOnRight ? r : 0), pos.y + headH}, {end.x - (blockOnRight ? 0 : r), pos.y + headH}, ui::ToU32(c.divider), ui.S(1));
+
+        // The row: one surface — a drag scrolls it, a tap runs the command under it.
+        const ImVec2 rowA{pos.x, pos.y + headH}, rowB{end.x, end.y};
+        const float rowW = rowB.x - rowA.x;
+        const float content = pad * 2 + static_cast<float>(m.flyItems.size()) * (tileW + gap) - gap;
+        const float maxScroll = std::max(0.0f, content - rowW);
+        m.flyScroll = std::clamp(m.flyScroll, 0.0f, maxScroll);
+        ImGui::SetCursorScreenPos(rowA);
         static float dragged = 0;
-        const bool clicked = ImGui::InvisibleButton("##strip-surface", size);
+        const bool clicked = ImGui::InvisibleButton("##strip-surface", {rowW, rowB.y - rowA.y});
         if (ImGui::IsItemActivated()) dragged = 0;
         if (ImGui::IsItemActive()) {
             const float dx = ImGui::GetIO().MouseDelta.x;
             dragged += std::abs(dx);
-            m.flyScroll = std::clamp(m.flyScroll - dx, 0.0f, std::max(0.0f, content - size.x));
+            m.flyScroll = std::clamp(m.flyScroll + (blockOnRight ? dx : -dx), 0.0f, maxScroll);
         }
-        inside = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) || ImGui::IsItemActive();
+        const bool rowActive = ImGui::IsItemActive();
+        inside = closeHovered || ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) || rowActive;
         // Laid out from block 2's side: its first command nearest block 2.
         const ImVec2 mouse = ImGui::GetMousePos();
-        dl->PushClipRect(pos, {pos.x + size.x, pos.y + size.y}, true);
+        dl->PushClipRect(rowA, rowB, true);
         for (std::size_t i = 0; i < m.flyItems.size(); ++i) {
             const MobileState::FlyItem& it = m.flyItems[i];
-            const float off = pad + static_cast<float>(i) * (tw + gap) - m.flyScroll;
-            const float x = blockOnRight ? pos.x + size.x - off - tw : pos.x + off;
-            const ImVec2 a{x, pos.y + (h - th) / 2}, b{x + tw, a.y + th};
+            const float off = pad + static_cast<float>(i) * (tileW + gap) - m.flyScroll;
+            const float x = blockOnRight ? rowB.x - off - tileW : rowA.x + off;
+            const ImVec2 a{x, rowA.y + ui.S(6)}, b{x + tileW, a.y + tileH};
             const Action* act = app.actions.Find(it.id);
             const bool enabled = act && act->IsEnabled();
-            const bool under = ImGui::IsItemActive() && mouse.x >= a.x && mouse.x < b.x && dragged < ui.S(8);
-            if (it.active || under) dl->AddRectFilled(a, b, ui::ToU32(it.active ? c.accentSoft : c.pressed), ui.S(10));
+            const bool under = rowActive && mouse.x >= a.x && mouse.x < b.x && dragged < ui.S(8);
+            dl->AddRectFilled(a, b, ui::ToU32(under ? c.pressed : it.active ? c.accentSoft : c.field), ui.S(10));
             const float is = ui.S(26);
-            ui.icons.Draw(dl, it.icon, {x + (tw - is) / 2, a.y + ui.S(8)}, is, enabled ? Color{1, 1, 1, 1} : Color{1, 1, 1, 0.4f});
-            ui::FittedText(dl, ui.fonts.caption, ui.S(10.5f),
-                           {x + std::max(ui.S(4), (tw - ui.fonts.caption->CalcTextSizeA(ui.S(10.5f), FLT_MAX, 0, it.label.c_str()).x) / 2),
-                            a.y + ui.S(40)},
-                           x + tw - ui.S(3), ui::ToU32(enabled ? c.textSecondary : c.textDisabled), it.label.c_str());
+            ui.icons.Draw(dl, it.icon, {x + (tileW - is) / 2, a.y + ui.S(9)}, is, enabled ? Color{1, 1, 1, 1} : Color{1, 1, 1, 0.4f});
+            const float fs = ui.S(10.5f);
+            ui::FittedText(dl, ui.fonts.caption, fs,
+                           {x + std::max(ui.S(4), (tileW - ui.fonts.caption->CalcTextSizeA(fs, FLT_MAX, 0, it.label.c_str()).x) / 2),
+                            a.y + ui.S(42)},
+                           x + tileW - ui.S(3), ui::ToU32(!enabled ? c.textDisabled : it.active ? c.text : c.textSecondary), it.label.c_str());
             if (clicked && dragged < ui.S(8) && mouse.x >= a.x && mouse.x < b.x && enabled) {
                 const std::string run = it.id;
                 app.Later([&app, run] { app.actions.Run(run); });
                 m.flyGroup.clear();   // the command chosen: the strip goes
             }
         }
+        // More this way: the far end fades into the panel (and the near end once scrolled).
+        const float fw = ui.S(40);
+        const ImU32 solid = ui::ToU32(c.panel), clear = ui::ToU32(c.panel.WithAlpha(0.0f));
+        const bool moreFar = m.flyScroll < maxScroll - 0.5f, moreNear = m.flyScroll > 0.5f;
+        const auto fade = [&](bool atLeft) {
+            const ImVec2 fa{atLeft ? rowA.x : rowB.x - fw, rowA.y}, fb{atLeft ? rowA.x + fw : rowB.x, rowB.y};
+            dl->AddRectFilledMultiColor(fa, fb, atLeft ? solid : clear, atLeft ? clear : solid, atLeft ? clear : solid, atLeft ? solid : clear);
+        };
+        if (moreFar) fade(blockOnRight);
+        if (moreNear) fade(!blockOnRight);
         dl->PopClipRect();
+        if (closeClicked) m.flyGroup.clear();
     }
     ImGui::End();
     // A tap elsewhere (but not on block 2, whose "›" toggles it) closes it.
