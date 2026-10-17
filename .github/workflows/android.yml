@@ -2,7 +2,10 @@
 # core with its unit tests and the app (src/android) packed into an APK.
 #
 #   arm64-v8a  phones: built; BreezeCAD-android.apk goes to the pre-release
-#              "android-build" (a stable link to download on the phone); the
+#              "android-build" (a stable link to download on the phone) — or,
+#              from a branch preview/android-N, to its own pre-release
+#              "android-preview-N" that nothing else overwrites (a version
+#              kept, not in main: the author, 2026-10-17); the
 #              staged tests are the artifact "bz-tests-android-arm64"
 #   x86_64     built the same way and run on an Android emulator — the unit
 #              tests, then the APK (starts, builds the example, survives a
@@ -22,7 +25,7 @@ name: android
 
 on:
   push:
-    branches: [next, main, 'ci/android-*', 'feat/android-*']
+    branches: [next, main, 'ci/android-*', 'feat/android-*', 'preview/android-*']
     paths-ignore: ['docs/**', 'translations/**', '**/*.md']
   pull_request:
     paths-ignore: ['docs/**', 'translations/**', '**/*.md']
@@ -195,6 +198,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: BreezeCAD-android-arm64-v8a, path: release }
       - name: Publish the APK to android-build
+        if: ${{ !startsWith(github.ref_name, 'preview/android-') }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -219,6 +223,26 @@ jobs:
           done
           gh release upload android-build release/BreezeCAD-android.apk release/BreezeCAD-android.aab --clobber
           gh release edit android-build --notes "$notes"
+      - name: Keep a preview version in its own pre-release
+        # Branch preview/android-N → pre-release and tag android-preview-N at
+        # this commit. Nothing else writes there: the version stays as it was.
+        if: ${{ startsWith(github.ref_name, 'preview/android-') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          n="${GITHUB_REF_NAME#preview/android-}"
+          rel="android-preview-$n"
+          mv release/BreezeCAD-android-arm64-v8a.apk "release/BreezeCAD-android-preview-$n.apk"
+          mv release/BreezeCAD-android.aab "release/BreezeCAD-android-preview-$n.aab" 2>/dev/null || true
+          notes="Сохранённая предварительная версия BreezeCAD для Android №$n (не в main): ветка ${GITHUB_REF_NAME}, коммит ${GITHUB_SHA::7}, сборка ${{ github.run_number }}, $(date -u '+%Y-%m-%d %H:%M') UTC.
+
+          Эта страница больше не обновляется — свежие сборки в android-build.
+          Установка: открыть ссылку на телефоне → скачать APK → открыть файл. Подписана постоянным ключом — ставится поверх."
+          if ! gh release view "$rel" >/dev/null 2>&1; then
+            gh release create "$rel" --prerelease --target "$GITHUB_SHA" --title "BreezeCAD для Android — предварительная версия $n" --notes "$notes"
+          fi
+          gh release upload "$rel" release/BreezeCAD-android-preview-* --clobber
 
   publish-shots:
     # The emulator passed: its screenshots next to the APK.
@@ -229,11 +253,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with: { name: android-emulator-shots, path: shots }
-      - name: Add the emulator's screenshots to android-build
+      - name: Add the emulator's screenshots to the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          rel=android-build
+          case "$GITHUB_REF_NAME" in preview/android-*) rel="android-preview-${GITHUB_REF_NAME#preview/android-}" ;; esac
           mkdir -p up
           for f in shots/*.png; do cp "$f" "up/emulator-$(basename "$f")"; done
-          gh release upload android-build up/*.png --clobber
+          gh release upload "$rel" up/*.png --clobber
