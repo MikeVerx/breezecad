@@ -13,6 +13,7 @@
 #include "app/Backgrounds.h"
 #include "app/shell/Shell.h"
 #include "app/shell/TouchpadSettings.h"
+#include "app/mobile/MobileLayout.h"
 #include "core/I18n.h"
 #include "core/Version.h"
 #include "document/Commands.h"
@@ -27,6 +28,7 @@
 #include "ui/Widgets.h"
 
 #include <array>
+#include <imgui_internal.h>
 #include <imgui_stdlib.h>
 #include <algorithm>
 #include <cmath>
@@ -1230,8 +1232,386 @@ void DrawAppearanceSettings(AppContext& app, float width) {
     if (ui::LinkButton(ui, "##open-backgrounds", Tr("Выбрать на вкладке «Вид» → «Фон»…"))) app.shell.backgroundMenu = true;
 }
 
+#if defined(__ANDROID__)
+// --- Settings on the phone, as in Minecraft (docs/dev/mockups/4, the author 17.10.2026) ---
+// Full screen next to the hotbar: big tabs on the left, the groups as pills
+// on top, the options as a grid of two columns of wide cells. A slider is the
+// cell itself (drag across it, the value in its caption); a choice is a cell
+// that steps to the next value with a tap.
+namespace phone {
+
+/// A cell `w` × `h` at the cursor; the grid moves on by itself.
+struct Grid {
+    ui::Ui& ui;
+    float   x, width, gap;
+    float   y;
+    int     column = 0;
+    float   CellW() const { return (width - gap) / 2; }
+    ImVec2  Next(bool wide) {
+        if (wide && column == 1) {
+            column = 0;
+            y += ui.S(44) + gap;
+        }
+        const ImVec2 at{x + (column == 1 ? CellW() + gap : 0.0f), y};
+        if (wide || column == 1) {
+            column = 0;
+            y += ui.S(44) + gap;
+        } else {
+            column = 1;
+        }
+        return at;
+    }
+    void Finish() {
+        if (column == 1) {
+            column = 0;
+            y += ui.S(44) + gap;
+        }
+        ImGui::SetCursorScreenPos({x, y});
+        ImGui::Dummy({width, ui.S(8)});
+    }
+};
+
+void CellFrame(ui::Ui& ui, ImVec2 a, ImVec2 b, bool held, bool button, Color border) {
+    const ui::ThemeColors& c = ui.C();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(a, b, ui::ToU32(held ? c.pressed : button ? c.field : c.panel), ui.S(12));
+    dl->AddRect(a, b, ui::ToU32(border), ui.S(12), 0, ui.S(1));
+}
+
+void CellText(ui::Ui& ui, ImVec2 a, ImVec2 b, const std::string& text, Color ink) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 ts = ui.fonts.medium->CalcTextSizeA(ui.S(13), FLT_MAX, 0, text.c_str());
+    const float x = std::max(a.x + ui.S(10), (a.x + b.x - ts.x) / 2);
+    ImGui::PushClipRect(a, b, true);
+    dl->AddText(ui.fonts.medium, ui.S(13), {x, (a.y + b.y - ts.y) / 2}, ui::ToU32(ink), text.c_str());
+    ImGui::PopClipRect();
+}
+
+/// A slider cell: "label: value" over a fill to the value.
+void Slider(Grid& g, const char* id, const char* label, double& value, double lo, double hi, double step, const std::string& shown) {
+    ui::Ui& ui = g.ui;
+    const ui::ThemeColors& c = ui.C();
+    const ImVec2 a = g.Next(false), b{a.x + g.CellW(), a.y + ui.S(44)};
+    ImGui::SetCursorScreenPos(a);
+    ImGui::InvisibleButton(id, {b.x - a.x, b.y - a.y});
+    if (ImGui::IsItemActive()) {
+        const double t = std::clamp(static_cast<double>((ImGui::GetIO().MousePos.x - a.x) / (b.x - a.x)), 0.0, 1.0);
+        value = std::clamp(lo + std::round(t * (hi - lo) / step) * step, lo, hi);
+    }
+    CellFrame(ui, a, b, false, false, ImGui::IsItemActive() ? c.selection : c.fieldBorder);
+    const float t = static_cast<float>((value - lo) / (hi - lo));
+    const float x = a.x + (b.x - a.x) * std::clamp(t, 0.0f, 1.0f);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled({a.x + 1, a.y + 1}, {std::max(a.x + 1, x), b.y - 1}, ui::ToU32(c.accent.WithAlpha(0.20f)), ui.S(12),
+                      ImDrawFlags_RoundCornersLeft);
+    dl->AddRectFilled({x - ui.S(2), a.y + 1}, {x + ui.S(2), b.y - 1}, ui::ToU32(c.selection));
+    CellText(ui, a, b, std::string(label) + ": " + shown, c.text);
+}
+
+/// A choice cell: a tap steps to the next value.
+template <std::size_t N>
+bool Choice(Grid& g, const char* id, const char* label, const std::array<const char*, N>& names, int& index, bool wide = false) {
+    ui::Ui& ui = g.ui;
+    const ui::ThemeColors& c = ui.C();
+    const ImVec2 a = g.Next(wide), b{a.x + (wide ? g.width : g.CellW()), a.y + ui.S(44)};
+    ImGui::SetCursorScreenPos(a);
+    const bool clicked = ImGui::InvisibleButton(id, {b.x - a.x, b.y - a.y});
+    if (clicked) index = (index + 1) % static_cast<int>(N);
+    CellFrame(ui, a, b, ImGui::IsItemActive(), true, c.fieldBorder);
+    CellText(ui, a, b, std::string(label) + ": " + Tr(names[static_cast<std::size_t>(std::clamp(index, 0, static_cast<int>(N) - 1))]), c.text);
+    return clicked;
+}
+
+/// An action cell; `left` puts the icon and text at the start (else at the end).
+bool Action(Grid& g, const char* id, const char* icon, const char* label, Color ink, Color border, bool left) {
+    ui::Ui& ui = g.ui;
+    const ImVec2 a = g.Next(false), b{a.x + g.CellW(), a.y + ui.S(44)};
+    ImGui::SetCursorScreenPos(a);
+    const bool clicked = ImGui::InvisibleButton(id, {b.x - a.x, b.y - a.y});
+    CellFrame(ui, a, b, ImGui::IsItemActive(), true, border);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 ts = ui.fonts.medium->CalcTextSizeA(ui.S(13), FLT_MAX, 0, label);
+    const float is = ui.S(17);
+    const float x = left ? a.x + ui.S(16) : b.x - ui.S(16) - ts.x - is - ui.S(10);
+    ui.icons.Draw(dl, icon, {x, (a.y + b.y - is) / 2}, is, ink);
+    dl->AddText(ui.fonts.medium, ui.S(13), {x + is + ui.S(10), (a.y + b.y - ts.y) / 2}, ui::ToU32(ink), label);
+    return clicked;
+}
+
+void Heading(Grid& g, const char* text) {
+    g.Finish();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddText(g.ui.fonts.strong, g.ui.S(12), {g.x + g.ui.S(4), g.y + g.ui.S(4)}, ui::ToU32(g.ui.C().textMuted), text);
+    g.y += g.ui.S(24);
+}
+
+template <typename T, std::size_t N>
+int IndexOf(const std::array<T, N>& values, T value) {
+    for (std::size_t i = 0; i < N; ++i)
+        if (std::abs(static_cast<double>(values[i]) - static_cast<double>(value)) < 1e-6) return static_cast<int>(i);
+    return 0;
+}
+
+void Sensor(AppContext& app, Grid& g) {
+    MobileSettings& m = app.settings.mobile;
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    const auto pct = [](double v) { return std::format("{:.0f} %", v * 100.0); };
+    Slider(g, "##p-orbit", Tr("Вращение"), m.fingerOrbit, 0.25, 4.0, 0.05, pct(m.fingerOrbit));
+    Slider(g, "##p-pan", Tr("Сдвиг"), m.fingerPan, 0.25, 3.0, 0.05, pct(m.fingerPan));
+    Slider(g, "##p-zoom", Tr("Масштаб (щипок)"), m.fingerZoom, 0.25, 3.0, 0.05, pct(m.fingerZoom));
+    Slider(g, "##p-scroll", Tr("Прокрутка списков"), m.scrollSpeed, 0.25, 3.0, 0.05, pct(m.scrollSpeed));
+    Slider(g, "##p-cursor", Tr("Скорость курсора"), m.cursorSpeed, 0.1, 1.0, 0.05, pct(m.cursorSpeed));
+    {
+        static constexpr std::array<const char*, 4> names{N_("Чуткий"), N_("Обычный"), N_("Спокойный"), N_("Твёрдый")};
+        static constexpr std::array<int, 4> values{6, 10, 16, 24};
+        int i = IndexOf(values, m.tapSlop);
+        if (Choice(g, "##p-slop", Tr("Порог касания"), names, i)) m.tapSlop = values[static_cast<std::size_t>(i)];
+    }
+    {
+        static constexpr std::array<const char*, 4> names{"0,3 с", "0,5 с", "0,7 с", "1 с"};
+        static constexpr std::array<double, 4> values{0.3, 0.5, 0.7, 1.0};
+        int i = IndexOf(values, m.longPress);
+        if (Choice(g, "##p-press", Tr("Долгое нажатие"), names, i)) m.longPress = values[static_cast<std::size_t>(i)];
+    }
+    {
+        static constexpr std::array<const char*, 4> names{"32 dp", "48 dp", "64 dp", "80 dp"};
+        static constexpr std::array<int, 4> values{32, 48, 64, 80};
+        int i = IndexOf(values, m.cursorReach);
+        if (Choice(g, "##p-reach", Tr("Кончик курсора"), names, i)) m.cursorReach = values[static_cast<std::size_t>(i)];
+    }
+    Heading(g, Tr("Раскладка"));
+    {
+        static constexpr std::array<const char*, 2> names{N_("правая"), N_("левая")};
+        int i = m.leftHanded ? 1 : 0;
+        if (Choice(g, "##p-hand", Tr("Рука"), names, i)) m.leftHanded = i == 1;
+    }
+    {
+        static constexpr std::array<const char*, 3> names{N_("компактный"), N_("список"), N_("только значки")};
+        int i = m.iconsOnly ? 2 : m.toolsList ? 1 : 0;
+        if (Choice(g, "##p-tools", Tr("Блок инструментов"), names, i)) {
+            m.toolsList = i == 1;
+            m.iconsOnly = i == 2;
+            if (!m.iconsOnly && m.rightWidth < 12) m.rightWidth = 20;
+        }
+    }
+    {
+        static constexpr std::array<const char*, 3> names{N_("по размеру экрана"), N_("десктопный"), N_("мобильный")};
+        Choice(g, "##p-layout", Tr("Вид"), names, m.layout);
+    }
+    {
+        static constexpr std::array<const char*, 4> names{"80%", "100%", "125%", "150%"};
+        static constexpr std::array<double, 4> values{0.8, 1.0, 1.25, 1.5};
+        int i = IndexOf(values, m.labelScale);
+        if (Choice(g, "##p-labels", Tr("Подписи в виде"), names, i)) m.labelScale = values[static_cast<std::size_t>(i)];
+    }
+    {
+        static constexpr std::array<const char*, 2> names{N_("громкость"), N_("масштаб вида")};
+        int i = m.volumeZoom ? 1 : 0;
+        if (Choice(g, "##p-volume", Tr("Кнопки громкости"), names, i)) m.volumeZoom = i == 1;
+    }
+    if (Action(g, "##p-setup", "ui-sliders", Tr("Пройти первую настройку"), c.text, c.fieldBorder, true))
+        app.Later([&app] {
+            app.shell.showSettings = false;
+            mobile::StartSetup(app);
+        });
+    g.Finish();
+    // The last row: the layout editor at the start, the reset at the end (the author's wish).
+    if (Action(g, "##p-edit-layout", "ui-edit", Tr("Настроить раскладку…"), c.selection, c.accentSoftBorder, true))
+        app.Later([&app] { mobile::OpenLayoutEditor(app); });
+    if (Action(g, "##p-reset", "ui-trash", Tr("Сбросить настройки"), c.danger, c.fieldBorder, false)) {
+        MobileSettings fresh;
+        fresh.askedNotifications = m.askedNotifications;
+        fresh.projectsFolderName = m.projectsFolderName;
+        fresh.hotbar = m.hotbar;
+        fresh.gesturesOff = m.gesturesOff;
+        fresh.gesturesOn = m.gesturesOn;
+        fresh.firstStartDone = m.firstStartDone;
+        m = fresh;
+    }
+    g.Finish();
+}
+
+void Gestures(AppContext& app, Grid& g) {
+    MobileSettings& m = app.settings.mobile;
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    static int set = 0;
+    {
+        static constexpr std::array<const char*, 2> names{N_("курсор выкл"), N_("курсор вкл")};
+        Choice(g, "##g-set", Tr("Набор"), names, set, true);
+    }
+    FingerGestures& gs = set == 1 ? m.gesturesOn : m.gesturesOff;
+    static constexpr std::array<const char*, 4> drags{N_("вращение"), N_("сдвиг"), N_("масштаб"), N_("нет")};
+    const auto drag = [&](const char* id, const char* label, mobile::FingerDrag& d) {
+        int i = d == mobile::FingerDrag::None ? 3 : static_cast<int>(d) - 1;
+        if (Choice(g, id, label, drags, i)) d = i == 3 ? mobile::FingerDrag::None : static_cast<mobile::FingerDrag>(i + 1);
+    };
+    if (set == 1) {
+        static constexpr std::array<const char*, 1> cursor{N_("ведёт курсор")};
+        int i = 0;
+        Choice(g, "##g-1", Tr("1 палец"), cursor, i);
+    } else {
+        drag("##g-1", Tr("1 палец"), gs.drags.one);
+    }
+    drag("##g-2", Tr("2 пальца"), gs.drags.two);
+    drag("##g-3", Tr("3 пальца"), gs.drags.three);
+    {
+        static constexpr std::array<const char*, 2> names{N_("масштаб"), N_("нет")};
+        int i = gs.drags.pinch ? 0 : 1;
+        if (Choice(g, "##g-pinch", Tr("Щипок"), names, i)) gs.drags.pinch = i == 0;
+    }
+    static constexpr std::array<const char*, 5> taps{N_("отменить"), N_("повторить"), N_("показать всё"), N_("домой"), N_("нет")};
+    const auto tap = [&](const char* id, const char* label, FingerTap& t) {
+        int i = t == FingerTap::None ? 4 : static_cast<int>(t) - 1;
+        if (Choice(g, id, label, taps, i)) t = i == 4 ? FingerTap::None : static_cast<FingerTap>(i + 1);
+    };
+    tap("##g-tap2", Tr("Тап 2 пальцами"), gs.tap2);
+    tap("##g-tap3", Tr("Тап 3 пальцами"), gs.tap3);
+    g.Finish();
+    if (Action(g, "##g-reset", "ui-trash", Tr("Сбросить жесты"), c.danger, c.fieldBorder, true)) {
+        m.gesturesOff = FingerGestures{};
+        m.gesturesOn = FingerGestures{mobile::GestureRecognizer::DefaultDrags(true)};
+    }
+    g.Finish();
+}
+
+/// A big tab on the left.
+bool Tab(ui::Ui& ui, const char* id, const char* icon, const char* label, bool on, ImVec2 at, float width) {
+    const ui::ThemeColors& c = ui.C();
+    const ImVec2 b{at.x + width, at.y + ui.S(46)};
+    ImGui::SetCursorScreenPos(at);
+    const bool clicked = ImGui::InvisibleButton(id, {width, b.y - at.y});
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(at, b, ui::ToU32(on ? c.accentSoft : ImGui::IsItemActive() ? c.pressed : c.panel), ui.S(12));
+    dl->AddRect(at, b, ui::ToU32(on ? c.accentSoftBorder : c.divider), ui.S(12));
+    ui.icons.Draw(dl, icon, {at.x + ui.S(14), (at.y + b.y - ui.S(18)) / 2}, ui.S(18), on ? c.selection : c.textSecondary);
+    dl->AddText(ui.fonts.medium, ui.S(13.5f), {at.x + ui.S(44), (at.y + b.y - ui.S(14)) / 2}, ui::ToU32(on ? c.text : c.textSecondary), label);
+    return clicked;
+}
+
+void Draw(AppContext& app) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    const mobile::MobileState& ms = app.shell.mobile;
+    const ImGuiIO& io = ImGui::GetIO();
+    // Next to the hotbar (it stays), over everything else.
+    const float left = ms.rHotbar.max.x > 0 && ms.rHotbar.min.x < 1 ? ms.rHotbar.max.x : ms.insets.left;
+    const float right = io.DisplaySize.x - (ms.rHotbar.min.x > 1 ? io.DisplaySize.x - ms.rHotbar.min.x : ms.insets.right);
+    const ImVec2 pos{left, 0}, size{right - left, io.DisplaySize.y};
+    ImGui::SetNextWindowPos(pos);
+    ImGui::SetNextWindowSize(size);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ui::ToVec4(c.appBackground));
+    const bool open = ImGui::Begin("##phone-settings", nullptr,
+                                   ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                                       ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(3);
+    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+    if (open) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float tabsW = std::clamp(size.x * 0.22f, ui.S(150), ui.S(200));
+        dl->AddRectFilled(pos, {pos.x + tabsW, pos.y + size.y}, ui::ToU32(c.ribbon));
+        dl->AddLine({pos.x + tabsW, pos.y}, {pos.x + tabsW, pos.y + size.y}, ui::ToU32(c.divider));
+        const float tx = pos.x + ui.S(12), tw = tabsW - ui.S(24);
+        float ty = pos.y + std::max(ui.S(12), ms.insets.top);
+        dl->AddText(ui.fonts.title, ui.S(17), {tx + ui.S(4), ty}, ui::ToU32(c.text), Tr("Настройки"));
+        ty += ui.S(32);
+        struct T {
+            const char* icon;
+            const char* label;
+        };
+        const T tabs[] = {{"ui-settings", Tr("Общие")}, {"ui-sliders", Tr("Управление")}, {"ui-display-style", Tr("Графика")},
+                          {"library", Tr("Модули")}};
+        for (int i = 0; i < 4; ++i) {
+            ImGui::PushID(i);
+            if (Tab(ui, "##tab", tabs[i].icon, tabs[i].label, app.shell.settingsTab == i, {tx, ty}, tw)) {
+                app.shell.settingsTab = i;
+                app.shell.settingsSub = i == 1 ? 2 : 0;   // controls: the touch screen first
+            }
+            ImGui::PopID();
+            ty += ui.S(54);
+        }
+        bool done = Tab(ui, "##done", "ui-check", Tr("Готово"), false, {tx, pos.y + size.y - ui.S(58) - ms.insets.bottom}, tw);
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape) && app.shell.captureShortcut.empty()) done = true;
+
+        // The groups as pills on top.
+        const float cx = pos.x + tabsW + ui.S(16), cw = size.x - tabsW - ui.S(32);
+        float cy = pos.y + std::max(ui.S(12), ms.insets.top);
+        std::vector<const char*> subs;
+        if (app.shell.settingsTab == 1) subs = {Tr("Клавиатура"), Tr("Мышь"), Tr("Сенсор"), Tr("Жесты")};
+        if (app.shell.settingsTab == 2) subs = {Tr("Внешний вид"), Tr("Качество"), Tr("Производительность")};
+        if (!subs.empty()) {
+            float px = cx;
+            for (int i = 0; i < static_cast<int>(subs.size()); ++i) {
+                const float w = ui.fonts.body->CalcTextSizeA(ui.S(12.5f), FLT_MAX, 0, subs[static_cast<std::size_t>(i)]).x + ui.S(32);
+                const bool on = app.shell.settingsSub == i;
+                ImGui::SetCursorScreenPos({px, cy});
+                ImGui::PushID(100 + i);
+                if (ImGui::InvisibleButton("##sub", {w, ui.S(34)})) app.shell.settingsSub = i;
+                ImGui::PopID();
+                dl->AddRectFilled({px, cy}, {px + w, cy + ui.S(34)}, ui::ToU32(on ? c.field : c.panel), ui.S(17));
+                dl->AddRect({px, cy}, {px + w, cy + ui.S(34)}, ui::ToU32(on ? c.fieldBorder : c.divider), ui.S(17));
+                dl->AddText(ui.fonts.body, ui.S(12.5f), {px + ui.S(16), cy + (ui.S(34) - ui.S(13)) / 2}, ui::ToU32(on ? c.text : c.textSecondary),
+                            subs[static_cast<std::size_t>(i)]);
+                px += w + ui.S(6);
+            }
+            cy += ui.S(46);
+        }
+        // The content scrolls (a finger up or down), the grid inside.
+        ImGui::SetCursorScreenPos({cx, cy});
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+        ImGui::BeginChild("##phone-settings-content", {cw, pos.y + size.y - cy - ms.insets.bottom}, ImGuiChildFlags_None,
+                          ImGuiWindowFlags_NoBackground);
+        ImGui::PopStyleVar();
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        const bool grid = app.shell.settingsTab == 1 && (app.shell.settingsSub == 2 || app.shell.settingsSub == 3);
+        if (grid) {
+            Grid g{ui, origin.x, cw, ui.S(8), origin.y};
+            if (app.shell.settingsSub == 2) Sensor(app, g);
+            else Gestures(app, g);
+        } else {
+            // The other pages as they are (lists and fields), in the content's width.
+            ImGui::PushTextWrapPos(cw);
+            switch (app.shell.settingsTab) {
+                case 1:
+                    if (app.shell.settingsSub == 1) DrawMouseSettings(app, cw);
+                    else DrawKeyboardSettings(app, cw);
+                    break;
+                case 2:
+                    if (app.shell.settingsSub == 1) DrawOptimizationSettings(app, cw, false);
+                    else if (app.shell.settingsSub == 2) DrawOptimizationSettings(app, cw, true);
+                    else DrawAppearanceSettings(app, cw);
+                    break;
+                case 3: DrawModuleSettings(app, cw); break;
+                default: DrawGeneralSettings(app, cw); break;
+            }
+            ImGui::PopTextWrapPos();
+            ImGui::Dummy({cw, ui.S(16)});
+        }
+        ImGui::EndChild();
+        if (done) {
+            app.shell.showSettings = false;
+            app.shell.captureShortcut.clear();
+        }
+    }
+    ImGui::End();
+}
+
+} // namespace phone
+#endif
+
 void DrawSettings(AppContext& app) {
     ui::Ui& ui = app.ui;
+#if defined(__ANDROID__)
+    if (app.shell.mobile.phone) {   // full screen, as in Minecraft
+        if (app.shell.showSettings) phone::Draw(app);
+        return;
+    }
+#endif
     if (!BeginDialog(ui, "##settings", app.shell.showSettings, ui.S(700))) return;
     {
         ui::FontScope font(ui.fonts.title);
