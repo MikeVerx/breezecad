@@ -325,6 +325,7 @@ private:
         ImGui::Dummy({myWidth, myUi.S(26)});
         p = ImGui::GetCursorScreenPos();
         const bool more = myItems.size() > 4;
+        if (more && m.flyGroup == "*") m.flyGroup = myCaption;   // a test run: the first group that has a strip
         const bool open = more && m.flyGroup == myCaption;
         if (open) {
             m.flyItems = myItems;

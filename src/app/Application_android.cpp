@@ -227,6 +227,12 @@ void Application::RunTestCommands() {
             myShell.showSettings = true;
         } else if (c == "numpad") {
             myShell.mobile.block1Tab = 1;
+        } else if (c == "strip") {
+            myShell.mobile.flyGroup = "*";   // compact block 2: the first group with more opens its strip
+        } else if (c == "layout") {
+            mobile::OpenLayoutEditor(*myContext);
+        } else if (c == "setup") {
+            mobile::StartSetup(*myContext);
         }
     }
     myFramesToDraw = std::max(myFramesToDraw, 5);

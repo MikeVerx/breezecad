@@ -122,6 +122,18 @@ fi
 shot 9-cube-face
 check cube-face
 
+# 10–12. Compact block 2 with a group's strip open; the settings on the phone;
+# the layout editor (the author's mockups, 17.10.2026).
+start example,strip 25
+shot 10-tool-strip
+check tool-strip
+start example,settings 25
+shot 11-settings
+check settings
+start example,layout 25
+shot 12-layout-editor
+check layout-editor
+
 adb logcat -d -s BreezeCAD:* > "$OUT/breezecad.log"
 adb logcat -d '*:E' > "$OUT/errors.log"
 grep -E "OpenGL ES|Window:|ERROR|WARN|test commands" "$OUT/breezecad.log" | head -20
