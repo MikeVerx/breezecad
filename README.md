@@ -64,6 +64,22 @@ catalogs — see [`translations/`](translations/README.md).
 </tr>
 </table>
 
+## On a phone (Android, beta)
+
+The whole modeller on an Android phone, laid out for the thumbs: commands on the
+right, the tree and the tool's settings on the left, a drop-shaped cursor whose tip
+never hides the point you work on, and a numpad for values. Get
+[`BreezeCAD-android.apk`](https://github.com/MikeVerx/breezecad/releases/latest) from the release (ARM 64-bit, Android 9+).
+
+<p align="center"><img src="docs/images/android-model.png" alt="BreezeCAD on an Android phone: a flange in the 3D view" width="100%"></p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/android-hole.png" alt="Editing a hole on the phone"><br><sub>An operation open: its modes as icons over the view, ✓ turns green when it is ready</sub></td>
+<td width="50%"><img src="docs/images/android-sketch.png" alt="Sketching with the drop cursor"><br><sub>Sketching with the drop cursor: drag the round end, the tip draws</sub></td>
+</tr>
+</table>
+
 ## Download
 
 The freshest build of the `next` branch, rebuilt after every change that
