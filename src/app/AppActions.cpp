@@ -163,7 +163,11 @@ void RegisterActions(AppContext& app) {
     a.Add({"edit.redo", N_("Повторить"), "ui-redo", Ctrl(ImGuiKey_Y), {}, [&app] { return CanRedo(app); }, [&app] { Redo(app); }});
     a.Add({"edit.redoAlt", "", "", CtrlShift(ImGuiKey_Z), {}, [&app] { return CanRedo(app); }, [&app] { Redo(app); }});
     a.Add({"edit.delete", N_("Удалить"), "ui-trash", ImGuiKey_Delete, {}, hasDoc, [&app] { DeletePressed(app); }});
-    a.Add({"edit.escape", "", "", ImGuiKey_Escape, {}, {}, [&app] { EscapePressed(app); }});
+    a.Add({"edit.escape", "", "", ImGuiKey_Escape, {}, {}, [&app] {
+               // The phone's "Back" in an operation steps back as ✕ does (it cancelled it all).
+               if (app.shell.mobile.phone && app.ops.Active()) CancelPressed(app);
+               else EscapePressed(app);
+           }});
     a.Add({"edit.confirm", "", "", ImGuiKey_Enter, {}, {}, [&app] { EnterPressed(app); }});
     a.Add({"edit.confirmPad", "", "", ImGuiKey_KeypadEnter, {}, {}, [&app] { EnterPressed(app); }});
 

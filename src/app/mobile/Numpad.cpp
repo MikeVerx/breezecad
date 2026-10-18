@@ -56,8 +56,22 @@ void DrawNumpad(AppContext& app, ImVec2 pos, ImVec2 size) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     MobileState& m = app.shell.mobile;
-    // Over everything in block 1 (see DrawBlock1): an opaque plate, then the keys.
-    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    // Over block 1 (see DrawBlock1), under menus: a window of its own, not the
+    // foreground layer — there it covered the «fx» menu of the field (17.10). It takes
+    // no input: the touch input takes the keys before ImGui (FireNumpadKey).
+    ImGui::SetNextWindowPos({pos.x - ui.S(4), pos.y - ui.S(2)});
+    ImGui::SetNextWindowSize({size.x + ui.S(8), size.y + ui.S(4)});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::Begin("##numpad", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBackground);
+    ImGui::PopStyleVar(3);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    struct End {
+        ~End() { ImGui::End(); }
+    } end;
     m.numpadKeys.clear();
     m.numpadMin = {pos.x - ui.S(4), pos.y - ui.S(2)};
     m.numpadMax = {pos.x + size.x + ui.S(4), pos.y + size.y + ui.S(2)};

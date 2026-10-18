@@ -45,6 +45,10 @@ public:
     bool        HasApply() const override { return false; }
     void        Done(AppContext& app, Session& session) override;
     void        Cancel(AppContext& app, Session& session) override;
+    void        Drop(AppContext& app) override {
+        Close(app);
+        myEdits.clear();
+    }
     void        DrawPanel(AppContext& app, Session& session) override;
     void        DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;
     bool        PicksFaces() const override { return true; }
@@ -108,7 +112,6 @@ private:
     bool        myOpen = false;
     bool        myInline = false;            ///< the create form is drawn in block 1 (the phone)
     int         myPhonePage = 0;             ///< 0 the main one, 1 the library, 2 my colours, 3 a new colour
-    std::vector<std::string> myRecent;       ///< the looks chosen last, newest first (the phone)
     std::string myRecentSeen;
     bool        myFaces = false;          ///< Поверхность: a click colours one face (default: the whole object)
     bool        myToPart = false;         ///< assembly: Готово writes into the parts' files

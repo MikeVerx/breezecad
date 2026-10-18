@@ -9,6 +9,9 @@
 
 namespace bz::app {
 
+/// Sketch entities in a screen box: wholly inside (`window`) or touching it (SketchEditor.cpp).
+std::vector<ObjectId> EntitiesInBox(const sketch::Sketch& sk, const SketchView& view, ImVec2 lo, ImVec2 hi, bool window);
+
 /// Entity under the cursor. Points win over curves, curves over dimensions.
 struct SketchHit {
     ObjectId           id;

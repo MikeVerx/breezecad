@@ -55,11 +55,13 @@ int ToolChoice(AppContext& app, const char* id, const char* title, std::span<con
     const float buttonsW = static_cast<float>(items.size()) * (button + gap) - gap;
     const ImVec2 start = ImGui::GetCursorScreenPos();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const bool beside = captionW + buttonsW <= width;
     const char* caption = Tr(title);
     ImGui::PushFont(ui.fonts.body);
     const float fs = ImGui::GetFontSize();
+    const float textW = ImGui::CalcTextSize(caption).x;
     ImGui::PopFont();
+    // A long caption («Выравнивание в рамке») ran under the buttons: then they go under it.
+    const bool beside = captionW + buttonsW <= width && textW <= captionW - ui.S(6);
     dl->AddText(ui.fonts.body, fs, {start.x, beside ? start.y + (button - fs) / 2 : start.y}, ui::ToU32(ui.C().textSecondary), caption);
     ImVec2 at{beside ? start.x + captionW : start.x, beside ? start.y : start.y + fs + ui.S(6)};
     const float rowStart = at.x;

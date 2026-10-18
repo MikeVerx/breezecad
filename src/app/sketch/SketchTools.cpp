@@ -1215,6 +1215,39 @@ void SketchEditor::HandleMotion(AppContext& app, Session& session, const SketchV
     }
     DrawSnapMarker(app.ui, ImGui::GetWindowDrawList(), view.ToScreen(mySnap.pos), mySnap);
 
+    // A frame picks here too (BETA-BUGS №1: it worked only in «Выбор»): before the base
+    // point, a press on empty space while nothing is chosen (or with Ctrl / Shift) and a
+    // drag take what the frame holds — left to right wholly inside, right to left touched.
+    {
+        const ImGuiIO& io = ImGui::GetIO();
+        const bool adding = io.KeyCtrl || io.KeyShift;
+        if (myClicks.empty() && view.vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !myHover && (mySelection.empty() || adding)) {
+            myBoxStart = ImGui::GetMousePos();
+            myBoxing = false;
+            if (adding) return;   // not a base point
+        }
+        if (myBoxStart) {
+            if (myBoxing || ImGui::IsMouseDragging(ImGuiMouseButton_Left, 4.0f)) {
+                myBoxing = true;
+                const ImVec2 a = *myBoxStart, b = ImGui::GetMousePos();
+                const bool window = b.x >= a.x;
+                const Color tone = window ? app.ui.C().danger : app.ui.C().success;
+                const ImVec2 lo{std::min(a.x, b.x), std::min(a.y, b.y)}, hi{std::max(a.x, b.x), std::max(a.y, b.y)};
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                dl->AddRectFilled(lo, hi, ui::ToU32(tone.WithAlpha(0.10f)));
+                dl->AddRect(lo, hi, ui::ToU32(tone), 0, 0, app.ui.S(1.2f));
+                if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+                    for (const ObjectId id : EntitiesInBox(f->sketch, view, lo, hi, window))
+                        if (!f->sketch.FindConstraint(id)) mySelection.insert(id);
+                    myBoxStart.reset();
+                    myBoxing = false;
+                }
+                return;
+            }
+            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) myBoxStart.reset();
+        }
+    }
+
     if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left) || !view.vf.hovered) return;
     // Ctrl / Shift + click, or any click while nothing is chosen, picks elements.
     const ImGuiIO& io = ImGui::GetIO();

@@ -65,6 +65,17 @@ struct OperationEditors {
     void Close(AppContext& app, Session& session) {
         if (OperationEditor* open = Active()) open->Cancel(app, session);
     }
+
+    /// Keeps the open operation as it is (Готово) before something that is not
+    /// another tool — saving the document, the tree's panel: these must not
+    /// throw the user's work away (18.10.2026: «Сохранить» dropped an extrude).
+    /// One that cannot be made (an error) is dropped.
+    void Commit(AppContext& app, Session& session) {
+        OperationEditor* open = Active();
+        if (!open) return;
+        open->Done(app, session);
+        if (open->IsOpen()) open->Cancel(app, session);
+    }
 };
 
 } // namespace bz::app

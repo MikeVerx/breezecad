@@ -90,6 +90,10 @@ public:
     void CreateAndEdit(AppContext& app, Session& session, const doc::SketchPlacement& placement);
     void Edit(AppContext& app, Session& session, ObjectId sketch);
     void Finish(AppContext& app, Session& session);
+    /// Another document became active: what was picked, begun or being
+    /// edited belonged to `old` (nullptr: it is closed). Ids repeat across
+    /// documents, so nothing of it may reach the new one.
+    void LeaveDocument(Session* old);
     /// Turns the camera to look straight at the sketch plane (F6).
     void LookAtSketch(AppContext& app, Session& session);
     /// The sketch with its dimension labels, in model space (for Показать всё).

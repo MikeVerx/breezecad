@@ -57,6 +57,8 @@ public:
 
 private:
     void Frame();
+    /// The active document changed since the last frame: its open operation and sketch picks are dropped.
+    void LeaveSwitchedDocument(AppContext& app);
     /// The interface scale: the setting, or one from the screen's density and size.
     float ChooseScale() const;
     /// Rebuilds fonts and sizes when the scale setting changed.
@@ -91,6 +93,7 @@ private:
     double           mySystemThemeCheck = 0.0;
 
     Workspace        myWorkspace;
+    Session*         myActiveSession = nullptr;   ///< the document the open tools belong to (see Frame)
     ActionRegistry   myActions;
     Notifications    myNotes;
     std::unique_ptr<Autosave> myAutosave;

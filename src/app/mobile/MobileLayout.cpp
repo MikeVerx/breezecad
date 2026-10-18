@@ -118,7 +118,7 @@ void DrawCameraPanel(AppContext& app, ImVec2 pos, ImVec2 size) {
         }
         y += ui.S(6);   // a gap: the fixed buttons, then the user's
         place();
-        if (ui::IconButton(ui, "##hotbar-add", "ui-plus", b, 18, Tr("Добавить кнопку"))) ImGui::OpenPopup("##hotbar-pick");
+        if (ui::IconButton(ui, "##hotbar-add", "ui-plus", b / ui.scale, 18, Tr("Добавить кнопку"))) ImGui::OpenPopup("##hotbar-pick");
     }
     // The user's buttons; a long press takes one away.
     const float hideY = pos.y + size.y - b - ui.S(6) - m.insets.bottom;
@@ -128,7 +128,7 @@ void DrawCameraPanel(AppContext& app, ImVec2 pos, ImVec2 size) {
         ImGui::SetCursorScreenPos({x, y});
         ImGui::PushID(static_cast<int>(i));
         const Action* a = app.actions.Find(bar[i]);
-        if (a && ui::IconButton(ui, "##hot", a->icon, b, 20, a->Label(), a->IsEnabled())) Run(app, a->id.c_str());
+        if (a && ui::IconButton(ui, "##hot", a->icon, b / ui.scale, 20, a->Label(), a->IsEnabled())) Run(app, a->id.c_str());
         if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
             const std::string gone = bar[i];
             app.Later([&app, gone] {
@@ -140,7 +140,7 @@ void DrawCameraPanel(AppContext& app, ImVec2 pos, ImVec2 size) {
         y += b + ui.S(4);
     }
     ImGui::SetCursorScreenPos({x, hideY});
-    if (ui::IconButton(ui, "##hide-controls", m.controlsHidden ? "ui-eye" : "ui-eye-off", b, 20,
+    if (ui::IconButton(ui, "##hide-controls", m.controlsHidden ? "ui-eye" : "ui-eye-off", b / ui.scale, 20,
                        m.controlsHidden ? Tr("Показать управление") : Tr("Скрыть управление"), true, m.controlsHidden))
         m.controlsHidden = !m.controlsHidden;
     {
@@ -358,7 +358,8 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
                 default:
                 {
                     const OperationEditor* op = app.ops.Active();
-                    const bool ready = op && op->HasApply() && !m.boxMode && op->Ready(session);
+                    // Green only when a tap applies: with the cursor on, ✓ is the cursor's click.
+                    const bool ready = op && op->HasApply() && !m.boxMode && !(cursorOn && m.cursorShown) && op->Ready(session);
                     DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, m.boxHeld, true, true, &clicked, &held, ready);
                     m.okDown = ImGui::IsItemActive();
                 }
@@ -411,8 +412,13 @@ StatusText Status(AppContext& app, Session& session) {
         // The model point under the tip (read again only when the tip moved).
         static ImVec2 pickedAt{-1, -1};
         static std::optional<Vec3> picked;
-        if (pickedAt.x != m.cursorTip.x || pickedAt.y != m.cursorTip.y) {
+        static double pickedTime = -1;
+        static const Session* pickedIn = nullptr;
+        // Again when the tip moved, the document changed, or now and then (a rebuild or an undo moved the model).
+        if (pickedAt.x != m.cursorTip.x || pickedAt.y != m.cursorTip.y || pickedIn != &session || app.now - pickedTime > 0.5) {
             pickedAt = m.cursorTip;
+            pickedIn = &session;
+            pickedTime = app.now;
             const auto hit = app.viewport.Pick({m.cursorTip.x - m.viewMin.x, m.cursorTip.y - m.viewMin.y});
             picked = hit ? std::optional<Vec3>(hit->point) : std::nullopt;
         }
@@ -546,12 +552,14 @@ void DrawBlock2(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
             ImGui::PushClipRect({tx, bottom}, {textEnd, pos.y + size.y}, true);
             ImFont* font = st.mono ? ui.fonts.mono : ui.fonts.bodySmall;
             const float fs = ui.S(st.mono ? 10.5f : 11.5f);
-            dl->AddText(font, fs, {tx, fy - fs * 0.6f}, ui::ToU32(c.text), st.main.c_str());
-            if (!st.mode.empty()) {
-                const float mw = font->CalcTextSizeA(fs, FLT_MAX, 0, st.main.c_str()).x;
-                const std::string tail = " · " + st.mode;
+            // Cut with "…" (it ended in «3D-модел»): the mode goes first when there is no room for both.
+            const std::string tail = st.mode.empty() ? std::string() : " · " + st.mode;
+            const float mw = font->CalcTextSizeA(fs, FLT_MAX, 0, st.main.c_str()).x;
+            const float tw = tail.empty() ? 0.0f : ui.fonts.bodySmall->CalcTextSizeA(ui.S(11.5f), FLT_MAX, 0, tail.c_str()).x;
+            const bool both = tail.empty() || tx + mw + tw <= textEnd;
+            ui::FittedText(dl, font, fs, {tx, fy - fs * 0.6f}, textEnd, ui::ToU32(c.text), st.main.c_str());
+            if (!tail.empty() && both)
                 dl->AddText(ui.fonts.bodySmall, ui.S(11.5f), {tx + mw, fy - ui.S(11.5f) * 0.6f}, ui::ToU32(c.textMuted), tail.c_str());
-            }
             ImGui::PopClipRect();
         }
     }
@@ -596,10 +604,12 @@ void DrawTabsIsland(AppContext& app, Session& session, ImVec2 at, float maxWidth
         EndIsland();
         return;
     }
-    float width = arrow;
-    if (!m.tabsFolded)
-        for (const Tab& t : tabs) width += ui.fonts.medium->CalcTextSizeA(ui.S(13), FLT_MAX, 0, t.label).x + ui.S(24);
-    width = std::min(width + ui.S(4), maxWidth);
+    // Narrow (640 dp): the tabs' padding shrinks before any of them is cut off («Вид» was).
+    float text = 0;
+    for (const Tab& t : tabs) text += ui.fonts.strong->CalcTextSizeA(ui.S(13), FLT_MAX, 0, t.label).x;
+    const float n = static_cast<float>(tabs.size());
+    const float pad = std::clamp((maxWidth - arrow - ui.S(4) - text) / n, ui.S(8), ui.S(24));
+    const float width = std::min(arrow + text + pad * n + ui.S(4), maxWidth);
     if (!BeginIsland(ui, "##island-tabs", at, {width, h})) {
         EndIsland();
         return;
@@ -613,13 +623,13 @@ void DrawTabsIsland(AppContext& app, Session& session, ImVec2 at, float maxWidth
         for (const Tab& t : tabs) {
             const bool on = app.shell.ribbonTab == t.tab;
             ImFont* font = on ? ui.fonts.strong : ui.fonts.medium;
-            const float w = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, t.label).x + ui.S(24);
+            const float w = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, t.label).x + pad;
             ImGui::SetCursorScreenPos({x, at.y});
             ImGui::PushID(t.label);
             if (ImGui::InvisibleButton("##tab", {w, h})) app.shell.ribbonTab = t.tab;
             ImGui::PopID();
             if (on) dl->AddRectFilled({x + ui.S(2), at.y + ui.S(5)}, {x + w - ui.S(2), at.y + h - ui.S(5)}, ui::ToU32(c.accentSoft), ui.S(8));
-            dl->AddText(font, ui.S(13), {x + ui.S(12), at.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(on ? c.accent : c.textSecondary),
+            dl->AddText(font, ui.S(13), {x + pad / 2, at.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(on ? c.accent : c.textSecondary),
                         t.label);
             x += w;
         }
@@ -648,9 +658,10 @@ void DrawChoiceIsland(AppContext& app, const char* id, const std::vector<const M
     MobileState& m = app.shell.mobile;
     const float h = ui.S(kIsland);
     const float content = ChoiceIslandWidth(ui, groups);
-    const float maxScroll = scrolls ? std::max(0.0f, content - width) : 0.0f;
-    float& scroll = m.choiceScroll;
-    if (!scrolls) scroll = 0;
+    // A little room after the last item: the fade and the bar stay off it.
+    const float maxScroll = scrolls && content > width ? content - width + ui.S(10) : 0.0f;
+    float fixed = 0;   // an island that does not scroll keeps its own zero (the line type reset the tools' scroll each frame)
+    float& scroll = scrolls ? m.choiceScroll : fixed;
     scroll = std::clamp(scroll, 0.0f, maxScroll);
     if (!BeginIsland(ui, id, at, {width, h})) {
         EndIsland();
@@ -1041,12 +1052,20 @@ void DrawPhoneRoot(AppContext& app) {
     std::vector<const MobileState::ChoiceGroup*> toolGroups, lineGroups;
     if (!owner.empty())
         for (const auto& g : shown) (g.lineType ? lineGroups : toolGroups).push_back(&g);
+    if (!toolGroups.empty() && !lineGroups.empty()) {
+        // Too narrow for two islands (640 dp): the line type joins the tool's island, which scrolls.
+        const float room = vx1 - ui.S(8) - ui.S(44) - ui.S(6) - (m.rUndo.max.x + ui.S(6));
+        if (room - ChoiceIslandWidth(ui, lineGroups) - ui.S(6) < ui.S(120)) {
+            toolGroups.insert(toolGroups.end(), lineGroups.begin(), lineGroups.end());
+            lineGroups.clear();
+        }
+    }
     if (m.setupStep != 2 && !toolGroups.empty()) {
         scaled(ms.tabsIsland);
         const float x = m.rUndo.max.x + ui.S(6);
         const float right = vx1 - ui.S(8) - ui.S(44) - ui.S(6) - (lineGroups.empty() ? 0.0f : ChoiceIslandWidth(ui, lineGroups) + ui.S(6));
         const float content = ChoiceIslandWidth(ui, toolGroups);
-        const float w = std::min(content, std::max(ui.S(80), right - x));
+        const float w = std::min(content, std::max(ui.S(60), right - x));
         const ImVec2 at{x, m.rUndo.min.y};
         DrawChoiceIsland(app, "##island-choices", toolGroups, at, w, true);
         m.rTabs = {at, {at.x + w, at.y + ui.S(kIsland)}};
@@ -1060,7 +1079,9 @@ void DrawPhoneRoot(AppContext& app) {
                                 ? std::min(1.0f, (m.rUndo.max.x - vx0 - ui.S(2)) / free)
                                 : 0.5f;
         const ImVec2 at = place(ms.tabsIsland, tw, ui.S(kIsland), usual);
-        DrawTabsIsland(app, *session, at, viewSize.x - ui.S(80));
+        // Not under the cube (640 dp: «Вид» went under it).
+        const float cubeLeft = ms.cubeIsland.bottom == ms.tabsIsland.bottom ? vx1 - ui.S(8) - ui.S(44) - ui.S(6) : vx1 - ui.S(8);
+        DrawTabsIsland(app, *session, at, std::max(ui.S(40), std::min(viewSize.x - ui.S(80), cubeLeft - at.x)));
         m.rTabs = {at, {at.x + tw, at.y + ui.S(kIsland)}};
     }
     {

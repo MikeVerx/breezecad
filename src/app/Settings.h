@@ -57,6 +57,7 @@ struct MobileSettings {
     int    cursorReach = 48;      ///< dp from the finger up to the tip
     double scrollSpeed = 1.0;     ///< lists scroll this much per finger travel
     std::vector<std::string> hotbar;   ///< actions added to the panel at the camera, in order
+    std::vector<std::string> recentLooks;  ///< the colours chosen last on the phone, newest first («Недавние»)
     std::vector<std::string> openGroups;   ///< block 2's folding groups the user opened ("sketch:Зависимости")
     bool   askedNotifications = false;   ///< the permission for the watchdog's notice was asked once
     std::string projectsFolderName;      ///< for display: the folder chosen (its URI is the system's)

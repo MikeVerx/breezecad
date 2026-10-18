@@ -206,6 +206,12 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;   // layout is fixed by the design, nothing to remember
     io.ConfigWindowsMoveFromTitleBarOnly = true;
+#if defined(NDEBUG)
+    // Dear ImGui's red "conflicting ID" window is for us: on in debug builds and
+    // the kept previews (preview/android-N), off where testers and users see it
+    // (BZ_IMGUI_IDS=1 turns it on anywhere).
+    io.ConfigDebugHighlightIdConflicts = std::string_view(Branch()).starts_with("preview/") || std::getenv("BZ_IMGUI_IDS") != nullptr;
+#endif
 #if defined(__ANDROID__)
     // No platform backend: input comes through mobile::TouchInput and
     // android/AndroidInput; the size and time are set every frame.
@@ -572,6 +578,27 @@ void Application::ApplyScaleIfChanged() {
     myFramesToDraw = std::max(myFramesToDraw, 3);
 }
 
+void Application::LeaveSwitchedDocument(AppContext& app) {
+    // Another document came to the front (a tab, the phone's projects strip, a
+    // close that asks first): the open operation and the sketch's picks belong
+    // to the one left. Ids repeat across documents, so they must not reach the
+    // new one — an extrude panel once edited the other part's sketch as if it
+    // were an extrude (18.10.2026). What was not confirmed is dropped, as when
+    // another tool starts.
+    Session* now = myWorkspace.Active();
+    if (now == myActiveSession) return;
+    Session* old = nullptr;
+    for (const auto& s : myWorkspace.sessions)
+        if (s.get() == myActiveSession) old = s.get();
+    if (OperationEditor* open = myOps.Active()) {
+        if (old) open->Cancel(app, *old);
+        else open->Drop(app);
+    }
+    mySketch.LeaveDocument(old);
+    app.shell.measuring = false;
+    myActiveSession = now;
+}
+
 void Application::Frame() {
     // The phone or the desktop layout, by the window's size (ADR-0004).
     myShell.mobile.phone = mobile::WantsPhoneLayout(mySettings, myWindow);
@@ -613,6 +640,7 @@ void Application::Frame() {
     app.pressedChords = myInput.chords;
     if (myShell.captureShortcut.empty()) myActions.HandleShortcuts(myInput.chords);
     myInput.chords.clear();
+    LeaveSwitchedDocument(app);
     if (Session* s = myWorkspace.Active()) {
         // Editing a sketch or an operation waits only for the part up to it;
         // what comes after is rebuilt once editing ends.

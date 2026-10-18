@@ -470,7 +470,8 @@ void AppearanceEditor::DrawPhonePanel(AppContext& app, Session& session, float w
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    // Remember what was chosen, for «Недавние».
+    // Remember what was chosen, for «Недавние» (in the settings: it outlives the program).
+    std::vector<std::string>& myRecent = app.settings.mobile.recentLooks;
     if (myChosen != myRecentSeen) {
         myRecentSeen = myChosen;
         myRecent.erase(std::remove(myRecent.begin(), myRecent.end(), myChosen), myRecent.end());
@@ -588,6 +589,13 @@ void AppearanceEditor::DrawPhonePanel(AppContext& app, Session& session, float w
         }
         ImGui::SetCursorScreenPos({x0, at.y + s + gap});
         ImGui::Dummy({width, 0});
+    }
+    if (!LookOf(session).Empty()) {
+        ImGui::Dummy({0, ui.S(6)});
+        if (ui::LinkButton(ui, "##reset-look-phone", session.assembly ? Tr("Сбросить виды, заданные в сборке") : Tr("Сбросить все цвета детали"))) {
+            LookOf(session) = {};
+            Touch(session);
+        }
     }
 }
 

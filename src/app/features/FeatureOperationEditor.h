@@ -29,6 +29,7 @@ public:
     void Done(AppContext& app, Session& session) override;
     void Cancel(AppContext& app, Session& session) override;
     bool Ready(Session& session) const override;
+    void Drop(AppContext&) override { Reset(); }
     bool StepBack(AppContext& app, Session& session) override;
 
     /// Header (icon, title, close), the body from DrawBody, footer buttons.

@@ -92,7 +92,7 @@ void OpenDocument(AppContext& app, std::optional<std::filesystem::path> file) {
 void SaveDocument(AppContext& app, bool saveAs) {
     Session* s = app.Doc();
     if (!s) return;
-    app.ops.Close(app, *s);
+    app.ops.Commit(app, *s);
     if (app.workspace.Save(*s, saveAs, app.notes, app.settings)) {
         app.autosave.Discard(*s);
         if (app.shell.mobile.phone) mobile::SaveThumbnail(app, *s);   // the card's picture on the phone's home page

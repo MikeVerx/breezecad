@@ -28,6 +28,8 @@ public:
     virtual void Apply(AppContext& app, Session& session) = 0;   ///< commit, stay open for the next one
     virtual void Done(AppContext& app, Session& session) = 0;    ///< commit and close
     virtual void Cancel(AppContext& app, Session& session) = 0;
+    /// The document it worked on is gone (closed): forget it without touching any document.
+    virtual void Drop(AppContext& app) { (void)app; }
 
     /// Left panel content.
     virtual void DrawPanel(AppContext& app, Session& session) = 0;

@@ -162,7 +162,12 @@ void TouchInput::BeginFrame(AppContext& app, double now) {
     if (m.penNear && myPenId < 0 && now - m.penSeenAt > kPenAway) m.penNear = false;
     const MobileSettings& tune = app.settings.mobile;
     const bool cursor = CursorActive(app);
-    myGestures.SetMode({cursor, m.boxMode && !cursor, m.penNear, (cursor ? tune.gesturesOn : tune.gesturesOff).drags});
+    DragMap drags = (cursor ? tune.gesturesOn : tune.gesturesOff).drags;
+    // A sketch lies flat to the eye: one finger moves it rather than tilting it into 3D
+    // (the author, 17.10: the sketch turned under the finger with the cursor off).
+    if (const Session* s = app.workspace.Active(); s && s->mode == EditMode::Sketch && !cursor && drags.one == FingerDrag::Orbit)
+        drags.one = FingerDrag::Pan;
+    myGestures.SetMode({cursor, m.boxMode && !cursor, m.penNear, drags});
     mySlop = static_cast<float>(tune.tapSlop);
     myScrollSpeed = static_cast<float>(tune.scrollSpeed);
     myGestures.SetTuning({static_cast<double>(tune.tapSlop), tune.longPress});
@@ -185,6 +190,15 @@ void TouchInput::BeginFrame(AppContext& app, double now) {
     }
     myGestures.Tick(now);
     ApplyGestures(app);
+    // The tip stays in the view when the view moves under it (the numpad widens
+    // block 1, the phone turned over): ✓ clicked a panel otherwise.
+    if (m.cursorShown && !m.cursorDragging && m.viewMax.x > m.viewMin.x) {
+        const ImVec2 tip = TipOf(m, {m.cursorTip.x, m.cursorTip.y + CursorReach(app)}, CursorReach(app));
+        if (tip.x != m.cursorTip.x || tip.y != m.cursorTip.y) {
+            m.cursorFinger = {m.cursorFinger.x + tip.x - m.cursorTip.x, m.cursorFinger.y + tip.y - m.cursorTip.y};
+            m.cursorTip = tip;
+        }
+    }
     RunRowButtons(app);
     PlaceMouse(app);
     m.framesWanted = Busy() ? 2 : 0;
@@ -332,10 +346,10 @@ void TouchInput::PenEvent(AppContext& app, const PointerEvent& e) {
             myPenButton = (e.buttons & 2) != 0;
             Pos(at, ImGuiMouseSource_Pen);
             if (e.tool == PointerTool::Eraser) {
-                // The eraser deletes what it touches: pick it, then Delete.
+                // The eraser deletes what it touches: picked as it touches, deleted as it
+                // lifts (a sketch picks on the release — a Delete at the touch took the
+                // selection from before).
                 Button(ImGuiMouseButton_Left, true, ImGuiMouseSource_Pen);
-                Button(ImGuiMouseButton_Left, false, ImGuiMouseSource_Pen);
-                app.Later([&app] { app.actions.Run("edit.delete"); });
             } else if (!myPenButton) {
                 Button(ImGuiMouseButton_Left, true, ImGuiMouseSource_Pen);
             }
@@ -354,8 +368,11 @@ void TouchInput::PenEvent(AppContext& app, const PointerEvent& e) {
         case PointerAction::Cancel:
             if (e.id != myPenId) break;
             Pos(at, ImGuiMouseSource_Pen);
-            if (e.tool != PointerTool::Eraser) {
-                if (myPenButton && !myPenFraming) {
+            if (e.tool == PointerTool::Eraser) {
+                Button(ImGuiMouseButton_Left, false, ImGuiMouseSource_Pen);
+                if (e.action == PointerAction::Up) app.Later([&app] { app.actions.Run("edit.delete"); });
+            } else {
+                if (myPenButton && !myPenFraming && e.action == PointerAction::Up) {
                     Button(ImGuiMouseButton_Right, true, ImGuiMouseSource_Pen);   // the button and a touch: the right click
                     Button(ImGuiMouseButton_Right, false, ImGuiMouseSource_Pen);
                 } else {
@@ -481,13 +498,6 @@ void TouchInput::RunRowButtons(AppContext& app) {
             io.AddKeyEvent(ImGuiKey_Enter, true);
             io.AddKeyEvent(ImGuiKey_Enter, false);
             myQueued = std::max(myQueued, 3);
-        } else if (OperationEditor* op = app.ops.Active(); op && !m.boxMode && app.Doc() && op->HasApply() && op->Ready(*app.Doc())) {
-            // Everything needed is chosen (✓ is green): it makes the feature and the
-            // operation stays open for the next one (the author, 18.10.2026). A long
-            // press is «Готово» (commit and close).
-            app.Later([&app, op] {
-                if (app.ops.Active() == op && app.Doc()) op->Apply(app, *app.Doc());
-            });
         } else if (cursor && m.boxMode) {
             // A frame with the cursor: OK at one corner, OK at the other.
             Pos(m.cursorTip);
@@ -495,7 +505,17 @@ void TouchInput::RunRowButtons(AppContext& app) {
             m.boxHeld = !m.boxHeld;
             if (!m.boxHeld) m.boxMode = false;   // the second corner: done, one frame per press of the button
         } else if (cursor) {
+            // With the cursor ✓ is its click, even when the operation could be made:
+            // the next contour, edge or face is chosen with it too (18.10.2026: a green
+            // ✓ applied instead, the second edge could not be picked). A long press is «Готово».
             Click(m.cursorTip, ImGuiMouseButton_Left);
+        } else if (OperationEditor* op = app.ops.Active(); op && app.Doc() && op->HasApply() && op->Ready(*app.Doc())) {
+            // Everything needed is chosen (✓ is green): it makes the feature and the
+            // operation stays open for the next one (the author, 18.10.2026). A long
+            // press is «Готово» (commit and close).
+            app.Later([&app, op] {
+                if (app.ops.Active() == op && app.Doc()) op->Apply(app, *app.Doc());
+            });
         } else {
             app.Later([&app] { EnterPressed(app); });
         }
