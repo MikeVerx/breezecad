@@ -587,16 +587,22 @@ void Application::LeaveSwitchedDocument(AppContext& app) {
     // were an extrude (18.10.2026). What was not confirmed is dropped, as when
     // another tool starts.
     Session* now = myWorkspace.Active();
-    if (now == myActiveSession) return;
-    Session* old = nullptr;
-    for (const auto& s : myWorkspace.sessions)
-        if (s.get() == myActiveSession) old = s.get();
-    if (OperationEditor* open = myOps.Active()) {
-        if (old) open->Cancel(app, *old);
+    const auto alive = [&](const Session* p) -> Session* {
+        for (const auto& s : myWorkspace.sessions)
+            if (s.get() == p) return s.get();
+        return nullptr;
+    };
+    // An operation opened in another document than the one in front (it may have
+    // been opened in the new one in the same frame, as the emulator's test does).
+    if (OperationEditor* open = myOps.Active(); open && open->Owner() && open->Owner() != now) {
+        if (Session* owner = alive(open->Owner())) open->Cancel(app, *owner);
         else open->Drop(app);
     }
-    mySketch.LeaveDocument(old);
-    app.shell.measuring = false;
+    if (now == myActiveSession) return;
+    if (myActiveSession) {
+        mySketch.LeaveDocument(alive(myActiveSession));
+        app.shell.measuring = false;
+    }
     myActiveSession = now;
 }
 

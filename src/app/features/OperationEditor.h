@@ -30,6 +30,13 @@ public:
     virtual void Cancel(AppContext& app, Session& session) = 0;
     /// The document it worked on is gone (closed): forget it without touching any document.
     virtual void Drop(AppContext& app) { (void)app; }
+    /// The document it was opened in (nullptr: not known).
+    const Session* Owner() const { return myOwner; }
+
+protected:
+    const Session* myOwner = nullptr;   ///< set when it opens (Application drops it when another document comes forward)
+
+public:
 
     /// Left panel content.
     virtual void DrawPanel(AppContext& app, Session& session) = 0;

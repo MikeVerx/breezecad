@@ -113,6 +113,7 @@ void AppearanceEditor::Start(AppContext& app, Session& session) {
         myTargetBodies.push_back(session.assembly->selected);
     myTargetsChosen = myChosen;   // nothing goes on them until a choice is made
     myOpen = true;
+    myOwner = &session;
 }
 
 void AppearanceEditor::StartOnFaces(AppContext& app, Session& session, std::vector<render::SelectedFace> faces) {

@@ -51,6 +51,7 @@ void FeatureOperationEditor::OpenNew(AppContext& app, Session& session, std::uni
     if (feature->name.empty()) feature->name = session.doc.UniqueFeatureName(Title());
     myFeature = feature->id;
     myIsNew = true;
+    myOwner = &session;
     LoadTexts(*feature);
     myFocusFirstField = true;
     session.doc.Insert(std::move(feature), session.doc.EndMarker());   // preview, not yet an undo step
@@ -63,6 +64,7 @@ void FeatureOperationEditor::EditExisting(AppContext& app, Session& session, Obj
     if (IsOpen()) Cancel(app, session);
     if (session.mode == EditMode::Sketch) app.sketch.Finish(app, session);
     myFeature = feature;
+    myOwner = &session;
     myIsNew = false;
     myOriginal = f->Clone();
     LoadTexts(*f);
