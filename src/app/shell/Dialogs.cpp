@@ -492,6 +492,10 @@ void DrawLibraryPart(AppContext& app, const parts::StandardInfo& standard, float
 /// "Выбор стандартного изделия": recent parts, the standards filter, the
 /// folders on the left, the chosen part on the right; makes a new part.
 void DrawLibrary(AppContext& app) {
+    if (app.shell.mobile.phone) {   // full screen (mockup 6a)
+        if (app.shell.showLibrary) DrawPhoneLibrary(app);
+        return;
+    }
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     if (!BeginDialog(ui, "##library", app.shell.showLibrary, ui.S(1000))) return;
@@ -656,6 +660,12 @@ void DrawLibrary(AppContext& app) {
 }
 
 } // namespace
+
+void PickLibraryPart(AppContext& app, const ShellState::Library::Pick& pick) { PickPart(app, pick); }
+
+ShellState::Library::Pick LibraryPickFor(const doc::parts::StandardInfo& standard, const ShellState::Library::Pick& from) {
+    return PickFor(standard, from);
+}
 
 /// Remembers the shortcuts that differ from the shipped ones.
 void StoreShortcuts(AppContext& app) {

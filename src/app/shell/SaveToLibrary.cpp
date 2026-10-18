@@ -36,7 +36,57 @@ void OpenSaveToLibrary(AppContext& app) {
         app.notes.Error(Tr("У детали нет переменных-размеров: добавьте их на панели fx — они станут таблицей размеров"));
 }
 
+bool SaveLibraryItem(AppContext& app) {
+    auto& st = app.shell.saveToLibrary;
+    const Session* s = app.Doc();
+    doc::parts::UserItem item;
+    item.title = st.title;
+    item.group = st.group;
+    std::string problem;
+    for (std::size_t i = 0; i < st.variables.size(); ++i)
+        if (st.use[i]) item.variables.push_back(st.variables[i]);
+    for (const auto& row : st.cells) {
+        std::vector<double> values;
+        for (std::size_t i = 0; i < st.variables.size(); ++i) {
+            if (!st.use[i]) continue;
+            const Expected<double> v = EvaluateExpression(row[i], Quantity::Length, UnitSystem{}, {});
+            if (!v && problem.empty()) problem = Trf("«{}» в столбце {} — не число", row[i], st.variables[i]);
+            values.push_back(v ? *v : 0.0);
+        }
+        item.rows.push_back(std::move(values));
+    }
+    if (!s || s->assembly) problem = Tr("Откройте деталь");
+    if (!problem.empty()) {
+        app.notes.Error(problem);
+        return false;
+    }
+    const Expected<std::string> id = doc::parts::AddUserItem(StandardPackDir() / std::string(doc::parts::kUserPackFile), s->doc, item);
+    if (!id) {
+        app.notes.Error(Trf("Не сохранено: {}", id.GetError().message));
+        return false;
+    }
+    LoadStandardPacks(app);
+    app.notes.Success(Trf("«{}» — в моей библиотеке", item.title));
+    if (const doc::parts::StandardInfo* added = doc::parts::FindStandard(*id)) {   // show it there
+        auto& lib = app.shell.library;
+        lib.chosen = {*id, doc::parts::Sizes(*added).front(), 0, {}};
+        if (const auto range = doc::parts::FreeLength(*added)) lib.chosen.length = range->preset;
+        lib.phoneGroup = -1;
+        const auto groups = doc::parts::Groups();
+        for (int g = 0; g < static_cast<int>(groups.size()); ++g)
+            for (doc::parts::PartKind k : groups[static_cast<std::size_t>(g)].kinds)
+                if (k == added->kind) lib.phoneGroup = g;
+        app.shell.showLibrary = true;
+    }
+    st.open = false;
+    return true;
+}
+
 void DrawSaveToLibrary(AppContext& app) {
+    if (app.shell.mobile.phone) {   // full screen (mockup 6b)
+        if (app.shell.saveToLibrary.open) DrawPhoneSaveToLibrary(app);
+        return;
+    }
     ui::Ui& ui = app.ui;
     auto& st = app.shell.saveToLibrary;
     if (!BeginDialog(ui, "##save-to-library", st.open, ui.S(760))) return;
@@ -96,43 +146,7 @@ void DrawSaveToLibrary(AppContext& app) {
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 2 * bw - ui.S(8));
     if (ui::SecondaryButton(ui, "##cancel", Tr("Отмена"), "Esc", {bw, ui.S(36)}) || ImGui::IsKeyPressed(ImGuiKey_Escape)) close();
     ImGui::SameLine(0, ui.S(8));
-    if (ui::PrimaryButton(ui, "##save", Tr("Сохранить"), nullptr, {bw, ui.S(36)})) {
-        const Session* s = app.Doc();
-        doc::parts::UserItem item;
-        item.title = st.title;
-        item.group = st.group;
-        std::string problem;
-        for (std::size_t i = 0; i < st.variables.size(); ++i)
-            if (st.use[i]) item.variables.push_back(st.variables[i]);
-        for (const auto& row : st.cells) {
-            std::vector<double> values;
-            for (std::size_t i = 0; i < st.variables.size(); ++i) {
-                if (!st.use[i]) continue;
-                const Expected<double> v = EvaluateExpression(row[i], Quantity::Length, UnitSystem{}, {});
-                if (!v && problem.empty()) problem = Trf("«{}» в столбце {} — не число", row[i], st.variables[i]);
-                values.push_back(v ? *v : 0.0);
-            }
-            item.rows.push_back(std::move(values));
-        }
-        if (!s || s->assembly) problem = Tr("Откройте деталь");
-        if (!problem.empty()) app.notes.Error(problem);
-        else if (const Expected<std::string> id =
-                     doc::parts::AddUserItem(StandardPackDir() / std::string(doc::parts::kUserPackFile), s->doc, item);
-                 !id)
-            app.notes.Error(Trf("Не сохранено: {}", id.GetError().message));
-        else {
-            LoadStandardPacks(app);
-            app.notes.Success(Trf("«{}» — в моей библиотеке", item.title));
-            const doc::parts::StandardInfo* added = doc::parts::FindStandard(*id);
-            if (added) {   // show it there
-                auto& lib = app.shell.library;
-                lib.chosen = {*id, doc::parts::Sizes(*added).front(), 0, {}};
-                if (const auto range = doc::parts::FreeLength(*added)) lib.chosen.length = range->preset;
-                app.shell.showLibrary = true;
-            }
-            close();
-        }
-    }
+    if (ui::PrimaryButton(ui, "##save", Tr("Сохранить"), nullptr, {bw, ui.S(36)}) && SaveLibraryItem(app)) ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
 }
 

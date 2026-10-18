@@ -104,6 +104,7 @@ struct ShellState {
         std::string      sizeFilter;             ///< typed in that list: only the sizes containing it
         bool             sizeFilterActive = false;   ///< that filter had the keyboard last frame
         std::string      confirmRemove;          ///< a user's item asked to be removed: the second click removes it
+        int              phoneGroup = -1;        ///< the phone: the folder shown (index in parts::Groups())
     } library;
 
     render::DisplayStyle displayStyle = render::DisplayStyle::ShadedWithEdges;

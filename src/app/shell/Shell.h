@@ -4,6 +4,7 @@
 // panel, project tabs and the status bar. Plus the home screen and dialogs.
 
 #include "app/AppContext.h"
+#include "document/StandardParts.h"
 
 namespace bz::app {
 
@@ -45,6 +46,16 @@ void  DrawDialogs(AppContext& app);
 /// "В библиотеку" (SaveToLibrary.cpp): opens the window for the active part.
 void  OpenSaveToLibrary(AppContext& app);
 void  DrawSaveToLibrary(AppContext& app);
+/// The library and «В мою библиотеку» on the phone, full screen (mobile/PhoneLibrary.cpp).
+void  DrawPhoneLibrary(AppContext& app);
+void  DrawPhoneSaveToLibrary(AppContext& app);
+/// Saves the part as the «В библиотеку» window says; on success closes it and
+/// shows the item in the library. False when something is wrong (said in a note).
+bool  SaveLibraryItem(AppContext& app);
+/// Chooses a standard part in the library window (remembered among the recent).
+void  PickLibraryPart(AppContext& app, const ShellState::Library::Pick& pick);
+/// The pick for a standard, keeping the size and length of `from` where it has them.
+ShellState::Library::Pick LibraryPickFor(const doc::parts::StandardInfo& standard, const ShellState::Library::Pick& from);
 /// A centred modal window of the house style; false when it is not shown.
 bool  BeginDialog(ui::Ui& ui, const char* id, bool& open, float width);
 /// The "Создать" window (NewDocumentDialog.cpp); opened by OpenNewDocumentDialog.
