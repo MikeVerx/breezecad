@@ -7,10 +7,11 @@ ICONS = '/home/claude/breezecad/assets/icons'
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def icon(name, size=18, color='#AEB4BD', style=''):
+def icon(name, size=18, color='#AEB4BD', style='', dark=True):
     p = os.path.join(ICONS, name + '.svg')
     s = open(p).read()
     s = s.replace('currentColor', color)
+    if dark: s = s.replace('#3D4552', '#C9D1DB')   # proposed: dark arrows turn light in the dark theme
     s = re.sub(r'<svg ', f'<svg width="{size}" height="{size}" style="flex:none;{style}" ', s, count=1)
     return s
 
@@ -100,6 +101,7 @@ def note(text, style):
 
 # ---------------------------------------------------------------------------------
 pages = {}
+SIZES = {}
 
 # 1a. The hotbar: "Скрыть управление" at the bottom (was the palette).
 pages['1a-hotbar'] = page(camera() + block1() + view() + block2_list() + strip() +
@@ -462,6 +464,92 @@ pages['7b-extrude-ready'] = page(hotbar7() + b1_7b + view_7b + b2_7b + strip()
     + note('Не влезло — край гаснет, полоска снизу,<br>листается вбок.', 'left:420px;top:56px'), R7_CSS)
 
 
+# 7c. The extrude on the phone with icon buttons in the top island (the author 18.10: "нужны маленькие картинки").
+OPS = [('op-join', 'Добавить к телу'), ('op-cut', 'Вырезать из тела'), ('op-intersect', 'Оставить пересечение'), ('op-new', 'Новое тело')]
+DIRS = [('dir-up', 'Вверх (по нормали эскиза)'), ('dir-down', 'Вниз (против нормали)'), ('dir-both', 'В обе стороны поровну'),
+        ('dir-asym', 'В обе стороны, разные расстояния')]
+DEPTH = [('ext-distance', 'На расстояние'), ('ext-to', 'До плоскости или грани'), ('ext-through', 'Насквозь')]
+R7C_CSS = R7_CSS + """
+.ti7 .m.ic{padding:0;width:30px;min-width:30px}
+.ti7 .sep{margin:0 2px}
+.tip{background:#0f1113;border:1px solid var(--border);border-radius:8px;padding:5px 9px;font-size:11.5px;color:var(--text);z-index:60;box-shadow:0 6px 16px rgba(0,0,0,.5)}
+.tip:after{content:'';position:absolute;left:50%;top:-6px;margin-left:-5px;border:5px solid transparent;border-top:none;border-bottom-color:#0f1113}
+"""
+
+
+def icon_group(items, on):
+    return ''.join(f'<div class="m ic{" on" if n == on else ""}">{icon(n, 22)}</div>' for n, _ in items)
+
+
+ti_7c = ('<div class="abs isl ti7" style="padding:0 3px;gap:1px">' + icon_group(OPS, 'op-join') + '<div class="sep"></div>'
+         + icon_group(DIRS, 'dir-up') + '<div class="sep"></div>' + icon_group(DEPTH, 'ext-distance') + '</div>')
+view_7c = f'<div class="abs view"><div class="abs" style="left:110px;top:90px">{MODEL}</div>{PREVIEW}{AXIS3}{islands7(ti_7c)}</div>'
+pages['7c-extrude-icons'] = page(hotbar7() + b1_7b + view_7c + b2_7b + strip()
+    + '<div class="abs tip" style="left:614px;top:62px">Насквозь</div>'
+    + note('Островок: <b>операция</b> (добавить · вырезать · пересечение · новое тело) │ <b>направление</b><br>'
+           '(вверх · вниз · поровну в обе · по-разному в обе) │ <b>глубина</b> (расстояние · до грани · насквозь).<br>'
+           'Помещается целиком. Зажатие кнопки — подсказка с названием.', 'left:240px;top:290px'), R7C_CSS)
+
+# 7a with the line types as an island of their own (the author 18.10).
+LT_ISL = (f'<div class="abs isl ti7" style="left:auto;right:56px;width:auto;padding:0 3px;gap:2px"><div class="m ic on">{icon("sk-line", 20, "#cfdcff")}</div>'
+          f'<div class="m ic">{icon("sk-construction", 20)}</div><div class="m ic">{icon("sk-centerline", 20)}</div></div>')
+ti_7a2 = (f'<div class="abs isl ti7" style="right:auto;padding:0 3px;gap:2px"><div class="m on">{icon("sk-rectangle", 18, "#cfdcff")}2 точки</div>'
+          f'<div class="m ic">{icon("sk-rect-centre", 18)}</div><div class="m ic">{icon("sk-rect-3pt", 18)}</div><div class="m ic">{icon("sk-rect-3pt-centre", 18)}</div></div>'
+          + LT_ISL)
+view_7a2 = (f'<div class="abs view" style="background:none">{GRID}{AXES}'
+            '<div class="abs" style="left:170px;top:116px;width:200px;height:80px;border:1.6px dashed #6E9BFF;background:rgba(110,155,255,.06)"></div>'
+            f'<div class="abs" style="left:166px;top:112px;width:9px;height:9px;border-radius:50%;background:#fff"></div>{DROP}'
+            f'{islands7(ti_7a2)}</div>')
+pages['7a-sketch-tool'] = page(hotbar7() + b1_7a + view_7a2 + b2_7a + strip()
+    + note('Два островка: <b>способ построения</b> и отдельно <b>тип линии</b><br>(основная · вспомогательная · осевая).', 'left:240px;top:58px')
+    + note('Сохранить, открыть, линейка — в хотбаре.<br>Рамка · курсор · ✕ · ✓ — в самом низу блока 1.', 'left:50px;top:150px;width:170px')
+    + note('Инструмент и режим — строкой<br>внизу блока 2.', 'right:188px;bottom:48px'), R7C_CSS + '.ti7 .m.ic{padding:0;width:32px;min-width:32px}')
+
+# 8a. The desktop: the same icon buttons in the tool panel, rows like KOMPAS-3D (caption on the left, buttons on the right).
+SIZES['8a-desktop-extrude'] = (1060, 640)
+D_CSS = """
+body{width:1060px;height:640px;background:#EEF0F3;color:#1F2328;font-size:12.5px}
+.rail{left:0;top:0;bottom:0;width:52px;background:#F4F5F7;border-right:1px solid #E1E4E8;display:flex;flex-direction:column;align-items:center;gap:22px;padding-top:18px}
+.pn{left:52px;top:0;bottom:0;width:330px;background:#FBFBFC;border-right:1px solid #E1E4E8}
+.pn .hd{height:52px;display:flex;align-items:center;gap:10px;padding:0 16px;font-weight:600;border-bottom:1px solid #E8EBEE}
+.pn .sec{font-size:11.5px;color:#6B7280;padding:14px 16px 6px}
+.pn .chip{margin:0 16px 6px;height:34px;border-radius:8px;border:1.5px solid #3F6FEA;background:#EEF3FF;display:flex;align-items:center;padding:0 12px;gap:8px;font-weight:500;color:#1F3A8A;font-size:12.5px}
+.pn .rw{display:flex;align-items:center;padding:5px 16px}
+.pn .rw .lb{width:92px;color:#4B5563}
+.pn .bt{width:34px;height:34px;border-radius:8px;border:1px solid #D7DBE0;background:#fff;display:flex;align-items:center;justify-content:center;margin-right:4px}
+.pn .bt.on{background:#E6EDFF;border:1.5px solid #3F6FEA}
+.pn .fld{margin:0 16px;height:36px;border-radius:8px;border:1px solid #D7DBE0;background:#fff;display:flex;align-items:center;padding:0 10px;gap:6px}
+.pn .ft{position:absolute;left:0;right:0;bottom:0;height:64px;border-top:1px solid #E8EBEE;display:flex;gap:8px;padding:14px 16px}
+.pn .ft div{flex:1;border-radius:8px;border:1px solid #D7DBE0;background:#fff;display:flex;align-items:center;justify-content:center;font-weight:500}
+.pn .ft .go{background:#1D4ED8;border-color:#1D4ED8;color:#fff}
+.dv{left:382px;right:0;top:0;bottom:0;background:linear-gradient(#F7F8FA,#E6E9ED)}
+.dtip{background:#1F2328;color:#fff;border-radius:6px;padding:5px 9px;font-size:11.5px;z-index:60}
+.note{color:#7A4B00;background:#FFF6DD;border-color:#E2B33C}
+"""
+
+
+def drow(label, items, on, hover=None):
+    hv = ' style="border-color:#9AA8C2;background:#F3F5F8"'
+    bts = ''.join(f'<div class="bt{" on" if n == on else ""}"{hv if n == hover else ""}>{icon(n, 22, dark=False)}</div>' for n, _ in items)
+    return f'<div class="rw"><span class="lb">{label}</span>{bts}</div>'
+
+
+pn = (f'<div class="abs pn"><div class="hd">{icon("extrude", 22, dark=False)}Выдавливание1<span style="margin-left:auto">{icon("ui-close", 16, "#6B7280")}</span></div>'
+      f'<div class="sec">Профиль · 2</div><div class="chip">{icon("ui-check", 14, "#3F6FEA")}Контур 1<span style="margin-left:auto">{icon("ui-close", 13, "#3F6FEA")}</span></div>'
+      f'<div class="chip">{icon("ui-check", 14, "#3F6FEA")}Контур 2<span style="margin-left:auto">{icon("ui-close", 13, "#3F6FEA")}</span></div>'
+      '<div style="height:8px"></div>'
+      + drow('Операция', OPS, 'op-join') + drow('Направление', DIRS, 'dir-up') + drow('Глубина', DEPTH, 'ext-distance', 'ext-through')
+      + f'<div class="sec">Расстояние</div><div class="fld">20<span style="margin-left:auto;color:#9AA1AB">мм</span>{icon("ui-fx", 14, "#6B7280")}</div>'
+      + '<div class="sec">Уклон</div><div class="fld">0<span style="margin-left:auto;color:#9AA1AB">°</span></div>'
+      + '<div class="ft"><div>Отмена</div><div>Применить</div><div class="go">Готово</div></div></div>')
+rail = f'<div class="abs rail">{icon("ui-tree", 20, "#4B5563")}{icon("ui-sliders", 20, "#3F6FEA")}{icon("ui-fx", 20, "#4B5563")}</div>'
+dview = f'<div class="abs dv"><div class="abs" style="left:170px;top:170px;transform:scale(1.5);transform-origin:0 0">{MODEL}{PREVIEW.replace("left:110px;top:50px", "left:0;top:-40px")}</div></div>'
+pages['8a-desktop-extrude'] = page(rail + pn + dview
+    + '<div class="abs dtip" style="left:266px;top:296px">Насквозь</div>'
+    + note('ПК: те же иконки в панели инструмента, строками как в КОМПАС-3D —<br>подпись слева, кнопки справа. Наведение — подсказка с названием.<br>'
+           'Текстовые полосы «Прямое / Обратное / В обе стороны» уходят.', 'left:420px;top:24px'), D_CSS)
+
+
 if __name__ == '__main__':
     only = sys.argv[1:]
     with sync_playwright() as p:
@@ -471,6 +559,7 @@ if __name__ == '__main__':
             if only and name not in only: continue
             f = os.path.join(HERE, name + '.html')
             open(f, 'w').write(html)
+            pg.set_viewport_size(dict(zip(('width', 'height'), SIZES.get(name, (915, 412)))))
             pg.goto('file://' + f)
             pg.wait_for_timeout(250)
             pg.screenshot(path=os.path.join(HERE, name + '.png'))
