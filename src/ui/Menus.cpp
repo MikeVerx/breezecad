@@ -49,6 +49,7 @@ MenuStyle::~MenuStyle() {
 }
 
 bool MenuItem(Ui& ui, const char* label, const char* shortcut, std::string_view icon, bool checked, bool enabled) {
+    if (!ui.keyHints) shortcut = nullptr;
     const float shortcutWidth = shortcut ? ui.fonts.mono->CalcTextSizeA(ui.S(11.5f), FLT_MAX, 0, shortcut).x : 0.0f;
     const float width = std::max(ui.S(kMinWidth), ui.S(kIconColumn) + LabelWidth(ui, label) + ui.S(32) + shortcutWidth + ui.S(8));
     const ImVec2 line = ImGui::GetCursorScreenPos();

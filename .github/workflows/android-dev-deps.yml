@@ -1,0 +1,76 @@
+# Manual only: puts what an Android build needs into the pre-release
+# "android-dev-deps", so a sandbox that reaches GitHub but not Google
+# (Claude's cloud sandbox, docs/dev/HANDOFF.md) can build the app itself:
+#
+#   android-ndk.tar.xz          the NDK used by android.yml
+#   android-deps-x86_64.tar.xz  FreeType + OCCT from the Actions cache
+#   android-deps-arm64-v8a.tar.xz
+#   android-sdk.tar.xz          build-tools (aapt2, d8, zipalign, apksigner)
+#                                and the platform's android.jar
+#
+# The deps are taken from the cache android.yml filled on the same branch:
+# run that first. Unpack with scripts/android/dev-setup.sh.
+name: android-dev-deps
+
+on:
+  workflow_dispatch:
+  # A dispatch needs the workflow on the default branch; until then a change
+  # of this stamp file starts it on an Android branch.
+  push:
+    branches: ['feat/android-*', 'ci/android-*']
+    paths: ['.github/android-dev-deps.stamp']
+
+env:
+  NDK_VERSION: r27c
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: false
+      - name: Restore x86_64 deps
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/.android-deps/x86_64
+          key: android-deps-x86_64-${{ env.NDK_VERSION }}-${{ hashFiles('scripts/android/build-deps.sh') }}
+          fail-on-cache-miss: true
+      - name: Restore arm64 deps
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/.android-deps/arm64-v8a
+          key: android-deps-arm64-v8a-${{ env.NDK_VERSION }}-${{ hashFiles('scripts/android/build-deps.sh') }}
+          fail-on-cache-miss: true
+      - name: Pack
+        run: |
+          mkdir -p out
+          ndk=${{ steps.ndk.outputs.ndk-path }}
+          tar -C "$ndk" --transform "s,^\\.,android-ndk-$NDK_VERSION," -cf - . | xz -T0 -6 > out/android-ndk.tar.xz
+          for abi in x86_64 arm64-v8a; do
+            tar -C .android-deps -cf - $abi | xz -T0 -6 > out/android-deps-$abi.tar.xz
+          done
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/* | grep -E '/[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          platform=$(ls -d "$ANDROID_HOME"/platforms/android-* | grep -E '/android-[0-9]+$' | sort -V | tail -1)
+          mkdir -p sdk/build-tools sdk/platforms
+          cp -r "$tools" sdk/build-tools/
+          mkdir -p "sdk/platforms/$(basename "$platform")" && cp "$platform/android.jar" "sdk/platforms/$(basename "$platform")/"
+          tar -cf - sdk | xz -T0 -6 > out/android-sdk.tar.xz
+          ls -la out
+          echo "::notice title=android-dev-deps::NDK $NDK_VERSION, $(basename "$tools"), $(basename "$platform"): $(du -sh out | cut -f1)"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view android-dev-deps >/dev/null 2>&1; then
+            gh release create android-dev-deps --prerelease --target "$GITHUB_SHA" --title "Android: зависимости для сборки в песочнице" \
+              --notes "Для разработки, не для пользователей: NDK, OCCT/FreeType под Android и утилиты SDK. Распаковка — scripts/android/dev-setup.sh."
+          fi
+          gh release upload android-dev-deps out/* --clobber

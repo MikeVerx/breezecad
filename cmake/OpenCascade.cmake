@@ -28,5 +28,11 @@ add_library(bz::occt_exchange ALIAS bz_occt_exchange)
 
 # Visualization: V3d viewer and the OpenGL driver.
 add_library(bz_occt_visual INTERFACE)
-target_link_libraries(bz_occt_visual INTERFACE TKService TKV3d TKOpenGl TKHLR bz_occt_modeling)
+# Android (and other GLES systems) have TKOpenGles in place of TKOpenGl: the
+# same OpenGl_* classes, built for OpenGL ES.
+if(TARGET TKOpenGles)
+    target_link_libraries(bz_occt_visual INTERFACE TKService TKV3d TKOpenGles TKHLR bz_occt_modeling)
+else()
+    target_link_libraries(bz_occt_visual INTERFACE TKService TKV3d TKOpenGl TKHLR bz_occt_modeling)
+endif()
 add_library(bz::occt_visual ALIAS bz_occt_visual)

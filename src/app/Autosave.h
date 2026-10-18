@@ -31,6 +31,10 @@ public:
     /// Returns true when a copy was written.
     bool Update(Session& session, const Settings& settings, double now, double idleSeconds);
 
+    /// Writes a copy at once if the document has changes not in one yet
+    /// (Android: the app went to the background, where it may be killed).
+    bool WriteNow(Session& session, double now);
+
     /// Removes the session's copies (after saving or a deliberate close).
     void Discard(const Session& session) const;
 
@@ -38,6 +42,7 @@ public:
     void Remove(const RecoverableDocument& doc) const;
 
 private:
+    bool Write(Session& session, double now);
     std::filesystem::path myRoot;
 };
 

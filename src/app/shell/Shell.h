@@ -4,18 +4,60 @@
 // panel, project tabs and the status bar. Plus the home screen and dialogs.
 
 #include "app/AppContext.h"
+#include "document/StandardParts.h"
 
 namespace bz::app {
 
 void  DrawHeader(AppContext& app, ImVec2 pos, float width);
+/// The main menu (the logo's): call right after the button that opens
+/// "##main-menu", in the same window.
+void  MainMenuPopup(AppContext& app);
 void  DrawModeBar(AppContext& app, ImVec2 pos, float width);
 /// Returns the ribbon height.
 float DrawRibbon(AppContext& app, Session& session, ImVec2 pos, float width);
 void  DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size);
+
+/// Where the commands of a ribbon tab go: the desktop's ribbon lays them
+/// out in groups (Ribbon.cpp), the phone's block 2 lists them
+/// (mobile/MobileRibbon.cpp). Same content, one place to change it.
+class RibbonSink {
+public:
+    virtual ~RibbonSink() = default;
+    virtual AppContext& App() const = 0;
+    virtual void BeginGroup(const char* caption) = 0;
+    virtual void EndGroup() = 0;
+    virtual void Large(const char* actionId, const char* caption, bool active = false) = 0;
+    virtual void LargeLater(const char* icon, const char* caption) = 0;
+    virtual void BeginColumn() = 0;
+    virtual void Small(const char* actionId, const char* label = nullptr, bool active = false) = 0;
+    virtual void SmallLater(const char* icon, const char* label) = 0;
+    virtual void EndColumn() = 0;
+    virtual void BeginGrid(int columns) = 0;
+    virtual void Icon(const char* actionId, bool active = false) = 0;
+    virtual void EndGrid() = 0;
+};
+/// The commands of the current ribbon tab (app.shell.ribbonTab) into `sink`.
+/// `withFinish`: "Принять эскиз" among them (the phone pins it above the list instead).
+void FillRibbon(AppContext& app, Session& session, RibbonSink& sink, bool withFinish);
 void  DrawProjectTabs(AppContext& app, ImVec2 pos, float width);
 void  DrawStatusBar(AppContext& app, ImVec2 pos, float width);
 void  DrawHomeScreen(AppContext& app, ImVec2 pos, ImVec2 size);
 void  DrawDialogs(AppContext& app);
+/// "В библиотеку" (SaveToLibrary.cpp): opens the window for the active part.
+void  OpenSaveToLibrary(AppContext& app);
+void  DrawSaveToLibrary(AppContext& app);
+/// The library and «В мою библиотеку» on the phone, full screen (mobile/PhoneLibrary.cpp).
+void  DrawPhoneLibrary(AppContext& app);
+void  DrawPhoneSaveToLibrary(AppContext& app);
+/// Saves the part as the «В библиотеку» window says; on success closes it and
+/// shows the item in the library. False when something is wrong (said in a note).
+bool  SaveLibraryItem(AppContext& app);
+/// Chooses a standard part in the library window (remembered among the recent).
+void  PickLibraryPart(AppContext& app, const ShellState::Library::Pick& pick);
+/// The pick for a standard, keeping the size and length of `from` where it has them.
+ShellState::Library::Pick LibraryPickFor(const doc::parts::StandardInfo& standard, const ShellState::Library::Pick& from);
+/// A centred modal window of the house style; false when it is not shown.
+bool  BeginDialog(ui::Ui& ui, const char* id, bool& open, float width);
 /// The "Создать" window (NewDocumentDialog.cpp); opened by OpenNewDocumentDialog.
 void  DrawNewDocumentDialog(AppContext& app);
 

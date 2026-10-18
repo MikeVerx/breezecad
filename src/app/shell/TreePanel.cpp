@@ -433,7 +433,9 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         ImGui::SetCursorPosX(ui.S(20));
         ImGui::PushTextWrapPos(width - ui.S(20));
         ImGui::TextColored(ui::ToVec4(c.textMuted), "%s",
-                           Tr("Деталь пустая. Нажмите «Начать эскиз» на ленте (S) и выберите плоскость — с этого начинается любая деталь."));
+                           app.shell.mobile.phone
+                               ? Tr("Деталь пустая. Нажмите «Начать эскиз» в блоке инструментов и выберите плоскость — с этого начинается любая деталь.")
+                               : Tr("Деталь пустая. Нажмите «Начать эскиз» на ленте (S) и выберите плоскость — с этого начинается любая деталь."));
         ImGui::PopTextWrapPos();
     }
     ImGui::EndGroup();

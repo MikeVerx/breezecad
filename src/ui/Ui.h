@@ -15,6 +15,7 @@ struct Ui {
     const Fonts& fonts;
     Icons&       icons;
     float        scale = 1.0f;   ///< UI scale: logical pixels per design pixel
+    bool         keyHints = true; ///< show keyboard shortcuts on buttons and in menus (off on a touch screen with no keyboard)
 
     /// Design pixels -> ImGui coordinates.
     float S(float designPixels) const { return designPixels * scale; }

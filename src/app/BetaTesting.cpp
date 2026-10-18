@@ -9,7 +9,7 @@
 #include "platform/SystemInfo.h"
 #include "platform/Window.h"
 
-#include <GLFW/glfw3.h>
+#include "ui/Gl.h"
 #include <imgui.h>
 #include <miniz.h>
 #include <nlohmann/json.hpp>

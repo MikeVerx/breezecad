@@ -63,7 +63,11 @@
 #include <gp_Pln.hxx>
 #include <gp_Trsf.hxx>
 
+#if defined(__ANDROID__)
+#include <chrono>
+#else
 #include <GLFW/glfw3.h>   // glfwGetTime for camera animation
+#endif
 
 #include <algorithm>
 #include <format>
@@ -586,6 +590,19 @@ struct Viewport::Impl {
 
 // --- Viewport ---------------------------------------------------------------
 
+namespace {
+/// The clock StepAnimation's `now` comes from: glfwGetTime on the desktop;
+/// on Android (no GLFW) a steady clock from its epoch — platform::Window::Time
+/// there is the same (Application passes it to StepAnimation).
+double AnimationClock() {
+#if defined(__ANDROID__)
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+#else
+    return glfwGetTime();
+#endif
+}
+} // namespace
+
 Viewport::Viewport() : myImpl(std::make_unique<Impl>()) {}
 
 Viewport::~Viewport() {
@@ -596,7 +613,7 @@ Viewport::~Viewport() {
 bool Viewport::Init(const NativeGlSurface& surface) {
     Impl& m = *myImpl;
 
-#if !defined(_WIN32) && !defined(__APPLE__)
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__ANDROID__)
     // The window's own X connection, not a second one. OCCT asks "is my
     // context current?" by comparing its connection with the current one;
     // with a connection of its own the answer was always no, and it bound the
@@ -610,6 +627,15 @@ bool Viewport::Init(const NativeGlSurface& surface) {
     Handle(Aspect_DisplayConnection) display = new Aspect_DisplayConnection();
 #endif
     m.driver = new OpenGl_GraphicDriver(display, false);
+#if defined(__ANDROID__)
+    // EGL: OCCT must be told the display, context and configuration of the
+    // app's context itself, or it refuses the window ("EGL does not provide
+    // compatible configurations").
+    if (!m.driver->InitEglContext(surface.display, surface.glContext, surface.eglConfig)) {
+        log::Error("Viewport: OCCT did not take the EGL context");
+        return false;
+    }
+#endif
     m.driver->ChangeOptions().buffersNoSwap = true;
     // Render plain sRGB colours into our RGBA8 texture. OCCT's linear-light
     // pipeline relies on an sRGB-capable output, which the window may not
@@ -1099,7 +1125,7 @@ void Viewport::AnimateTo(const CameraState& target, double seconds) {
     }
     m.animFrom = Camera();
     m.animTo = target;
-    m.animStart = glfwGetTime();
+    m.animStart = AnimationClock();
     m.animDuration = seconds;
     m.animating = true;
 }
@@ -1107,7 +1133,10 @@ void Viewport::AnimateTo(const CameraState& target, double seconds) {
 bool Viewport::StepAnimation(double now) {
     Impl& m = *myImpl;
     if (!m.animating) return false;
-    const double t = std::clamp((now - m.animStart) / m.animDuration, 0.0, 1.0);
+    double t = std::clamp((now - m.animStart) / m.animDuration, 0.0, 1.0);
+    // A clock that does not match the animation's start: finish at once
+    // rather than hold the camera at the start for ever.
+    if (now + 1.0 < m.animStart) t = 1.0;
     const double s = SmoothStep(t);
 
     const Orientation from = Orientation::FromView(m.animFrom.center - m.animFrom.eye, m.animFrom.up);

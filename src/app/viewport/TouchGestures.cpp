@@ -121,4 +121,29 @@ bool NavigateTouch(AppContext& app, const ViewportFrame& vf, bool sceneHovered) 
     return wheelTaken;
 }
 
+bool NavigateFingers(AppContext& app, const ViewportFrame& vf) {
+    const mobile::GestureStep& g = app.shell.mobile.gestures;
+    ShellState::Navigation& nav = app.shell.nav;
+    if (g.orbitStart) {
+        ChooseOrbitPivot(app, vf, {static_cast<float>(g.orbitStart->x), static_cast<float>(g.orbitStart->y)});
+        mon::Action("view", "пальцы: вращение");
+    }
+    bool moved = false;
+    if (g.orbit.x != 0 || g.orbit.y != 0) {
+        const double k = kOrbitPerPixel * app.settings.orbitSpeed * app.settings.mobile.fingerOrbit;
+        app.viewport.Orbit(g.orbit.x * k, g.orbit.y * k * (app.settings.invertOrbit ? -1.0 : 1.0), nav.pivot, app.settings.turntableOrbit);
+        moved = true;
+    }
+    if (g.pan.x != 0 || g.pan.y != 0) {
+        const double k = app.settings.mobile.fingerPan;
+        app.viewport.Pan(g.pan.x * k, g.pan.y * k);
+        moved = true;
+    }
+    if (g.zoom != 1.0) {
+        app.viewport.ZoomAt(std::pow(g.zoom, app.settings.mobile.fingerZoom), vf.ToLocal({static_cast<float>(g.zoomAt.x), static_cast<float>(g.zoomAt.y)}));
+        moved = true;
+    }
+    return moved;
+}
+
 } // namespace bz::app

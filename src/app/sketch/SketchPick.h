@@ -9,12 +9,19 @@
 
 namespace bz::app {
 
+/// Sketch entities in a screen box: wholly inside (`window`) or touching it (SketchEditor.cpp).
+std::vector<ObjectId> EntitiesInBox(const sketch::Sketch& sk, const SketchView& view, ImVec2 lo, ImVec2 hi, bool window);
+
 /// Entity under the cursor. Points win over curves, curves over dimensions.
 struct SketchHit {
     ObjectId           id;
     sketch::EntityKind kind = sketch::EntityKind::None;
     explicit operator bool() const { return id.IsValid(); }
 };
+
+/// The pick radii are for a mouse or the phone's cursor tip (a few dp); a bare
+/// finger needs ~3 mm. The phone sets this every frame (1 = as on the desktop).
+void SetPickScale(float scale);
 
 /// Closest entity within a few pixels of `mouse`. Dimension labels count as
 /// their constraint. `ignore` skips one point (the one being dragged).

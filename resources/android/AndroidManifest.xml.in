@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BreezeCAD for Android. Filled in by scripts/android/package-apk.sh:
+     @VERSION_CODE@ (grows with every CI run, so a new APK installs over the
+     old one), @VERSION_NAME@, @MIN_SDK@, @TARGET_SDK@.
+     The program is C++ (libbreezecad.so) run by BreezeActivity, a
+     NativeActivity with a little Java for what only Java can do
+     (resources/android/java, docs/ADR/0004-mobile-touch-ui.md). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="io.github.mikeverx.breezecad"
+          android:versionCode="@VERSION_CODE@"
+          android:versionName="@VERSION_NAME@">
+
+    <uses-sdk android:minSdkVersion="@MIN_SDK@" android:targetSdkVersion="@TARGET_SDK@" />
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+    <!-- Not required: a tablet with a keyboard dock or a Chromebook runs it too. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <!-- The watchdog's notice after a crash or a hang (Android 13+ asks). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application android:label="BreezeCAD"
+                 android:icon="@mipmap/ic_launcher"
+                 android:roundIcon="@mipmap/ic_launcher"
+                 android:hasCode="true"
+                 android:extractNativeLibs="true"
+                 android:allowBackup="false"
+                 android:resizeableActivity="true"
+                 android:enableOnBackInvokedCallback="false"
+                 android:theme="@android:style/Theme.Material.Light.NoActionBar.Fullscreen">
+        <!-- Always landscape on a phone (ADR-0004); turning the phone over flips
+             it, the activity is not recreated on rotation or a keyboard.
+             enableOnBackInvokedCallback="false": "Back" comes as KEYCODE_BACK
+             (Esc in the program, a second one leaves) — on Android 16 with
+             target 36 the system no longer sends it otherwise. -->
+        <activity android:name=".BreezeActivity"
+                  android:exported="true"
+                  android:screenOrientation="sensorLandscape"
+                  android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|layoutDirection|locale"
+                  android:windowSoftInputMode="adjustNothing|stateHidden"
+                  android:launchMode="singleTask"
+                  android:enableOnBackInvokedCallback="false">
+            <meta-data android:name="android.app.lib_name" android:value="breezecad" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- The crash and hang watchdog and its error screen: a process of
+             their own, so they live when the program's process does not. -->
+        <service android:name=".Watchdog"
+                 android:process=":crash"
+                 android:exported="false" />
+        <activity android:name=".CrashActivity"
+                  android:process=":crash"
+                  android:exported="false"
+                  android:excludeFromRecents="true"
+                  android:taskAffinity="io.github.mikeverx.breezecad.crash"
+                  android:theme="@android:style/Theme.Material.Light" />
+
+        <!-- Files handed to other apps ("Поделиться"): reports and exports. -->
+        <provider android:name=".ShareProvider"
+                  android:authorities="io.github.mikeverx.breezecad.share"
+                  android:exported="false"
+                  android:grantUriPermissions="true" />
+    </application>
+</manifest>

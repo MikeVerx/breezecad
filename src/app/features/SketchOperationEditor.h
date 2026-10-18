@@ -18,6 +18,14 @@ public:
     void DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;
 
 protected:
+    /// The last chosen region; with none left the profile is automatic again (as it started).
+    bool PopPick(doc::Feature& feature) override {
+        auto& p = static_cast<doc::SketchSolidFeature&>(feature).profiles;
+        if (p.automatic || p.regions.empty()) return false;
+        p.regions.pop_back();
+        if (p.regions.empty()) p.automatic = true;
+        return true;
+    }
     /// The sketch a new operation starts on, given the one StartNew proposes
     /// (the selected or last unused sketch). The default keeps it.
     virtual ObjectId ChooseSketch(const Session& session, ObjectId proposed) const;

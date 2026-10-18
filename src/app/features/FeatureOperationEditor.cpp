@@ -1,10 +1,12 @@
 #include "app/features/FeatureOperationEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/Format.h"
 #include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
 #include "app/viewport/Planes.h"
 #include "core/I18n.h"
+#include "core/Log.h"
 #include "document/Commands.h"
 #include "document/LoftFeature.h"
 #include "document/Origin.h"
@@ -14,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace bz::app {
 
@@ -48,6 +51,7 @@ void FeatureOperationEditor::OpenNew(AppContext& app, Session& session, std::uni
     if (feature->name.empty()) feature->name = session.doc.UniqueFeatureName(Title());
     myFeature = feature->id;
     myIsNew = true;
+    myOwner = &session;
     LoadTexts(*feature);
     myFocusFirstField = true;
     session.doc.Insert(std::move(feature), session.doc.EndMarker());   // preview, not yet an undo step
@@ -60,6 +64,7 @@ void FeatureOperationEditor::EditExisting(AppContext& app, Session& session, Obj
     if (IsOpen()) Cancel(app, session);
     if (session.mode == EditMode::Sketch) app.sketch.Finish(app, session);
     myFeature = feature;
+    myOwner = &session;
     myIsNew = false;
     myOriginal = f->Clone();
     LoadTexts(*f);
@@ -133,9 +138,10 @@ void FeatureOperationEditor::Section(AppContext& app, const char* label) const {
     ImGui::Dummy({0, app.ui.S(2)});
 }
 
-void FeatureOperationEditor::Gap(AppContext& app) const { ImGui::Dummy({0, app.ui.S(12)}); }
+void FeatureOperationEditor::Gap(AppContext& app) const { ImGui::Dummy({0, app.ui.S(app.shell.mobile.phone ? 6 : 12)}); }
 
 void FeatureOperationEditor::Caption(AppContext& app, const char* text, float width) const {
+    if (DeferCaption(app, text)) return;   // the phone: at the panel's bottom
     ui::FontScope font(app.ui.fonts.caption);
     ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(app.ui.C().textMuted));
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
@@ -209,11 +215,11 @@ bool FeatureOperationEditor::PickOriginalFaces(AppContext& app, Session& session
 }
 
 void FeatureOperationEditor::PlaneChoice(AppContext& app, Session& session, ObjectId& plane, float width) {
-    static constexpr std::array<const char*, 3> labels{"XY", "XZ", "YZ"};
+    static constexpr std::array<ChoiceItem, 3> labels{{{nullptr, "XY"}, {nullptr, "XZ"}, {nullptr, "YZ"}}};
     static constexpr std::array<ObjectId, 3> ids{doc::origin::kPlaneXY, doc::origin::kPlaneXZ, doc::origin::kPlaneYZ};
     const auto at = std::ranges::find(ids, plane);
     const int current = at != ids.end() ? static_cast<int>(at - ids.begin()) : -1;
-    const int chosen = ui::Segmented(app.ui, "plane", labels, current, 3, width);
+    const int chosen = ToolChoice(app, "plane", N_("Плоскость"), labels, current, width);
     if (chosen != current && chosen >= 0) {
         plane = ids[static_cast<std::size_t>(chosen)];
         Changed(session);
@@ -243,10 +249,35 @@ void FeatureOperationEditor::PickPlane(AppContext& app, Session& session, Object
     }
 }
 
+bool FeatureOperationEditor::Ready(Session& session) const {
+    const doc::Feature* f = Edited(session);
+    return f && (f->status.state == doc::FeatureState::Ok || f->status.state == doc::FeatureState::Warning);
+}
+
+bool FeatureOperationEditor::StepBack(AppContext& app, Session& session) {
+    doc::Feature* f = Edited(session);
+    if (!f || !PopPick(*f)) return false;
+    Changed(session);
+    return true;
+}
+
 bool FeatureOperationEditor::ParameterField(AppContext& app, Session& session, const char* id, std::string& text,
                                             Parameter& parameter, float width, bool focus, bool showFx) {
     ui::Ui& ui = app.ui;
     ImGui::PushID(id);
+    if (app.shell.mobile.phone) {
+        // Where the field is, whenever that changes: the emulator's check taps it (smoke-apk.sh).
+        static std::vector<std::pair<ImGuiID, ImVec2>> logged;
+        const ImGuiID gid = ImGui::GetID("value");
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        auto known = std::find_if(logged.begin(), logged.end(), [gid](const auto& e) { return e.first == gid; });
+        if (known == logged.end() || std::abs(known->second.x - at.x) > 1 || std::abs(known->second.y - at.y) > 1) {
+            if (known == logged.end()) logged.emplace_back(gid, at);
+            else known->second = at;
+            log::Info("Touch: field {} at {:.0f},{:.0f} size {:.0f}x{:.0f}", id, at.x, at.y, width,
+                      ui.S(ui.theme.metrics.fieldHeight));
+        }
+    }
     const ui::FieldResult r = ui::ExpressionField(ui, "value", text, UnitLabel(parameter.quantity, session.doc.units),
                                                   parameter.error, width, focus, showFx);
     bool changed = false;
@@ -256,10 +287,13 @@ bool FeatureOperationEditor::ParameterField(AppContext& app, Session& session, c
         changed = true;
     }
     // Enter finishes the operation, as the "Готово Enter" button says.
-    if (r.submitted && parameter.error.empty()) app.Later([&app, &session, this] { Done(app, session); });
     // Esc too: the field has the focus as soon as the panel opens, and Esc
     // should cancel the operation as the panel says, not just leave the field.
-    if (r.cancelled) app.Later([&app, &session, this] { Cancel(app, session); });
+    // Not on the phone: there ✓ at a field only enters the number and ✕ only
+    // leaves the field (the author, 18.10.2026); the row's ✓ / ✕ do the rest.
+    const bool phone = app.shell.mobile.phone;
+    if (r.submitted && parameter.error.empty() && !phone) app.Later([&app, &session, this] { Done(app, session); });
+    if (r.cancelled && !phone) app.Later([&app, &session, this] { Cancel(app, session); });
     if (r.fxClicked) ImGui::OpenPopup("##fx");
     ui::FontScope font(ui.fonts.body);   // before Begin: must outlive the End call
     if (ImGui::BeginPopup("##fx")) {
@@ -290,14 +324,14 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
     const ui::ThemeColors& c = ui.C();
     const float width = ImGui::GetContentRegionAvail().x;
 
-    // Header: icon, title, close.
-    {
+    // Header: icon, title, close (not on the phone: block 2's status line and ✕ under block 1).
+    if (!app.shell.mobile.phone) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(48);
         ui.icons.Draw(dl, Icon(), {p.x + ui.S(14), p.y + (h - ui.S(24)) / 2}, ui.S(24), {1, 1, 1, 1});
-        dl->AddText(ui.fonts.title, ui.S(14), {p.x + ui.S(48), p.y + (h - ui.S(14)) / 2 - ui.S(1)}, ui::ToU32(c.text),
-                    myIsNew ? Title() : f->name.c_str());
+        ui::FittedText(dl, ui.fonts.title, ui.S(14), {p.x + ui.S(48), p.y + (h - ui.S(14)) / 2 - ui.S(1)}, p.x + width - ui.S(40),
+                       ui::ToU32(c.text), myIsNew ? Title() : f->name.c_str());
         ImGui::SetCursorScreenPos({p.x + width - ui.S(38), p.y + ui.S(9)});
         if (ui::IconButton(ui, "##close-op", "ui-close", 30, 14, Tr("Отмена (Esc)")))
             app.Later([&app, &session, this] { Cancel(app, session); });
@@ -305,7 +339,9 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
         ui::Divider(ui, c.dividerSoft);
     }
 
-    const float footer = ui.S(62);
+    // The phone has no footer: Отмена/ОК are the row under block 1, "Применить" its bottom line.
+    const bool phone = app.shell.mobile.phone;
+    const float footer = phone ? 0.0f : ui.S(62);
     ImGui::BeginChild("##operation-body", {width, ImGui::GetContentRegionAvail().y - footer}, ImGuiChildFlags_None);
     ImGui::SetCursorPos({ui.S(14), ui.S(14)});
     ImGui::BeginGroup();
@@ -326,10 +362,12 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
             ImGui::PopStyleColor();
         }
     }
+    FlushCaptions(app, inner);
     ImGui::PopItemWidth();
     ImGui::EndGroup();
     ImGui::EndChild();
 
+    if (phone) return;
     // Footer: Отмена / Применить / Готово.
     ui::Divider(ui, c.dividerSoft);
     const ImVec2 fp = ImGui::GetCursorScreenPos();

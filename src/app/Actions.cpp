@@ -169,8 +169,25 @@ std::vector<const Action*> ActionRegistry::Search(std::string_view query) const 
     for (const auto& a : myActions) {
         if (!a.run || a.label.empty()) continue;
         // The shown label, and the Russian one too: commands are found either way.
-        if (q.empty() || Lower(a.Label()).find(q) != std::string::npos || Lower(a.label).find(q) != std::string::npos)
+        if (q.empty() || Lower(a.Label()).find(q) != std::string::npos || Lower(a.label).find(q) != std::string::npos) {
             found.push_back(&a);
+            continue;
+        }
+        // With keywords: every word of the query, beginnings count ("чувствит курсор").
+        if (a.keywords.empty()) continue;
+        const std::string hay = Lower(a.label) + ' ' + Lower(a.Label()) + ' ' + a.keywords;
+        bool all = true;
+        std::size_t from = 0;
+        while (all && from < q.size()) {
+            const std::size_t space = q.find(' ', from);
+            const std::string word = q.substr(from, space == std::string::npos ? std::string::npos : space - from);
+            from = space == std::string::npos ? q.size() : space + 1;
+            if (word.empty()) continue;
+            // A word's ending differs ("курсора" for "курсор"): its first 5 letters (UTF-8: up to 10 bytes) do.
+            const std::string stem = word.substr(0, std::min<std::size_t>(word.size(), 10));
+            all = hay.find(stem) != std::string::npos;
+        }
+        if (all) found.push_back(&a);
     }
     // Labels that start with the query first.
     std::stable_sort(found.begin(), found.end(), [&](const Action* x, const Action* y) {

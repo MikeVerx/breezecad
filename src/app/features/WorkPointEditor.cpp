@@ -1,4 +1,5 @@
 #include "app/features/WorkPointEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/viewport/Planes.h"
 #include "core/I18n.h"
@@ -158,11 +159,9 @@ void WorkPointEditor::DrawInViewport(AppContext& app, Session& session, const Vi
 void WorkPointEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::WorkPointFeature&>(feature);
     ui::Ui& ui = app.ui;
-    Section(app, Tr("Способ"));
-    static constexpr std::array<const char*, 5> methods{N_("Вершина"), N_("Центр"), N_("Середина"), N_("Пересечение"),
-                                                        N_("Координаты")};
+    static constexpr std::array<ChoiceItem, 5> methods{{{"wpt-vertex", N_("Вершина")}, {"wpt-centre", N_("Центр")}, {"wpt-mid", N_("Середина")}, {"wpt-intersect", N_("Пересечение")}, {"wpt-xyz", N_("Координаты")}}};
     const int current = static_cast<int>(f.method);
-    if (const int chosen = ui::Segmented(ui, "method", methods, current, 3, width); chosen != current && chosen >= 0) {
+    if (const int chosen = ToolChoice(app, "method", N_("Способ"), methods, current, width); chosen != current && chosen >= 0) {
         f.method = static_cast<WorkPointMethod>(chosen);
         myMethod = f.method;
         mySlot = 0;

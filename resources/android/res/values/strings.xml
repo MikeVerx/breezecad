@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Texts of the Java part (the watchdog's notices and the error screen).
+     Russian by default, as the program; English in values-en. -->
+<resources>
+    <string name="channel_problems">Сбои и зависания</string>
+    <string name="crash_title">BreezeCAD закрылся из-за ошибки</string>
+    <string name="crash_text">Нажмите, чтобы увидеть код ошибки и отчёт</string>
+    <string name="crash_explain">Программа аварийно завершилась. Несохранённую работу можно восстановить при следующем запуске: она лежит в автосохранении. Код ниже помогает найти причину — скопируйте его или поделитесь отчётом с разработчиком. Отчёт никуда не отправляется сам.</string>
+    <string name="hang_title">BreezeCAD не отвечает</string>
+    <string name="hang_text">Можно подождать или закрыть программу и отправить отчёт</string>
+    <string name="hang_explain">Программа перестала отвечать и закрыта. Несохранённую работу можно восстановить при следующем запуске. Код ниже помогает найти причину — скопируйте его или поделитесь отчётом с разработчиком.</string>
+    <string name="hang_wait">Подождать</string>
+    <string name="hang_close">Закрыть и отправить отчёт</string>
+    <string name="copy_code">Скопировать код</string>
+    <string name="share_report">Поделиться отчётом</string>
+    <string name="restart">Запустить снова</string>
+</resources>

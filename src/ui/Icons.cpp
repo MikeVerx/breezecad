@@ -2,7 +2,7 @@
 
 #include "core/Log.h"
 
-#include <GLFW/glfw3.h>
+#include "ui/Gl.h"
 #include <lunasvg.h>
 
 #include <cmath>
@@ -21,6 +21,13 @@ void Icons::SetScale(float scale) {
     if (scale == myScale) return;
     myScale = scale;
     Clear();
+}
+
+void Icons::SetDark(bool dark) {
+    if (dark == myDark) return;
+    myDark = dark;
+    Clear();
+    mySvgs.clear();
 }
 
 void Icons::Clear() {
@@ -42,6 +49,10 @@ const Icons::Svg& Icons::Load(std::string_view name) {
         log::Warn("Icon not found: {}", name);
     } else {
         svg.text.assign(std::istreambuf_iterator<char>(in), {});
+        // The dark theme: the dark grey of arrows and outlines becomes a light grey.
+        if (myDark)
+            for (std::size_t pos = svg.text.find("#3D4552"); pos != std::string::npos; pos = svg.text.find("#3D4552", pos))
+                svg.text.replace(pos, 7, "#C9D1DB");
         // Monochrome icons are drawn in white and tinted by ImGui.
         for (std::size_t pos = svg.text.find("currentColor"); pos != std::string::npos;
              pos = svg.text.find("currentColor", pos)) {

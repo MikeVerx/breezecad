@@ -59,9 +59,18 @@ struct OperationEditors {
         return nullptr;
     }
 
-    /// Finishes the open operation before something else starts; an
-    /// operation that cannot be committed (it has an error) is cancelled.
+    /// Drops the open operation before another tool starts: what was not
+    /// confirmed (✓, «Применить», «Готово») is reset, never committed behind
+    /// the user's back (the author, 18.10.2026: "везде").
     void Close(AppContext& app, Session& session) {
+        if (OperationEditor* open = Active()) open->Cancel(app, session);
+    }
+
+    /// Keeps the open operation as it is (Готово) before something that is not
+    /// another tool — saving the document, the tree's panel: these must not
+    /// throw the user's work away (18.10.2026: «Сохранить» dropped an extrude).
+    /// One that cannot be made (an error) is dropped.
+    void Commit(AppContext& app, Session& session) {
         OperationEditor* open = Active();
         if (!open) return;
         open->Done(app, session);

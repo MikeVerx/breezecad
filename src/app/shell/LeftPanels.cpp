@@ -252,7 +252,7 @@ void DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             ImGui::SetCursorScreenPos({pos.x + (railW - ui.S(36)) / 2, y});
             const bool active = app.shell.leftTab == t.tab && !app.ops.Active();
             if (ui::IconButton(ui, t.id, t.icon, 36, 20, t.tip, true, active)) {
-                if (app.ops.Active()) app.Later([&app, &session] { app.ops.Close(app, session); });
+                if (app.ops.Active()) app.Later([&app, &session] { app.ops.Commit(app, session); });
                 app.shell.measuring = false;   // its panel gives way to the one asked for
                 app.shell.leftTab = t.tab;
             }

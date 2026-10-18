@@ -19,9 +19,11 @@
 #include "document/SketchFeature.h"
 #include "ui/Menus.h"
 #include "ui/ViewCube.h"
+#include "app/viewport/ViewPrompt.h"
 #include "ui/Widgets.h"
 
-#include <GLFW/glfw3.h>
+#include "app/mobile/Cursor.h"
+#include "platform/Window.h"
 
 #include <algorithm>
 #include <cmath>
@@ -69,12 +71,7 @@ void PickPlane(AppContext& app, Session& session, const ViewportFrame& vf, ImDra
     for (const ShownPlane& p : planes) DrawPlane(app, dl, vf, p, &p == hot, faint && &p != hot);
 
     // Prompt at the top of the viewport.
-    const char* prompt = Tr("Выберите плоскость или плоскую грань для эскиза");
-    ImFont* font = app.ui.fonts.medium;
-    const ImVec2 ts = font->CalcTextSizeA(app.ui.S(13), FLT_MAX, 0, prompt);
-    const ImVec2 p{(vf.min.x + vf.max.x - ts.x) / 2 - app.ui.S(14), vf.min.y + app.ui.S(14)};
-    dl->AddRectFilled(p, {p.x + ts.x + app.ui.S(28), p.y + app.ui.S(34)}, ui::ToU32(app.ui.C().panel.WithAlpha(0.94f)), app.ui.S(17));
-    dl->AddText(font, app.ui.S(13), {p.x + app.ui.S(14), p.y + app.ui.S(9)}, ui::ToU32(app.ui.C().text), prompt);
+    DrawViewPrompt(app.ui, dl, vf, Tr("Выберите плоскость или плоскую грань для эскиза"), app.ui.C().text);
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
     if (hot) {
@@ -211,8 +208,11 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
             nav.button = -1;
         }
     }
+    // Fingers on a touch screen (the phone): their gestures, already sorted out.
+    if (app.shell.mobile.touchScreen && NavigateFingers(app, vf)) return true;
     // Fingers on a touchpad come as a wheel too: their gestures take it.
-    const bool touchTookWheel = NavigateTouch(app, vf, sceneHovered && !busy);
+    // Not on a touch screen: there is no touchpad there, its gestures are the fingers'.
+    const bool touchTookWheel = !app.shell.mobile.touchScreen && NavigateTouch(app, vf, sceneHovered && !busy);
     if (sceneHovered && io.MouseWheel != 0.0f && !touchTookWheel) {
         static double lastWheel = -10.0;   // one action per burst of wheel turns
         if (app.now - lastWheel > 1.0) mon::Action("view", "колесо");
@@ -238,11 +238,11 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     ImDrawList* dl = BeginArea("##viewport", pos, size, ui.C().viewportBottom);
     app.shell.viewportMax = {pos.x + size.x, pos.y + size.y};
 
+    app.shell.mobile.viewMin = pos;
+    app.shell.mobile.viewMax = app.shell.viewportMax;
+
     // Size the 3D view and give each document its own camera.
-    int winW = 1, fbW = 1, h = 1;
-    glfwGetWindowSize(glfwGetCurrentContext(), &winW, &h);
-    glfwGetFramebufferSize(glfwGetCurrentContext(), &fbW, &h);
-    app.viewport.SetSize(size.x, size.y, winW > 0 ? static_cast<double>(fbW) / winW : 1.0);
+    app.viewport.SetSize(size.x, size.y, platform::Window::CurrentFramebufferScale());
     if (app.shell.viewportSession != &session) {
         app.shell.viewportSession = &session;
         if (!session.hasCamera) {
@@ -262,6 +262,8 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
                            ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
 
     ViewportFrame vf{pos, {pos.x + size.x, pos.y + size.y}, app.viewport.Projection(), false};
+    // On the phone undo, the tabs and the cube float over the view's top row: prompts go under them.
+    vf.promptTop = pos.y + app.ui.S(app.shell.mobile.phone ? 62.0f : 14.0f);
     const bool navigating = Navigate(app, session, vf, ImGui::IsItemHovered());
     vf.projection = app.viewport.Projection();
     vf.hovered = ImGui::IsItemHovered() && !navigating;
@@ -302,9 +304,9 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     const bool hoverMatters =
         projecting || (session.mode != EditMode::Sketch && (!operation || pickingOriginal || operation->PicksFaces()));
     {
-        const double start = glfwGetTime();
+        const double start = platform::Window::Time();
         app.viewport.Hover(vf.hovered && hoverMatters ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);
-        app.stats.hoverMs = app.stats.hoverMs * 0.9 + (glfwGetTime() - start) * 100.0;   // ms, smoothed
+        app.stats.hoverMs = app.stats.hoverMs * 0.9 + (platform::Window::Time() - start) * 100.0;   // ms, smoothed
     }
     // Faces chosen with the left button (a click, Shift/Ctrl, a frame).
     UpdateFaceSelection(app, session, vf);
@@ -354,12 +356,10 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
 
             // A friendly start for an empty part.
             if (session.doc.FeatureCount() == 0) {
-                const char* text = Tr("Начните с эскиза: «Начать эскиз» на ленте (S), затем выберите плоскость");
-                ImFont* font = ui.fonts.medium;
-                const ImVec2 ts = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, text);
-                const ImVec2 p{pos.x + (size.x - ts.x) / 2 - ui.S(14), pos.y + ui.S(14)};
-                dl->AddRectFilled(p, {p.x + ts.x + ui.S(28), p.y + ui.S(34)}, ui::ToU32(ui.C().panel.WithAlpha(0.94f)), ui.S(17));
-                dl->AddText(font, ui.S(13), {p.x + ui.S(14), p.y + ui.S(9)}, ui::ToU32(ui.C().textSecondary), text);
+                // The phone has no "S" key and calls the ribbon the tools block.
+                const char* text = app.shell.mobile.phone ? Tr("Начните с эскиза: «Начать эскиз» в блоке инструментов, затем выберите плоскость")
+                                                          : Tr("Начните с эскиза: «Начать эскиз» на ленте (S), затем выберите плоскость");
+                DrawViewPrompt(ui, dl, vf, text, ui.C().textSecondary);
             }
             // Double click on the model: edit the operation that made the body.
             if (!measuring && vf.hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
@@ -386,11 +386,21 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     DrawMarkingMenu(app, session);
     app.viewport.SetPlanes(app.shell.planeQuads);
 
-    // View cube and triad on top of everything.
-    const ui::ViewCubeAction cube = ui::DrawViewCube(ui, vf.projection, pos, {pos.x + size.x, pos.y + size.y}, app.settings.showTriad);
-    if (cube.lookFrom) LookFrom(app, cube.lookFrom->first, cube.lookFrom->second);
-    if (cube.home) HomeView(app);
-    if (cube.dragYaw != 0 || cube.dragPitch != 0) app.viewport.Orbit(cube.dragYaw, cube.dragPitch, app.viewport.ModelCenter(), app.settings.turntableOrbit);
+    // View cube and triad on top of everything. The phone has the cube as a
+    // button that opens a big one (mobile/MobileLayout); the triad stays here.
+    if (app.shell.mobile.phone) {
+        if (app.settings.showTriad) ui::DrawAxisTriad(ui, vf.projection, {pos.x + ui.S(44), pos.y + size.y - ui.S(44)});
+        // On top of the islands too (the foreground layer).
+        ImDrawList* front = ImGui::GetForegroundDrawList();
+        front->PushClipRect(pos, {pos.x + size.x, pos.y + size.y + ui.S(60)});
+        mobile::DrawDropCursor(app, front);
+        front->PopClipRect();
+    } else {
+        const ui::ViewCubeAction cube = ui::DrawViewCube(ui, vf.projection, pos, {pos.x + size.x, pos.y + size.y}, app.settings.showTriad);
+        if (cube.lookFrom) LookFrom(app, cube.lookFrom->first, cube.lookFrom->second);
+        if (cube.home) HomeView(app);
+        if (cube.dragYaw != 0 || cube.dragPitch != 0) app.viewport.Orbit(cube.dragYaw, cube.dragPitch, app.viewport.ModelCenter(), app.settings.turntableOrbit);
+    }
 
     session.camera = app.viewport.Camera();
     EndArea();

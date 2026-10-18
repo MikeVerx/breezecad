@@ -7,6 +7,7 @@
 #include "app/Notifications.h"
 #include "app/Settings.h"
 #include "app/Workspace.h"
+#include "app/mobile/MobileState.h"
 #include "core/ViewProjection.h"
 #include "platform/Touchpad.h"
 #include "render/Viewport.h"
@@ -67,6 +68,16 @@ struct ShellState {
     std::string        shortcutNote;             ///< "taken from …" after a reassignment
     bool               showMassProperties = false;   ///< the "МЦХ" window
     bool               showLibrary = false;          ///< the standard parts window ("Библиотека")
+    /// "В библиотеку": the open part saved as an item of the user's library
+    /// (SaveToLibrary.cpp). `variables` are the part's user variables, `use`
+    /// says which become columns; `cells` holds the rows as typed.
+    struct SaveToLibrary {
+        bool                                  open = false;
+        std::string                           title, group = "Мои изделия";
+        std::vector<std::string>              variables;
+        std::vector<char>                     use;
+        std::vector<std::vector<std::string>> cells;
+    } saveToLibrary;
     /// The "Создать" window: the folder shown and the template chosen in it.
     struct NewDocument {
         bool        open = false;
@@ -79,6 +90,7 @@ struct ShellState {
         struct Pick {
             std::string standard, size;   ///< doc::parts ids
             double      length = 0;
+            std::vector<std::pair<std::string, double>> inputs{};   ///< typed sizes (a sheet's width), doc::parts::Inputs
         };
         int              family = 0;        ///< filter: 0 ГОСТ, 1 ISO, 2 DIN
         std::set<int>    openGroups;        ///< expanded folders (index in parts::Groups())
@@ -88,6 +100,11 @@ struct ShellState {
         bool             dropWasher = true, dropNut = true;   ///< AutoDrop: add them with the screw
         std::string      appearance;        ///< empty: the default of the kind
         std::vector<Pick> recent;           ///< newest first
+        bool             sizeListOpen = false;   ///< the list of sizes is dropped down: Esc closes it, not the window
+        std::string      sizeFilter;             ///< typed in that list: only the sizes containing it
+        bool             sizeFilterActive = false;   ///< that filter had the keyboard last frame
+        std::string      confirmRemove;          ///< a user's item asked to be removed: the second click removes it
+        int              phoneGroup = -1;        ///< the phone: the folder shown (index in parts::Groups())
     } library;
 
     render::DisplayStyle displayStyle = render::DisplayStyle::ShadedWithEdges;
@@ -160,6 +177,7 @@ struct ShellState {
     bool           animateUi = false;           ///< something in the interface moves by itself this frame
     const Session* viewportSession = nullptr;   ///< whose camera the viewport shows
     ImVec2         viewportMax{0, 0};           ///< bottom-right of the scene, for notifications
+    mobile::MobileState mobile;                 ///< phone layout and touch (Android); unused on the desktop
 };
 
 /// The viewport rectangle and camera of the current frame.
@@ -168,6 +186,7 @@ struct ViewportFrame {
     ImVec2         max;
     ViewProjection projection;
     bool           hovered = false;   ///< mouse over the scene, not over overlays
+    float          promptTop = 0;     ///< where prompts over the view start (under the phone's islands); 0: min.y + 14
 
     Vec2 ToLocal(ImVec2 screen) const { return {screen.x - min.x, screen.y - min.y}; }
     ImVec2 ToScreen(Vec2 local) const { return {static_cast<float>(local.x) + min.x, static_cast<float>(local.y) + min.y}; }

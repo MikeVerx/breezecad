@@ -1,4 +1,5 @@
 #include "app/assembly/AssemblyUi.h"
+#include "app/viewport/ViewPrompt.h"
 
 #include "app/Format.h"
 #include "core/Monitor.h"
@@ -277,12 +278,7 @@ const char* PickPrompt(assembly::ConstraintType type, int picked) {
 }
 
 void Prompt(ui::Ui& ui, const ViewportFrame& vf, const char* text) {
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImFont* font = ui.fonts.medium;
-    const ImVec2 ts = font->CalcTextSizeA(ui.S(13), FLT_MAX, 0, text);
-    const ImVec2 p{(vf.min.x + vf.max.x - ts.x) / 2 - ui.S(14), vf.min.y + ui.S(14)};
-    dl->AddRectFilled(p, {p.x + ts.x + ui.S(28), p.y + ui.S(34)}, ui::ToU32(ui.C().panel.WithAlpha(0.94f)), ui.S(17));
-    dl->AddText(font, ui.S(13), {p.x + ui.S(14), p.y + ui.S(9)}, ui::ToU32(ui.C().textSecondary), text);
+    DrawViewPrompt(ui, ImGui::GetWindowDrawList(), vf, text, ui.C().textSecondary);
 }
 
 /// Value and options of a constraint (being made or chosen in the tree).

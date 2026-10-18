@@ -125,7 +125,9 @@ build_app() {
     cd "$REPO"
     cmake --preset linux-debug -DCMAKE_PREFIX_PATH="$PREFIX" \
         -DOpenCASCADE_DIR="$PREFIX/lib/cmake/opencascade" >/dev/null
-    cmake --build --preset linux-debug -j "$JOBS" 2>&1 | grep -E 'error|warning:' | head -40 || true
+    # Into a file first: `| head` ended the build with SIGPIPE after 40 warnings.
+    cmake --build --preset linux-debug -j "$JOBS" > "$DEPS/build.log" 2>&1 || true
+    grep -E 'error|warning:' "$DEPS/build.log" | head -40 || true
     log "Тесты"
     LD_LIBRARY_PATH="$PREFIX/lib:${LD_LIBRARY_PATH:-}" ./build/linux-debug/bin/bz_tests 2>&1 | tail -3
 }

@@ -12,11 +12,21 @@
 namespace bz::app {
 namespace {
 
-constexpr float kPointRadius = 8.0f;   // px
-constexpr float kMidRadius = 12.0f;    // px: the middle of a line pulls from a bit further
+float gPickScale = 1.0f;   // SetPickScale: a finger with no cursor picks from further
+constexpr float kPointRadiusBase = 8.0f;   // px
+constexpr float kMidRadiusBase = 12.0f;    // px: the middle of a line pulls from a bit further
 constexpr double kSquareDegrees = 4.0; // a line this close to 90° to another becomes exactly 90°
-constexpr float kCurveRadius = 6.0f;   // px
+constexpr float kCurveRadiusBase = 6.0f;   // px
+float PointRadius() { return kPointRadiusBase * gPickScale; }
+float MidRadius() { return kMidRadiusBase * gPickScale; }
+float CurveRadius() { return kCurveRadiusBase * gPickScale; }
 constexpr float kAlignRadius = 6.0f;   // px: lining up with a point's x or y
+
+}  // namespace
+
+void SetPickScale(float scale) { gPickScale = scale > 0 ? scale : 1.0f; }
+
+namespace {
 
 float Distance(ImVec2 a, ImVec2 b) { return std::hypot(a.x - b.x, a.y - b.y); }
 
@@ -64,7 +74,7 @@ float CurveDistance(const sketch::Sketch& sk, const SketchView& view, ObjectId i
     }
     if (const sketch::Text* t = sk.FindText(id)) {
         // Anywhere in its box picks the text (the box lines themselves stay lines).
-        if (InsideTextBox(sk, *t, *local)) return 0.5f * kCurveRadius;
+        if (InsideTextBox(sk, *t, *local)) return 0.5f * CurveRadius();
         return FLT_MAX;
     }
     if (const sketch::Spline* sp = sk.FindSpline(id)) {
@@ -103,7 +113,7 @@ Vec2 ClosestOnCurve(const sketch::Sketch& sk, ObjectId curve, Vec2 p) {
 
 SketchHit HitTest(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, const UnitSystem& units, ObjectId ignore) {
     SketchHit best;
-    float bestDistance = kPointRadius;
+    float bestDistance = PointRadius();
     for (const auto& p : sk.points) {
         if (p.id == ignore) continue;
         const float d = Distance(mouse, view.ToScreen(p.pos));
@@ -126,7 +136,7 @@ SketchHit HitTest(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse
         if (std::abs(mouse.x - at.x) < halfW && std::abs(mouse.y - at.y) < halfH) return {c.id, sketch::EntityKind::Constraint};
     }
 
-    bestDistance = kCurveRadius;
+    bestDistance = CurveRadius();
     const auto tryCurve = [&](ObjectId id, sketch::EntityKind kind) {
         const float d = CurveDistance(sk, view, id, mouse);
         if (d < bestDistance) {
@@ -150,7 +160,7 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
     snap.pos = *local;
 
     if (options.points) {
-        float best = kPointRadius + 2.0f;
+        float best = PointRadius() + 2.0f;
         for (const auto& p : sk.points) {
             if (p.id == options.ignore) continue;
             const float d = Distance(mouse, view.ToScreen(p.pos));
@@ -161,7 +171,7 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
         }
         if (snap.kind == SnapKind::Point) return snap;
 
-        best = std::max(best, kMidRadius);
+        best = std::max(best, MidRadius());
         for (const auto& l : sk.lines) {
             const Vec2 mid = (sk.PositionOf(l.start) + sk.PositionOf(l.end)) * 0.5;
             const float d = Distance(mouse, view.ToScreen(mid));
@@ -172,7 +182,7 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
         }
         if (snap.kind == SnapKind::Midpoint) return snap;
 
-        float bestCurve = kCurveRadius;
+        float bestCurve = CurveRadius();
         const auto tryCurve = [&](ObjectId id) {
             const float d = CurveDistance(sk, view, id, mouse);
             if (d < bestCurve) {
