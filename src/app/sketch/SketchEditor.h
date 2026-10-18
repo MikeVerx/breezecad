@@ -99,6 +99,8 @@ public:
 
     // --- tools ------------------------------------------------------------
     SketchTool Tool() const { return myTool; }
+    /// What the point under the cursor snaps to now (the phone's cursor shows it).
+    SnapKind CurrentSnap() const { return mySnap.kind; }
     /// Projection linked to the model (it follows it) or a fixed copy.
     bool ProjectsLinked() const { return myOptions.projectLinked; }
     void SetProjectLinked(bool linked) { myOptions.projectLinked = linked; }

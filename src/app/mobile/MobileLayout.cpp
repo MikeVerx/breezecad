@@ -360,6 +360,7 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
                     const OperationEditor* op = app.ops.Active();
                     const bool ready = op && op->HasApply() && !m.boxMode && op->Ready(session);
                     DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, m.boxHeld, true, true, &clicked, &held, ready);
+                    m.okDown = ImGui::IsItemActive();
                 }
                     if (clicked) m.okPressed = true;
                     if (held) m.okLongPressed = true;   // a long press confirms the operation, cursor or not

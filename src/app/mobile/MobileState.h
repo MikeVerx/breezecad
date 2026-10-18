@@ -132,6 +132,8 @@ struct MobileState {
     int         pickedIndex = -1;           ///< …and the item, taken by ToolChoice next frame
     float       choiceScroll = 0;           ///< the tool island scrolled sideways
 
+    bool okDown = false;   ///< ✓ under a finger right now (the cursor fills)
+
     // --- View cube ---
     bool cubeOpen = false;   ///< the big cube panel is up
 
