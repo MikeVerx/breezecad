@@ -626,6 +626,102 @@ void DrawTabsIsland(AppContext& app, Session& session, ImVec2 at, float maxWidth
     EndIsland();
 }
 
+/// The open tool's choices over the view, instead of the tabs (the author's mockups 7a/7c, 18.10):
+/// groups side by side, a thin divider between them; icons, or short text where a choice has
+/// no picture yet. Too wide: it scrolls sideways (a drag), the far edge fades, a thin bar under it.
+/// A tap sets the choice for ToolChoice to take next frame. Returns the island's width.
+float ChoiceIslandWidth(ui::Ui& ui, const std::vector<const MobileState::ChoiceGroup*>& groups) {
+    float w = ui.S(6);
+    for (std::size_t g = 0; g < groups.size(); ++g) {
+        if (g) w += ui.S(9);
+        for (const auto& [icon, label] : groups[g]->items)
+            w += icon.empty() ? ui.fonts.medium->CalcTextSizeA(ui.S(12), FLT_MAX, 0, label.c_str()).x + ui.S(18) : ui.S(34);
+    }
+    return w;
+}
+
+void DrawChoiceIsland(AppContext& app, const char* id, const std::vector<const MobileState::ChoiceGroup*>& groups, ImVec2 at,
+                      float width, bool scrolls) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    MobileState& m = app.shell.mobile;
+    const float h = ui.S(kIsland);
+    const float content = ChoiceIslandWidth(ui, groups);
+    const float maxScroll = scrolls ? std::max(0.0f, content - width) : 0.0f;
+    float& scroll = m.choiceScroll;
+    if (!scrolls) scroll = 0;
+    scroll = std::clamp(scroll, 0.0f, maxScroll);
+    if (!BeginIsland(ui, id, at, {width, h})) {
+        EndIsland();
+        return;
+    }
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImGui::SetCursorScreenPos(at);
+    static float dragged = 0;
+    const bool released = ImGui::InvisibleButton("##choices", {width, h});
+    if (ImGui::IsItemActivated()) dragged = 0;
+    if (ImGui::IsItemActive()) {
+        const float dx = ImGui::GetIO().MouseDelta.x;
+        dragged += std::abs(dx);
+        scroll = std::clamp(scroll - dx, 0.0f, maxScroll);
+    }
+    const bool held = ImGui::IsItemActive();
+    const ImVec2 mouse = ImGui::GetMousePos();
+    dl->PushClipRect({at.x + ui.S(2), at.y}, {at.x + width - ui.S(2), at.y + h}, true);
+    float x = at.x + ui.S(3) - scroll;
+    static std::string logged;
+    for (std::size_t g = 0; g < groups.size(); ++g) {
+        const MobileState::ChoiceGroup& grp = *groups[g];
+        if (g) {
+            dl->AddLine({x + ui.S(4), at.y + ui.S(10)}, {x + ui.S(4), at.y + h - ui.S(10)}, ui::ToU32(c.divider));
+            x += ui.S(9);
+        }
+        for (std::size_t i = 0; i < grp.items.size(); ++i) {
+            const auto& [icon, label] = grp.items[i];
+            const float w = icon.empty() ? ui.fonts.medium->CalcTextSizeA(ui.S(12), FLT_MAX, 0, label.c_str()).x + ui.S(18) : ui.S(34);
+            const ImVec2 a{x + ui.S(1), at.y + ui.S(5)}, b{x + w - ui.S(1), at.y + h - ui.S(5)};
+            const bool on = static_cast<int>(i) == grp.current;
+            const bool off = (grp.disabled >> i) & 1;
+            const bool under = held && dragged < ui.S(8) && mouse.x >= a.x && mouse.x < b.x;
+            if (on || under) dl->AddRectFilled(a, b, ui::ToU32(under ? c.pressed : c.accentSoft), ui.S(8));
+            if (on) dl->AddRect(a, b, ui::ToU32(c.accentSoftBorder), ui.S(8));
+            if (icon.empty()) {
+                dl->AddText(ui.fonts.medium, ui.S(12), {x + ui.S(9), at.y + (h - ui.S(12)) / 2 - ui.S(1)},
+                            ui::ToU32(off ? c.textDisabled : on ? c.accent : c.textSecondary), label.c_str());
+            } else {
+                const float is = ui.S(22);
+                ui.icons.Draw(dl, icon, {x + (w - is) / 2, at.y + (h - is) / 2}, is, off ? Color{1, 1, 1, 0.3f} : Color{1, 1, 1, 1});
+            }
+            if (logged.empty() && !on && !off) {
+                logged = grp.id + std::to_string(i);   // once: the emulator taps the first item that can be chosen
+                log::Info("Touch: choice {} {} at {:.0f},{:.0f} size {:.0f}", grp.id, i, a.x, a.y, w);
+            }
+            if (released && dragged < ui.S(8) && mouse.x >= a.x && mouse.x < b.x && !off) {
+                m.pickedChoice = grp.id;
+                m.pickedIndex = static_cast<int>(i);
+                m.block1Tab = 1;   // the panel takes the choice: it must be drawn
+                log::Info("Choice: {} {}", grp.id, i);
+            }
+            x += w;
+        }
+    }
+    dl->PopClipRect();
+    if (maxScroll > 0) {
+        // The far end fades (and the near one once scrolled); a thin bar shows where we are.
+        const float fw = ui.S(30);
+        const ImU32 solid = ui::ToU32(c.panel), clear = ui::ToU32(c.panel.WithAlpha(0.0f));
+        if (scroll < maxScroll - 0.5f)
+            dl->AddRectFilledMultiColor({at.x + width - fw, at.y + 1}, {at.x + width - 1, at.y + h - 1}, clear, solid, solid, clear);
+        if (scroll > 0.5f) dl->AddRectFilledMultiColor({at.x + 1, at.y + 1}, {at.x + fw, at.y + h - 1}, solid, clear, clear, solid);
+        const float barW = width - ui.S(20);
+        const float knob = std::max(ui.S(16), barW * width / content);
+        const float kx = at.x + ui.S(10) + (barW - knob) * (scroll / maxScroll);
+        dl->AddRectFilled({at.x + ui.S(10), at.y + h - ui.S(4)}, {at.x + ui.S(10) + barW, at.y + h - ui.S(2)}, ui::ToU32(c.divider), ui.S(1));
+        dl->AddRectFilled({kx, at.y + h - ui.S(4)}, {kx + knob, at.y + h - ui.S(2)}, ui::ToU32(c.accent), ui.S(1));
+    }
+    EndIsland();
+}
+
 float DrawUndoIsland(AppContext& app, ImVec2 at) {
     ui::Ui& ui = app.ui;
     const float h = ui.S(kIsland), w = ui.S(4 + 38 + 38 + 4);
@@ -886,6 +982,7 @@ void DrawPhoneRoot(AppContext& app) {
 
     const ImVec2 viewPos{vx0, m.insets.top};
     const ImVec2 viewSize{vx1 - vx0, stripBottom - stripH - m.insets.top};
+    m.choices.clear();   // the tool panel (block 1) fills them again this frame
     DrawViewport(app, *session, viewPos, viewSize);
     DrawStrip(app, {vx0, stripBottom - stripH}, {vx1 - vx0, stripH});
     DrawBlock1(app, *session, {b1x, 0}, {w1, H}, !lefty, logoInBrow);
@@ -915,7 +1012,34 @@ void DrawPhoneRoot(AppContext& app) {
         DrawUndoIsland(app, at);
         m.rUndo = {at, {at.x + uw, at.y + uh}};
     }
-    if (m.setupStep != 2) {   // the setup's second step has its own tabs there
+    // The open tool's choices replace the tabs while it is open (from the panel drawn just now,
+    // or — when block 1 shows another tab — the ones it drew last).
+    std::string owner;
+    if (const OperationEditor* op = app.ops.Active()) owner = op->Title();
+    else if (session->mode == EditMode::Sketch && app.sketch.Tool() != SketchTool::Select) owner = InfoOf(app.sketch.Tool()).label;
+    if (owner.empty()) {
+        m.lastChoices.clear();
+        m.choicesOwner.clear();
+        m.choiceScroll = 0;
+    } else if (!m.choices.empty()) {
+        if (m.choicesOwner != owner) m.choiceScroll = 0;
+        m.lastChoices = m.choices;
+        m.choicesOwner = owner;
+    }
+    const std::vector<MobileState::ChoiceGroup>& shown = m.choices.empty() && owner == m.choicesOwner ? m.lastChoices : m.choices;
+    std::vector<const MobileState::ChoiceGroup*> toolGroups, lineGroups;
+    if (!owner.empty())
+        for (const auto& g : shown) (g.lineType ? lineGroups : toolGroups).push_back(&g);
+    if (m.setupStep != 2 && !toolGroups.empty()) {
+        scaled(ms.tabsIsland);
+        const float x = m.rUndo.max.x + ui.S(6);
+        const float right = vx1 - ui.S(8) - ui.S(44) - ui.S(6) - (lineGroups.empty() ? 0.0f : ChoiceIslandWidth(ui, lineGroups) + ui.S(6));
+        const float content = ChoiceIslandWidth(ui, toolGroups);
+        const float w = std::min(content, std::max(ui.S(80), right - x));
+        const ImVec2 at{x, m.rUndo.min.y};
+        DrawChoiceIsland(app, "##island-choices", toolGroups, at, w, true);
+        m.rTabs = {at, {at.x + w, at.y + ui.S(kIsland)}};
+    } else if (m.setupStep != 2) {   // the setup's second step has its own tabs there
         scaled(ms.tabsIsland);
         const float tw = TabsIslandWidth(app, *session, viewSize.x - ui.S(80));
         // Usually right after undo/redo.
@@ -933,6 +1057,10 @@ void DrawPhoneRoot(AppContext& app) {
         const ImVec2 at = place(ms.cubeIsland, cb, cb, 1.0f);
         DrawCube(app, viewPos, {vx1, viewBottom}, at);
         m.rCube = {at, {at.x + cb, at.y + cb}};
+        if (!lineGroups.empty()) {   // the sketch's line type: an island of its own, left of the cube
+            const float lw = ChoiceIslandWidth(ui, lineGroups);
+            DrawChoiceIsland(app, "##island-line", lineGroups, {at.x - ui.S(6) - lw, at.y}, lw, false);
+        }
     }
     ui.scale = baseScale;
     DrawToolStrip(app, viewPos, {vx1, viewBottom}, !lefty);

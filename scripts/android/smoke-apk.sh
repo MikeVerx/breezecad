@@ -185,6 +185,23 @@ else
 fi
 check extrude-field
 
+# 14b. The extrude's choices are in the top island (18.10): a tap on one sets it (the log says so).
+adb shell input tap $((w / 2)) $((h / 3))   # off the field: the numpad goes
+sleep 2
+read -r cid cix cx0 cy0 cs0 < <(blog | sed -n 's/.*Touch: choice \([a-z-]*\) \([0-9]*\) at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\).*/\1 \2 \3 \4 \5/p' | head -1)
+if [ -n "${cs0:-}" ]; then
+    adb shell input tap $(dp $(( cx0 + cs0 / 2 ))) $(dp $(( cy0 + 15 )))
+    shot 14b-choice-tapped 3
+    if blog | grep -q "Choice: $cid $cix"; then
+        echo "step choice-tap: $cid set to $cix"
+    else
+        echo "step choice-tap: FAILED — no «Choice: $cid $cix» ($(blog | grep -o 'Choice: .*' | tr '\n' ';'))"; broken=1
+    fi
+else
+    echo "step choice-tap: FAILED — no choice island in the log"; broken=1
+fi
+check choice-tap
+
 adb logcat -d -s BreezeCAD:* > "$OUT/breezecad.log"
 adb logcat -d '*:E' > "$OUT/errors.log"
 grep -E "OpenGL ES|Window:|ERROR|WARN|test commands" "$OUT/breezecad.log" | head -20

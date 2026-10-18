@@ -117,6 +117,21 @@ struct MobileState {
     float                flyY = 0;     ///< the group's row (the strip opens there)
     float                flyScroll = 0;
 
+    // --- The open tool's choices (features/ToolChoice.h): the top islands ---
+    struct ChoiceGroup {
+        std::string id, title;
+        std::vector<std::pair<std::string, std::string>> items;   ///< icon (may be empty: text), label
+        int current = 0;
+        int disabled = 0;      ///< bit i: item i cannot be chosen now
+        bool lineType = false; ///< the sketch's line type: an island of its own
+    };
+    std::vector<ChoiceGroup> choices;       ///< filled while this frame's tool panel is drawn
+    std::vector<ChoiceGroup> lastChoices;   ///< the last non-empty set (the panel may be on another tab)
+    std::string choicesOwner;               ///< whose they are (the tool's title)
+    std::string pickedChoice;               ///< a choice tapped in an island: "id"…
+    int         pickedIndex = -1;           ///< …and the item, taken by ToolChoice next frame
+    float       choiceScroll = 0;           ///< the tool island scrolled sideways
+
     // --- View cube ---
     bool cubeOpen = false;   ///< the big cube panel is up
 

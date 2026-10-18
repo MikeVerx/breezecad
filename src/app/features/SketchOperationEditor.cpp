@@ -1,4 +1,5 @@
 #include "app/features/SketchOperationEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchOverlay.h"
@@ -270,17 +271,19 @@ void SketchOperationEditor::DrawProfileSection(AppContext& app, Session& session
 
 void SketchOperationEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::SketchSolidFeature&>(feature);
-    // Operation: a new body, or combined with the body before it.
-    Section(app, Tr("Операция"));
+    // Operation: combined with the body before it, or a new body (pictures as in Inventor, 18.10).
     const bool bodyBefore = HasSolidBefore(session.doc, static_cast<std::size_t>(session.doc.IndexOf(f.id)));
-    static constexpr std::array<const char*, 4> labels{N_("Новое тело"), N_("Добавить"), N_("Вырезать"), N_("Пересечь")};
-    const int current = static_cast<int>(f.operation);
-    const int chosen = ui::Segmented(app.ui, "op", labels, current, 2, width, bodyBefore ? 0 : 0b1110);
+    static constexpr std::array<ChoiceItem, 4> ops{{{"op-join", N_("Добавить к телу")},
+                                                    {"op-cut", N_("Вырезать из тела")},
+                                                    {"op-intersect", N_("Оставить пересечение")},
+                                                    {"op-new", N_("Новое тело")}}};
+    static constexpr std::array<BooleanOp, 4> order{BooleanOp::Join, BooleanOp::Cut, BooleanOp::Intersect, BooleanOp::NewBody};
+    const int current = static_cast<int>(std::find(order.begin(), order.end(), f.operation) - order.begin());
+    const int chosen = ToolChoice(app, "op", N_("Операция"), ops, current, width, bodyBefore ? 0 : 0b0111);
     if (chosen != current) {
-        f.operation = static_cast<BooleanOp>(chosen);
+        f.operation = order[static_cast<std::size_t>(chosen)];
         Changed(session);
     }
-    Gap(app);
     DrawProfileSection(app, session, f, width);
     Gap(app);
     DrawOptions(app, session, f, width);

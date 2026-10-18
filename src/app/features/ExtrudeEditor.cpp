@@ -1,4 +1,5 @@
 #include "app/features/ExtrudeEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/Format.h"
 #include "app/sketch/SketchView.h"
@@ -129,43 +130,40 @@ void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
         Changed(session);
     }
 
-    Section(app, Tr("Направление"));
+    // Direction, four pictures (the author's icons, 18.10): up the sketch's normal, down,
+    // both ways equally, both ways by different distances.
     {
-        const bool both = f.extent == ExtentType::Symmetric || f.extent == ExtentType::Asymmetric;
-        static constexpr std::array<const char*, 3> labels{N_("Прямое"), N_("Обратное"), N_("В обе стороны")};
-        const int current = both ? 2 : f.reversed ? 1 : 0;
-        const int chosen = ui::Segmented(ui, "dir", labels, current, 3, width);
+        static constexpr std::array<ChoiceItem, 4> dirs{{{"dir-up", N_("Вверх (по нормали эскиза)")},
+                                                         {"dir-down", N_("Вниз (против нормали)")},
+                                                         {"dir-both", N_("В обе стороны поровну")},
+                                                         {"dir-asym", N_("В обе стороны, разные расстояния")}}};
+        const int current = f.extent == ExtentType::Asymmetric ? 3 : f.extent == ExtentType::Symmetric ? 2 : f.reversed ? 1 : 0;
+        const int chosen = ToolChoice(app, "dir", N_("Направление"), dirs, current, width);
         if (chosen != current) {
-            f.reversed = chosen == 1;
-            if (chosen == 2) f.extent = ExtentType::Symmetric;
-            else if (both) f.extent = ExtentType::Distance;
+            const bool both = f.extent == ExtentType::Symmetric || f.extent == ExtentType::Asymmetric;
+            if (chosen <= 1) {
+                f.reversed = chosen == 1;
+                if (both) f.extent = ExtentType::Distance;
+            } else {
+                f.extent = chosen == 3 ? ExtentType::Asymmetric : ExtentType::Symmetric;
+                if (f.extent == ExtentType::Asymmetric && f.distance2.name.empty()) f.distance2.name = session.doc.NextParameterName();
+            }
             Changed(session);
         }
-        if (f.extent == ExtentType::Symmetric || f.extent == ExtentType::Asymmetric) {
-            ImGui::Dummy({0, ui.S(6)});
-            static constexpr std::array<const char*, 2> split{N_("Поровну"), N_("Несимметрично")};
-            const int now = f.extent == ExtentType::Asymmetric ? 1 : 0;
-            if (const int picked = ui::Segmented(ui, "split", split, now, 2, width); picked != now) {
-                f.extent = picked == 1 ? ExtentType::Asymmetric : ExtentType::Symmetric;
-                if (f.extent == ExtentType::Asymmetric && f.distance2.name.empty()) f.distance2.name = session.doc.NextParameterName();
-                Changed(session);
-            }
-        }
-        if (f.extent != ExtentType::Symmetric && f.extent != ExtentType::ToPlane &&
-            ui::LinkButton(ui, "##flip", f.extent == ExtentType::Asymmetric ? Tr("Поменять стороны") : Tr("Изменить направление"))) {
+        if (f.extent == ExtentType::Asymmetric && ui::LinkButton(ui, "##flip", Tr("Поменять стороны"))) {
             f.reversed = !f.reversed;
             Changed(session);
         }
     }
-    Gap(app);
 
     // Depth: a distance, up to a plane or face, or (cuts) through everything.
-    Section(app, Tr("Глубина"));
     {
-        static constexpr std::array<const char*, 3> labels{N_("На расстояние"), N_("До плоскости"), N_("Насквозь")};
+        static constexpr std::array<ChoiceItem, 3> depths{{{"ext-distance", N_("На расстояние")},
+                                                           {"ext-to", N_("До плоскости или грани")},
+                                                           {"ext-through", N_("Насквозь (только вырез)")}}};
         const bool cut = f.operation == BooleanOp::Cut;
         const int current = f.extent == ExtentType::ToPlane ? 1 : f.extent == ExtentType::ThroughAll ? 2 : 0;
-        const int chosen = ui::Segmented(ui, "depth", std::span(labels.data(), cut ? 3 : 2), current, cut ? 3 : 2, width);
+        const int chosen = ToolChoice(app, "depth", N_("Глубина"), depths, current, width, cut ? 0 : 0b100);
         if (chosen != current) {
             f.extent = chosen == 1 ? ExtentType::ToPlane : chosen == 2 ? ExtentType::ThroughAll : ExtentType::Distance;
             myPickTarget = chosen == 1;

@@ -4,6 +4,7 @@
 
 #include "app/Format.h"
 #include "app/sketch/SketchEditor.h"
+#include "app/features/ToolChoice.h"
 #include "core/Expression.h"
 #include "core/I18n.h"
 #include "kernel/TextGeometry.h"
@@ -17,28 +18,6 @@
 
 namespace bz::app {
 namespace {
-
-struct Way {
-    const char* icon;
-    const char* tip;
-};
-
-/// Icon buttons in rows that fit `width`; returns the chosen index.
-int WayRow(ui::Ui& ui, const char* id, std::span<const Way> ways, int current, float width) {
-    int chosen = current;
-    const float cell = ui.S(40), gap = ui.S(6);
-    const std::size_t perRow = std::max<std::size_t>(1, static_cast<std::size_t>((width + gap) / (cell + gap)));
-    for (std::size_t i = 0; i < ways.size(); ++i) {
-        if (i % perRow != 0) ImGui::SameLine(0, gap);
-        ImGui::PushID(id);
-        ImGui::PushID(static_cast<int>(i));
-        if (ui::IconButton(ui, "##way", ways[i].icon, 40, 24, Tr(ways[i].tip), true, static_cast<int>(i) == current))
-            chosen = static_cast<int>(i);
-        ImGui::PopID();
-        ImGui::PopID();
-    }
-    return chosen;
-}
 
 void Caption(ui::Ui& ui, const char* text, float width) {
     ui::FontScope font(ui.fonts.caption);
@@ -160,22 +139,21 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
     if (!editing) {
         const bool lines = myTool == SketchTool::Line;
         if (!lines && myOptions.style == LineStyle::Centerline) myOptions.style = LineStyle::Normal;
-        ui::FieldLabel(ui, Tr("Тип линии"));
-        ImGui::Dummy({0, ui.S(2)});
-        static constexpr std::array<const char*, 3> styles{N_("Основная"), N_("Вспомогат."), N_("Осевая")};
+        // The phone puts it in an island of its own (the author, 18.10).
+        static constexpr std::array<ChoiceItem, 3> styles{{{"sk-line", N_("Основная")},
+                                                           {"sk-construction", N_("Вспомогательная")},
+                                                           {"sk-centerline", N_("Осевая")}}};
         const int current = static_cast<int>(myOptions.style);
-        const int chosen = ui::Segmented(ui, "line-style", styles, current, 3, inner, lines ? 0 : 0b100);
+        const int chosen = ToolChoice(app, "line-style", N_("Тип линии"), styles, current, inner, lines ? 0 : 0b100, true);
         if (chosen != current) myOptions.style = static_cast<LineStyle>(chosen);
-        ImGui::Dummy({0, ui.S(14)});
     }
 
     // Проецирование: linked to the model or a fixed copy.
     if (myTool == SketchTool::Project) {
-        ui::FieldLabel(ui, Tr("Связь с моделью"));
-        ImGui::Dummy({0, ui.S(2)});
-        static constexpr std::array<const char*, 2> links{N_("Зависимая"), N_("Независимая")};
+        static constexpr std::array<ChoiceItem, 2> links{{{"sk-project", N_("Зависимая: следует за моделью")},
+                                                          {"sk-project-fixed", N_("Независимая копия")}}};
         const int current = myOptions.projectLinked ? 0 : 1;
-        if (const int chosen = ui::Segmented(ui, "project-link", links, current, 2, inner); chosen != current)
+        if (const int chosen = ToolChoice(app, "project-link", N_("Связь с моделью"), links, current, inner); chosen != current)
             myOptions.projectLinked = chosen == 0;
         ImGui::Dummy({0, ui.S(4)});
         Caption(ui, myOptions.projectLinked ? Tr("Проекция следует за моделью: изменится деталь — изменится и эскиз.")
@@ -187,7 +165,7 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
     // Ways to draw.
     switch (myTool) {
         case SketchTool::Rectangle: {
-            static constexpr std::array<Way, 10> ways{{{"sk-rectangle", N_("Прямоугольник по двум углам")},
+            static constexpr std::array<ChoiceItem, 10> ways{{{"sk-rectangle", N_("Прямоугольник по двум углам")},
                                                       {"sk-rect-centre", N_("Прямоугольник от центра")},
                                                       {"sk-rect-3pt", N_("Прямоугольник по трём точкам (под углом)")},
                                                       {"sk-rect-3pt-centre", N_("Прямоугольник по трём точкам и центру")},
@@ -197,7 +175,7 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
                                                       {"sk-slot-centre", N_("Паз: от середины")},
                                                       {"sk-slot-arc3", N_("Дуговой паз по трём точкам")},
                                                       {"sk-slot-arc-centre", N_("Дуговой паз от центра дуги")}}};
-            const int chosen = WayRow(ui, "rect", ways, static_cast<int>(myOptions.rectangle), inner);
+            const int chosen = ToolChoice(app, "rect", N_("Способ"), ways, static_cast<int>(myOptions.rectangle), inner);
             if (chosen != static_cast<int>(myOptions.rectangle)) {
                 myOptions.rectangle = static_cast<RectangleMode>(chosen);
                 restart();
@@ -205,11 +183,11 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
             break;
         }
         case SketchTool::Circle: {
-            static constexpr std::array<Way, 4> ways{{{"sk-circle", N_("Центр и радиус")},
+            static constexpr std::array<ChoiceItem, 4> ways{{{"sk-circle", N_("Центр и радиус")},
                                                       {"sk-circle-3pt", N_("По трём точкам")},
                                                       {"sk-ellipse", N_("Эллипс")},   // order of CircleMode
                                                       {"sk-circle-tangent", N_("Касательная к трём отрезкам")}}};
-            const int chosen = WayRow(ui, "circle", ways, static_cast<int>(myOptions.circle), inner);
+            const int chosen = ToolChoice(app, "circle", N_("Способ"), ways, static_cast<int>(myOptions.circle), inner);
             if (chosen != static_cast<int>(myOptions.circle)) {
                 myOptions.circle = static_cast<CircleMode>(chosen);
                 restart();
@@ -217,17 +195,17 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
             break;
         }
         case SketchTool::Spline: {
-            static constexpr std::array<Way, 2> ways{{{"sk-spline", N_("Через точки")}, {"sk-spline-cv", N_("По управляющим точкам")}}};
+            static constexpr std::array<ChoiceItem, 2> ways{{{"sk-spline", N_("Через точки")}, {"sk-spline-cv", N_("По управляющим точкам")}}};
             const int current = myOptions.splineControl ? 1 : 0;
-            if (const int chosen = WayRow(ui, "spline", ways, current, inner); chosen != current) {
+            if (const int chosen = ToolChoice(app, "spline", N_("Способ"), ways, current, inner); chosen != current) {
                 myOptions.splineControl = chosen == 1;
                 restart();
             }
             break;
         }
         case SketchTool::Arc: {
-            static constexpr std::array<Way, 2> ways{{{"sk-arc", N_("Центр, начало, конец")}, {"sk-arc-3pt", N_("По трём точкам")}}};
-            const int chosen = WayRow(ui, "arc", ways, static_cast<int>(myOptions.arc), inner);
+            static constexpr std::array<ChoiceItem, 2> ways{{{"sk-arc", N_("Центр, начало, конец")}, {"sk-arc-3pt", N_("По трём точкам")}}};
+            const int chosen = ToolChoice(app, "arc", N_("Способ"), ways, static_cast<int>(myOptions.arc), inner);
             if (chosen != static_cast<int>(myOptions.arc)) {
                 myOptions.arc = static_cast<ArcMode>(chosen);
                 restart();
