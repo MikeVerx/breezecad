@@ -1050,7 +1050,8 @@ void DrawPhoneRoot(AppContext& app) {
         const ImVec2 at{x, m.rUndo.min.y};
         DrawChoiceIsland(app, "##island-choices", toolGroups, at, w, true);
         m.rTabs = {at, {at.x + w, at.y + ui.S(kIsland)}};
-    } else if (m.setupStep != 2) {   // the setup's second step has its own tabs there
+    } else if (m.setupStep != 2 && lineGroups.empty()) {   // the setup's second step has its own tabs there;
+        // a tool with only the line type (a line) shows no tabs either: they come back when it closes
         scaled(ms.tabsIsland);
         const float tw = TabsIslandWidth(app, *session, viewSize.x - ui.S(80));
         // Usually right after undo/redo.

@@ -396,8 +396,10 @@ void CommandCell(AppContext& app, const char* id, bool active, ImVec2 at, ImVec2
     ImGui::PushID(id);
     const bool clicked = ImGui::InvisibleButton("##cell", size);
     const bool held = ImGui::IsItemActive();
-    const Color bg = active ? c.accent : held ? c.pressed : c.segmentTrack;   // a plate in both themes
+    // The open tool: a soft accent with an accent border (on a solid accent the blue icons vanished).
+    const Color bg = active ? c.accentSoft : held ? c.pressed : c.segmentTrack;   // a plate in both themes
     dl->AddRectFilled(at, {at.x + size.x, at.y + size.y}, ui::ToU32(bg), ui.S(8));
+    if (active) dl->AddRect(at, {at.x + size.x, at.y + size.y}, ui::ToU32(c.accent), ui.S(8), 0, ui.S(1.5f));
     const float is = ui.S(22);
     const std::string icon = exportCell ? std::string("export") : std::string(a->icon);
     ui.icons.Draw(dl, icon, {at.x + (size.x - is) / 2, at.y + (size.y - is) / 2}, is, enabled ? Color{1, 1, 1, 1} : Color{1, 1, 1, 0.35f});
