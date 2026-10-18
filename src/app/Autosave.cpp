@@ -39,7 +39,15 @@ bool Autosave::Update(Session& session, const Settings& settings, double now, do
     if (session.autosavedRevision == session.ContentRevision()) return false;
     if (now - session.unsavedSince < settings.autosaveMinutes * 60.0) return false;
     if (idleSeconds < kIdleBeforeWrite) return false;
+    return Write(session, now);
+}
 
+bool Autosave::WriteNow(Session& session, double now) {
+    if (!session.IsModified() || session.autosavedRevision == session.ContentRevision()) return false;
+    return Write(session, now);
+}
+
+bool Autosave::Write(Session& session, double now) {
     const std::filesystem::path folder = myRoot / session.autosaveKey;
     std::error_code ec;
     std::filesystem::create_directories(folder, ec);

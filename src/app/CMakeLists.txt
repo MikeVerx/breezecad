@@ -1,5 +1,6 @@
-add_executable(breezecad WIN32
-    main.cpp
+# The program's sources, shared by the desktop executable and the Android
+# library (docs/dev/MOBILE-PORT.md); the entry points differ.
+set(BZ_APP_SOURCES
     Actions.cpp
     AppActions.cpp
     AppearanceLibrary.cpp
@@ -32,6 +33,7 @@ add_executable(breezecad WIN32
     scripting/ViewCommands.cpp
     scripting/AssemblyCommands.cpp
     features/AppearanceEditor.cpp
+    features/ToolChoice.cpp
     features/CopyEditors.cpp
     features/CoilEditor.cpp
     features/SketchAxis.cpp
@@ -54,6 +56,7 @@ add_executable(breezecad WIN32
     shell/Bars.cpp
     shell/CrashWindow.cpp
     shell/Dialogs.cpp
+    shell/SaveToLibrary.cpp
     shell/NewDocumentDialog.cpp
     shell/Header.cpp
     shell/HomeScreen.cpp
@@ -62,6 +65,7 @@ add_executable(breezecad WIN32
     shell/Splash.cpp
     shell/TouchpadSettings.cpp
     shell/TreePanel.cpp
+    sketch/DimensionArrange.cpp
     sketch/DimensionLayout.cpp
     MouseNavigation.cpp
     ShortcutPresets.cpp
@@ -77,7 +81,42 @@ add_executable(breezecad WIN32
     viewport/Section.cpp
     viewport/TouchGestures.cpp
     viewport/ViewportPanel.cpp
-    viewport/FaceSelection.cpp)
+    viewport/FaceSelection.cpp
+    mobile/Cursor.cpp
+    mobile/Gestures.cpp
+    mobile/LayoutEditor.cpp
+    mobile/MobileLayout.cpp
+    mobile/MobileRibbon.cpp
+    mobile/Numpad.cpp
+    mobile/PhoneHome.cpp
+    mobile/PhoneLibrary.cpp
+    mobile/TouchInput.cpp)
+
+if(ANDROID)
+    # libbreezecad.so, run by BreezeActivity (resources/android/java): the
+    # crash and splash windows are processes and windows of their own on the
+    # desktop; on Android the watchdog (":crash") and the app's start do that.
+    list(REMOVE_ITEM BZ_APP_SOURCES shell/CrashWindow.cpp shell/Splash.cpp)
+    add_library(breezecad SHARED android/AndroidMain.cpp android/AndroidInput.cpp Application_android.cpp shell/Splash_android.cpp
+                ${BZ_APP_SOURCES})
+    target_link_libraries(breezecad PRIVATE
+        bz::core bz::document bz::assembly bz::kernel bz::modules bz::render bz::ui bz::platform
+        bz::imgui bz::miniz bz::json lunasvg::lunasvg android EGL GLESv3 log)
+    # The glue's entry point is called by the system, not by our code: keep it.
+    target_link_options(breezecad PRIVATE "-uANativeActivity_onCreate")
+    set_target_properties(breezecad PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/android)
+    bz_set_warnings(breezecad)
+
+    # The error code for the watchdog's error screen (CrashActivity): a small
+    # library, so that screen does not load OCCT.
+    add_library(bzcrash SHARED android/CrashJni.cpp ${PROJECT_SOURCE_DIR}/src/core/CrashCode.cpp)
+    target_include_directories(bzcrash PRIVATE ${PROJECT_SOURCE_DIR}/src)
+    set_target_properties(bzcrash PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/android)
+    bz_set_warnings(bzcrash)
+    return()
+endif()
+
+add_executable(breezecad WIN32 main.cpp ${BZ_APP_SOURCES})
 if(WIN32)
     # The icon in the exe (Explorer, a pinned taskbar button). Without the
     # RC language the .rc file was silently left out.

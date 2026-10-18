@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Packs the Android app into an installable APK: libbreezecad.so and the
 # shared libraries it needs (found by DT_NEEDED: OCCT, FreeType, the C++
-# runtime), the launcher icon and the example part. No Gradle: aapt2,
-# zipalign and apksigner from the Android SDK.
+# runtime), libbzcrash.so (the error screen's code), the Java part
+# (resources/android/java → classes.dex), the program's assets (fonts,
+# icons; unpacked at the first start, see platform/Android.cpp) and the
+# example part. No Gradle: aapt2, javac, d8, zipalign and apksigner.
 #
 # Usage: package-apk.sh <build dir> <deps prefix> <abi> <out.apk>
 # Environment:
@@ -12,6 +14,9 @@
 #   BZ_KEYSTORE          signing key (.jks/.p12) and BZ_KEYSTORE_PASSWORD;
 #                        the alias is "breezecad". Without them a throwaway
 #                        key is made — then each APK needs the old one removed.
+#   BZ_AAB               also make an Android App Bundle there (Google Play);
+#                        needs BZ_BUNDLETOOL (bundletool's .jar). Signed with the
+#                        same key: on Play it is the upload key (Play App Signing).
 set -euo pipefail
 
 BUILD=$(realpath "${1:?build dir}")
@@ -27,7 +32,12 @@ NDK_BIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
 # 36.0.0-rc…) make an APK that release Android refuses to install.
 TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | grep -E '/[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
 PLATFORM=$(ls -d "$ANDROID_HOME"/platforms/android-* | grep -E '/android-[0-9]+$' | sort -V | tail -1)
-TARGET_SDK=${PLATFORM##*-}
+# The target is fixed, not "whatever the runner has": a new target changes how the
+# system treats the app (Android 16 with target 36 stopped sending "Back", 18.10.2026).
+# Raise it on purpose, after checking the behaviour changes of that Android.
+PLATFORM_SDK=${PLATFORM##*-}
+TARGET_SDK=36
+[ "$PLATFORM_SDK" -lt "$TARGET_SDK" ] && TARGET_SDK=$PLATFORM_SDK
 case "$ABI" in
     arm64-v8a) triple=aarch64-linux-android ;;
     x86_64)    triple=x86_64-linux-android ;;
@@ -36,7 +46,7 @@ esac
 
 W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
-mkdir -p "$W/lib/$ABI" "$W/assets/examples"
+mkdir -p "$W/lib/$ABI" "$W/assets/examples" "$W/gen" "$W/classes"
 
 # --- Native libraries: libbreezecad.so and what it needs, recursively --------
 lookup() {   # a library name → its file among ours (none: a system library)
@@ -45,7 +55,7 @@ lookup() {   # a library name → its file among ours (none: a system library)
     done
     return 0   # not ours: under set -e a non-zero status would end the script
 }
-queue=(libbreezecad.so)
+queue=(libbreezecad.so libbzcrash.so)
 declare -A seen=()
 while [ ${#queue[@]} -gt 0 ]; do
     name=${queue[0]}; queue=("${queue[@]:1}")
@@ -58,19 +68,28 @@ while [ ${#queue[@]} -gt 0 ]; do
 done
 "$NDK_BIN/llvm-strip" --strip-unneeded "$W/lib/$ABI"/*.so
 
-# --- Assets: the example part ----------------------------------------------
+# --- Assets: the program's own (fonts, icons…) and the example part ----------
+cp -r "$SRC/assets/." "$W/assets/"
 cp "$SRC/tests/data/кронштейн.bzc" "$W/assets/examples/bracket.bzc"
 
 # --- Manifest, resources, APK -----------------------------------------------
 number=$(sed -n '/^project(/,/)/s/.*VERSION \([0-9.]*\).*/\1/p' "$SRC/CMakeLists.txt" | head -1)
 code=${BZ_VERSION_CODE:-1}
+# The NDK cannot list asset folders: a list for the app, the first line a
+# stamp that changes with every build (the app unpacks them again then).
+(cd "$W/assets" && { echo "$number-$code-$(git -C "$SRC" rev-parse --short HEAD 2>/dev/null || echo local)"; find . -type f ! -name asset-list.txt | sed 's|^\./||' | sort; } > asset-list.txt)
 sed -e "s/@VERSION_CODE@/$code/" -e "s/@VERSION_NAME@/$number-android.$code/" \
     -e "s/@MIN_SDK@/$MIN_SDK/" -e "s/@TARGET_SDK@/$TARGET_SDK/" \
     "$SRC/resources/android/AndroidManifest.xml.in" > "$W/AndroidManifest.xml"
 "$TOOLS/aapt2" compile --dir "$SRC/resources/android/res" -o "$W/res.zip"
 "$TOOLS/aapt2" link -o "$W/unsigned.apk" -I "$PLATFORM/android.jar" --manifest "$W/AndroidManifest.xml" \
-    -A "$W/assets" "$W/res.zip"
-(cd "$W" && zip -qr unsigned.apk lib)
+    -A "$W/assets" --java "$W/gen" "$W/res.zip"
+
+# --- Java: BreezeActivity and the watchdog → classes.dex ---------------------
+find "$SRC/resources/android/java" "$W/gen" -name '*.java' > "$W/sources.txt"
+javac -encoding UTF-8 --release 11 -nowarn -classpath "$PLATFORM/android.jar" -d "$W/classes" @"$W/sources.txt"
+"$TOOLS/d8" --release --min-api "$MIN_SDK" --lib "$PLATFORM/android.jar" --output "$W" $(find "$W/classes" -name '*.class')
+(cd "$W" && zip -qr unsigned.apk lib classes.dex)
 "$TOOLS/zipalign" -f 4 "$W/unsigned.apk" "$W/aligned.apk"
 
 # --- Signature ----------------------------------------------------------------
@@ -87,3 +106,22 @@ BZ_KS_PASS=$password "$TOOLS/apksigner" sign --ks "$keystore" --ks-pass env:BZ_K
     --ks-key-alias breezecad --out "$OUT" "$W/aligned.apk"
 "$TOOLS/apksigner" verify "$OUT"
 echo "APK: $OUT ($(du -h "$OUT" | cut -f1)), version $number-android.$code, target SDK $TARGET_SDK, $(ls "$W/lib/$ABI" | wc -l) libraries"
+
+# --- Android App Bundle (Google Play, not published yet) ------------------------
+# The same content in bundletool's layout: resources linked as protobuf,
+# then the module zip (manifest/, res/, resources.pb, assets/, lib/, dex/).
+if [ -n "${BZ_AAB:-}" ]; then
+    : "${BZ_BUNDLETOOL:?bundletool .jar}"
+    "$TOOLS/aapt2" link --proto-format -o "$W/proto.zip" -I "$PLATFORM/android.jar" --manifest "$W/AndroidManifest.xml" \
+        -A "$W/assets" "$W/res.zip"
+    mkdir -p "$W/base/manifest" "$W/base/dex"
+    (cd "$W/base" && unzip -q ../proto.zip && mv AndroidManifest.xml manifest/ && cp -r "$W/lib" . && cp "$W/classes.dex" dex/)
+    (cd "$W/base" && zip -qr ../base.zip .)
+    rm -f "$W/unsigned.aab"
+    java -jar "$BZ_BUNDLETOOL" build-bundle --modules="$W/base.zip" --output="$W/unsigned.aab"
+    mkdir -p "$(dirname "$BZ_AAB")"
+    cp "$W/unsigned.aab" "$BZ_AAB"
+    jarsigner -keystore "$keystore" -storepass "$password" -keypass "$password" -sigalg SHA256withRSA -digestalg SHA-256 \
+        "$BZ_AAB" breezecad >/dev/null
+    echo "AAB: $BZ_AAB ($(du -h "$BZ_AAB" | cut -f1))"
+fi

@@ -1,6 +1,7 @@
 #include "app/sketch/SketchEditor.h"
 
 #include "app/Format.h"
+#include "app/sketch/DimensionArrange.h"
 #include "app/sketch/DimensionLayout.h"
 #include "app/sketch/SketchOverlay.h"
 #include "core/I18n.h"
@@ -16,7 +17,6 @@
 #include <cmath>
 
 namespace bz::app {
-namespace {
 
 /// Sketch entities in a screen box: wholly inside (`window`) or touching it.
 std::vector<ObjectId> EntitiesInBox(const sketch::Sketch& sk, const SketchView& view, ImVec2 lo, ImVec2 hi, bool window) {
@@ -70,6 +70,8 @@ std::vector<ObjectId> EntitiesInBox(const sketch::Sketch& sk, const SketchView& 
         if (test(sketch::SampleEllipse(sk, e, 48))) out.push_back(e.id);
     return out;
 }
+
+namespace {
 
 constexpr std::array<SketchToolInfo, 33> kTools{{
     {SketchTool::Select, N_("Выбор"), "ui-check", N_("Выберите или перетащите элементы эскиза")},
@@ -262,7 +264,35 @@ void SketchEditor::SetTool(AppContext& app, Session& session, SketchTool tool) {
     if (tool >= SketchTool::Coincident) TryApplyToSelection(app, session);
 }
 
-void SketchEditor::Escape(AppContext& app, Session& session) {
+void SketchEditor::LeaveDocument(Session* old) {
+    if (old) {
+        EndTextEdit(*old);
+    } else {
+        myEditedText = {};
+        myTextBefore.reset();
+    }
+    myClicks.clear();
+    myPicks.clear();
+    mySelection.clear();
+    myHover = {};
+    myBoxStart.reset();
+    myBoxing = false;
+    myFence.clear();
+    myOffsetCurve = {};
+    myChainStart = myChainEnd = {};
+    myMirrorAxisStep = false;
+    myDragging = false;
+    myPressedOnEntity = false;
+    myDragOrigins.clear();
+    myDragBefore.reset();
+    myLabelGrab = {};
+    myLabelMoved = false;
+    myEditDimension = {};
+    myFieldSeed.clear();
+    myBackspaces = 0;
+}
+
+void SketchEditor::Escape(AppContext& app, Session& session, bool mayFinish) {
     if (myEditDimension) {
         myEditDimension = {};
     } else if (myEditedText) {
@@ -275,9 +305,28 @@ void SketchEditor::Escape(AppContext& app, Session& session) {
         myTool = SketchTool::Select;
     } else if (!mySelection.empty()) {
         mySelection.clear();
-    } else {
+    } else if (mayFinish) {
         Finish(app, session);
     }
+}
+
+bool SketchEditor::HasDimensions(Session& session) const {
+    const doc::SketchFeature* f = Active(session);
+    if (!f) return false;
+    return std::any_of(f->sketch.constraints.begin(), f->sketch.constraints.end(),
+                       [](const sketch::Constraint& c) { return sketch::IsDimensional(c.type); });
+}
+
+void SketchEditor::ArrangeDimensions(AppContext& app, Session& session) {
+    doc::SketchFeature* f = Active(session);
+    if (!f) return;
+    auto before = f->Clone();
+    const int moved = app::ArrangeDimensions(f->sketch, session.doc.units, {myMmPerPixel, app.ui.scale});
+    if (moved == 0) {
+        app.notes.Info(Tr("Размеры уже не мешают друг другу"));
+        return;
+    }
+    session.CommitInPlaceEdit(std::move(before), Tr("Упорядочить размеры"));
 }
 
 void SketchEditor::DeleteSelection(Session& session) {
@@ -561,8 +610,9 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
             const bool label = f->sketch.FindConstraint(myDragEntity) != nullptr;
             session.CommitInPlaceEdit(std::move(myDragBefore), label ? Tr("Перемещение размера") : Tr("Перемещение в эскизе"));
         } else if (myHover) {
-            // Click: select; Shift or Ctrl add to the selection.
-            if (!io.KeyShift && !io.KeyCtrl) mySelection.clear();
+            // Click: select; Shift or Ctrl add to the selection. The phone has no Ctrl:
+            // a tap adds or takes away, a tap on empty space clears (18.10.2026).
+            if (!io.KeyShift && !io.KeyCtrl && !app.shell.mobile.phone) mySelection.clear();
             if (myHover) {
                 if (mySelection.count(myHover.id)) mySelection.erase(myHover.id);
                 else mySelection.insert(myHover.id);
@@ -597,8 +647,16 @@ void SketchEditor::HandleInlineEdit(AppContext& app, Session& session, const Ske
     if (!layout) return;
 
     ui::Ui& ui = app.ui;
-    const ImVec2 at = view.ToScreen(layout->label);
+    ImVec2 at = view.ToScreen(layout->label);
     const float width = ui.S(150);
+    // The phone: a new dimension's label is where the cursor's tip is, and the drop
+    // hangs below the tip over the field — the field goes above the tip (the author, 17.10).
+    if (const mobile::MobileState& m = app.shell.mobile; m.phone && m.cursorShown) {
+        const ImVec2 tip = m.cursorTip;
+        const float below = std::hypot(m.cursorFinger.x - tip.x, m.cursorFinger.y - tip.y) + ui.S(26);   // the drop's reach and lens
+        if (std::abs(at.x - tip.x) < width / 2 + ui.S(30) && at.y + ui.S(18) > tip.y - ui.S(6) && at.y - ui.S(18) < tip.y + below)
+            at.y = tip.y - ui.S(18) - ui.S(12);
+    }
     ImGui::SetCursorScreenPos({at.x - width / 2, at.y - ui.S(18)});
     const Quantity q = c->type == sketch::ConstraintType::Angle ? Quantity::Angle : Quantity::Length;
     // A click on another dimension puts its name into the formula, as in

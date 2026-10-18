@@ -1,4 +1,5 @@
 #include "app/features/EdgeOperationEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "core/I18n.h"
 #include "ui/Widgets.h"
@@ -62,11 +63,10 @@ void EdgeOperationEditor::DrawBody(AppContext& app, Session& session, doc::Featu
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
 
-    Section(app, Tr("Щелчок выбирает"));
     {
-        static constexpr std::array<const char*, 2> modes{N_("Ребро"), N_("Грань целиком")};
+        static constexpr std::array<ChoiceItem, 2> modes{{{"pick-edge", N_("Ребро")}, {"pick-face", N_("Грань целиком")}}};
         const int current = myByFace ? 1 : 0;
-        if (const int chosen = ui::Segmented(ui, "pick-mode", modes, current, 2, width); chosen != current) myByFace = chosen == 1;
+        if (const int chosen = ToolChoice(app, "pick-mode", N_("Щелчок выбирает"), modes, current, width); chosen != current) myByFace = chosen == 1;
         Caption(app, myByFace ? Tr("Все рёбра грани разом. Убрать отдельные потом можно в режиме «Ребро».")
                               : Tr("Каждое ребро по отдельности. Касательные к нему рёбра скругляются вместе с ним."),
                 width);
@@ -171,11 +171,10 @@ void ChamferEditor::LoadTexts(const doc::Feature& feature) {
 void ChamferEditor::DrawSize(AppContext& app, Session& session, doc::EdgeFeature& feature, float width) {
     auto& f = static_cast<doc::ChamferFeature&>(feature);
     using doc::ChamferMode;
-    Section(app, Tr("Способ"));
     {
-        static constexpr std::array<const char*, 3> modes{N_("Равные"), N_("С углом"), N_("Два размера")};
+        static constexpr std::array<ChoiceItem, 3> modes{{{"chamfer-equal", N_("Равные")}, {"chamfer-angle", N_("С углом")}, {"chamfer-two", N_("Два размера")}}};
         const int current = static_cast<int>(f.mode);
-        if (const int chosen = ui::Segmented(app.ui, "chamfer-mode", modes, current, 3, width); chosen != current) {
+        if (const int chosen = ToolChoice(app, "chamfer-mode", N_("Способ"), modes, current, width); chosen != current) {
             f.mode = static_cast<ChamferMode>(chosen);
             // A size shown for the first time gets its name in the variables.
             if (f.mode == ChamferMode::TwoDistances && f.distance2.name.empty()) f.distance2.name = session.doc.NextParameterName();
@@ -208,11 +207,10 @@ void ChamferEditor::DrawSize(AppContext& app, Session& session, doc::EdgeFeature
             break;
     }
     Gap(app);
-    Section(app, Tr("Опорная грань"));
     {
-        static constexpr std::array<const char*, 2> sides{N_("Прямо"), N_("Наоборот")};
+        static constexpr std::array<ChoiceItem, 2> sides{{{"chamfer-side1", N_("Прямо")}, {"chamfer-side2", N_("Наоборот")}}};
         const int current = f.flipped ? 1 : 0;
-        if (const int chosen = ui::Segmented(app.ui, "chamfer-side", sides, current, 2, width); chosen != current) {
+        if (const int chosen = ToolChoice(app, "chamfer-side", N_("Опорная грань"), sides, current, width); chosen != current) {
             f.flipped = chosen == 1;
             Changed(session);
         }

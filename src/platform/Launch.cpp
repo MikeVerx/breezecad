@@ -1,6 +1,8 @@
 #include "platform/Launch.h"
 
-#ifdef _WIN32
+#if defined(__ANDROID__)
+#include "platform/Android.h"
+#elif defined(_WIN32)
 #include <windows.h>
 #include <shellapi.h>
 #else
@@ -11,7 +13,8 @@
 namespace bz::platform {
 namespace {
 
-#ifdef _WIN32
+#if defined(__ANDROID__)
+#elif defined(_WIN32)
 bool Open(const std::wstring& target) {
     const auto result = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
     return result > 32;
@@ -44,7 +47,9 @@ bool Open(const std::string& target) {
 
 bool OpenUrl(const std::string& url) {
     if (url.rfind("https://", 0) != 0) return false;   // only web pages, never local commands
-#ifdef _WIN32
+#if defined(__ANDROID__)
+    return android::OpenUrl(url);
+#elif defined(_WIN32)
     const int n = MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, nullptr, 0);
     std::wstring wide(static_cast<std::size_t>(n > 0 ? n - 1 : 0), L'\0');
     if (n > 1) MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, wide.data(), n);
@@ -58,7 +63,9 @@ bool OpenFolder(const std::filesystem::path& folder) {
     std::error_code ec;
     std::filesystem::create_directories(folder, ec);
     if (!std::filesystem::is_directory(folder, ec)) return false;
-#ifdef _WIN32
+#if defined(__ANDROID__)
+    return false;   // no file manager to show the app's own folder in
+#elif defined(_WIN32)
     return Open(folder.wstring());
 #else
     return Open(folder.string());

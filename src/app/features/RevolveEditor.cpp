@@ -1,4 +1,5 @@
 #include "app/features/RevolveEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/features/SketchAxis.h"
 
@@ -72,11 +73,10 @@ void RevolveEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
     }
     Gap(app);
 
-    Section(app, Tr("Угол"));
     {
-        static constexpr std::array<const char*, 3> labels{N_("Полный"), N_("Угол"), N_("Симметрично")};
+        static constexpr std::array<ChoiceItem, 3> labels{{{"rev-full", N_("Полный")}, {"rev-angle", N_("Угол")}, {"rev-sym", N_("Симметрично")}}};
         const int current = static_cast<int>(f.extent);
-        const int chosen = ui::Segmented(ui, "extent", labels, current, 3, width);
+        const int chosen = ToolChoice(app, "extent", N_("Угол"), labels, current, width);
         if (chosen != current) {
             f.extent = static_cast<RevolveExtent>(chosen);
             Changed(session);
@@ -88,10 +88,9 @@ void RevolveEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
     }
     if (f.extent == RevolveExtent::Angle) {
         Gap(app);
-        Section(app, Tr("Направление"));
-        static constexpr std::array<const char*, 2> labels{N_("Прямое"), N_("Обратное")};
+        static constexpr std::array<ChoiceItem, 2> labels{{{"rev-dir1", N_("Прямое")}, {"rev-dir2", N_("Обратное")}}};
         const int current = f.reversed ? 1 : 0;
-        const int chosen = ui::Segmented(ui, "dir", labels, current, 2, width);
+        const int chosen = ToolChoice(app, "dir", N_("Направление"), labels, current, width);
         if (chosen != current) {
             f.reversed = chosen == 1;
             Changed(session);

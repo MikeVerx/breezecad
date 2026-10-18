@@ -251,9 +251,19 @@ ViewCubeAction DrawViewCube(Ui& ui, const ViewProjection& view, ImVec2 topLeft, 
     if (FloatingButton(ui, "##cube-home", homeCenter, ui.S(26), Tr("Домой: изометрия (Home)"))) action.home = true;
     ui.icons.Draw(dl, "ui-home", {homeCenter.x - ui.S(8), homeCenter.y - ui.S(8)}, ui.S(16), c.floatingInk);
 
-    // Axis triad in the bottom-left corner, far axes first.
-    if (!showTriad) return action;
-    const ImVec2 origin{topLeft.x + ui.S(44), bottomRight.y - ui.S(44)};
+    // Axis triad in the bottom-left corner.
+    if (showTriad) DrawAxisTriad(ui, view, {topLeft.x + ui.S(44), bottomRight.y - ui.S(44)});
+    return action;
+}
+
+void DrawAxisTriad(Ui& ui, const ViewProjection& view, ImVec2 origin) {
+    const ThemeColors& c = ui.C();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const Vec3 d = view.direction.Normalized();
+    const Vec3 r = d.Cross(view.up).Normalized();
+    const Vec3 u = r.Cross(d).Normalized();
+    const Vec3 v = -d;
+    // Far axes first.
     struct Axis {
         Vec3        e;
         Color       color;
@@ -270,7 +280,6 @@ ViewCubeAction DrawViewCube(Ui& ui, const ViewProjection& view, ImVec2 topLeft, 
         dl->AddText(ui.fonts.strong, ui.S(11), lp, ToU32(a.color), a.label);
     }
     dl->AddCircleFilled(origin, ui.S(2.5f), ToU32(c.textSecondary));
-    return action;
 }
 
 } // namespace bz::ui

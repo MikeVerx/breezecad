@@ -13,6 +13,9 @@
 #include "document/ThreadFeature.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
+#if defined(__ANDROID__)
+#include "platform/Android.h"
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -188,6 +191,15 @@ bool Workspace::ExportTo(Session& session, ExportFormat format, const std::files
         notes.Info(Tr(empty));
         return false;
     }
+    // A long export (a threaded part as STEP on a phone) is work, not a hang: no hang
+    // report, and on Android the watchdog does not offer to close the app meanwhile.
+    const mon::Waiting waiting;
+#if defined(__ANDROID__)
+    struct Busy {
+        Busy() { platform::android::SetWatchdogState("wait"); }
+        ~Busy() { platform::android::SetWatchdogState("fg"); }
+    } busy;
+#endif
     session.RebuildNow();   // a rebuild may still be under way in slices
     // Cosmetic threads are only drawn in the model; a file gets them cut.
     std::optional<kernel::Model> real;

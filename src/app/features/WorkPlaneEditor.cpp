@@ -1,4 +1,5 @@
 #include "app/features/WorkPlaneEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/Format.h"
 #include "app/features/PointPick.h"
@@ -192,12 +193,10 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
     auto& f = static_cast<doc::WorkPlaneFeature&>(feature);
     ui::Ui& ui = app.ui;
 
-    Section(app, Tr("Способ"));
     {
-        static constexpr std::array<const char*, 5> methods{N_("Смещение"), N_("Посередине"), N_("Под углом"), N_("По 3 точкам"),
-                                                            N_("Касательно к цилиндру")};
+        static constexpr std::array<ChoiceItem, 5> methods{{{"wp-offset", N_("Смещение")}, {"wp-mid", N_("Посередине")}, {"wp-angle", N_("Под углом")}, {"wp-3pt", N_("По 3 точкам")}, {"wp-tangent", N_("Касательно к цилиндру")}}};
         const int current = static_cast<int>(f.method);
-        if (const int chosen = ui::Segmented(ui, "method", methods, current, 2, width); chosen != current) {
+        if (const int chosen = ToolChoice(app, "method", N_("Способ"), methods, current, width); chosen != current) {
             f.method = static_cast<WorkPlaneMethod>(chosen);
             myMethod = f.method;
             // The start is kept; the next click goes to what the method still needs.
@@ -281,10 +280,9 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
     }
     if (f.method != WorkPlaneMethod::Midplane) {
         Gap(app);
-        Section(app, Tr("Направление"));
-        static constexpr std::array<const char*, 2> labels{N_("По нормали"), N_("Обратно")};
+        static constexpr std::array<ChoiceItem, 2> labels{{{"flip-normal", N_("По нормали")}, {"flip-reverse", N_("Обратно")}}};
         const int current = f.reversed ? 1 : 0;
-        const int chosen = ui::Segmented(ui, "direction", labels, current, 2, width);
+        const int chosen = ToolChoice(app, "direction", N_("Направление"), labels, current, width);
         if (chosen != current) {
             f.reversed = chosen == 1;
             Changed(session);

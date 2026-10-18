@@ -26,6 +26,9 @@ public:
     void SetDirectory(const std::filesystem::path& iconsDir) { myDir = iconsDir; }
     /// Drops all textures (after a scale change they are re-rasterised).
     void SetScale(float scale);
+    /// The dark theme: the colour icons' dark arrows and outlines (#3D4552) are drawn light,
+    /// or they vanish on a dark panel (the author, 18.10.2026). Drops the cache when it changes.
+    void SetDark(bool dark);
 
     /// Texture of `name` at `size` logical pixels; 0 when the icon is missing.
     ImTextureID Texture(std::string_view name, float size);
@@ -45,6 +48,7 @@ private:
 
     std::filesystem::path                     myDir;
     float                                     myScale = 1.0f;
+    bool                                      myDark = false;
     std::unordered_map<std::string, Svg>      mySvgs;
     std::unordered_map<std::string, unsigned> myTextures;   // "name@px" -> GL texture
 };

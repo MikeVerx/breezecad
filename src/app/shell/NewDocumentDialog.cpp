@@ -81,7 +81,8 @@ void DrawNewDocumentDialog(AppContext& app) {
     if (nd.open && !ImGui::IsPopupOpen(id)) ImGui::OpenPopup(id);
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowPos({display.x / 2, display.y / 2}, ImGuiCond_Always, {0.5f, 0.5f});
-    ImGui::SetNextWindowSize({ui.S(760), 0});
+    // Fits a phone held sideways (~880 × 390 dp); unchanged on a desktop window (800 × 500 at least).
+    ImGui::SetNextWindowSize({std::min(ui.S(760), display.x - ui.S(24)), 0});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui.S(24, 22));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ui.S(14));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ui.S(8, 8));
@@ -103,7 +104,7 @@ void DrawNewDocumentDialog(AppContext& app) {
     ImGui::Dummy({0, ui.S(4)});
 
     // Folders on the left.
-    const float listW = ui.S(170), height = ui.S(250);
+    const float listW = ui.S(170), height = std::max(ui.S(120), std::min(ui.S(250), display.y - ui.S(175)));
     ImGui::BeginGroup();
     for (const NewGroup& g : groups) {
         ImGui::PushID(g.name.c_str());

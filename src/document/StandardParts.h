@@ -8,6 +8,10 @@
 // The size tables are data (StandardParts.cpp). Geometry is simplified the
 // usual way for a CAD library: no head chamfers, a socket or slot as a
 // plain cut, a bearing as one body with grooves, a ring without lugs.
+//
+// Packs (StandardPacks.h) add kinds and standards from *.bzlib files: they
+// appear here next to the built-in ones, with PartKind values from
+// kFirstPackKind on (given in the order the packs were loaded).
 
 #include "core/Expected.h"
 #include "document/Document.h"
@@ -16,6 +20,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace bz::doc::parts {
@@ -36,6 +41,11 @@ enum class PartKind : unsigned char {
     PinTaper,           ///< штифт конический
     CotterPin,          ///< шплинт
 };
+
+/// Kinds from packs get PartKind values from here on (up to 255).
+inline constexpr unsigned kFirstPackKind = 64;
+/// A kind declared by a pack, not built in.
+inline bool IsPackKind(PartKind kind) { return static_cast<unsigned>(kind) >= kFirstPackKind; }
 
 /// A variety of parts (a kind): its row in a group and its full name.
 /// Names are Russian; the interface translates them when it shows them.
@@ -68,6 +78,8 @@ const KindInfo& KindOf(PartKind kind);
 /// The folders of the library window, in order.
 std::span<const GroupInfo> Groups();
 Family FamilyOf(const StandardInfo& standard);
+/// Shown under every standards body of the window (the user's own parts).
+bool InEveryFamily(const StandardInfo& standard);
 /// "Болт ГОСТ 7798-70": for the list of recent parts.
 std::string ShortName(const StandardInfo& standard);
 /// Standards of the same kind other than this one (the analogues).
@@ -89,8 +101,29 @@ std::vector<std::string> Sizes(const StandardInfo& standard);
 /// or Cyrillic М) or "6" for a washer listed as "6", "М6" for a screw typed
 /// as "6". `given` itself when nothing matches (MakePart names the error).
 std::string MatchSize(const StandardInfo& standard, std::string_view given);
-/// Lengths available for a size, mm; empty when the part has no length.
+/// Lengths available for a size, mm; empty when the part has no length or
+/// any length of a range is allowed (FreeLength).
 std::vector<double> Lengths(const StandardInfo& standard, std::string_view size);
+
+/// A range of lengths any of which a part may have (a profile cut to size).
+struct LengthRange {
+    double min = 0, max = 0;
+    double preset = 0;   ///< offered first
+};
+/// Nullopt unless the standard takes any length of a range (packs only).
+std::optional<LengthRange> FreeLength(const StandardInfo& standard);
+/// A size typed within a range besides the row and the length (a sheet's width).
+struct InputInfo {
+    std::string_view name;    ///< variable and key in Request::inputs: "B"
+    std::string_view title;   ///< "Ширина, мм"
+    double           min = 0, max = 0, preset = 0;
+};
+/// Such sizes of a standard (packs only); empty for most.
+std::vector<InputInfo> Inputs(const StandardInfo& standard);
+
+/// Caption of the sizes for the library window ("Сечение a×t, мм"); empty:
+/// the window chooses by the kind.
+std::string_view SizeTitle(const StandardInfo& standard);
 
 struct Request {
     std::string standard;   ///< StandardInfo::id
@@ -101,6 +134,8 @@ struct Request {
     bool        realThread = false;
     /// Appearance of the body (doc::StandardAppearances id); empty: DefaultAppearance.
     std::string appearance{};
+    /// Values of Inputs() by name; one not given takes its preset.
+    std::vector<std::pair<std::string, double>> inputs{};
 };
 
 /// Outer size of the part as the table gives it (mm): across X, Y and along

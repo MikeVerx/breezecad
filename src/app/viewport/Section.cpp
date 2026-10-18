@@ -41,7 +41,7 @@ void DrawSectionBar(AppContext& app, Session& session, const ViewportFrame& vf) 
     const float segment = ui.S(132), slider = ui.S(170), label = ui.S(96), button = ui.S(30), gap = ui.S(8), pad = ui.S(8);
     const float width = pad * 2 + segment + slider + label + button * 2 + gap * 4;
     const float height = ui.S(44);
-    const ImVec2 p{(vf.min.x + vf.max.x - width) / 2, vf.min.y + ui.S(14)};
+    const ImVec2 p{(vf.min.x + vf.max.x - width) / 2, vf.promptTop > 0 ? vf.promptTop : vf.min.y + ui.S(14)};
     dl->AddRectFilled(p, {p.x + width, p.y + height}, ui::ToU32(c.floatingButton), ui.S(10));
     dl->AddRect(p, {p.x + width, p.y + height}, ui::ToU32(c.floatingBorder), ui.S(10));
 

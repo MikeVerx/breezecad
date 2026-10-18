@@ -34,6 +34,9 @@ int Segmented(Ui& ui, const char* id, std::span<const char* const> labels, int c
 bool Slider(Ui& ui, const char* id, float& value, float width);
 
 /// Filled accent button. `hint` (e.g. "Enter") is drawn small after the label.
+/// Text cut with "…" to fit before `right` (a panel's title next to its close button).
+void FittedText(ImDrawList* dl, ImFont* font, float size, ImVec2 at, float right, ImU32 color, const char* text);
+
 bool PrimaryButton(Ui& ui, const char* id, const char* label, const char* hint, ImVec2 size, bool enabled = true);
 /// Outlined neutral button.
 bool SecondaryButton(Ui& ui, const char* id, const char* label, const char* hint, ImVec2 size, bool enabled = true);

@@ -1,4 +1,5 @@
 #include "app/features/LoftEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/sketch/SketchOverlay.h"
 #include "core/I18n.h"
@@ -49,11 +50,10 @@ void LoftEditor::DrawInViewport(AppContext& app, Session& session, const Viewpor
 
 void LoftEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::LoftFeature&>(feature);
-    Section(app, Tr("Операция"));
-    static constexpr std::array<const char*, 3> ops{N_("Новое тело"), N_("Добавить"), N_("Вырезать")};
+    static constexpr std::array<ChoiceItem, 3> ops{{{"op-new", N_("Новое тело")}, {"op-join", N_("Добавить")}, {"op-cut", N_("Вырезать")}}};
     const bool bodyBefore = HasSolidBefore(session.doc, static_cast<std::size_t>(session.doc.IndexOf(f.id)));
     const int current = std::min(static_cast<int>(f.operation), 2);
-    const int chosen = ui::Segmented(app.ui, "op", ops, current, 3, width, bodyBefore ? 0 : 0b110);
+    const int chosen = ToolChoice(app, "op", N_("Операция"), ops, current, width, bodyBefore ? 0 : 0b110);
     if (chosen != current) {
         f.operation = static_cast<doc::BooleanOp>(chosen);
         Changed(session);
@@ -64,10 +64,9 @@ void LoftEditor::DrawBody(AppContext& app, Session& session, doc::Feature& featu
     FeatureChecklist(app, session, f.sections, IsSketch, width, Tr("Нет эскизов. Нарисуйте сечения на разных плоскостях."));
     Gap(app);
 
-    Section(app, Tr("Переходы"));
-    static constexpr std::array<const char*, 2> kinds{N_("Плавные"), N_("Прямые")};
+    static constexpr std::array<ChoiceItem, 2> kinds{{{"loft-smooth", N_("Плавные")}, {"loft-straight", N_("Прямые")}}};
     const int ruled = f.ruled ? 1 : 0;
-    const int pick = ui::Segmented(app.ui, "ruled", kinds, ruled, 2, width);
+    const int pick = ToolChoice(app, "ruled", N_("Переходы"), kinds, ruled, width);
     if (pick != ruled) {
         f.ruled = pick == 1;
         Changed(session);

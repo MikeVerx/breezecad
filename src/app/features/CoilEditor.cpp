@@ -1,4 +1,5 @@
 #include "app/features/CoilEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/features/SketchAxis.h"
 #include "app/sketch/SketchPick.h"
@@ -48,10 +49,9 @@ void CoilEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSolid
     ParameterField(app, session, "turns", myTurns, f.turns, width, false);
     Gap(app);
 
-    Section(app, Tr("Навивка"));
-    static constexpr std::array<const char*, 2> hands{N_("Правая"), N_("Левая")};
+    static constexpr std::array<ChoiceItem, 2> hands{{{"hand-right", N_("Правая")}, {"hand-left", N_("Левая")}}};
     const int current = f.leftHanded ? 1 : 0;
-    const int chosen = ui::Segmented(app.ui, "hand", hands, current, 2, width);
+    const int chosen = ToolChoice(app, "hand", N_("Навивка"), hands, current, width);
     if (chosen != current) {
         f.leftHanded = chosen == 1;
         Changed(session);

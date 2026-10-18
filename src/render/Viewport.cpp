@@ -592,7 +592,8 @@ struct Viewport::Impl {
 
 namespace {
 /// The clock StepAnimation's `now` comes from: glfwGetTime on the desktop;
-/// on Android (no GLFW) a steady clock — android/AndroidMain uses the same.
+/// on Android (no GLFW) a steady clock from its epoch — platform::Window::Time
+/// there is the same (Application passes it to StepAnimation).
 double AnimationClock() {
 #if defined(__ANDROID__)
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -1132,7 +1133,10 @@ void Viewport::AnimateTo(const CameraState& target, double seconds) {
 bool Viewport::StepAnimation(double now) {
     Impl& m = *myImpl;
     if (!m.animating) return false;
-    const double t = std::clamp((now - m.animStart) / m.animDuration, 0.0, 1.0);
+    double t = std::clamp((now - m.animStart) / m.animDuration, 0.0, 1.0);
+    // A clock that does not match the animation's start: finish at once
+    // rather than hold the camera at the start for ever.
+    if (now + 1.0 < m.animStart) t = 1.0;
     const double s = SmoothStep(t);
 
     const Orientation from = Orientation::FromView(m.animFrom.center - m.animFrom.eye, m.animFrom.up);

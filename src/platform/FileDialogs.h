@@ -25,4 +25,13 @@ std::optional<std::filesystem::path> ShowOpenDialog(const std::string& title, co
 std::optional<std::filesystem::path> ShowSaveDialog(const std::string& title, const std::filesystem::path& suggested,
                                                     const std::vector<FileFilter>& filters, const std::string& extension);
 
+/// Called after the program wrote `file` (a saved document, an export). On
+/// Android a file standing for a document elsewhere (a picked or projects-
+/// folder file) is copied back to it; nothing to do on the desktop.
+#if defined(__ANDROID__)
+void FileWritten(const std::filesystem::path& file);
+#else
+inline void FileWritten(const std::filesystem::path&) {}
+#endif
+
 } // namespace bz::platform

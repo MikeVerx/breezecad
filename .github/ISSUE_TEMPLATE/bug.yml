@@ -1,0 +1,39 @@
+name: Сообщить о баге
+description: Что-то работает не так
+labels: ["баг"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Версия
+      description: Справка → О программе
+      placeholder: 0.2.1-beta
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Система
+      placeholder: Windows 11, видеокарта GTX 1660
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Что делал
+      placeholder: |
+        1. Открыл деталь
+        2. Нажал «Отверстие»
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Что ждал
+  - type: textarea
+    id: actual
+    attributes:
+      label: Что получилось
+      description: Можно вставить скриншот или перетащить файл детали прямо сюда
+    validations:
+      required: true
