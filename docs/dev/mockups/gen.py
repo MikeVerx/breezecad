@@ -834,6 +834,63 @@ pages['12-model-tab'] = page(tab + note('Край экрана<br>телефон
     + note('Всё самое частое — без прокрутки.<br>Ниже края — диагностика,<br>библиотека и экспорт<br>(экспорт — один значок,<br>формат выбирается в списке).', 'left:212px;top:130px'), T12)
 
 
+# 13. Block 2, every other tab (the author 18.10): Эскиз in full, Вид, Сборка, Вид in the assembly. The dashed line is
+# the phone's screen edge: everything above it is reachable without scrolling.
+SIZES['13-other-tabs'] = (1000, 730)
+T13 = R7_CSS + """body{width:1000px;height:730px}
+.col{position:absolute;top:30px;width:180px;background:var(--panel);border:1px solid var(--div);border-radius:0 0 10px 10px}
+.ct{position:absolute;top:6px;font-size:12px;font-weight:600;color:var(--text)}
+.fold{position:absolute;width:200px;height:0;border-top:2px dashed #F5A524;z-index:30}
+.g7 .r div{position:relative}
+.g7 .r div b{position:absolute;right:3px;bottom:1px;font-size:9px;font-weight:600;color:#cfdcff}
+"""
+
+
+def g7x(title, cells):
+    out = ''
+    for c in cells:
+        n, lab = (c, '') if isinstance(c, str) else c
+        out += f'<div>{icon(n, 20, "#fff")}{"<b>" + lab + "</b>" if lab else ""}</div>'
+    return f'<div class="g7"><div class="h">{title}</div><div class="r">{out}</div></div>'
+
+
+HEAD = ('<div class="brow" style="height:38px;gap:8px;padding:0 8px"><span style="font-size:11px;color:#4CBB7F;font-family:monospace">74</span>'
+        f'<div class="search">{icon("ui-search", 14)}Поиск</div></div>')
+sketch_col = (HEAD + f'<div class="fin">{icon("ui-check", 16, "#9db6ff")}Завершить эскиз</div>'
+              + g7x('РАЗМЕРЫ', ['sk-dimension', 'dim-arrange'])
+              + g7x('СОЗДАТЬ', ['sk-line', 'sk-circle', 'sk-arc', 'sk-rectangle', 'sk-point', 'sk-spline', 'sk-text'])
+              + g7x('ЗАВИСИМОСТИ', ['c-coincident', 'c-horizontal', 'c-vertical', 'c-fix', 'c-parallel', 'c-perpendicular', 'c-equal',
+                                    'c-midpoint', 'c-tangent', 'c-concentric', 'c-symmetric', 'c-show-all'])
+              + g7x('ИЗМЕНИТЬ', ['sk-trim', 'sk-extend', 'sk-offset', 'sk-fillet', 'sk-move', 'sk-rotate', 'sk-copy', 'sk-scale', 'sk-split', 'ui-trash'])
+              + g7x('МАССИВ И МОДЕЛЬ', ['sk-pattern-rect', 'sk-pattern-circular', 'sk-mirror', 'sk-project', 'sk-project-fixed'])
+              + g7x('ФОРМАТ И ВИД', ['sk-construction', 'sk-centerline', 'c-perpendicular', 'sk-look-at']))
+view_col = (HEAD
+            + g7x('СТИЛЬ ОТОБРАЖЕНИЯ', ['ds-shaded', 'ds-shaded-edges', 'ds-wireframe', 'ds-hidden-lines', 'ds-transparent'])
+            + g7x('ЦВЕТА', ['appearance', 'view-background'])
+            + g7x('ОРИЕНТАЦИЯ', ['view-home', 'view-fit', ('tree-plane', 'Ф'), ('tree-plane', 'В'), ('tree-plane', 'П')])
+            + g7x('ОФОРМЛЕНИЕ', ['theme', 'ui-sun', 'ui-moon']))
+asm_col = (HEAD
+           + g7x('КОМПОНЕНТ', ['place-component', 'library', 'pattern-rect'])
+           + g7x('ЗАВИСИМОСТИ', ['a-mate', 'a-insert', 'a-angle', 'a-tangent', 'a-axis'])
+           + g7x('СОЕДИНЕНИЯ', ['j-rotational', 'j-slider', 'j-cylindrical', 'j-planar', 'j-ball', 'j-rigid'])
+           + g7x('ПОЛОЖЕНИЕ', ['move-component', 'rotate-component', 'ui-lock'])
+           + g7x('ДИАГНОСТИКА И ЭКСПОРТ', ['measure', 'section', 'interference', 'export']))
+
+
+def col(x, title, inner, h):
+    return f'<div class="ct" style="left:{x}px">{title}</div><div class="col" style="left:{x}px;height:{h}px">{inner}</div>'
+
+
+FOLD = 30 + 412 - 28   # the tab's top + the phone's height - the status line
+body13 = (col(16, 'Эскиз (целиком)', sketch_col, 690) + col(266, 'Вид', view_col, 375) + col(516, 'Сборка', asm_col, 440)
+          + ''.join(f'<div class="fold" style="left:{x - 10}px;top:{FOLD}px"></div>' for x in (16, 266, 516))
+          + note('Пунктир — край экрана телефона.<br><br><b>Эскиз:</b> над краем — размеры, создание<br>и все зависимости. Ниже — «Изменить»<br>(обрезка, сдвиг, копия…), массивы,<br>проецирование, формат.<br><br>'
+                 '<b>Вид</b> помещается целиком.<br><b>Сборка</b> — всё, кроме последнего ряда<br>(диагностика и экспорт), он чуть ниже края.<br><br>'
+                 'Буквы Ф / В / П на плоскостях —<br>спереди, сверху, справа.', 'left:740px;top:40px')
+          + note('Предложение: «Оформление» (тема) на<br>телефоне убрать в настройки — там ему место.', 'left:740px;top:330px'))
+pages['13-other-tabs'] = page(body13, T13)
+
+
 if __name__ == '__main__':
     only = sys.argv[1:]
     with sync_playwright() as p:
