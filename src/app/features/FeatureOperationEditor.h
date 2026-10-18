@@ -28,11 +28,15 @@ public:
     void Apply(AppContext& app, Session& session) override;
     void Done(AppContext& app, Session& session) override;
     void Cancel(AppContext& app, Session& session) override;
+    bool Ready(Session& session) const override;
+    bool StepBack(AppContext& app, Session& session) override;
 
     /// Header (icon, title, close), the body from DrawBody, footer buttons.
     void DrawPanel(AppContext& app, Session& session) override;
 
 protected:
+    /// Drops the feature's last pick; false when it has none (StepBack).
+    virtual bool PopPick(doc::Feature& feature) { return false; }
     /// Icon of the panel header ("tree-extrude").
     const char* Icon() const override = 0;
     /// Fills the text fields from the feature (when the panel opens).

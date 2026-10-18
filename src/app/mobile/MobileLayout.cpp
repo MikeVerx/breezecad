@@ -169,7 +169,7 @@ bool HasToolPanel(AppContext& app, Session& session) {
 }
 
 void DrawRowButton(AppContext& app, const char* id, const char* icon, const char* tip, ImVec2 p, ImVec2 s, bool on, bool primary,
-                   bool enabled, bool* clicked, bool* held) {
+                   bool enabled, bool* clicked, bool* held, bool ready = false) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -179,7 +179,9 @@ void DrawRowButton(AppContext& app, const char* id, const char* icon, const char
     if (held) *held = enabled && ImGui::IsItemClicked(ImGuiMouseButton_Right);   // a long press (touch) or a right click
     const bool pressed = ImGui::IsItemActive();
     const ImVec2 a{p.x + ui.S(3), p.y + ui.S(4)}, b{p.x + s.x - ui.S(3), p.y + s.y - ui.S(4)};
-    const Color fill = primary ? (enabled ? c.accent : c.segmentTrack) : on ? c.accentSoft : pressed ? c.pressed : c.segmentTrack;
+    // ✓ turns green when the open operation has everything it needs: a tap applies it.
+    const Color fill = primary ? (!enabled ? c.segmentTrack : ready ? c.success : c.accent) : on ? c.accentSoft : pressed ? c.pressed : c.segmentTrack;
+    if (ready && primary) dl->AddRect({a.x - ui.S(2), a.y - ui.S(2)}, {b.x + ui.S(2), b.y + ui.S(2)}, ui::ToU32(c.success.WithAlpha(0.35f)), ui.S(12), 0, ui.S(3));
     dl->AddRectFilled(a, b, ui::ToU32(fill), ui.S(10));
     if (on && !primary) dl->AddRect(a, b, ui::ToU32(c.accentSoftBorder), ui.S(10));
     const float is = ui.S(22);
@@ -354,7 +356,11 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
                     if (clicked) m.cancelPressed = true;
                     break;
                 default:
-                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, m.boxHeld, true, true, &clicked, &held);
+                {
+                    const OperationEditor* op = app.ops.Active();
+                    const bool ready = op && op->HasApply() && !m.boxMode && op->Ready(session);
+                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, m.boxHeld, true, true, &clicked, &held, ready);
+                }
                     if (clicked) m.okPressed = true;
                     if (held) m.okLongPressed = true;   // a long press confirms the operation, cursor or not
                     break;

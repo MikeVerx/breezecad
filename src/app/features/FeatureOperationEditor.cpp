@@ -245,6 +245,18 @@ void FeatureOperationEditor::PickPlane(AppContext& app, Session& session, Object
     }
 }
 
+bool FeatureOperationEditor::Ready(Session& session) const {
+    const doc::Feature* f = Edited(session);
+    return f && (f->status.state == doc::FeatureState::Ok || f->status.state == doc::FeatureState::Warning);
+}
+
+bool FeatureOperationEditor::StepBack(AppContext& app, Session& session) {
+    doc::Feature* f = Edited(session);
+    if (!f || !PopPick(*f)) return false;
+    Changed(session);
+    return true;
+}
+
 bool FeatureOperationEditor::ParameterField(AppContext& app, Session& session, const char* id, std::string& text,
                                             Parameter& parameter, float width, bool focus, bool showFx) {
     ui::Ui& ui = app.ui;
@@ -271,10 +283,13 @@ bool FeatureOperationEditor::ParameterField(AppContext& app, Session& session, c
         changed = true;
     }
     // Enter finishes the operation, as the "Готово Enter" button says.
-    if (r.submitted && parameter.error.empty()) app.Later([&app, &session, this] { Done(app, session); });
     // Esc too: the field has the focus as soon as the panel opens, and Esc
     // should cancel the operation as the panel says, not just leave the field.
-    if (r.cancelled) app.Later([&app, &session, this] { Cancel(app, session); });
+    // Not on the phone: there ✓ at a field only enters the number and ✕ only
+    // leaves the field (the author, 18.10.2026); the row's ✓ / ✕ do the rest.
+    const bool phone = app.shell.mobile.phone;
+    if (r.submitted && parameter.error.empty() && !phone) app.Later([&app, &session, this] { Done(app, session); });
+    if (r.cancelled && !phone) app.Later([&app, &session, this] { Cancel(app, session); });
     if (r.fxClicked) ImGui::OpenPopup("##fx");
     ui::FontScope font(ui.fonts.body);   // before Begin: must outlive the End call
     if (ImGui::BeginPopup("##fx")) {

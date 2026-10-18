@@ -1,6 +1,7 @@
 #include "app/mobile/TouchInput.h"
 
 #include "app/Operations.h"
+#include "app/features/OperationEditors.h"
 #include "app/mobile/MobileLayout.h"
 #include "app/sketch/SketchEditor.h"
 #include "core/Log.h"
@@ -480,6 +481,13 @@ void TouchInput::RunRowButtons(AppContext& app) {
             io.AddKeyEvent(ImGuiKey_Enter, true);
             io.AddKeyEvent(ImGuiKey_Enter, false);
             myQueued = std::max(myQueued, 3);
+        } else if (OperationEditor* op = app.ops.Active(); op && !m.boxMode && app.Doc() && op->HasApply() && op->Ready(*app.Doc())) {
+            // Everything needed is chosen (✓ is green): it makes the feature and the
+            // operation stays open for the next one (the author, 18.10.2026). A long
+            // press is «Готово» (commit and close).
+            app.Later([&app, op] {
+                if (app.ops.Active() == op && app.Doc()) op->Apply(app, *app.Doc());
+            });
         } else if (cursor && m.boxMode) {
             // A frame with the cursor: OK at one corner, OK at the other.
             Pos(m.cursorTip);

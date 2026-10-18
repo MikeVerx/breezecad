@@ -390,6 +390,14 @@ void KeepInView(AppContext& app, const Box3& box) {
 
 void CancelPressed(AppContext& app) {
     Session* s = app.Doc();
+    // An operation: ✕ takes back the last pick (Контур 2, then Контур 1); when nothing is
+    // left to take back it closes the operation (the author, 18.10.2026).
+    if (s && !app.shell.paletteOpen) {
+        if (OperationEditor* open = app.ops.Active()) {
+            if (!open->StepBack(app, *s)) open->Cancel(app, *s);
+            return;
+        }
+    }
     if (s && !app.shell.paletteOpen && !app.ops.Active() && !app.shell.measuring && s->mode == EditMode::Sketch) {
         app.sketch.Escape(app, *s, false);
         return;

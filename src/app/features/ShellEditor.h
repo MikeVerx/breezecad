@@ -6,6 +6,7 @@
 
 #include "app/features/FeatureOperationEditor.h"
 #include "core/I18n.h"
+#include "document/ShellFeature.h"
 
 namespace bz::app {
 
@@ -19,6 +20,12 @@ public:
     std::string Hint() const override;
 
 protected:
+    bool PopPick(doc::Feature& feature) override {
+        auto& faces = static_cast<doc::ShellFeature&>(feature).faces;
+        if (faces.empty()) return false;
+        faces.pop_back();
+        return true;
+    }
     const char* Icon() const override { return "tree-shell"; }
     void LoadTexts(const doc::Feature& feature) override;
     void DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) override;
