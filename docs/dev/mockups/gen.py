@@ -945,6 +945,141 @@ body14 = (col(16, 'Эскиз — свёрнуто', sketch14(), 530) + col(266,
 pages['14-fold-groups'] = page(body14, T14)
 
 
+# 15. FINAL set (the author 18.10): every tab and state on the phone, everything approved in one style.
+FIN_CSS = R7C_CSS + P9_CSS.replace(R7C_CSS, '') + """
+.g7 .r .op{background:var(--accSoft);outline:1px solid var(--accB);flex-direction:column;gap:0}
+.g7 .r .op i{font-style:normal;font-size:9px;color:#9db6ff;line-height:1}
+.tree7{padding:4px 10px;line-height:32px}
+.tree7 div{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.tree7 .on{background:var(--accSoft);border-radius:7px;margin:0 -6px;padding:0 6px;color:#cfdcff}
+"""
+
+
+def tabs_tree():
+    return (f'<div class="tabs"><div class="tab on" style="flex:1">{icon("ui-tree", 16, "#E6E8EB")}Дерево</div>'
+            f'<div class="tab">{icon("ui-wrench", 16)}</div><div class="tab">{icon("ui-dimension", 16)}</div></div>')
+
+
+def b1_tree(items, sel=None):
+    rows = ''.join(f'<div class="{"on" if t == sel else ""}" style="padding-left:{lvl * 14}px">{icon(i, 16)}{t}</div>' for lvl, i, t in items)
+    return f'<div class="abs b1">{tabs_tree()}<div class="tree7">{rows}</div>{row7(cursor=False)}</div>'
+
+
+PART_TREE = [(0, 'tree-part', 'Кронштейн'), (1, 'tree-origin', 'Начало координат'), (1, 'tree-sketch', 'Эскиз1'),
+             (1, 'tree-extrude', 'Выдавливание1'), (1, 'tree-sketch', 'Эскиз2'), (1, 'tree-hole', 'Отверстие1'), (1, 'tree-fillet', 'Скругление1')]
+ASM_TREE = [(0, 'tree-assembly', 'Узел крепления'), (1, 'tree-origin', 'Начало координат'), (1, 'tree-component', 'Кронштейн:1'),
+            (1, 'tree-component', 'Фланец:1'), (1, 'tree-component', 'Винт M6:1'), (1, 'tree-component', 'Винт M6:2'), (1, 'a-mate', 'Зависимости (4)')]
+
+
+def b2_full(groups, status, finish=False, fps='74'):
+    return ('<div class="abs b2"><div class="brow" style="height:38px;gap:8px;padding:0 8px">'
+            f'<span style="font-size:11px;color:#4CBB7F;font-family:monospace">{fps}</span><div class="search">{icon("ui-search", 14)}Поиск</div></div>'
+            + (f'<div class="fin">{icon("ui-check", 16, "#9db6ff")}Завершить эскиз</div>' if finish else '')
+            + groups + status + '</div>')
+
+
+def tabs_island(names, on):
+    t = ''.join(f'<div class="t{" on" if n == on else ""}">{n}</div>' for n in names)
+    return f'<div class="abs isl" style="left:84px;top:8px">{icon("ui-arrow-left", 16)}{t}</div>'
+
+
+def view_full(inner, top_island, sketch=False):
+    bg = (f'<div class="abs view" style="background:none">{GRID}{AXES}' if sketch else '<div class="abs view">')
+    return bg + inner + AXIS3 * (not sketch) + islands7(top_island) + '</div>'
+
+
+MODEL_AT = f'<div class="abs" style="left:110px;top:90px">{MODEL}</div>'
+SK_PROFILE = ('<svg class="abs" style="left:110px;top:70px" width="300" height="200"><path d="M30 126H250V100H150V20H110V100H30Z" fill="rgba(110,155,255,.07)" '
+              'stroke="#E6E8EB" stroke-width="1.6"/><circle cx="70" cy="113" r="7" fill="none" stroke="#E6E8EB" stroke-width="1.4"/>'
+              '<circle cx="210" cy="113" r="7" fill="none" stroke="#E6E8EB" stroke-width="1.4"/>'
+              '<path d="M30 150H250M30 144v12M250 144v12" stroke="#6E9BFF" stroke-width="1"/><text x="128" y="146" fill="#9db6ff" font-size="11" font-family="Plex">120</text></svg>')
+
+G_MODEL = (g7x('ЭСКИЗ И РАБ. ЭЛЕМЕНТЫ', ['sketch', 'work-plane', 'work-axis', 'work-point'])
+           + g7x('СОЗДАТЬ', ['extrude', 'revolve', 'sweep', 'loft', 'coil'])
+           + fold('ИЗМЕНИТЬ', ['hole', 'fillet', 'chamfer'], ['thread', 'shell', 'cut-section'])
+           + g7x('МАССИВ', ['pattern-rect', 'pattern-circular', 'mirror'])
+           + g7x('ДИАГНОСТИКА', ['measure', 'section', 'mass-properties', 'interference'])
+           + g7x('ИЗДЕЛИЯ И ЭКСПОРТ', ['library', 'export']))
+
+
+def g_sketch(active=None):
+    def gx(title, names):
+        return g7(title, names, (active,) if active else ())
+    return (gx('РАЗМЕРЫ', ['sk-dimension', 'dim-arrange'])
+            + gx('СОЗДАТЬ', ['sk-line', 'sk-circle', 'sk-arc', 'sk-rectangle', 'sk-point', 'sk-spline', 'sk-text'])
+            + fold('ЗАВИСИМОСТИ', C_SHOWN, C_REST) + fold('ИЗМЕНИТЬ', M_SHOWN, M_REST)
+            + g7x('МАССИВ И МОДЕЛЬ', ['sk-pattern-rect', 'sk-pattern-circular', 'sk-mirror', 'sk-project', 'sk-project-fixed']))
+
+
+G_VIEW = (g7x('СТИЛЬ ОТОБРАЖЕНИЯ', ['ds-shaded', 'ds-shaded-edges', 'ds-wireframe', 'ds-hidden-lines', 'ds-transparent'])
+          + g7x('ЦВЕТА', ['appearance', 'view-background'])
+          + g7x('ОРИЕНТАЦИЯ', ['view-home', 'view-fit', ('tree-plane', 'Ф'), ('tree-plane', 'В'), ('tree-plane', 'П')]))
+G_ASM = (g7x('КОМПОНЕНТ', ['place-component', 'library', 'pattern-rect'])
+         + fold('ЗАВИСИМОСТИ', ['a-mate', 'a-insert', 'a-axis'], ['a-angle', 'a-tangent'])
+         + fold('СОЕДИНЕНИЯ', ['j-rotational', 'j-slider', 'j-rigid'], ['j-cylindrical', 'j-planar', 'j-ball'])
+         + g7x('ПОЛОЖЕНИЕ', ['move-component', 'rotate-component', 'ui-lock'])
+         + g7x('ДИАГНОСТИКА И ЭКСПОРТ', ['measure', 'section', 'interference', 'export']))
+ASM_MODEL = ('<div class="abs" style="left:90px;top:60px;transform:scale(.9);transform-origin:0 0">' + MODEL + '</div>'
+             '<svg class="abs" style="left:330px;top:110px" width="90" height="110"><path d="M10 40l35-17 35 17v40l-35 17-35-17z" fill="#8c95a3"/>'
+             '<path d="M10 40l35 17 35-17" fill="none" stroke="#c3c9d1"/><path d="M45 57v40" stroke="#5f6672"/></svg>')
+STRIP_ASM = strip().replace('Кронштейн</div><div class="chip off">Фланец', 'Кронштейн</div><div class="chip off">Фланец</div><div class="chip">Узел крепления')
+
+FIN = {}
+# F1. 3D-model, nothing open.
+FIN['F1-model'] = (hotbar7() + b1_tree(PART_TREE) + view_full(MODEL_AT, tabs_island(['3D-модель', 'Эскиз', 'Вид'], '3D-модель'))
+                   + b2_full(G_MODEL, status7('tree-part', 'Кронштейн', '3D-модель')) + strip())
+# F2. Sketch, nothing open (the Линза cursor resting at the centre).
+FIN['F2-sketch'] = (hotbar7() + b1_tree(PART_TREE, 'Эскиз2')
+                    + view_full(SK_PROFILE + '<svg class="abs" style="left:0;top:0" width="509" height="372">' + dropA(330, 290, 330, 226, B) + '</svg>',
+                                tabs_island(['3D-модель', 'Эскиз', 'Вид'], 'Эскиз'), True)
+                    + b2_full(g_sketch(), status7('tree-sketch', 'Эскиз2', 'Эскиз'), True, '107') + strip())
+# F3. Sketch, the rectangle tool: the way island + the line type island; the cursor snapped to a corner.
+ti_f3 = ti_7a2
+FIN['F3-sketch-rect'] = (hotbar7() + b1_7a
+                         + view_full('<div class="abs" style="left:170px;top:116px;width:200px;height:80px;border:1.6px dashed #6E9BFF;background:rgba(110,155,255,.06)"></div>'
+                                     '<div class="abs" style="left:166px;top:112px;width:9px;height:9px;border-radius:50%;background:#fff"></div>'
+                                     + '<svg class="abs" style="left:0;top:0" width="509" height="372">' + dropA(370, 260, 370, 196, G, 'snap') + '</svg>', ti_f3, True)
+                         + b2_full(g_sketch('sk-rectangle'), status7('sk-rectangle', 'Прямоугольник', 'Эскиз'), True, '107') + strip())
+# F4. The extrude: the icon island, contours in block 1, a green ✓.
+FIN['F4-extrude'] = (hotbar7() + b1_7b + view_full(MODEL_AT + PREVIEW, ti_7c)
+                     + b2_full(G_MODEL.replace(g7x('СОЗДАТЬ', ['extrude', 'revolve', 'sweep', 'loft', 'coil']), g7('СОЗДАТЬ', ['extrude', 'revolve', 'sweep', 'loft', 'coil'], ('extrude',))),
+                               status7('extrude', 'Выдавливание', '3D-модель'), False, '72') + strip()
+                     + '<div class="abs tip" style="left:614px;top:62px">Насквозь</div>')
+# F5. Вид.
+FIN['F5-view'] = (hotbar7() + b1_tree(PART_TREE) + view_full(MODEL_AT, tabs_island(['3D-модель', 'Эскиз', 'Вид'], 'Вид'))
+                  + b2_full(G_VIEW, status7('tree-part', 'Кронштейн', 'Вид')) + strip())
+# F6. The assembly.
+FIN['F6-assembly'] = (hotbar7() + b1_tree(ASM_TREE, 'Кронштейн:1') + view_full(ASM_MODEL, tabs_island(['Сборка', 'Вид'], 'Сборка'))
+                      + b2_full(G_ASM, status7('tree-assembly', 'Узел крепления', 'Сборка')) + STRIP_ASM)
+# F7–F9. Appearance: the tool, the library over block 1, «Создать цвет».
+B2_LOOK = b2_full(G_VIEW.replace(g7x('ЦВЕТА', ['appearance', 'view-background']), g7('ЦВЕТА', ['appearance', 'view-background'], ('appearance',))),
+                  status7('appearance', 'Внешний вид', 'Вид'))
+FIN['F7-look'] = hotbar7() + b1_9a + view_9 + B2_LOOK + strip()
+FIN['F8-look-library'] = hotbar7() + b1_9a + pop_b + view_9 + B2_LOOK + strip()
+FIN['F9-look-create'] = hotbar7() + b1_9a + pop_c + view_9 + B2_LOOK + strip()
+for k, v in FIN.items():
+    pages[k] = page(v, FIN_CSS)
+
+# F10. The cursor — «Линза», final: the states, and how it looks on the light theme too.
+SIZES['F10-cursor'] = (1120, 330)
+LIGHT_GRID = ('background-image:linear-gradient(#dfe3e8 1px,transparent 1px),linear-gradient(90deg,#dfe3e8 1px,transparent 1px);'
+              'background-size:22px 22px;background-color:#f6f7f9')
+cur_states = (f'<div class="cc w" style="left:12px;top:12px;width:740px;height:300px"><div class="t">Курсор «Линза» — состояния</div><div class="lineA"></div>'
+              '<svg style="position:absolute;left:0;top:0" width="740" height="300">'
+              + dropA(80, 200, 80, 136, B) + dropA(230, 200, 230, 118, G, 'snap') + dropA(380, 200, 380, 136, B, 'press')
+              + dropA(530, 200, 530, 136, '#F5A524') + dropA(670, 200, 670, 136, '#8E959D')
+              + '</svg>' + ''.join(f'<div class="st11" style="left:{x - 45}px;top:84px">{t}</div>' for x, t in
+                                   [(80, 'покой'), (230, 'привязка к точке'), (380, 'нажата ✓'), (530, 'точный режим'), (670, 'курсор выкл.<br>(тап — выбор)')])
+              + '<div class="d">Синий — работа, зелёный — привязка (значок формы цели), заливка — нажатие ✓, оранжевый — точный режим. '
+                'Серый — подсказка, где был курсор, когда он выключен.</div></div>')
+cur_light = (f'<div class="cc" style="left:764px;top:12px;width:344px;height:300px;{LIGHT_GRID};border-color:#d7dbe0">'
+             '<div class="t" style="color:#1F2328">Светлая тема</div><div class="lineA" style="background:#e08a8d"></div>'
+             '<svg style="position:absolute;left:0;top:0" width="344" height="300">' + dropA(110, 200, 110, 136, '#2F5CD0')
+             + dropA(240, 200, 240, 118, '#1E9E57', 'snap') + '</svg>'
+             '<div class="d" style="color:#4B5563">Тень и ореол отделяют курсор от чертежа и на светлом фоне.</div></div>')
+pages['F10-cursor'] = page(cur_states + cur_light, D11_CSS + 'body{height:330px}')
+
+
 if __name__ == '__main__':
     only = sys.argv[1:]
     with sync_playwright() as p:
