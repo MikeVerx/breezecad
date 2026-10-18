@@ -216,8 +216,15 @@ void DrawPhoneLibrary(AppContext& app) {
         const ImVec2 a{lx, bottom - addH}, b{lx + lw, bottom};
         if (Box(ui, "##phone-lib-add", a, b, false, ui.S(12))) ImGui::OpenPopup("##phone-lib-add-menu");
         BoxText(ui, a, b, Tr("+ Пакет / моя деталь"), c.textSecondary, true, ui.fonts.body, ui.S(12.5f));
-        ImGui::SetNextWindowPos({a.x, a.y}, ImGuiCond_Always, {0, 1});
-        if (ImGui::BeginPopup("##phone-lib-add-menu")) {
+        ImGui::SetNextWindowPos({a.x, a.y - ui.S(6)}, ImGuiCond_Always, {0, 1});
+        ImGui::SetNextWindowSize({ui.S(300), 0});
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui.S(14, 10));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ui.S(12));
+        ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, {0, 0.5f});
+        const bool menu = ImGui::BeginPopup("##phone-lib-add-menu");
+        ImGui::PopStyleVar(3);
+        if (menu) {
+            ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());   // over the full-screen window, which comes to the front every frame
             if (ImGui::Selectable(Tr("Добавить пакет стандартных изделий…"), false, 0, {0, ui.S(40)})) InstallStandardPack(app);
             const bool partOpen = app.Doc() && !app.workspace.ShowsHome() && !InAssembly(app);
             if (ImGui::Selectable(Tr("Моя деталь — в библиотеку…"), false, partOpen ? 0 : ImGuiSelectableFlags_Disabled, {0, ui.S(40)})) {

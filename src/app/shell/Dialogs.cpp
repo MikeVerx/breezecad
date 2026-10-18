@@ -233,8 +233,10 @@ ShellState::Library::Pick PickFor(const parts::StandardInfo& s, const ShellState
     }
     const parts::StandardInfo* old = parts::FindStandard(from.standard);
     p.size = old ? parts::MatchingSize(*old, from.size, s) : parts::Sizes(s).front();
-    if (const std::optional<parts::LengthRange> range = parts::FreeLength(s)) {   // any length: keep the one there was
-        p.length = from.length >= range->min && from.length <= range->max ? from.length : range->preset;
+    if (const std::optional<parts::LengthRange> range = parts::FreeLength(s)) {
+        // Any length: keep the one there was if it was a cut length too (a bolt's 38 mm is no length for a tube).
+        const bool wasFree = old && parts::FreeLength(*old);
+        p.length = wasFree && from.length >= range->min && from.length <= range->max ? from.length : range->preset;
         return p;
     }
     const std::vector<double> lengths = parts::Lengths(s, p.size);
