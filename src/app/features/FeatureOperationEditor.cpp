@@ -136,9 +136,10 @@ void FeatureOperationEditor::Section(AppContext& app, const char* label) const {
     ImGui::Dummy({0, app.ui.S(2)});
 }
 
-void FeatureOperationEditor::Gap(AppContext& app) const { ImGui::Dummy({0, app.ui.S(12)}); }
+void FeatureOperationEditor::Gap(AppContext& app) const { ImGui::Dummy({0, app.ui.S(app.shell.mobile.phone ? 6 : 12)}); }
 
 void FeatureOperationEditor::Caption(AppContext& app, const char* text, float width) const {
+    if (DeferCaption(app, text)) return;   // the phone: at the panel's bottom
     ui::FontScope font(app.ui.fonts.caption);
     ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(app.ui.C().textMuted));
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
@@ -359,6 +360,7 @@ void FeatureOperationEditor::DrawPanel(AppContext& app, Session& session) {
             ImGui::PopStyleColor();
         }
     }
+    FlushCaptions(app, inner);
     ImGui::PopItemWidth();
     ImGui::EndGroup();
     ImGui::EndChild();

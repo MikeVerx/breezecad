@@ -95,4 +95,30 @@ int ToolChoice(AppContext& app, const char* id, const char* title, std::span<con
     return chosen;
 }
 
+bool DeferCaption(AppContext& app, const char* text) {
+    if (!app.shell.mobile.phone || !text || !*text) return false;
+    app.shell.mobile.deferredCaptions.emplace_back(text);
+    return true;
+}
+
+void FlushCaptions(AppContext& app, float width) {
+    auto& kept = app.shell.mobile.deferredCaptions;
+    if (kept.empty()) return;
+    ui::Ui& ui = app.ui;
+    ImGui::Dummy({0, ui.S(14)});
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::GetWindowDrawList()->AddLine(p, {p.x + width, p.y}, ui::ToU32(ui.C().dividerSoft));
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FontScope font(ui.fonts.caption);
+    ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+    for (const std::string& t : kept) {
+        ImGui::TextUnformatted(t.c_str());
+        ImGui::Dummy({0, ui.S(3)});
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::PopStyleColor();
+    kept.clear();
+}
+
 } // namespace bz::app

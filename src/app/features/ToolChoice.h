@@ -23,4 +23,10 @@ struct ChoiceItem {
 int ToolChoice(AppContext& app, const char* id, const char* title, std::span<const ChoiceItem> items, int current, float width,
                int disabledMask = 0, bool lineType = false);
 
+/// The phone (the author, 18.10.2026: block 1 must not waste room): a tool panel's explanations
+/// go to its bottom, the controls stay together at the top. True when `text` was kept for that.
+bool DeferCaption(AppContext& app, const char* text);
+/// Draws the kept explanations (small, muted, under a thin line) and forgets them.
+void FlushCaptions(AppContext& app, float width);
+
 } // namespace bz::app

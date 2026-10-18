@@ -19,7 +19,10 @@
 namespace bz::app {
 namespace {
 
+AppContext* gPanelApp = nullptr;   ///< the panel being drawn: its captions may go to its bottom (the phone)
+
 void Caption(ui::Ui& ui, const char* text, float width) {
+    if (gPanelApp && DeferCaption(*gPanelApp, text)) return;
     ui::FontScope font(ui.fonts.caption);
     ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
@@ -47,6 +50,16 @@ bool SketchEditor::HasToolPanel() const {
 }
 
 void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width) {
+    // However the panel returns: the explanations kept for the bottom are drawn there.
+    struct Bottom {
+        AppContext& app;
+        float       width;
+        ~Bottom() {
+            FlushCaptions(app, width);
+            gPanelApp = nullptr;
+        }
+    } bottom{app, width - app.ui.S(28)};
+    gPanelApp = &app;
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     const UnitSystem& units = session.doc.units;
