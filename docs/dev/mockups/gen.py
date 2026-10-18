@@ -891,6 +891,60 @@ body13 = (col(16, 'Эскиз (целиком)', sketch_col, 690) + col(266, 'В
 pages['13-other-tabs'] = page(body13, T13)
 
 
+# 14. Folding groups (the author 18.10): «Зависимости» and «Изменить» show one row — the opener + 3 working buttons.
+# The opener is always on the side of the view (block 2 on the right -> the opener is the leftmost; mirrored for lefties).
+SIZES['14-fold-groups'] = (1000, 620)
+T14 = T13.replace('body{width:1000px;height:730px}', 'body{width:1000px;height:620px}') + """
+.g7 .r .op{background:var(--accSoft);outline:1px solid var(--accB);flex-direction:column;gap:0}
+.g7 .r .op i{font-style:normal;font-size:9px;color:#9db6ff;line-height:1}
+.g7 .r .op.open{background:var(--acc);outline-color:var(--acc)}
+.g7 .r .op.open i{color:#fff}
+"""
+
+
+def fold(title, shown, rest, opened=False):
+    chev = icon('ui-chevron-down', 14, '#fff' if opened else '#9db6ff', 'transform:rotate(180deg)' if opened else '')
+    cells = f'<div class="op{" open" if opened else ""}">{chev}<i>{"" if opened else "+" + str(len(rest))}</i></div>'
+    cells += ''.join(f'<div>{icon(n, 20, "#fff")}</div>' for n in shown)
+    if opened:
+        cells += ''.join(f'<div>{icon(n, 20, "#fff")}</div>' for n in rest)
+    return f'<div class="g7"><div class="h">{title}</div><div class="r">{cells}</div></div>'
+
+
+C_SHOWN, C_REST = ['c-coincident', 'c-horizontal', 'c-vertical'], ['c-fix', 'c-parallel', 'c-perpendicular', 'c-equal', 'c-midpoint',
+                                                                       'c-tangent', 'c-concentric', 'c-symmetric', 'c-show-all']
+M_SHOWN, M_REST = ['sk-trim', 'sk-extend', 'sk-offset'], ['sk-fillet', 'sk-move', 'sk-rotate', 'sk-copy', 'sk-scale', 'sk-split', 'ui-trash']
+
+
+def sketch14(open_c=False):
+    return (HEAD + f'<div class="fin">{icon("ui-check", 16, "#9db6ff")}Завершить эскиз</div>'
+            + g7x('РАЗМЕРЫ', ['sk-dimension', 'dim-arrange'])
+            + g7x('СОЗДАТЬ', ['sk-line', 'sk-circle', 'sk-arc', 'sk-rectangle', 'sk-point', 'sk-spline', 'sk-text'])
+            + fold('ЗАВИСИМОСТИ', C_SHOWN, C_REST, open_c)
+            + fold('ИЗМЕНИТЬ', M_SHOWN, M_REST)
+            + g7x('МАССИВ И МОДЕЛЬ', ['sk-pattern-rect', 'sk-pattern-circular', 'sk-mirror', 'sk-project', 'sk-project-fixed'])
+            + g7x('ФОРМАТ И ВИД', ['sk-construction', 'sk-centerline', 'c-perpendicular', 'sk-look-at']))
+
+
+model14 = (HEAD + g7x('ЭСКИЗ И РАБ. ЭЛЕМЕНТЫ', ['sketch', 'work-plane', 'work-axis', 'work-point'])
+           + g7x('СОЗДАТЬ', ['extrude', 'revolve', 'sweep', 'loft', 'coil'])
+           + fold('ИЗМЕНИТЬ', ['hole', 'fillet', 'chamfer'], ['thread', 'shell', 'cut-section'])
+           + g7x('МАССИВ', ['pattern-rect', 'pattern-circular', 'mirror'])
+           + g7x('ДИАГНОСТИКА', ['measure', 'section', 'mass-properties', 'interference'])
+           + g7x('ИЗДЕЛИЯ И ЭКСПОРТ', ['library', 'export']))
+FOLD14 = 30 + 412 - 28
+body14 = (col(16, 'Эскиз — свёрнуто', sketch14(), 530) + col(266, 'Эскиз — «Зависимости» раскрыты', sketch14(True), 575)
+          + col(516, '3D-модель', model14, 445)
+          + ''.join(f'<div class="fold" style="left:{x - 10}px;top:{FOLD14}px"></div>' for x in (16, 266, 516))
+          + note('Свёрнуто: раскрывашка + 3 рабочие кнопки.<br>На раскрывашке — сколько спрятано («+9»).<br>'
+                 'Раскрывашка всегда со стороны вида:<br>блок 2 справа — она слева; у левши — справа.<br><br>'
+                 'Тап — группа раскрывается на месте<br>(первый ряд не двигается), стрелка вверх.<br>'
+                 'Повторный тап — свернуть. Раскрытость<br>запоминается.<br><br>'
+                 'Эскиз свёрнутый: размеры, создание,<br>зависимости и «Изменить» — без прокрутки<br>(было — только до зависимостей).', 'left:740px;top:40px')
+          + note('Какие 3 кнопки на виду — моё<br>предположение: совпадение, горизонталь,<br>вертикаль; обрезка, удлинение,<br>эквидистанта; отверстие, скругление, фаска.', 'left:740px;top:390px'))
+pages['14-fold-groups'] = page(body14, T14)
+
+
 if __name__ == '__main__':
     only = sys.argv[1:]
     with sync_playwright() as p:
