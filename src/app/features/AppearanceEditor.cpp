@@ -1,4 +1,5 @@
 #include "app/features/AppearanceEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
@@ -849,10 +850,9 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     const float inner = width - ui.S(28);
 
     // What is painted: a whole object (the default) or single faces.
-    Section(app, Tr("Что красить"));
-    static constexpr std::array<const char*, 2> targets{N_("Объект"), N_("Поверхность")};
+    static constexpr std::array<ChoiceItem, 2> targets{{{"tree-part", N_("Тело целиком")}, {"work-plane", N_("Грань")}}};
     const int target = myFaces ? 1 : 0;
-    if (const int t = ui::Segmented(ui, "look-target", targets, target, 2, inner); t != target) {
+    if (const int t = ToolChoice(app, "look-target", N_("Что красить"), targets, target, inner); t != target) {
         myFaces = t == 1;
         myTargetsChosen = myChosen;   // the next choice goes on the targets in the new mode
     }
@@ -869,10 +869,9 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     // Assembly: where the look is kept.
     if (session.assembly) {
         ImGui::Dummy({0, ui.S(8)});
-        Section(app, Tr("Где сохранить"));
-        static constexpr std::array<const char*, 2> places{N_("Только в сборке"), N_("В детали")};
+        static constexpr std::array<ChoiceItem, 2> places{{{nullptr, N_("Только в сборке")}, {nullptr, N_("В детали")}}};
         const int place = myToPart ? 1 : 0;
-        if (const int p = ui::Segmented(ui, "look-place", places, place, 2, inner); p != place) myToPart = p == 1;
+        if (const int p = ToolChoice(app, "look-place", N_("Где сохранить"), places, place, inner); p != place) myToPart = p == 1;
         Caption(app, myToPart ? Tr("По «Готово» вид запишется в файлы деталей: изменятся все их копии, в этой и других сборках.")
                               : Tr("Вид только для этой сборки: файлы деталей не меняются."),
                 inner);

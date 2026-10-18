@@ -1,4 +1,5 @@
 #include "app/features/CopyEditors.h"
+#include "app/features/ToolChoice.h"
 
 #include "core/I18n.h"
 #include "document/HoleFeature.h"
@@ -140,10 +141,9 @@ void PatternEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fe
     DrawSources(app, session, f, width);
     Gap(app);
 
-    Section(app, Tr("Вид массива"));
-    static constexpr std::array<const char*, 2> kinds{N_("Прямоугольный"), N_("Круговой")};
+    static constexpr std::array<ChoiceItem, 2> kinds{{{"pattern-rect", N_("Прямоугольный")}, {"pattern-circular", N_("Круговой")}}};
     const int current = static_cast<int>(f.kind);
-    const int chosen = ui::Segmented(app.ui, "kind", kinds, current, 2, width);
+    const int chosen = ToolChoice(app, "kind", N_("Вид массива"), kinds, current, width);
     if (chosen != current) {
         f.kind = static_cast<PatternKind>(chosen);
         myKind = f.kind;
@@ -170,10 +170,9 @@ void PatternEditor::DrawRectangular(AppContext& app, Session& session, doc::Patt
     ParameterField(app, session, "spacing1", mySpacing1, f.spacing1, half, false);
     Gap(app);
 
-    Section(app, Tr("Направление 2"));
-    static constexpr std::array<const char*, 4> second{N_("Нет"), "X", "Y", "Z"};
+    static constexpr std::array<ChoiceItem, 4> second{{{nullptr, N_("Нет")}, {nullptr, "X"}, {nullptr, "Y"}, {nullptr, "Z"}}};
     const int current = f.useDirection2 ? static_cast<int>(f.direction2) + 1 : 0;
-    const int chosen = ui::Segmented(ui, "dir2", second, current, 4, width);
+    const int chosen = ToolChoice(app, "dir2", N_("Направление 2"), second, current, width);
     if (chosen != current) {
         f.useDirection2 = chosen > 0;
         if (chosen > 0) f.direction2 = static_cast<ModelAxis>(chosen - 1);
@@ -274,10 +273,9 @@ void MirrorEditor::DrawInViewport(AppContext& app, Session& session, const Viewp
 
 void MirrorEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::MirrorFeature&>(feature);
-    Section(app, Tr("Что отражать"));
-    static constexpr std::array<const char*, 2> what{N_("Операции"), N_("Тело целиком")};
+    static constexpr std::array<ChoiceItem, 2> what{{{nullptr, N_("Операции")}, {nullptr, N_("Тело целиком")}}};
     const int current = f.wholeBody ? 1 : 0;
-    if (const int chosen = ui::Segmented(app.ui, "mirror-what", what, current, 2, width); chosen != current) {
+    if (const int chosen = ToolChoice(app, "mirror-what", N_("Что отражать"), what, current, width); chosen != current) {
         f.wholeBody = chosen == 1;
         Changed(session);
     }

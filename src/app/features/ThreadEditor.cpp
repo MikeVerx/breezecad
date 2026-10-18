@@ -1,4 +1,5 @@
 #include "app/features/ThreadEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/Format.h"
 #include "ui/Menus.h"
@@ -102,11 +103,10 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
     }
     Gap(app);
 
-    Section(app, Tr("Вид"));
     {
-        static constexpr std::array<const char*, 2> kinds{N_("Настоящая"), N_("Условная")};
+        static constexpr std::array<ChoiceItem, 2> kinds{{{nullptr, N_("Настоящая")}, {nullptr, N_("Условная")}}};
         const int current = f.cosmetic ? 1 : 0;
-        if (const int picked = ui::Segmented(ui, "kind", kinds, current, 2, width); picked != current) {
+        if (const int picked = ToolChoice(app, "kind", N_("Вид"), kinds, current, width); picked != current) {
             f.cosmetic = picked == 1;
             Changed(session);
         }
@@ -122,11 +122,10 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
     if (ParameterField(app, session, "pitch", myPitch, f.pitch, width, myFocusFirstField)) myAutoPitch = false;
     Gap(app);
 
-    Section(app, Tr("Длина"));
     {
-        static constexpr std::array<const char*, 2> labels{N_("Вся грань"), N_("На длину")};
+        static constexpr std::array<ChoiceItem, 2> labels{{{nullptr, N_("Вся грань")}, {nullptr, N_("На длину")}}};
         const int current = f.fullLength ? 0 : 1;
-        if (const int chosen = ui::Segmented(ui, "extent", labels, current, 2, width); chosen != current) {
+        if (const int chosen = ToolChoice(app, "extent", N_("Длина"), labels, current, width); chosen != current) {
             f.fullLength = chosen == 0;
             Changed(session);
         }
@@ -135,19 +134,18 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
         ImGui::Dummy({0, ui.S(6)});
         ParameterField(app, session, "length", myLength, f.length, width, false);
         ImGui::Dummy({0, ui.S(6)});
-        static constexpr std::array<const char*, 2> ends{N_("С начала"), N_("С другого конца")};
+        static constexpr std::array<ChoiceItem, 2> ends{{{nullptr, N_("С начала")}, {nullptr, N_("С другого конца")}}};
         const int current = f.fromOtherEnd ? 1 : 0;
-        if (const int chosen = ui::Segmented(ui, "end", ends, current, 2, width); chosen != current) {
+        if (const int chosen = ToolChoice(app, "end", N_("Откуда"), ends, current, width); chosen != current) {
             f.fromOtherEnd = chosen == 1;
             Changed(session);
         }
     }
     Gap(app);
 
-    Section(app, Tr("Направление"));
-    static constexpr std::array<const char*, 2> hands{N_("Правая"), N_("Левая")};
+    static constexpr std::array<ChoiceItem, 2> hands{{{nullptr, N_("Правая")}, {nullptr, N_("Левая")}}};
     const int current = f.leftHanded ? 1 : 0;
-    if (const int chosen = ui::Segmented(ui, "hand", hands, current, 2, width); chosen != current) {
+    if (const int chosen = ToolChoice(app, "hand", N_("Направление"), hands, current, width); chosen != current) {
         f.leftHanded = chosen == 1;
         Changed(session);
     }

@@ -1,4 +1,5 @@
 #include "app/features/FeatureOperationEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/Format.h"
 #include "app/shell/Shell.h"
@@ -211,11 +212,11 @@ bool FeatureOperationEditor::PickOriginalFaces(AppContext& app, Session& session
 }
 
 void FeatureOperationEditor::PlaneChoice(AppContext& app, Session& session, ObjectId& plane, float width) {
-    static constexpr std::array<const char*, 3> labels{"XY", "XZ", "YZ"};
+    static constexpr std::array<ChoiceItem, 3> labels{{{nullptr, "XY"}, {nullptr, "XZ"}, {nullptr, "YZ"}}};
     static constexpr std::array<ObjectId, 3> ids{doc::origin::kPlaneXY, doc::origin::kPlaneXZ, doc::origin::kPlaneYZ};
     const auto at = std::ranges::find(ids, plane);
     const int current = at != ids.end() ? static_cast<int>(at - ids.begin()) : -1;
-    const int chosen = ui::Segmented(app.ui, "plane", labels, current, 3, width);
+    const int chosen = ToolChoice(app, "plane", N_("Плоскость"), labels, current, width);
     if (chosen != current && chosen >= 0) {
         plane = ids[static_cast<std::size_t>(chosen)];
         Changed(session);

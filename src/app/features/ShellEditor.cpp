@@ -1,4 +1,5 @@
 #include "app/features/ShellEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "core/I18n.h"
 #include "document/ShellFeature.h"
@@ -57,10 +58,9 @@ void ShellEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feat
     ParameterField(app, session, "thickness", myThickness, f.thickness, width, myFocusFirstField);
     Gap(app);
 
-    Section(app, Tr("Направление"));
-    static constexpr std::array<const char*, 2> sides{N_("Внутрь"), N_("Наружу")};
+    static constexpr std::array<ChoiceItem, 2> sides{{{nullptr, N_("Внутрь")}, {nullptr, N_("Наружу")}}};
     const int current = f.outward ? 1 : 0;
-    if (const int chosen = ui::Segmented(ui, "side", sides, current, 2, width); chosen != current && chosen >= 0) {
+    if (const int chosen = ToolChoice(app, "side", N_("Направление"), sides, current, width); chosen != current && chosen >= 0) {
         f.outward = chosen == 1;
         Changed(session);
     }

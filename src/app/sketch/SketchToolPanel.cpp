@@ -239,9 +239,9 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
                     if (whole) myOptions.polygonSides = static_cast<int>(std::lround(*n));
                 }
                 ImGui::Dummy({0, ui.S(8)});
-                static constexpr std::array<const char*, 2> kinds{N_("Вписанный"), N_("Описанный")};
+                static constexpr std::array<ChoiceItem, 2> kinds{{{nullptr, N_("Вписанный")}, {nullptr, N_("Описанный")}}};
                 const int kind = myOptions.polygonInscribed ? 0 : 1;
-                if (const int k = ui::Segmented(ui, "kind", kinds, kind, 2, inner); k != kind) {
+                if (const int k = ToolChoice(app, "kind", N_("Многоугольник"), kinds, kind, inner); k != kind) {
                     myOptions.polygonInscribed = k == 0;
                     restart();
                 }
@@ -280,15 +280,14 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
                 ImGui::EndCombo();
             }
             ImGui::Dummy({0, ui.S(6)});
-            static constexpr std::array<const char*, 4> styles{N_("Обычный"), N_("Жирный"), N_("Курсив"), N_("Жирн. курсив")};
-            myOptions.textStyle = ui::Segmented(ui, "text-style", styles, myOptions.textStyle, 2, inner);
+            static constexpr std::array<ChoiceItem, 4> styles{{{nullptr, N_("Обычный")}, {nullptr, N_("Жирный")}, {nullptr, N_("Курсив")}, {nullptr, N_("Жирн. курсив")}}};
+            myOptions.textStyle = ToolChoice(app, "text-style", N_("Начертание"), styles, myOptions.textStyle, inner);
             ImGui::Dummy({0, ui.S(6)});
-            ui::FieldLabel(ui, Tr("Выравнивание в рамке"));
-            static constexpr std::array<const char*, 3> across{N_("Влево"), N_("По центру"), N_("Вправо")};
-            myOptions.textHAlign = ui::Segmented(ui, "text-h", across, myOptions.textHAlign, 3, inner);
+            static constexpr std::array<ChoiceItem, 3> across{{{nullptr, N_("Влево")}, {nullptr, N_("По центру")}, {nullptr, N_("Вправо")}}};
+            myOptions.textHAlign = ToolChoice(app, "text-h", N_("Выравнивание в рамке"), across, myOptions.textHAlign, inner);
             ImGui::Dummy({0, ui.S(4)});
-            static constexpr std::array<const char*, 3> down{N_("Вниз"), N_("Посередине"), N_("Вверх")};
-            myOptions.textVAlign = ui::Segmented(ui, "text-v", down, myOptions.textVAlign, 3, inner);
+            static constexpr std::array<ChoiceItem, 3> down{{{nullptr, N_("Вниз")}, {nullptr, N_("Посередине")}, {nullptr, N_("Вверх")}}};
+            myOptions.textVAlign = ToolChoice(app, "text-v", N_("По вертикали"), down, myOptions.textVAlign, inner);
             Caption(ui, Tr("Щелчок ставит рамку по размеру текста, протяжка задаёт её размер. Рамку можно образмерить и повернуть (уберите её горизонтальность)."), inner);
             ApplyTextOptions(session);   // the edited text follows the panel at once
             break;
@@ -301,9 +300,9 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
                                                            : Trf("Выбрано элементов: {}", mySelection.size());
             ui::FieldLabel(ui, chosen.c_str());
             ImGui::Dummy({0, ui.S(6)});
-            static constexpr std::array<const char*, 2> steps{N_("Элементы"), N_("Линия зеркала")};
+            static constexpr std::array<ChoiceItem, 2> steps{{{nullptr, N_("Элементы")}, {nullptr, N_("Линия зеркала")}}};
             const int current = myMirrorAxisStep ? 1 : 0;
-            const int chosenStep = ui::Segmented(ui, "mirror-step", steps, current, 2, inner, mySelection.empty() ? 0b10 : 0);
+            const int chosenStep = ToolChoice(app, "mirror-step", N_("Шаг"), steps, current, inner, mySelection.empty() ? 0b10 : 0);
             if (chosenStep != current) myMirrorAxisStep = chosenStep == 1;
             ImGui::Dummy({0, ui.S(10)});
             Caption(ui,
@@ -328,9 +327,9 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
                 button = Tr("Масштабировать");
                 Caption(ui, myClicks.empty() ? Tr("Щёлкните базовую точку — она останется на месте.") : Tr("Базовая точка выбрана (щелчок — другая)."), inner);
             } else if (myTool == SketchTool::PatternRect) {
-                static constexpr std::array<const char*, 2> dirs{N_("Вдоль X"), N_("Вдоль Y")};
+                static constexpr std::array<ChoiceItem, 2> dirs{{{nullptr, N_("Вдоль X")}, {nullptr, N_("Вдоль Y")}}};
                 const int current = myOptions.vertical1 ? 1 : 0;
-                if (const int d = ui::Segmented(ui, "dir", dirs, current, 2, inner); d != current) myOptions.vertical1 = d == 1;
+                if (const int d = ToolChoice(app, "dir", N_("Направление"), dirs, current, inner); d != current) myOptions.vertical1 = d == 1;
                 ImGui::Dummy({0, ui.S(8)});
                 field(Tr("Количество"), "##n1", myOptions.count1, Quantity::Scalar);
                 field(Tr("Шаг"), "##s1", myOptions.spacing1, Quantity::Length);
