@@ -160,6 +160,9 @@ Settings FromJson(const nlohmann::json& j) {
         o.hotbar.clear();
         for (const auto& id : m->value("hotbar", nlohmann::json::array()))
             if (id.is_string()) o.hotbar.push_back(id.get<std::string>());
+        o.openGroups.clear();
+        for (const auto& id : m->value("openGroups", nlohmann::json::array()))
+            if (id.is_string()) o.openGroups.push_back(id.get<std::string>());
     }
     s.shortcutsCustom = j.value("shortcutsCustom", s.shortcutsCustom);
     // Named: items() of a temporary would outlive it (ASan: stack-use-after-scope).
@@ -274,6 +277,7 @@ bool Settings::Save(const std::filesystem::path& file) const {
                     {"cursorReach", mobile.cursorReach},
                     {"scrollSpeed", mobile.scrollSpeed},
                     {"hotbar", mobile.hotbar},
+                    {"openGroups", mobile.openGroups},
                     {"askedNotifications", mobile.askedNotifications},
                     {"projectsFolderName", mobile.projectsFolderName}}},
         {"shortcutsCustom", shortcutsCustom},

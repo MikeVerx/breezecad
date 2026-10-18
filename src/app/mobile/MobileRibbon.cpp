@@ -9,12 +9,16 @@
 // corner mark shows there is more under a long press.
 #include "app/mobile/MobileLayout.h"
 
+#include "app/Session.h"
 #include "app/shell/Shell.h"
 #include "core/I18n.h"
 #include "core/Log.h"
+#include "ui/Menus.h"
 #include "ui/Widgets.h"
 
 #include <algorithm>
+#include <array>
+#include <format>
 #include <cfloat>
 #include <cmath>
 #include <cstring>
@@ -280,132 +284,271 @@ private:
     ImVec2            myGridOrigin{0, 0};
 };
 
-/// Block 2, compact (the author's default, 17.10.2026; mockup 3): a group is
-/// one row of four equal buttons. With more than four commands the one
-/// nearest the view is "›" — it opens the group as a strip over the view
-/// (DrawToolStrip), which scrolls sideways.
-class CompactSink final : public RibbonSink {
+/// Collects what the ribbon would show: every command once, with its "on" state.
+class CollectSink final : public RibbonSink {
 public:
-    CompactSink(AppContext& app, float width, bool viewOnLeft) : myApp(app), myUi(app.ui), myWidth(width), myViewOnLeft(viewOnLeft) {}
-
+    explicit CollectSink(AppContext& app) : myApp(app) {}
     AppContext& App() const override { return myApp; }
-    void BeginGroup(const char* caption) override {
-        Flush();
-        myCaption = caption ? caption : "";
-    }
-    void EndGroup() override { Flush(); }
-    void Large(const char* id, const char* caption, bool active) override { Add(id, caption, active); }
-    void Small(const char* id, const char* label, bool active) override { Add(id, label, active); }
+    void BeginGroup(const char*) override {}
+    void EndGroup() override {}
+    void Large(const char* id, const char*, bool active) override { Add(id, active); }
+    void Small(const char* id, const char*, bool active) override { Add(id, active); }
     void LargeLater(const char*, const char*) override {}
     void SmallLater(const char*, const char*) override {}
     void BeginColumn() override {}
     void EndColumn() override {}
     void BeginGrid(int) override {}
-    void Icon(const char* id, bool active) override { Add(id, nullptr, active); }
+    void Icon(const char* id, bool active) override { Add(id, active); }
     void EndGrid() override {}
 
-private:
-    void Add(const char* actionId, const char* label, bool active) {
-        const Action* a = myApp.actions.Find(actionId);
-        if (!a) return;
-        std::string text = label ? label : a->Label();
-        for (std::size_t at; (at = text.find("-\n")) != std::string::npos;) text.erase(at, 2);
-        std::replace(text.begin(), text.end(), '\n', ' ');
-        myItems.push_back({actionId, text, a->icon, active});
+    struct Entry {
+        std::string id;
+        bool active = false;
+        bool used = false;
+    };
+    std::vector<Entry> entries;
+
+    Entry* Find(const std::string& id) {
+        for (Entry& e : entries)
+            if (e.id == id) return &e;
+        return nullptr;
     }
 
-    void Flush() {
-        if (myItems.empty()) return;
-        MobileState& m = myApp.shell.mobile;
-        const ui::ThemeColors& c = myUi.C();
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        // The header, as in the list.
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        const std::string caps = Upper(myCaption);
-        dl->AddText(myUi.fonts.strong, myUi.S(10.5f), {p.x + myUi.S(12), p.y + myUi.S(10)}, ui::ToU32(c.textMuted), caps.c_str());
-        ImGui::Dummy({myWidth, myUi.S(26)});
-        p = ImGui::GetCursorScreenPos();
-        const bool more = myItems.size() > 4;
-        if (more && m.flyGroup == "*") m.flyGroup = myCaption;   // a test run: the first group that has a strip
-        const bool open = more && m.flyGroup == myCaption;
-        if (open) {
-            m.flyItems = myItems;
-            m.flyY = p.y;
+private:
+    void Add(const char* id, bool active) {
+        if (!myApp.actions.Find(id)) return;
+        if (Entry* e = Find(id)) {
+            e->active = e->active || active;
+            return;
         }
-        const float pad = myUi.S(8), gap = myUi.S(6);
-        const float cell = (myWidth - 2 * pad - 3 * gap) / 4;
-        // Every group has its own "›" and slots 0–3: the caption keeps their IDs apart
-        // (one shared ID made ImGui complain and the tap went nowhere).
-        ImGui::PushID(myCaption.c_str());
-        const float h = cell;   // square, as IconButton draws them
-        for (int slot = 0; slot < 4; ++slot) {
-            // The "›" goes to the slot nearest the view; the commands fill the rest in order.
-            const int chevronSlot = myViewOnLeft ? 0 : 3;
-            const ImVec2 a{p.x + pad + static_cast<float>(slot) * (cell + gap), p.y};
-            ImGui::SetCursorScreenPos(a);
-            ImGui::PushID(slot);
-            if (more && slot == chevronSlot) {
-                static std::string loggedMore;   // once: the emulator's check taps the first «›»
-                if (loggedMore.empty()) {
-                    loggedMore = myCaption;
-                    log::Info("Touch: more {} at {:.0f},{:.0f} size {:.0f}", myCaption, a.x, a.y, cell);
+        entries.push_back({id, active, false});
+    }
+    AppContext& myApp;
+};
+
+/// The phone's groups (the author's mockups 13, 14, F1–F9, 18.10.2026): the ribbon's
+/// commands regrouped for a thumb — the most used first, kindred groups merged. A folding
+/// group shows its first three commands and an opener; the rest come out under them.
+/// "phone.export" stands for the export commands: one button, the format in a menu.
+struct PhoneGroup {
+    const char* title;
+    std::vector<const char*> ids;
+    bool folds = false;
+};
+
+const std::vector<PhoneGroup>& PhoneGroups(AppContext& app, Session& session) {
+    static const std::vector<PhoneGroup> sketch{
+        {N_("Эскиз"), {"sketch.start"}},
+        {N_("Размеры"), {"sketch.dimension", "sketch.arrangeDimensions"}},
+        {N_("Создать"), {"sketch.line", "sketch.circle", "sketch.arc", "sketch.rectangle", "sketch.point", "sketch.spline", "sketch.text"}},
+        {N_("Зависимости"),
+         {"sketch.coincident", "sketch.horizontal", "sketch.vertical", "sketch.fix", "sketch.parallel", "sketch.perpendicular", "sketch.equal",
+          "sketch.midpoint", "sketch.tangent", "sketch.concentric", "sketch.symmetric", "sketch.showConstraints", "sketch.hideConstraints"},
+         true},
+        {N_("Изменить"),
+         {"sketch.trim", "sketch.extend", "sketch.offset", "sketch.fillet", "sketch.move", "sketch.rotate", "sketch.copy", "sketch.scale",
+          "sketch.split", "edit.delete"},
+         true},
+        {N_("Массив и модель"), {"sketch.patternRect", "sketch.patternCircular", "sketch.mirror", "sketch.project", "sketch.projectFixed"}},
+        {N_("Формат и вид"), {"sketch.construction", "sketch.centerline", "sketch.ortho", "sketch.lookAt"}},
+    };
+    static const std::vector<PhoneGroup> model{
+        {N_("Эскиз и раб. элементы"), {"sketch.start", "feature.workPlane", "feature.workAxis", "feature.workPoint"}},
+        {N_("Создать"), {"feature.extrude", "feature.revolve", "feature.sweep", "feature.loft", "feature.coil"}},
+        {N_("Изменить"), {"feature.hole", "feature.fillet", "feature.chamfer", "feature.thread", "feature.shell", "feature.section"}, true},
+        {N_("Массив"), {"feature.patternRect", "feature.patternCircular", "feature.mirror"}},
+        {N_("Диагностика"), {"tools.measure", "view.section", "tools.massProperties", "tools.interference"}},
+        {N_("Изделия и экспорт"), {"parts.library", "phone.export"}},
+    };
+    static const std::vector<PhoneGroup> assembly{
+        {N_("Компонент"), {"assembly.place", "assembly.placeStandard", "assembly.pattern"}},
+        {N_("Зависимости"), {"assembly.mate", "assembly.insert", "assembly.axisMate", "assembly.angle", "assembly.tangent"}, true},
+        {N_("Соединения"),
+         {"assembly.jointRotational", "assembly.jointSlider", "assembly.jointRigid", "assembly.jointCylindrical", "assembly.jointPlanar",
+          "assembly.jointBall"},
+         true},
+        {N_("Положение"), {"assembly.move", "assembly.rotate", "assembly.ground"}},
+        {N_("Диагностика и экспорт"), {"tools.measure", "view.section", "tools.interference", "phone.export"}},
+    };
+    // «Оформление» (the theme) is not here: on the phone it lives in the settings (the author, 18.10).
+    static const std::vector<PhoneGroup> view{
+        {N_("Стиль отображения"), {"view.shaded", "view.edges", "view.wireframe", "view.hidden", "view.transparent"}},
+        {N_("Цвета"), {"view.appearance", "view.background"}},
+        {N_("Ориентация"), {"view.home", "view.fit", "view.front", "view.top", "view.right"}},
+    };
+    if (app.shell.ribbonTab == RibbonTab::View) return view;
+    if (session.assembly) return assembly;
+    return app.shell.ribbonTab == RibbonTab::Sketch ? sketch : model;
+}
+
+constexpr const char* kExports[] = {"file.exportStep", "file.exportStl", "file.export3mf"};
+constexpr const char* kHidden[] = {"view.themeSystem", "view.themeLight", "view.themeDark", "sketch.finish"};
+
+/// One command button of the grid. Front, Top and Right share an icon: a letter tells them apart.
+void CommandCell(AppContext& app, const char* id, bool active, ImVec2 at, ImVec2 size) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const bool exportCell = std::strcmp(id, "phone.export") == 0;
+    const Action* a = exportCell ? nullptr : app.actions.Find(id);
+    const bool enabled = exportCell || (a && a->IsEnabled());
+    ImGui::SetCursorScreenPos(at);
+    ImGui::PushID(id);
+    const bool clicked = ImGui::InvisibleButton("##cell", size);
+    const bool held = ImGui::IsItemActive();
+    const Color bg = active ? c.accent : held ? c.pressed : c.field;
+    dl->AddRectFilled(at, {at.x + size.x, at.y + size.y}, ui::ToU32(bg), ui.S(8));
+    const float is = ui.S(22);
+    const std::string icon = exportCell ? std::string("export") : std::string(a->icon);
+    ui.icons.Draw(dl, icon, {at.x + (size.x - is) / 2, at.y + (size.y - is) / 2}, is, enabled ? Color{1, 1, 1, 1} : Color{1, 1, 1, 0.35f});
+    const char* letter = std::strcmp(id, "view.front") == 0 ? "Ф" : std::strcmp(id, "view.top") == 0 ? "В" : std::strcmp(id, "view.right") == 0 ? "П" : nullptr;
+    if (letter) {
+        const char* shown = Tr(letter);
+        const float fs = ui.S(10);
+        const float lw = ui.fonts.strong->CalcTextSizeA(fs, FLT_MAX, 0, shown).x;
+        dl->AddText(ui.fonts.strong, fs, {at.x + size.x - lw - ui.S(4), at.y + size.y - fs - ui.S(2)}, ui::ToU32(c.text), shown);
+    }
+    if (exportCell) {
+        if (clicked) ImGui::OpenPopup("##export-menu");
+        ui::MenuStyle style(ui);
+        if (ImGui::BeginPopup("##export-menu")) {
+            for (const char* e : kExports)
+                if (const Action* ea = app.actions.Find(e); ea && ui::MenuItem(ui, ea->Label(), nullptr, ea->icon, false, ea->IsEnabled())) {
+                    const std::string run = e;
+                    app.Later([&app, run] { app.actions.Run(run); });
                 }
-                const bool clicked = ImGui::InvisibleButton("##more", {cell, h});
+            ImGui::EndPopup();
+        }
+    } else {
+        ui::ItemTooltip(ui, a->Label());
+        if (clicked && enabled) {
+            const std::string run = id;
+            app.Later([&app, run] { app.actions.Run(run); });
+        }
+    }
+    ImGui::PopID();
+}
+
+/// Block 2, compact (the default; the author's mockups 13–14, 18.10.2026): small buttons without
+/// captions, four in a row; «Зависимости», «Изменить», «Соединения» fold to one row — the opener on
+/// the view's side, then three commands; the rest comes out under them. What is open is remembered.
+void DrawPhoneGrid(AppContext& app, Session& session, float width, bool viewOnLeft) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    CollectSink all(app);
+    FillRibbon(app, session, all, false);
+    for (const char* h : kHidden)
+        if (auto* e = all.Find(h)) e->used = true;
+
+    const float pad = ui.S(8), gap = ui.S(4);
+    const float cell = (width - 2 * pad - 3 * gap) / 4;
+    const float h = std::min(cell, ui.S(40));
+    std::vector<std::string>& opened = app.settings.mobile.openGroups;
+    const std::string tabKey = session.assembly ? "asm" : app.shell.ribbonTab == RibbonTab::Sketch ? "sketch"
+                               : app.shell.ribbonTab == RibbonTab::View ? "view" : "model";
+    static bool loggedOpener = false;
+
+    const auto drawGroup = [&](const char* title, const std::vector<std::pair<std::string, bool>>& items, bool folds) {
+        if (items.empty()) return;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        const std::string caps = Upper(Tr(title));
+        dl->AddText(ui.fonts.strong, ui.S(9.5f), {p.x + pad + ui.S(2), p.y + ui.S(7)}, ui::ToU32(c.textMuted), caps.c_str());
+        p.y += ui.S(22);
+        const bool canFold = folds && items.size() > 3;
+        const std::string key = tabKey + ":" + title;
+        const bool open = canFold && std::find(opened.begin(), opened.end(), key) != opened.end();
+        // Slots in reading order; the opener takes the slot nearest the view.
+        std::vector<int> order;   // command index per slot, -1 = the opener
+        if (canFold) {
+            const int shown = open ? static_cast<int>(items.size()) : 3;
+            for (int i = 0; i < 3; ++i) order.push_back(i);
+            order.insert(viewOnLeft ? order.begin() : order.end(), -1);
+            for (int i = 3; i < shown; ++i) order.push_back(i);
+        } else {
+            for (int i = 0; i < static_cast<int>(items.size()); ++i) order.push_back(i);
+        }
+        ImGui::PushID(key.c_str());
+        for (std::size_t k = 0; k < order.size(); ++k) {
+            const int col = static_cast<int>(k % 4), row = static_cast<int>(k / 4);
+            const ImVec2 at{p.x + pad + static_cast<float>(col) * (cell + gap), p.y + static_cast<float>(row) * (h + gap)};
+            if (order[k] < 0) {
+                if (!loggedOpener) {
+                    loggedOpener = true;   // once: the emulator's check taps the first opener
+                    log::Info("Touch: fold {} at {:.0f},{:.0f} size {:.0f}", key, at.x, at.y, h);
+                }
+                ImGui::SetCursorScreenPos(at);
+                const bool clicked = ImGui::InvisibleButton("##opener", {cell, h});
                 const bool held = ImGui::IsItemActive();
-                dl->AddRectFilled(a, {a.x + cell, a.y + h}, ui::ToU32(open ? c.accent : held ? c.pressed : c.accentSoft), myUi.S(9));
-                if (!open) dl->AddRect(a, {a.x + cell, a.y + h}, ui::ToU32(c.accentSoftBorder), myUi.S(9));
-                const bool pointLeft = myViewOnLeft != open;   // toward the view to open, back to close
-                const float is = myUi.S(16);
-                myUi.icons.Draw(dl, pointLeft ? "ui-arrow-left" : "ui-chevron-right", {a.x + (cell - is) / 2, a.y + (h - is) / 2}, is,
-                                open ? c.textOnAccent : c.accent);
+                dl->AddRectFilled(at, {at.x + cell, at.y + h}, ui::ToU32(open ? c.accent : held ? c.pressed : c.accentSoft), ui.S(8));
+                if (!open) dl->AddRect(at, {at.x + cell, at.y + h}, ui::ToU32(c.accentSoftBorder), ui.S(8));
+                const float is = ui.S(14);
+                const Color ink = open ? c.textOnAccent : c.accent;
+                if (open) {
+                    ui.icons.Draw(dl, "ui-chevron-down", {at.x + (cell - is) / 2, at.y + (h - is) / 2}, is, ink);   // drawn as "up" below
+                } else {
+                    ui.icons.Draw(dl, "ui-chevron-down", {at.x + (cell - is) / 2, at.y + h / 2 - is + ui.S(2)}, is, ink);
+                    const std::string more = std::format("+{}", items.size() - 3);
+                    const float fs = ui.S(9.5f);
+                    const float tw = ui.fonts.strong->CalcTextSizeA(fs, FLT_MAX, 0, more.c_str()).x;
+                    dl->AddText(ui.fonts.strong, fs, {at.x + (cell - tw) / 2, at.y + h / 2 + ui.S(2)}, ui::ToU32(ink), more.c_str());
+                }
+                if (open) {   // an up arrow: the chevron's triangle flipped
+                    const ImVec2 m{at.x + cell / 2, at.y + h / 2};
+                    dl->AddRectFilled({m.x - is / 2, m.y - is / 2}, {m.x + is / 2, m.y + is / 2}, ui::ToU32(c.accent));
+                    dl->AddPolyline(std::array<ImVec2, 3>{ImVec2{m.x - ui.S(5), m.y + ui.S(2.5f)}, ImVec2{m.x, m.y - ui.S(2.5f)},
+                                                          ImVec2{m.x + ui.S(5), m.y + ui.S(2.5f)}}
+                                        .data(),
+                                    3, ui::ToU32(ink), ImDrawFlags_None, ui.S(1.8f));
+                }
                 if (clicked) {
-                    // The strip is drawn later in this same frame: it needs the items now.
-                    // (Without them it took the group for gone and closed at once — «›»
-                    // did nothing on the phone, 17.10; the emulator's test path set them.)
-                    m.flyGroup = open ? std::string() : myCaption;
-                    m.flyScroll = 0;
-                    if (open) m.flyItems.clear();
-                    else {
-                        m.flyItems = myItems;
-                        m.flyY = p.y;
-                    }
+                    if (open) opened.erase(std::remove(opened.begin(), opened.end(), key), opened.end());
+                    else opened.push_back(key);
+                    log::Info("Fold: {} {}", open ? "closed" : "open", key);
                 }
             } else {
-                const int index = more ? (myViewOnLeft ? slot - 1 : slot) : slot;
-                if (index >= 0 && index < static_cast<int>(myItems.size())) {
-                    const MobileState::FlyItem& it = myItems[static_cast<std::size_t>(index)];
-                    const Action* act = myApp.actions.Find(it.id);
-                    const bool enabled = act && act->IsEnabled();
-                    if (ui::IconButton(myUi, it.id.c_str(), it.icon, cell / myUi.scale, 22, it.label.c_str(), enabled, it.active) && enabled) {
-                        AppContext& app = myApp;
-                        const std::string run = it.id;
-                        app.Later([&app, run] { app.actions.Run(run); });
-                    }
-                    // A square button wider than tall: drawn by IconButton as a square of `cell`; keep the row height.
-                }
+                const auto& [id, active] = items[static_cast<std::size_t>(order[k])];
+                CommandCell(app, id.c_str(), active, at, {cell, h});
             }
-            ImGui::PopID();
         }
         ImGui::PopID();
-        ImGui::SetCursorScreenPos({p.x, p.y + std::max(h, cell) + myUi.S(4)});
-        ImGui::Dummy({myWidth, 0});
-        myItems.clear();
-    }
+        const int rows = static_cast<int>((order.size() + 3) / 4);
+        ImGui::SetCursorScreenPos({p.x, p.y + static_cast<float>(rows) * (h + gap)});
+        ImGui::Dummy({width, 0});
+    };
 
-    AppContext&                         myApp;
-    ui::Ui&                             myUi;
-    float                               myWidth;
-    bool                                myViewOnLeft;
-    std::string                         myCaption;
-    std::vector<MobileState::FlyItem>   myItems;
-};
+    for (const PhoneGroup& g : PhoneGroups(app, session)) {
+        std::vector<std::pair<std::string, bool>> items;
+        for (const char* id : g.ids) {
+            if (std::strcmp(id, "phone.export") == 0) {
+                bool any = false;
+                for (const char* e : kExports)
+                    if (auto* x = all.Find(e); x && !x->used) {
+                        x->used = true;
+                        any = true;
+                    }
+                if (any) items.emplace_back(id, false);
+                continue;
+            }
+            if (auto* e = all.Find(id); e && !e->used) {
+                e->used = true;
+                items.emplace_back(e->id, e->active);
+            }
+        }
+        drawGroup(g.title, items, g.folds);
+    }
+    // Anything the ribbon has that the table does not know (a module's command): at the end.
+    std::vector<std::pair<std::string, bool>> rest;
+    for (const auto& e : all.entries)
+        if (!e.used) rest.emplace_back(e.id, e.active);
+    drawGroup(N_("Ещё"), rest, false);
+}
 
 } // namespace
 
 void DrawToolList(AppContext& app, Session& session, float width, bool iconsOnly, bool compact, bool viewOnLeft) {
     if (compact && !iconsOnly) {
-        CompactSink sink(app, width, viewOnLeft);
-        FillRibbon(app, session, sink, false);
+        DrawPhoneGrid(app, session, width, viewOnLeft);
     } else {
         ListSink sink(app, width, iconsOnly);
         FillRibbon(app, session, sink, false);

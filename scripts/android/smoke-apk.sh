@@ -136,27 +136,31 @@ check layout-editor
 
 # 13–14. Real taps, as a finger does them (17.10: the author's «›» and the
 # extrude field did nothing, while the test commands above opened them fine).
-# The app logs where the first «›» and the operation's fields are, in dp.
+# The app logs where the first fold opener and the operation's fields are, in dp.
 broken=0
 adb logcat -d -s BreezeCAD:* > "$OUT/breezecad-1.log"   # steps 1–12: the log is cleared below
 blog() { adb logcat -d -s BreezeCAD:* | tr -d '\r'; }
 
-# 13. «›» of compact block 2 tapped: its strip opens and stays.
+# 13. A folding group's opener in block 2 (18.10: «Изменить» of the 3D tab) tapped: the group opens.
 adb logcat -c
 start example 25
-read -r mx my ms < <(blog | sed -n 's/.*Touch: more .* at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\).*/\1 \2 \3/p' | head -1)
+read -r mx my ms < <(blog | sed -n 's/.*Touch: fold [^ ]* at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\).*/\1 \2 \3/p' | head -1)
 if [ -n "${ms:-}" ]; then
     adb shell input tap $(dp $(( mx + ms / 2 ))) $(dp $(( my + ms / 2 )))
-    shot 13-strip-tapped 3
-    if blog | grep -q "Strip: open"; then
-        echo "step strip-tap: the strip opened ($(blog | grep -o 'Strip: .*' | tr '\n' ';'))"
+    shot 13-fold-tapped 3
+    if blog | grep -q "Fold: open"; then
+        echo "step fold-tap: the group opened ($(blog | grep -o 'Fold: .*' | tr '\n' ';'))"
     else
-        echo "step strip-tap: FAILED — the strip did not open ($(blog | grep -o 'Strip: .*' | tr '\n' ';'))"; broken=1
+        echo "step fold-tap: FAILED — the group did not open ($(blog | grep -o 'Fold: .*' | tr '\n' ';'))"; broken=1
     fi
+    # Tapped again: it folds back (and stays folded for the next steps).
+    adb shell input tap $(dp $(( mx + ms / 2 ))) $(dp $(( my + ms / 2 )))
+    sleep 2
+    blog | grep -q "Fold: closed" && echo "step fold-tap: folded back" || { echo "step fold-tap: FAILED — did not fold back"; broken=1; }
 else
-    echo "step strip-tap: FAILED — no «›» in the log"; broken=1
+    echo "step fold-tap: FAILED — no opener in the log"; broken=1
 fi
-check strip-tap
+check fold-tap
 
 # 14. Extrude (a new part, an empty sketch: the example has no unused sketch): the field loses the focus it opens with (a tap on the model),
 # then a tap on the field opens the numpad, and it is still open 3 s later.
