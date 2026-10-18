@@ -170,6 +170,15 @@ fieldat() { blog | sed -n 's/.*Touch: field distance at \([0-9-]*\),\([0-9-]*\) 
 adb shell input tap $((w / 2)) $((h / 3))
 sleep 2
 read -r fx fy fw fh < <(fieldat)   # where it is now, the layout settled
+# Under block 1's bottom row (a low screen; the focus it opens with did not scroll to it — that
+# depends on timing): scrolled into view with a finger first, as a person would.
+hdp=$(( h * 160 / density ))
+if [ -n "${fh:-}" ] && [ $(( fy + fh )) -gt $(( hdp - 56 )) ]; then
+    adb shell input swipe $(dp $(( fx + fw / 2 ))) $(dp $(( hdp - 90 ))) $(dp $(( fx + fw / 2 ))) $(dp 70) 700
+    sleep 2
+    read -r fx fy fw fh < <(fieldat)
+    echo "step extrude-field: scrolled block 1 (field now at $fx,$fy)"
+fi
 if [ -n "${fh:-}" ]; then
     adb shell input tap $(dp $(( fx + fw / 3 ))) $(dp $(( fy + fh / 2 )))
     shot 14-extrude-numpad 3
