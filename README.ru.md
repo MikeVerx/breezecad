@@ -58,6 +58,22 @@
 </tr>
 </table>
 
+## На телефоне (Android, бета)
+
+Вся программа на телефоне с Android, разложенная под большие пальцы: команды справа,
+дерево и настройки инструмента слева, курсор-капля, кончик которой не закрывает точку,
+и мини-нампад для чисел. [`BreezeCAD-android.apk`](https://github.com/MikeVerx/breezecad/releases/latest) — в выпуске
+(ARM 64-бит, Android 9 и новее).
+
+<p align="center"><img src="docs/images/android-model.png" alt="BreezeCAD на телефоне с Android: фланец в 3D-виде" width="100%"></p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/android-hole.png" alt="Правка отверстия на телефоне"><br><sub>Открытая операция: режимы значками над видом, ✓ зеленеет, когда всё выбрано</sub></td>
+<td width="50%"><img src="docs/images/android-sketch.png" alt="Эскиз с курсором-каплей"><br><sub>Эскиз курсором-каплей: тянешь круг — кончик рисует</sub></td>
+</tr>
+</table>
+
 ## Скачать
 
 Свежая сборка ветки `next`: обновляется после каждого изменения, прошедшего
