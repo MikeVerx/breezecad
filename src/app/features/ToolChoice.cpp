@@ -108,13 +108,18 @@ void FlushCaptions(AppContext& app, float width) {
     if (kept.empty()) return;
     ui::Ui& ui = app.ui;
     ImGui::Dummy({0, ui.S(14)});
+    // The panel's own margin (a sketch tool's panel drew them at its very edge).
+    const float indent = std::max(ImGui::GetCursorPosX(), ui.S(14));
+    ImGui::SetCursorPosX(indent);
     const ImVec2 p = ImGui::GetCursorScreenPos();
     ImGui::GetWindowDrawList()->AddLine(p, {p.x + width, p.y}, ui::ToU32(ui.C().dividerSoft));
     ImGui::Dummy({0, ui.S(6)});
+    ImGui::SetCursorPosX(indent);
     ui::FontScope font(ui.fonts.caption);
     ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
     for (const std::string& t : kept) {
+        ImGui::SetCursorPosX(indent);
         ImGui::TextUnformatted(t.c_str());
         ImGui::Dummy({0, ui.S(3)});
     }
