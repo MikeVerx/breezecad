@@ -334,6 +334,134 @@ pages['6c-strip-drawer'] = page(camera() + block1() + view() + b2c_with() + stri
     note('<b>В. «Ящик»</b> — полоса выдвигается из блока 2 как его продолжение:<br>тот же цвет, без зазора, сверху имя группы и ✕.<br> Читается как одна панель.', 'left:240px;top:262px'), STRIP_CSS)
 
 
+# 7. The author's redesign 18.10: compact grids, the tool's options in the top island, the action row at the very
+# bottom, save/open/ruler in the hotbar, the mode and the tool's title in block 2's bottom line, a green ✓.
+R7_CSS = """
+.b1 .tabs{padding:6px 6px 0;gap:4px}
+.b1 .tab{padding:0 8px;gap:5px;font-size:12px}
+.g7{padding:0 8px}
+.g7 .h{font-size:9.5px;letter-spacing:.8px;color:var(--mut);padding:7px 2px 3px}
+.g7 .r{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.g7 .r div{height:36px;border-radius:8px;background:var(--field);display:flex;align-items:center;justify-content:center}
+.g7 .r .on{background:var(--acc)}
+.fin{margin:0 8px 2px;height:34px;border-radius:9px;background:var(--accSoft);border:1px solid var(--accB);display:flex;align-items:center;gap:8px;padding:0 10px;color:#9db6ff;font-weight:500;font-size:12px}
+.st{left:0;right:0;bottom:0;height:28px;display:flex;white-space:nowrap;overflow:hidden;align-items:center;gap:6px;padding:0 10px;font-size:11px;color:var(--text);border-top:1px solid var(--div);background:var(--panel)}
+.st i{font-style:normal;color:var(--mut)}
+.row7{left:0;right:0;bottom:0;height:52px;display:flex;gap:6px;padding:6px 8px;border-top:1px solid var(--div);background:var(--panel)}
+.row7 .rb{border-radius:10px}
+.row7 .on{background:var(--accSoft);outline:1px solid var(--accB)}
+.row7 .go{background:#2E9E64;box-shadow:0 0 0 3px rgba(46,158,100,.28)}
+.ti7{left:84px;right:56px;top:8px;height:40px;padding:0 4px;gap:3px;overflow:hidden}
+.ti7 .m{height:30px;min-width:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:5px;padding:0 7px;color:var(--t2);font-size:11.5px;flex:none}
+.ti7 .m.on{background:var(--accSoft);color:#cfdcff;outline:1px solid var(--accB)}
+.ti7 .sep{width:1px;height:22px;background:var(--border);margin:0 3px;flex:none}
+.ti7 .sb{position:absolute;left:10px;right:10px;bottom:2px;height:2px;border-radius:1px;background:#2a2e35}
+.ti7 .sb b{position:absolute;left:0;width:42%;top:0;bottom:0;border-radius:1px;background:#6E9BFF}
+.fadeR7{position:absolute;right:0;top:0;bottom:0;width:36px;background:linear-gradient(90deg,transparent,rgba(27,30,34,.98))}
+.fl{color:var(--mut);font-size:10.5px;padding:8px 12px 4px}
+.fld{margin:0 10px;height:32px;border-radius:8px;background:var(--field);border:1px solid var(--border);display:flex;align-items:center;padding:0 10px;gap:6px}
+.chipx{margin:3px 10px 0;height:30px;border-radius:8px;background:var(--accSoft);border:1px solid var(--accB);display:flex;align-items:center;padding:0 8px 0 10px;color:#cfdcff;font-size:11.5px}
+.vscroll{right:3px;width:3px;border-radius:2px;background:#3a3f47}
+"""
+
+
+def hotbar7():
+    hb = lambda n, c='#AEB4BD': f'<div class="hb">{icon(n, 18, c)}</div>'
+    return (f'<div class="abs cam">{icon("brand-mark", 22)}{hb("ui-save")}{hb("ui-open")}{hb("ui-ruler", "#6E9BFF")}'
+            '<div style="width:20px;height:1px;background:#2a2d33;margin-top:8px"></div>'
+            f'<div style="margin-top:52px">{hb("ui-plus")}</div>{hb("section")}<div style="margin-top:auto">{hb("ui-eye-off")}</div></div>'
+            '<div class="abs cutout"></div>')
+
+
+def g7(title, names, on=()):
+    cells = ''.join(f'<div class="{"on" if n in on else ""}">{icon(n, 20, "#fff")}</div>' for n in names)
+    return f'<div class="g7"><div class="h">{title}</div><div class="r">{cells}</div></div>'
+
+
+def tabs7():
+    return (f'<div class="tabs"><div class="tab">{icon("ui-tree", 16)}</div>'
+            f'<div class="tab on" style="flex:1">{icon("ui-wrench", 16, "#E6E8EB")}Инструмент</div><div class="tab">{icon("ui-dimension", 16)}</div></div>')
+
+
+def row7(ok='', cursor=True):
+    okc = 'rb go' if ok == 'go' else 'rb ok'
+    cur = ' on' if cursor else ''
+    return (f'<div class="abs row7"><div class="rb">{icon("ui-frame")}</div><div class="rb{cur}">{icon("ui-cursor", 18, "#9db6ff" if cursor else "#AEB4BD")}</div>'
+            f'<div class="rb">{icon("ui-close")}</div><div class="{okc}">{icon("ui-check", 20, "#fff")}</div></div>')
+
+
+def status7(ic, tool, mode, right=''):
+    return f'<div class="abs st">{icon(ic, 14, "#9db6ff")}<span>{tool}</span><i>· {mode}</i><span style="margin-left:auto;color:var(--mut)">{right}</span></div>'
+
+
+def islands7(tool_island):
+    return (f'<div class="abs isl" style="left:8px;top:8px">{icon("ui-undo")}<span style="width:6px"></span>{icon("ui-redo")}</div>'
+            f'{tool_island}<div class="abs isl" style="right:8px;top:8px;width:40px;justify-content:center">{icon("ui-cube", 20)}</div>')
+
+
+GRID = ('<div class="abs" style="inset:0;background-image:linear-gradient(#2c3037 1px,transparent 1px),'
+        'linear-gradient(90deg,#2c3037 1px,transparent 1px);background-size:28px 28px;background-color:#1e2126"></div>')
+AXES = ('<div class="abs" style="left:0;right:0;top:196px;height:1px;background:#8a4447"></div>'
+        '<div class="abs" style="top:0;bottom:0;left:254px;width:1px;background:#3f7a57"></div>')
+DROP = ('<svg class="abs" style="left:340px;top:192px" width="60" height="110" viewBox="0 0 60 110">'
+        '<path d="M30 4 L42 58 A16 16 0 1 1 18 58 Z" fill="rgba(110,155,255,.10)" stroke="#6E9BFF" stroke-width="1.6"/>'
+        '<circle cx="30" cy="4" r="3" fill="#fff"/><circle cx="30" cy="72" r="22" fill="none" stroke="#6E9BFF" stroke-dasharray="3 4" opacity=".7"/></svg>')
+AXIS3 = ('<svg class="abs" style="left:18px;bottom:16px" width="44" height="44" viewBox="0 0 44 44"><path d="M14 30V8" stroke="#4f7df5" stroke-width="2"/>'
+         '<path d="M14 30l20 8" stroke="#4CBB7F" stroke-width="2"/><path d="M14 30l-8 8" stroke="#F06A6E" stroke-width="2"/></svg>')
+
+# 7a. Sketch, the rectangle tool.
+b1_7a = (f'<div class="abs b1">{tabs7()}<div class="fl">Подсказка</div>'
+         '<div style="padding:0 12px;color:var(--t2);line-height:1.45;font-size:12px">Укажите первый угол.<br>Размер — числом на нампаде.</div>'
+         f'{row7()}</div>')
+b2_7a = ('<div class="abs b2"><div class="brow" style="height:38px;gap:8px;padding:0 8px"><span style="font-size:11px;color:#4CBB7F;font-family:monospace">107</span>'
+         f'<div class="search">{icon("ui-search", 14)}Поиск</div></div>'
+         f'<div class="fin">{icon("ui-check", 16, "#9db6ff")}Завершить эскиз</div>'
+         + g7('РАЗМЕРЫ', ['sk-dimension', 'dim-arrange'])
+         + g7('СОЗДАТЬ', ['sk-line', 'sk-circle', 'sk-arc', 'sk-rectangle', 'sk-point', 'sk-spline', 'sk-text'], ('sk-rectangle',))
+         + g7('ЗАВИСИМОСТИ', ['c-coincident', 'c-horizontal', 'c-vertical', 'c-fix', 'c-parallel', 'c-perpendicular', 'c-equal',
+                              'c-midpoint', 'c-tangent', 'c-concentric', 'c-symmetric', 'c-show-all'])
+         + g7('ИЗМЕНИТЬ', ['sk-trim', 'sk-extend', 'sk-offset', 'sk-fillet'])
+         + '<div class="abs vscroll" style="top:96px;height:120px"></div>'
+         + status7('sk-rectangle', 'Прямоугольник', 'Эскиз') + '</div>')
+ti_7a = (f'<div class="abs isl ti7"><div class="m on">{icon("sk-rectangle", 18, "#cfdcff")}2 точки</div><div class="m">{icon("sk-rect-centre", 18)}</div>'
+         f'<div class="m">{icon("sk-rect-3pt", 18)}</div><div class="m">{icon("sk-rect-3pt-centre", 18)}</div><div class="sep"></div>'
+         f'<div class="m on">{icon("sk-line", 18, "#cfdcff")}Основная</div><div class="m">{icon("sk-construction", 18)}</div><div class="m">{icon("sk-centerline", 18)}</div></div>')
+view_7a = (f'<div class="abs view" style="background:none">{GRID}{AXES}'
+           '<div class="abs" style="left:170px;top:116px;width:200px;height:80px;border:1.6px dashed #6E9BFF;background:rgba(110,155,255,.06)"></div>'
+           f'<div class="abs" style="left:166px;top:112px;width:9px;height:9px;border-radius:50%;background:#fff"></div>{DROP}'
+           f'{islands7(ti_7a)}</div>')
+pages['7a-sketch-tool'] = page(hotbar7() + b1_7a + view_7a + b2_7a + strip()
+    + note('<b>Верхний островок</b> — настройки инструмента вместо «3D-модель / Эскиз / Вид»:<br>способ построения · тип линии. Не влезает — листается вбок.', 'left:240px;top:58px')
+    + note('Сохранить, открыть, линейка — в хотбаре.<br>Рамка · курсор · ✕ · ✓ — в самом низу блока 1.', 'left:50px;top:150px;width:170px')
+    + note('Инструмент и режим — строкой<br>внизу блока 2.', 'right:188px;bottom:48px'), R7_CSS)
+
+# 7b. 3D, the extrude: everything needed is chosen -> ✓ is green and applies (the tool stays open).
+b1_7b = (f'<div class="abs b1">{tabs7()}'
+         f'<div class="fl">Профиль · 2</div><div class="chipx">Контур 1<span style="margin-left:auto">{icon("ui-close", 13, "#9db6ff")}</span></div>'
+         f'<div class="chipx">Контур 2<span style="margin-left:auto">{icon("ui-close", 13, "#9db6ff")}</span></div>'
+         f'<div class="fl">Расстояние</div><div class="fld">20 мм<span style="margin-left:auto">{icon("ui-fx", 14)}</span></div>'
+         '<div class="fl">Уклон</div><div class="fld">0°</div>'
+         f'{row7("go", cursor=False)}</div>')
+b2_7b = ('<div class="abs b2"><div class="brow" style="height:38px;gap:8px;padding:0 8px"><span style="font-size:11px;color:#4CBB7F;font-family:monospace">72</span>'
+         f'<div class="search">{icon("ui-search", 14)}Поиск</div></div>'
+         + g7('ЭСКИЗ И РАБ. ЭЛЕМЕНТЫ', ['sketch', 'work-plane', 'work-axis', 'work-point'])
+         + g7('СОЗДАТЬ', ['extrude', 'revolve', 'hole', 'loft', 'sweep', 'coil', 'thread'], ('extrude',))
+         + g7('ИЗМЕНИТЬ', ['fillet', 'chamfer', 'shell'])
+         + g7('МАССИВ', ['pattern-rect', 'pattern-circular', 'mirror'])
+         + status7('extrude', 'Выдавливание', '3D-модель') + '</div>')
+ti_7b = ('<div class="abs isl ti7"><div class="m on">Добавить</div><div class="m">Новое тело</div><div class="m">Вырезать</div><div class="m">Пересечь</div>'
+         '<div class="sep"></div><div class="m on">Прямое</div><div class="m">Обратное</div><div class="m">В обе стороны</div><div class="sep"></div>'
+         '<div class="m on">На расстояние</div><div class="fadeR7"></div><div class="sb"><b></b></div></div>')
+PREVIEW = ('<svg class="abs" style="left:110px;top:50px" width="300" height="200" viewBox="0 0 300 200">'
+           '<path d="M95 92l45-22 45 22v-40l-45-22-45 22z" fill="rgba(110,155,255,.25)" stroke="#6E9BFF" stroke-width="1.4"/>'
+           '<path d="M95 52l45 22 45-22" fill="none" stroke="#6E9BFF" stroke-width="1.2"/></svg>')
+view_7b = f'<div class="abs view"><div class="abs" style="left:110px;top:90px">{MODEL}</div>{PREVIEW}{AXIS3}{islands7(ti_7b)}</div>'
+pages['7b-extrude-ready'] = page(hotbar7() + b1_7b + view_7b + b2_7b + strip()
+    + note('<b>✓ зелёная</b> — всё нужное выбрано: тап применяет, инструмент остаётся открыт.<br>'
+           '<b>✕</b> снимает выбор по одному с конца (Контур 2, затем Контур 1),<br>когда снимать нечего — закрывает инструмент.', 'left:240px;top:290px')
+    + note('Не влезло — край гаснет, полоска снизу,<br>листается вбок.', 'left:420px;top:56px'), R7_CSS)
+
+
 if __name__ == '__main__':
     only = sys.argv[1:]
     with sync_playwright() as p:
