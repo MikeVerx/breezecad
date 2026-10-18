@@ -244,6 +244,38 @@ jobs:
           fi
           gh release upload "$rel" release/BreezeCAD-android-preview-* --clobber
 
+  release-apk:
+    # A push to main is a numbered release (build.yml, job "release"): the phone APK
+    # goes into it too, once the emulator passed — the same file as in android-build.
+    needs: [build, test]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: BreezeCAD-android-arm64-v8a, path: release }
+      - name: Add the APK to the numbered release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          number=$(sed -n '/^project(/,/)/s/.*VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt | head -1)
+          suffix=$(sed -n 's/^set(BZ_VERSION_SUFFIX "\(.*\)")/\1/p' CMakeLists.txt | head -1)
+          label="$number$suffix"
+          tag="v$(echo "$label" | tr '[:upper:]' '[:lower:]')"
+          notes_file="docs/releases/$(echo "$label" | tr '[:upper:]' '[:lower:]').md"
+          mv release/BreezeCAD-android-arm64-v8a.apk release/BreezeCAD-android.apk
+          # The desktop job may not have made the release yet: whoever is first makes it.
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --title "BreezeCAD $label" --notes-file "$notes_file" --latest ||
+              gh release view "$tag" >/dev/null
+          fi
+          gh release upload "$tag" release/BreezeCAD-android.apk --clobber
+          gh release edit "$tag" --notes-file "$notes_file"   # the notes may have been added to since
+          echo "::notice title=Release::BreezeCAD-android.apk added to $tag"
+
   publish-shots:
     # The emulator passed: its screenshots next to the APK.
     needs: [publish, test]
