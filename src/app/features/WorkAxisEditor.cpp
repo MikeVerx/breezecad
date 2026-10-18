@@ -1,4 +1,5 @@
 #include "app/features/WorkAxisEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/features/PointPick.h"
 #include "app/viewport/Planes.h"
@@ -106,15 +107,14 @@ void WorkAxisEditor::DrawInViewport(AppContext& app, Session& session, const Vie
 void WorkAxisEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::WorkAxisFeature&>(feature);
     ui::Ui& ui = app.ui;
-    Section(app, Tr("Способ"));
-    static constexpr std::array<const char*, 4> methods{N_("Ось цилиндра"), N_("По ребру"), N_("Две плоскости"), N_("Две точки")};
+    static constexpr std::array<ChoiceItem, 4> methods{{{"wa-cylinder", N_("Ось цилиндра")}, {"wa-edge", N_("По ребру")}, {"wa-two-planes", N_("Две плоскости")}, {"wa-two-points", N_("Две точки")}}};
     // The panel shows the methods in this order; the enum is Edge, Cylinder, Planes, Points.
     static constexpr std::array<WorkAxisMethod, 4> order{WorkAxisMethod::Cylinder, WorkAxisMethod::Edge, WorkAxisMethod::Planes,
                                                          WorkAxisMethod::Points};
     int current = 0;
     for (std::size_t i = 0; i < order.size(); ++i)
         if (order[i] == f.method) current = static_cast<int>(i);
-    if (const int chosen = ui::Segmented(ui, "method", methods, current, 2, width); chosen != current) {
+    if (const int chosen = ToolChoice(app, "method", N_("Способ"), methods, current, width); chosen != current) {
         f.method = order[static_cast<std::size_t>(chosen)];
         myMethod = f.method;
         mySlot = 0;

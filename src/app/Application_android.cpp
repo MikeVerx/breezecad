@@ -7,6 +7,8 @@
 #include "app/Operations.h"
 #include "app/android/AndroidInput.h"
 #include "app/mobile/MobileLayout.h"
+#include "app/mobile/TouchInput.h"
+#include "app/sketch/SketchPick.h"
 #include "core/CrashCode.h"
 #include "core/I18n.h"
 #include "core/Log.h"
@@ -43,6 +45,10 @@ void Application::StartAndroid() {
         // "Back" on the home page with nothing open: the system's (leave the app).
         return myWorkspace.ShowsHome() && !myShell.showSettings && !myShell.newDocument.open && !myShell.showAbout &&
                !myShell.mobile.lastCrash.open && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+    };
+    sink.backHint = [this] {
+        log::Info("Back: once more to leave");
+        myNotes.Info(Tr("Проведите «Назад» ещё раз, чтобы выйти"));
     };
     sink.volume = [this](int direction) {
         if (!mySettings.mobile.volumeZoom || myWorkspace.ShowsHome() || !myWorkspace.Active()) return false;
@@ -103,7 +109,7 @@ bool Application::AndroidBetweenFrames(double now) {
                     std::max(screen.cutout.right, screen.bars.right),
                     std::max({screen.cutout.bottom, screen.bars.bottom, screen.gestures.bottom * 0.5f})};
         m.keyboardHeight = screen.ime.bottom;
-        m.hardKeyboard = screen.hardKeyboard;
+        m.hardKeyboard = screen.hardKeyboard && !myTestTouchKeys;   // the emulator has one; its check needs the numpad
         myFramesToDraw = std::max(myFramesToDraw, 3);
     }
     android::FeedTypedText();
@@ -123,16 +129,26 @@ bool Application::AndroidBetweenFrames(double now) {
     // system's keyboard for names and search (or when asked with ⌨); none
     // when a hardware keyboard is there.
     mobile::MobileState& m = myShell.mobile;
+    // A bare finger picks sketch lines from ~3 mm; the cursor's tip is precise.
+    SetPickScale(m.phone && !mobile::CursorActive(*myContext) ? 3.0f : 1.0f);
+    myContext->sketch.SetAutoArrange(m.phone);   // new dimensions placed clear of the others
     const bool typing = ImGui::GetCurrentContext() && ImGui::GetIO().WantTextInput;
     const bool words = myShell.paletteOpen || myShell.renaming || myShell.treeSearch || m.fullKeyboard || !m.phone;
     myUi->keyHints = m.hardKeyboard;   // Ctrl+N or Esc mean nothing on a touch screen without a keyboard
+    static bool wasTyping = false;   // the log: a field took or left the keyboard
+    if (typing != wasTyping) {
+        log::Info("Keyboard: typing {}", typing ? "on" : "off");
+        wasTyping = typing;
+    }
     const bool hadNumpad = m.numpad;
     m.numpad = m.phone && typing && !words && !m.hardKeyboard;
     // A value left any way (↵, the OK button, another field): it is "пред." for the next one.
     if (hadNumpad && !m.numpad && !m.editingText.empty()) m.previousValue = m.editingText;
+    if (hadNumpad != m.numpad) log::Info("Keyboard: numpad {}", m.numpad ? "on" : "off");
     const bool keyboard = typing && words && !m.hardKeyboard;
     if (!typing) m.fullKeyboard = false;
     if (keyboard != myKeyboardUp) {
+        log::Info("Keyboard: system {}", keyboard ? "on" : "off");
         droid::ShowKeyboard(keyboard);
         myKeyboardUp = keyboard;
     }
@@ -225,12 +241,18 @@ void Application::RunTestCommands() {
             mySettings.mobile.layout = 2;
         } else if (c == "settings") {
             myShell.showSettings = true;
+        } else if (c == "touchkeys") {
+            myTestTouchKeys = true;   // as on a phone with no keyboard plugged in
+        } else if (c == "extrude") {
+            myActions.Run("feature.extrude");   // its distance field: the emulator taps it (smoke-apk.sh)
         } else if (c == "numpad") {
             myShell.mobile.block1Tab = 1;
         } else if (c == "strip") {
             myShell.mobile.flyGroup = "*";   // compact block 2: the first group with more opens its strip
         } else if (c == "layout") {
             mobile::OpenLayoutEditor(*myContext);
+        } else if (c == "home") {
+            // Nothing: the home page as it opens, but a test run (no first-start setup over it).
         } else if (c == "setup") {
             mobile::StartSetup(*myContext);
         }

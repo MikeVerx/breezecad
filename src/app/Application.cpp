@@ -292,6 +292,7 @@ void Application::ApplyTheme(bool force) {
     const bool pictureChanged = background != myBackgroundApplied;
     myBackgroundApplied = background;
     myTheme = dark ? ui::Theme::Dark() : ui::Theme::Light();
+    myIcons.SetDark(dark);
     ui::ApplyToImGui(myTheme, myScale);
     const ui::ThemeColors& c = myTheme.colors;
     // The view background: a preset (under a picture, if there is one).

@@ -18,6 +18,7 @@ struct InputSink {
     std::function<void(ImGuiKeyChord)>               chord;    ///< a key pressed with its modifiers (shortcuts)
     std::function<void()>                            woke;     ///< any input: draw frames
     std::function<bool()>                            backLeaves;   ///< "back" now leaves the app (nothing to close in it)
+    std::function<void()>                            backHint;     ///< says "once more to leave" (the first of two)
     std::function<bool(int direction)>               volume;   ///< a volume key: zoom in (+1) or out (-1); false: the system's
     float density = 1.0f;
 };

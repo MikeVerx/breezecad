@@ -1,4 +1,5 @@
 #include "app/features/SectionEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "core/I18n.h"
 #include "document/Origin.h"
@@ -53,10 +54,9 @@ void SectionEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fe
     Caption(app, Tr("Или щёлкните в окне модели рабочую плоскость или плоскую грань детали."), width);
     Gap(app);
 
-    Section(app, Tr("Остаётся"));
-    static constexpr std::array<const char*, 2> sides{N_("За плоскостью"), N_("Перед плоскостью")};
+    static constexpr std::array<ChoiceItem, 2> sides{{{"section-behind", N_("За плоскостью")}, {"section-front", N_("Перед плоскостью")}}};
     const int current = f.flipped ? 1 : 0;
-    const int chosen = ui::Segmented(app.ui, "side", sides, current, 2, width);
+    const int chosen = ToolChoice(app, "side", N_("Остаётся"), sides, current, width);
     if (chosen != current) {
         f.flipped = chosen == 1;
         Changed(session);

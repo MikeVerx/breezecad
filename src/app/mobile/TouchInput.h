@@ -101,5 +101,9 @@ private:
 /// The drop cursor is in use now: the phone layout, a document open, and a
 /// sketch (always) or the cursor's button on.
 bool CursorActive(const AppContext& app);
+/// The sketch tool places points (draws, moves, copies): only with the cursor —
+/// a bare finger is too coarse for it (author, 17.10). Picking tools (select,
+/// dimension, trim, constraints…) may go without.
+bool SketchToolNeedsCursor(const AppContext& app);
 
 } // namespace bz::app::mobile

@@ -41,7 +41,8 @@ struct MobileState {
     bool touchScreen = false;   ///< fingers are the main input (Android)
 
     // --- The drop cursor (ADR-0004, "Курсор-капля") ---
-    bool   cursorIn3d = false;    ///< its button in the row under block 1 (a sketch has it always on)
+    bool   cursorIn3d = false;    ///< its button in the row under block 1, in the model
+    bool   cursorInSketch = true; ///< the same in a sketch; drawing tools have it on regardless (author, 17.10)
     bool   cursorShown = false;   ///< drawn: it was called at least once since it was switched on
     ImVec2 cursorFinger{0, 0};    ///< where its round part is (under the finger)
     ImVec2 cursorTip{0, 0};       ///< where it points (what the mouse is for ImGui)
@@ -82,6 +83,7 @@ struct MobileState {
         int    code = 0;   ///< a character, or one of the Numpad* codes below
     };
     std::vector<NumpadKey> numpadKeys;
+    ImVec2 numpadMin{0, 0}, numpadMax{0, 0};   ///< the whole plate: a touch between keys goes nowhere
     int numpadDown = -1;   ///< the key under a finger now (drawn pressed)
 
     // --- Value input ---
@@ -114,6 +116,24 @@ struct MobileState {
     std::vector<FlyItem> flyItems;     ///< its commands (filled while block 2 is drawn)
     float                flyY = 0;     ///< the group's row (the strip opens there)
     float                flyScroll = 0;
+
+    // --- The open tool's choices (features/ToolChoice.h): the top islands ---
+    struct ChoiceGroup {
+        std::string id, title;
+        std::vector<std::pair<std::string, std::string>> items;   ///< icon (may be empty: text), label
+        int current = 0;
+        int disabled = 0;      ///< bit i: item i cannot be chosen now
+        bool lineType = false; ///< the sketch's line type: an island of its own
+    };
+    std::vector<ChoiceGroup> choices;       ///< filled while this frame's tool panel is drawn
+    std::vector<ChoiceGroup> lastChoices;   ///< the last non-empty set (the panel may be on another tab)
+    std::string choicesOwner;               ///< whose they are (the tool's title)
+    std::string pickedChoice;               ///< a choice tapped in an island: "id"…
+    int         pickedIndex = -1;           ///< …and the item, taken by ToolChoice next frame
+    float       choiceScroll = 0;           ///< the tool island scrolled sideways
+
+    bool okDown = false;
+    std::vector<std::string> deferredCaptions;   ///< a tool panel's explanations, drawn at its bottom (the phone)   ///< ✓ under a finger right now (the cursor fills)
 
     // --- View cube ---
     bool cubeOpen = false;   ///< the big cube panel is up

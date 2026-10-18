@@ -44,7 +44,18 @@ public:
     /// True when the operation draws the work points itself (it picks them).
     virtual bool DrawsPoints() const { return false; }
 
+    /// True when "Применить" (commit and stay open) differs from "Готово"; the
+    /// phone shows it in block 1's bottom line then.
+    virtual bool HasApply() const { return true; }
+
+    /// Everything needed is chosen: "Применить" would make something (the phone's ✓ turns green).
+    virtual bool Ready(Session& session) const { return true; }
+    /// Takes back the last pick (a contour, an edge, a face); false when nothing is left to take
+    /// back — the phone's ✕ then closes the operation.
+    virtual bool StepBack(AppContext& app, Session& session) { return false; }
+
     virtual const char* Title() const = 0;    ///< "Выдавливание", shown in the status bar
+    virtual const char* Icon() const { return "ui-wrench"; }   ///< its icon, next to the title
     virtual std::string Hint() const = 0;     ///< what to do, for the status bar
 };
 

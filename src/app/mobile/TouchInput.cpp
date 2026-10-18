@@ -1,7 +1,9 @@
 #include "app/mobile/TouchInput.h"
 
 #include "app/Operations.h"
+#include "app/features/OperationEditors.h"
 #include "app/mobile/MobileLayout.h"
+#include "app/sketch/SketchEditor.h"
 #include "core/Log.h"
 #include "core/Monitor.h"
 
@@ -78,7 +80,32 @@ bool CursorActive(const AppContext& app) {
     if (!m.phone) return false;
     const Session* s = app.workspace.Active();
     if (!s || app.workspace.ShowsHome()) return false;
-    return s->mode == EditMode::Sketch || m.cursorIn3d;
+    if (s->mode == EditMode::Sketch) return m.cursorInSketch || SketchToolNeedsCursor(app);
+    return m.cursorIn3d;
+}
+
+bool SketchToolNeedsCursor(const AppContext& app) {
+    switch (app.sketch.Tool()) {
+        case SketchTool::Select:
+        case SketchTool::Dimension:
+        case SketchTool::Project:
+        case SketchTool::Trim:
+        case SketchTool::Extend:
+        case SketchTool::Split:
+        case SketchTool::Fillet:
+        case SketchTool::Coincident:
+        case SketchTool::Horizontal:
+        case SketchTool::Vertical:
+        case SketchTool::Parallel:
+        case SketchTool::Perpendicular:
+        case SketchTool::Equal:
+        case SketchTool::Tangent:
+        case SketchTool::Fix:
+        case SketchTool::Midpoint:
+        case SketchTool::Concentric:
+        case SketchTool::Symmetric: return false;
+        default: return true;
+    }
 }
 
 void TouchInput::Pos(ImVec2 at, ImGuiMouseSource source) {
@@ -186,6 +213,11 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
             myNumpadSince = myNumpadRepeat = e.time;
             m.numpadDown = static_cast<int>(i);
             myQueued = std::max(myQueued, 2);
+            return;
+        }
+        // Between the keys: the panel drawn under the numpad must not get it.
+        if (Inside(at, m.numpadMin, m.numpadMax)) {
+            myRoutes[e.id] = Route::Ignored;
             return;
         }
     }
@@ -440,7 +472,23 @@ void TouchInput::RunRowButtons(AppContext& app) {
     const bool cursor = CursorActive(app) && m.cursorShown;
     if (m.okPressed) {
         m.okPressed = false;
-        if (cursor && m.boxMode) {
+        if (ImGui::GetIO().WantTextInput) {
+            // A value being typed: ✓ enters it (as ↵), never a click at the tip —
+            // that click landed off the field and the value was lost (17.10, the
+            // circle's 20 mm). The next ✓ goes on as usual.
+            ImGuiIO& io = ImGui::GetIO();
+            if (!m.editingText.empty()) m.previousValue = m.editingText;
+            io.AddKeyEvent(ImGuiKey_Enter, true);
+            io.AddKeyEvent(ImGuiKey_Enter, false);
+            myQueued = std::max(myQueued, 3);
+        } else if (OperationEditor* op = app.ops.Active(); op && !m.boxMode && app.Doc() && op->HasApply() && op->Ready(*app.Doc())) {
+            // Everything needed is chosen (✓ is green): it makes the feature and the
+            // operation stays open for the next one (the author, 18.10.2026). A long
+            // press is «Готово» (commit and close).
+            app.Later([&app, op] {
+                if (app.ops.Active() == op && app.Doc()) op->Apply(app, *app.Doc());
+            });
+        } else if (cursor && m.boxMode) {
             // A frame with the cursor: OK at one corner, OK at the other.
             Pos(m.cursorTip);
             Button(ImGuiMouseButton_Left, !m.boxHeld);
@@ -464,8 +512,24 @@ void TouchInput::RunRowButtons(AppContext& app) {
             m.boxHeld = false;
         }
         ImGuiIO& io = ImGui::GetIO();
-        io.AddKeyEvent(ImGuiKey_Escape, true);
-        io.AddKeyEvent(ImGuiKey_Escape, false);
+        // A field being typed in or a menu on top takes it as the Esc key. Otherwise
+        // it is the command: the key alone reached nobody (shortcuts on the phone come
+        // as chords, like "Назад"), so ✕ did nothing in a sketch.
+        const bool keyTakers = io.WantTextInput || ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+        if (keyTakers) {
+            io.AddKeyEvent(ImGuiKey_Escape, true);
+            io.AddKeyEvent(ImGuiKey_Escape, false);
+            if (!io.WantTextInput) {   // a context menu: closed as HandleShortcuts does for Esc
+                ImGuiContext& g = *GImGui;
+                if (!g.OpenPopupStack.empty()) {
+                    const ImGuiWindow* top = g.OpenPopupStack.back().Window;
+                    if (!top || !(top->Flags & ImGuiWindowFlags_Modal)) ImGui::ClosePopupToLevel(g.OpenPopupStack.Size - 1, true);
+                }
+            }
+        } else {
+            mon::Action("touch", "отмена");
+            app.Later([&app] { CancelPressed(app); });
+        }
         myQueued = std::max(myQueued, 3);
     }
 }

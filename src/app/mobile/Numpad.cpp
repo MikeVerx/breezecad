@@ -56,8 +56,12 @@ void DrawNumpad(AppContext& app, ImVec2 pos, ImVec2 size) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     MobileState& m = app.shell.mobile;
-    ImDrawList* dl = ImGui::GetWindowDrawList();
+    // Over everything in block 1 (see DrawBlock1): an opaque plate, then the keys.
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
     m.numpadKeys.clear();
+    m.numpadMin = {pos.x - ui.S(4), pos.y - ui.S(2)};
+    m.numpadMax = {pos.x + size.x + ui.S(4), pos.y + size.y + ui.S(2)};
+    dl->AddRectFilled({pos.x - ui.S(4), pos.y - ui.S(2)}, {pos.x + size.x + ui.S(4), pos.y + size.y + ui.S(2)}, ui::ToU32(c.panel));
 
     // What the field holds now.
     const ImGuiContext& g = *GImGui;
@@ -66,9 +70,9 @@ void DrawNumpad(AppContext& app, ImVec2 pos, ImVec2 size) {
     const float lineH = ui.S(30);
     dl->AddRectFilled(pos, {pos.x + size.x, pos.y + lineH}, ui::ToU32(c.field), ui.S(6));
     dl->AddRect(pos, {pos.x + size.x, pos.y + lineH}, ui::ToU32(c.accent), ui.S(6));
-    ImGui::PushClipRect(pos, {pos.x + size.x - ui.S(6), pos.y + lineH}, true);
+    dl->PushClipRect(pos, {pos.x + size.x - ui.S(6), pos.y + lineH}, true);
     dl->AddText(ui.fonts.mono, ui.S(15), {pos.x + ui.S(8), pos.y + (lineH - ui.S(15)) / 2}, ui::ToU32(c.text), m.editingText.c_str());
-    ImGui::PopClipRect();
+    dl->PopClipRect();
 
     const float top = pos.y + lineH + ui.S(4);
     const float cw = size.x / 7.0f, ch = (size.y - lineH - ui.S(4)) / 4.0f;

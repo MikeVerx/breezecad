@@ -21,6 +21,12 @@ public:
     std::string Hint() const override;
 
 protected:
+    bool PopPick(doc::Feature& feature) override {
+        auto& edges = static_cast<doc::EdgeFeature&>(feature).edges;
+        if (edges.empty()) return false;
+        edges.pop_back();
+        return true;
+    }
     /// A new feature of this kind with defaults.
     virtual std::unique_ptr<doc::EdgeFeature> Create(Session& session) const = 0;
     /// The size field (radius, distance).

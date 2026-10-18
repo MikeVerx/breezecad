@@ -85,7 +85,7 @@ adb shell input tap $cx $cy
 shot 4-sketch 2
 check sketch
 ok_x=$(( b1 - $(dp 30) ))               # OK: block 1's row, nearest the model
-ok_y=$(( h - $(dp 26) - $(dp 25) ))      # above the beard, middle of the row
+ok_y=$(( h - $(dp 25) ))                # the row is block 1's bottom (18.10), its middle
 adb shell input tap $ok_x $ok_y
 adb shell input swipe $cx $cy $((cx + w / 10)) $((cy - h / 8)) 500
 adb shell input tap $ok_x $ok_y
@@ -134,12 +134,123 @@ start example,layout 25
 shot 12-layout-editor
 check layout-editor
 
+# 13–14. Real taps, as a finger does them (17.10: the author's «›» and the
+# extrude field did nothing, while the test commands above opened them fine).
+# The app logs where the first fold opener and the operation's fields are, in dp.
+broken=0
+adb logcat -d -s BreezeCAD:* > "$OUT/breezecad-1.log"   # steps 1–12: the log is cleared below
+blog() { adb logcat -d -s BreezeCAD:* | tr -d '\r'; }
+
+# 13. A folding group's opener in block 2 (18.10: «Изменить» of the 3D tab) tapped: the group opens.
+adb logcat -c
+start example 25
+read -r mx my ms < <(blog | sed -n 's/.*Touch: fold [^ ]* at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\).*/\1 \2 \3/p' | head -1)
+if [ -n "${ms:-}" ]; then
+    adb shell input tap $(dp $(( mx + ms / 2 ))) $(dp $(( my + ms / 2 )))
+    shot 13-fold-tapped 3
+    if blog | grep -q "Fold: open"; then
+        echo "step fold-tap: the group opened ($(blog | grep -o 'Fold: .*' | tr '\n' ';'))"
+    else
+        echo "step fold-tap: FAILED — the group did not open ($(blog | grep -o 'Fold: .*' | tr '\n' ';'))"; broken=1
+    fi
+    # Tapped again: it folds back (and stays folded for the next steps).
+    adb shell input tap $(dp $(( mx + ms / 2 ))) $(dp $(( my + ms / 2 )))
+    sleep 2
+    blog | grep -q "Fold: closed" && echo "step fold-tap: folded back" || { echo "step fold-tap: FAILED — did not fold back"; broken=1; }
+else
+    echo "step fold-tap: FAILED — no opener in the log"; broken=1
+fi
+check fold-tap
+
+# 14. Extrude (a new part, an empty sketch: the example has no unused sketch): the field loses the focus it opens with (a tap on the model),
+# then a tap on the field opens the numpad, and it is still open 3 s later.
+adb logcat -c
+start touchkeys,new,sketch,extrude 30
+fieldat() { blog | sed -n 's/.*Touch: field distance at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' | tail -1; }
+adb shell input tap $((w / 2)) $((h / 3))
+sleep 2
+read -r fx fy fw fh < <(fieldat)   # where it is now, the layout settled
+# Under block 1's bottom row (a low screen; the focus it opens with did not scroll to it — that
+# depends on timing): scrolled into view with a finger first, as a person would.
+hdp=$(( h * 160 / density ))
+if [ -n "${fh:-}" ] && [ $(( fy + fh )) -gt $(( hdp - 56 )) ]; then
+    adb shell input swipe $(dp $(( fx + fw / 2 ))) $(dp $(( hdp - 90 ))) $(dp $(( fx + fw / 2 ))) $(dp 70) 700
+    sleep 2
+    read -r fx fy fw fh < <(fieldat)
+    echo "step extrude-field: scrolled block 1 (field now at $fx,$fy)"
+fi
+if [ -n "${fh:-}" ]; then
+    adb shell input tap $(dp $(( fx + fw / 3 ))) $(dp $(( fy + fh / 2 )))
+    shot 14-extrude-numpad 3
+    seq=$(blog | grep -o 'Keyboard: [a-z]* [a-z]*' | tr '\n' ';')
+    if [ "$(blog | grep -o 'Keyboard: typing [a-z]*' | tail -1)" = "Keyboard: typing on" ] &&
+       [ "$(blog | grep -o 'Keyboard: numpad [a-z]*' | tail -1)" = "Keyboard: numpad on" ]; then
+        echo "step extrude-field: the numpad is open (field at $fx,$fy; $seq)"
+    else
+        echo "step extrude-field: FAILED — the numpad is not open (field at $fx,$fy; $seq)"; broken=1
+    fi
+else
+    echo "step extrude-field: FAILED — no field in the log"; broken=1
+fi
+check extrude-field
+
+# 14b. The extrude's choices are in the top island (18.10). In a new part no operation but
+# «new body» can be chosen, and the emulator's view is narrow: the island is swiped sideways
+# first (it scrolls), then the first item that can be chosen is tapped — the log says it took.
+adb shell input tap $((w / 2)) $((h / 3))   # off the field: the numpad goes
+sleep 2
+read -r ix iy iw ih < <(blog | sed -n 's/.*Touch: choices ##island-choices at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' | tail -1)
+if [ -n "${iw:-}" ]; then
+    adb shell input swipe $(dp $(( ix + iw - 12 ))) $(dp $(( iy + ih / 2 ))) $(dp $(( ix + 12 ))) $(dp $(( iy + ih / 2 ))) 600
+    sleep 2
+    read -r cid cix cx0 cy0 cs0 < <(blog | sed -n 's/.*Touch: choice \([a-z-]*\) \([0-9]*\) at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\).*/\1 \2 \3 \4 \5/p' | tail -1)
+    if [ -n "${cs0:-}" ]; then
+        adb shell input tap $(dp $(( cx0 + cs0 / 2 ))) $(dp $(( cy0 + 15 )))
+        shot 14b-choice-tapped 3
+        if blog | grep -q "Choice: $cid $cix"; then
+            echo "step choice-tap: $cid set to $cix (after a swipe)"
+        else
+            echo "step choice-tap: FAILED — no «Choice: $cid $cix» ($(blog | grep -o 'Choice: .*' | tr '\n' ';'))"; broken=1
+        fi
+    else
+        echo "step choice-tap: FAILED — nothing to choose in the island after the swipe"; broken=1
+    fi
+else
+    echo "step choice-tap: FAILED — no choice island in the log"; broken=1
+fi
+check choice-tap
+
 adb logcat -d -s BreezeCAD:* > "$OUT/breezecad.log"
 adb logcat -d '*:E' > "$OUT/errors.log"
 grep -E "OpenGL ES|Window:|ERROR|WARN|test commands" "$OUT/breezecad.log" | head -20
 echo "touch: $(tr -d '\r' < "$OUT/breezecad.log" | grep -o 'Touch: .*' | tail -12 | tr '\n' ';')"
+
+# 15. "Back" on the home page (18.10: an edge swipe closed the app): the first only
+# says "once more", the app stays in front; the second leaves. Then started again.
+focused() { adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | grep -c "$PACKAGE"; }
+adb logcat -c
+start home 15   # "home": a test run — no first-start setup over the home page
+adb shell input keyevent KEYCODE_BACK
+sleep 1
+if [ "$(focused)" -gt 0 ] && blog | grep -q "Back: once more"; then
+    echo "step back-once: stayed, asked for a second"
+else
+    echo "step back-once: FAILED — focus $(focused), log: $(blog | grep -o 'Back: .*' | tr '\n' ';')"; broken=1
+fi
+adb shell input keyevent KEYCODE_BACK
+sleep 3
+if [ "$(focused)" -eq 0 ]; then
+    echo "step back-twice: left"
+else
+    echo "step back-twice: FAILED — still in front"; broken=1
+fi
+start "" 15
 if [ $failed -ne 0 ] || [ -z "$(alive)" ]; then
     echo "the app died:"; grep -E "FATAL|DEBUG|libbreezecad|backtrace|#[0-9]+ pc|AndroidRuntime" "$OUT/errors.log" | head -60
+    exit 1
+fi
+if [ $broken -ne 0 ]; then
+    echo "a tap check failed (steps 13–15 above)"
     exit 1
 fi
 echo "smoke test passed"

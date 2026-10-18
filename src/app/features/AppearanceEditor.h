@@ -42,12 +42,14 @@ public:
     bool        CanEdit(const doc::Feature&) const override { return false; }
     void        EditExisting(AppContext&, Session&, ObjectId) override {}
     void        Apply(AppContext& app, Session& session) override { Done(app, session); }
+    bool        HasApply() const override { return false; }
     void        Done(AppContext& app, Session& session) override;
     void        Cancel(AppContext& app, Session& session) override;
     void        DrawPanel(AppContext& app, Session& session) override;
     void        DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;
     bool        PicksFaces() const override { return true; }
     const char* Title() const override { return Tr("Внешний вид"); }
+    const char* Icon() const override { return "appearance"; }
     std::string Hint() const override;
 
     /// The appearance picker of the top toolbar (as in Inventor): the part's
@@ -68,6 +70,14 @@ private:
     /// Standard and own appearances as rows; returns the clicked id ("" default), or nullopt.
     std::optional<std::string> List(AppContext& app, std::string_view chosen, float width, bool withOwnMenu);
     void DrawCreateDialog(AppContext& app, Session& session);
+    /// The new look's fields; `myInline`: one column in the phone's block 1, not a window.
+    void DrawCreateBody(AppContext& app, float width);
+    /// A new look of one's own, starting from the chosen colour.
+    void StartCreate();
+    /// The phone (mockups 9a–9c, 18.10.2026): what is on now, three buttons —
+    /// the library, my colours, a new colour — each opening over block 1 with
+    /// ✕ in its corner; the recent looks a tap away.
+    void DrawPhonePanel(AppContext& app, Session& session, float width);
     /// Puts the chosen appearance on what it was opened on: the faces
     /// (Поверхность) or their objects and the chosen component (Объект).
     void ApplyToTargets(AppContext& app, Session& session);
@@ -96,6 +106,10 @@ private:
     unsigned ThumbnailOf(const doc::Appearance* a);
 
     bool        myOpen = false;
+    bool        myInline = false;            ///< the create form is drawn in block 1 (the phone)
+    int         myPhonePage = 0;             ///< 0 the main one, 1 the library, 2 my colours, 3 a new colour
+    std::vector<std::string> myRecent;       ///< the looks chosen last, newest first (the phone)
+    std::string myRecentSeen;
     bool        myFaces = false;          ///< Поверхность: a click colours one face (default: the whole object)
     bool        myToPart = false;         ///< assembly: Готово writes into the parts' files
     std::vector<ObjectId> myTargetBodies;   ///< objects it was opened on (the assembly's chosen component)

@@ -16,6 +16,10 @@ struct SketchHit {
     explicit operator bool() const { return id.IsValid(); }
 };
 
+/// The pick radii are for a mouse or the phone's cursor tip (a few dp); a bare
+/// finger needs ~3 mm. The phone sets this every frame (1 = as on the desktop).
+void SetPickScale(float scale);
+
 /// Closest entity within a few pixels of `mouse`. Dimension labels count as
 /// their constraint. `ignore` skips one point (the one being dragged).
 SketchHit HitTest(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, const UnitSystem& units,

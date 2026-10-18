@@ -230,6 +230,10 @@ void RegisterActions(AppContext& app) {
            N_("Сделать выбранные отрезки осевыми (штрихпунктир): ось для вращения и пружины, контур ограничивают как обычные"),
            [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasSelection(); },
            [&app] { app.sketch.ToggleCenterline(*app.Doc()); }});
+    a.Add({"sketch.arrangeDimensions", N_("Упорядочить"), "dim-arrange", ImGuiKey_None,
+           N_("Упорядочить размеры: тексты разносятся так, чтобы не налезали друг на друга и на линии эскиза"),
+           [&app] { return app.Doc() && app.Doc()->mode == EditMode::Sketch && app.sketch.HasDimensions(*app.Doc()); },
+           [&app] { app.sketch.ArrangeDimensions(app, *app.Doc()); }});
     a.Add({"sketch.showConstraints", N_("Показать все зависимости"), "c-show-all", ImGuiKey_F8,
            N_("Значки всех зависимостей эскиза (F8). Скрытые видны у выделенного"), inSketch,
            [&app] { app.settings.showAllConstraints = true; }});

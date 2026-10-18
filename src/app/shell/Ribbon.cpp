@@ -341,6 +341,9 @@ void SketchRibbonImpl(AppContext& app, RibbonSink& r, bool withFinish) {
 
     r.BeginGroup(Tr("Размеры"));
     r.Large("sketch.dimension", Tr("Размер"), active(SketchTool::Dimension));
+    r.BeginColumn();
+    r.Small("sketch.arrangeDimensions");
+    r.EndColumn();
     r.EndGroup();
 
     r.BeginGroup(Tr("Формат"));

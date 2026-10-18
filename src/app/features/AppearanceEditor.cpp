@@ -1,4 +1,5 @@
 #include "app/features/AppearanceEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/features/OperationEditors.h"
 #include "app/sketch/SketchEditor.h"
@@ -452,22 +453,149 @@ std::optional<std::string> AppearanceEditor::List(AppContext& app, std::string_v
     return picked;
 }
 
+void AppearanceEditor::StartCreate() {
+    myDraft = {};
+    myKind = 0;
+    myPictureFile.clear();
+    myDraft.name = Tr("Мой цвет");
+    if (const doc::Appearance* base = Chosen(); base && !base->HasPicture()) {
+        myDraft.face = base->face;
+        myDraft.edges = base->edges;
+        myDraft.finish = base->finish;
+    }
+    myCreating = true;
+}
+
+void AppearanceEditor::DrawPhonePanel(AppContext& app, Session& session, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    // Remember what was chosen, for «Недавние».
+    if (myChosen != myRecentSeen) {
+        myRecentSeen = myChosen;
+        myRecent.erase(std::remove(myRecent.begin(), myRecent.end(), myChosen), myRecent.end());
+        myRecent.insert(myRecent.begin(), myChosen);
+        if (myRecent.size() > 6) myRecent.resize(6);
+    }
+    // A page over block 1: its name, ✕ in the top right corner (back to the main page).
+    const auto head = [&](const char* title) {
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        dl->AddText(ui.fonts.strong, ui.S(14), {p.x, p.y + ui.S(9)}, ui::ToU32(c.text), title);
+        ImGui::SetCursorScreenPos({p.x + width - ui.S(34), p.y});
+        const bool closed = ui::IconButton(ui, "##page-close", "ui-close", 34, 16, Tr("Закрыть"));
+        ImGui::SetCursorScreenPos({p.x, p.y + ui.S(40)});
+        ui::Divider(ui, c.dividerSoft);
+        ImGui::Dummy({0, ui.S(4)});
+        return closed;
+    };
+    if (myPhonePage == 1 || myPhonePage == 2) {
+        if (head(myPhonePage == 1 ? Tr("Библиотека") : Tr("Мои цвета"))) myPhonePage = 0;
+        if (myPhonePage == 1) {
+            if (Row(app, nullptr, myChosen.empty(), width)) myChosen.clear();
+            for (const doc::Appearance& a : doc::StandardAppearances())
+                if (Row(app, &a, myChosen == a.id, width)) myChosen = a.id;
+        } else {
+            for (const doc::Appearance& a : myLibrary.Items())
+                if (Row(app, &a, myChosen == a.id, width)) myChosen = a.id;
+            if (myLibrary.Items().empty()) Caption(app, Tr("Пока нет: создайте свой цвет или картинку."), width);
+            ImGui::Dummy({0, ui.S(6)});
+            if (ui::LinkButton(ui, "##import-looks-phone", Tr("Импорт…"))) {
+                if (const auto file = platform::ShowOpenDialog(Tr("Импорт внешних видов"), {{Tr("Внешние виды"), "*.zip *.json"}}, platform::DocumentsDir())) {
+                    if (const auto added = myLibrary.Import(*file)) app.notes.Success(Trf("Добавлено в «Мои»: {}", *added));
+                    else app.notes.Error(Tr(added.GetError().message));
+                }
+            }
+        }
+        return;
+    }
+    if (myPhonePage == 3) {
+        if (head(myDraft.id.empty() ? Tr("Новый цвет") : Tr("Изменить цвет"))) {
+            myCreating = false;
+            myPhonePage = 0;
+            return;
+        }
+        myInline = true;
+        DrawCreateBody(app, width);
+        myInline = false;
+        if (!myCreating) myPhonePage = 0;   // saved or cancelled
+        return;
+    }
+
+    // The main page: what a tap on the model puts on now.
+    {
+        ui::FieldLabel(ui, Tr("Сейчас"));
+        const doc::Appearance* a = Chosen();
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float h = ui.S(46);
+        dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.segmentTrack), ui.S(10));
+        Sample(app, dl, {p.x + ui.S(8), p.y + ui.S(8)}, h - ui.S(16), a);
+        const std::string name = a ? NameOf(*a) : std::string(Tr("По умолчанию"));
+        ui::FittedText(dl, ui.fonts.medium, ui.S(13), {p.x + h + ui.S(4), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, p.x + width - ui.S(6),
+                       ui::ToU32(c.text), name.c_str());
+        ImGui::Dummy({width, h});
+    }
+    DrawPictureSize(app, session, width);
+    ImGui::Dummy({0, ui.S(6)});
+    // The three ways to a look.
+    struct Way {
+        const char* icon;
+        const char* label;
+        int page;
+    };
+    const Way ways[] = {{"ui-folder", Tr("Из библиотеки"), 1}, {"ui-palette", Tr("Мои цвета"), 2}, {"ui-plus", Tr("Создать цвет"), 3}};
+    for (const Way& w : ways) {
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float h = ui.S(42);
+        ImGui::PushID(w.page);
+        const bool clicked = ImGui::InvisibleButton("##way", {width, h});
+        ImGui::PopID();
+        dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(ImGui::IsItemActive() ? c.pressed : c.segmentTrack), ui.S(10));
+        ui.icons.Draw(dl, w.icon, {p.x + ui.S(12), p.y + (h - ui.S(18)) / 2}, ui.S(18), c.textSecondary);
+        ui::FittedText(dl, ui.fonts.medium, ui.S(13), {p.x + ui.S(40), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, p.x + width - ui.S(24),
+                       ui::ToU32(c.text), w.label);
+        ui.icons.Draw(dl, "ui-chevron-right", {p.x + width - ui.S(20), p.y + (h - ui.S(12)) / 2}, ui.S(12), c.textMuted);
+        if (clicked) {
+            if (w.page == 3) StartCreate();
+            myPhonePage = w.page;
+        }
+        ImGui::Dummy({0, ui.S(4)});
+    }
+    // The recent looks: a tap takes one at once.
+    if (myRecent.size() > 1) {
+        ImGui::Dummy({0, ui.S(4)});
+        ui::FieldLabel(ui, Tr("Недавние"));
+        const float s = ui.S(30), gap = ui.S(8);
+        ImVec2 at = ImGui::GetCursorScreenPos();
+        const float x0 = at.x;
+        for (std::size_t i = 0; i < myRecent.size(); ++i) {
+            const doc::Appearance* a = myRecent[i].empty() ? nullptr : myLibrary.Find(myRecent[i]);
+            if (!a && !myRecent[i].empty()) {
+                for (const doc::Appearance& std : doc::StandardAppearances())
+                    if (std.id == myRecent[i]) a = &std;
+                if (!a) continue;
+            }
+            if (at.x + s > x0 + width) {
+                at.x = x0;
+                at.y += s + gap;
+            }
+            ImGui::SetCursorScreenPos(at);
+            ImGui::PushID(static_cast<int>(i));
+            if (ImGui::InvisibleButton("##recent", {s, s})) myChosen = myRecent[i];
+            ImGui::PopID();
+            Sample(app, dl, at, s, a);
+            if (myRecent[i] == myChosen) dl->AddRect({at.x - ui.S(2), at.y - ui.S(2)}, {at.x + s + ui.S(2), at.y + s + ui.S(2)}, ui::ToU32(c.accent), ui.S(8), 0, ui.S(2));
+            at.x += s + gap;
+        }
+        ImGui::SetCursorScreenPos({x0, at.y + s + gap});
+        ImGui::Dummy({width, 0});
+    }
+}
+
 void AppearanceEditor::DrawLibrary(AppContext& app, float width) {
     ui::Ui& ui = app.ui;
     if (const auto picked = List(app, myChosen, width, true)) myChosen = *picked;
     ImGui::Dummy({0, ui.S(4)});
-    if (ui::LinkButton(ui, "##new-look", Tr("+ Создать свой…"))) {
-        myDraft = {};
-        myKind = 0;
-        myPictureFile.clear();
-        myDraft.name = Tr("Мой цвет");
-        if (const doc::Appearance* base = Chosen(); base && !base->HasPicture()) {
-            myDraft.face = base->face;
-            myDraft.edges = base->edges;
-            myDraft.finish = base->finish;
-        }
-        myCreating = true;
-    }
+    if (ui::LinkButton(ui, "##new-look", Tr("+ Создать свой…"))) StartCreate();
     ImGui::SameLine(0, ui.S(14));
     if (ui::LinkButton(ui, "##import-looks", Tr("Импорт…"))) {
         if (const auto file = platform::ShowOpenDialog(Tr("Импорт внешних видов"), {{Tr("Внешние виды"), "*.zip *.json"}}, platform::DocumentsDir())) {
@@ -519,29 +647,10 @@ unsigned AppearanceEditor::ThumbnailOf(const doc::Appearance* a) {
     return Thumbnail(a->picture, myLibrary.PictureBytes(a->picture));
 }
 
-void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
-    (void)session;
+void AppearanceEditor::DrawCreateBody(AppContext& app, float width) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
-    const char* id = "##appearance-create";
-    if (myCreating && !ImGui::IsPopupOpen(id)) ImGui::OpenPopup(id);
-    const ImVec2 display = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowPos({display.x / 2, display.y / 2}, ImGuiCond_Always, {0.5f, 0.5f});
-    ImGui::SetNextWindowSize({ui.S(560), 0});
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui.S(24, 22));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ui.S(14));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ui.S(8, 8));
-    const bool visible = ImGui::BeginPopupModal(id, nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
-    ImGui::PopStyleVar(3);
-    if (!visible) {
-        myCreating = false;
-        return;
-    }
-    const float width = ImGui::GetContentRegionAvail().x;
-    {
-        ui::FontScope font(ui.fonts.title);
-        ImGui::TextUnformatted(myDraft.id.empty() ? Tr("Новый внешний вид") : Tr("Изменить внешний вид"));
-    }
+    (void)c;
     ImGui::Dummy({0, ui.S(4)});
     Section(app, Tr("Название"));
     ui::TextField(ui, "##look-name", myDraft.name, width);
@@ -552,7 +661,7 @@ void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
     ImGui::Dummy({0, ui.S(6)});
 
     // Left: the colour (or the picture) of the faces; right: preview, edges, finish.
-    const float left = ui.S(270);
+    const float left = myInline ? width : ui.S(270);
     ImGui::BeginGroup();
     if (myKind == 1) {
         Section(app, Tr("Картинка"));
@@ -608,9 +717,10 @@ void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
     Caption(app, Tr("Правая полоса — прозрачность: ниже — прозрачнее (A: 255 — непрозрачный)."), left);
     ImGui::EndGroup();
     }
-    ImGui::SameLine(0, ui.S(20));
+    if (myInline) ImGui::Dummy({0, ui.S(8)});   // the phone: one column
+    else ImGui::SameLine(0, ui.S(20));
     ImGui::BeginGroup();
-    const float right = width - left - ui.S(20);
+    const float right = myInline ? width : width - left - ui.S(20);
     Section(app, Tr("Образец"));
     {
         const ImVec2 p = ImGui::GetCursorScreenPos();
@@ -657,7 +767,7 @@ void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
     const float bw = (width - ui.S(8)) / 2;
     if (ui::SecondaryButton(ui, "##look-cancel", Tr("Отмена"), nullptr, {bw, ui.S(36)})) {
         myCreating = false;
-        ImGui::CloseCurrentPopup();
+        if (!myInline) ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine(0, ui.S(8));
     const bool ready = !myDraft.name.empty() && (myKind == 0 || myDraft.HasPicture());
@@ -679,8 +789,33 @@ void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
             app.notes.Error(Tr(saved.GetError().message));
         }
         myCreating = false;
-        ImGui::CloseCurrentPopup();
+        if (!myInline) ImGui::CloseCurrentPopup();
     }
+}
+
+void AppearanceEditor::DrawCreateDialog(AppContext& app, Session& session) {
+    (void)session;
+    ui::Ui& ui = app.ui;
+    const char* id = "##appearance-create";
+    if (myCreating && !ImGui::IsPopupOpen(id)) ImGui::OpenPopup(id);
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowPos({display.x / 2, display.y / 2}, ImGuiCond_Always, {0.5f, 0.5f});
+    ImGui::SetNextWindowSize({ui.S(560), 0});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui.S(24, 22));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ui.S(14));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ui.S(8, 8));
+    const bool visible = ImGui::BeginPopupModal(id, nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
+    ImGui::PopStyleVar(3);
+    if (!visible) {
+        myCreating = false;
+        return;
+    }
+    const float width = ImGui::GetContentRegionAvail().x;
+    {
+        ui::FontScope font(ui.fonts.title);
+        ImGui::TextUnformatted(myDraft.id.empty() ? Tr("Новый внешний вид") : Tr("Изменить внешний вид"));
+    }
+    DrawCreateBody(app, width);
     ImGui::EndPopup();
 }
 
@@ -827,8 +962,8 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     const ui::ThemeColors& c = ui.C();
     const float width = ImGui::GetContentRegionAvail().x;
 
-    // Header: icon, title, close.
-    {
+    // Header: icon, title, close (not on the phone: block 2's status line and ✕ under block 1).
+    if (!app.shell.mobile.phone) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(48);
@@ -841,19 +976,34 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
         ui::Divider(ui, c.dividerSoft);
     }
 
-    const float footer = ui.S(62);
+    const bool phone = app.shell.mobile.phone;   // Отмена/Готово: the row under block 1
+    const float footer = phone ? 0.0f : ui.S(62);
     ImGui::BeginChild("##look-body", {width, ImGui::GetContentRegionAvail().y - footer}, ImGuiChildFlags_None);
     ImGui::SetCursorPos({ui.S(14), ui.S(14)});
     ImGui::BeginGroup();
     const float inner = width - ui.S(28);
 
     // What is painted: a whole object (the default) or single faces.
-    Section(app, Tr("Что красить"));
-    static constexpr std::array<const char*, 2> targets{N_("Объект"), N_("Поверхность")};
+    static constexpr std::array<ChoiceItem, 2> targets{{{"tree-part", N_("Тело целиком")}, {"work-plane", N_("Грань")}}};
     const int target = myFaces ? 1 : 0;
-    if (const int t = ui::Segmented(ui, "look-target", targets, target, 2, inner); t != target) {
+    if (const int t = ToolChoice(app, "look-target", N_("Что красить"), targets, target, inner); t != target) {
         myFaces = t == 1;
         myTargetsChosen = myChosen;   // the next choice goes on the targets in the new mode
+    }
+    if (phone) {
+        if (session.assembly) {   // where it is kept: an island too
+            static constexpr std::array<ChoiceItem, 2> places{{{nullptr, N_("Только в сборке")}, {nullptr, N_("В детали")}}};
+            const int place = myToPart ? 1 : 0;
+            if (const int p = ToolChoice(app, "look-place", N_("Где сохранить"), places, place, inner); p != place) myToPart = p == 1;
+        }
+        DrawPhonePanel(app, session, inner);
+        if (TargetCount() > 0 && myChosen != myTargetsChosen) {
+            myTargetsChosen = myChosen;
+            ApplyToTargets(app, session);
+        }
+        ImGui::EndGroup();
+        ImGui::EndChild();
+        return;
     }
     if (const std::size_t n = TargetCount(); n > 0)
         Caption(app, (myFaces ? Trf("Выбрано граней: {}. Вид из списка сразу ложится на них; щелчок по другой грани красит и её.", n)
@@ -868,10 +1018,9 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     // Assembly: where the look is kept.
     if (session.assembly) {
         ImGui::Dummy({0, ui.S(8)});
-        Section(app, Tr("Где сохранить"));
-        static constexpr std::array<const char*, 2> places{N_("Только в сборке"), N_("В детали")};
+        static constexpr std::array<ChoiceItem, 2> places{{{nullptr, N_("Только в сборке")}, {nullptr, N_("В детали")}}};
         const int place = myToPart ? 1 : 0;
-        if (const int p = ui::Segmented(ui, "look-place", places, place, 2, inner); p != place) myToPart = p == 1;
+        if (const int p = ToolChoice(app, "look-place", N_("Где сохранить"), places, place, inner); p != place) myToPart = p == 1;
         Caption(app, myToPart ? Tr("По «Готово» вид запишется в файлы деталей: изменятся все их копии, в этой и других сборках.")
                               : Tr("Вид только для этой сборки: файлы деталей не меняются."),
                 inner);
@@ -909,6 +1058,10 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     ImGui::EndGroup();
     ImGui::EndChild();
 
+    if (phone) {
+        DrawCreateDialog(app, session);
+        return;
+    }
     // Footer: Отмена / Готово.
     ui::Divider(ui, c.dividerSoft);
     const ImVec2 fp = ImGui::GetCursorScreenPos();

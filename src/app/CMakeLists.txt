@@ -33,6 +33,7 @@ set(BZ_APP_SOURCES
     scripting/ViewCommands.cpp
     scripting/AssemblyCommands.cpp
     features/AppearanceEditor.cpp
+    features/ToolChoice.cpp
     features/CopyEditors.cpp
     features/CoilEditor.cpp
     features/SketchAxis.cpp
@@ -64,6 +65,7 @@ set(BZ_APP_SOURCES
     shell/Splash.cpp
     shell/TouchpadSettings.cpp
     shell/TreePanel.cpp
+    sketch/DimensionArrange.cpp
     sketch/DimensionLayout.cpp
     MouseNavigation.cpp
     ShortcutPresets.cpp

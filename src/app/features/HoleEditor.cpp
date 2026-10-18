@@ -1,4 +1,5 @@
 #include "app/features/HoleEditor.h"
+#include "app/features/ToolChoice.h"
 
 #include "app/Format.h"
 #include "app/sketch/SketchView.h"
@@ -284,9 +285,9 @@ void HoleEditor::DrawFaceSection(AppContext& app, Session& session, doc::HoleFea
         ImGui::Dummy({width, h});
     }
     {
-        static constexpr std::array<const char*, 2> modes{N_("Центр по щелчку"), N_("Соосно")};
+        static constexpr std::array<ChoiceItem, 2> modes{{{"hole-at-click", N_("Центр по щелчку")}, {"hole-coaxial", N_("Соосно")}}};
         const int current = myCoaxial ? 1 : 0;
-        if (const int chosen = ui::Segmented(ui, "centre-mode", modes, current, 2, width); chosen != current) myCoaxial = chosen == 1;
+        if (const int chosen = ToolChoice(app, "centre-mode", N_("Центр"), modes, current, width); chosen != current) myCoaxial = chosen == 1;
         ImGui::Dummy({0, ui.S(4)});
     }
     if (myCoaxial)
@@ -365,11 +366,10 @@ void HoleEditor::DrawCentres(AppContext& app, Session& session, doc::HoleFeature
 void HoleEditor::DrawSizes(AppContext& app, Session& session, doc::HoleFeature& f, float width) {
     ui::Ui& ui = app.ui;
 
-    Section(app, Tr("Тип"));
     {
-        static constexpr std::array<const char*, 3> labels{N_("Простое"), N_("Цековка"), N_("Зенковка")};
+        static constexpr std::array<ChoiceItem, 3> labels{{{"hole-simple", N_("Простое")}, {"hole-cbore", N_("Цековка")}, {"hole-csink", N_("Зенковка")}}};
         const int current = static_cast<int>(f.type);
-        const int chosen = ui::Segmented(ui, "type", labels, current, 3, width);
+        const int chosen = ToolChoice(app, "type", N_("Тип"), labels, current, width);
         if (chosen != current) {
             f.type = static_cast<HoleType>(chosen);
             Changed(session);
@@ -395,11 +395,10 @@ void HoleEditor::DrawSizes(AppContext& app, Session& session, doc::HoleFeature& 
         Gap(app);
     }
 
-    Section(app, Tr("Глубина"));
     {
-        static constexpr std::array<const char*, 2> labels{N_("На расстояние"), N_("Насквозь")};
+        static constexpr std::array<ChoiceItem, 2> labels{{{"ext-distance", N_("На расстояние")}, {"ext-through", N_("Насквозь")}}};
         const int current = f.throughAll ? 1 : 0;
-        const int chosen = ui::Segmented(ui, "depth-kind", labels, current, 2, width);
+        const int chosen = ToolChoice(app, "depth-kind", N_("Глубина"), labels, current, width);
         if (chosen != current) {
             f.throughAll = chosen == 1;
             Changed(session);
