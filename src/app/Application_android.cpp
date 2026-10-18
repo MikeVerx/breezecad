@@ -251,6 +251,8 @@ void Application::RunTestCommands() {
             myShell.mobile.flyGroup = "*";   // compact block 2: the first group with more opens its strip
         } else if (c == "layout") {
             mobile::OpenLayoutEditor(*myContext);
+        } else if (c == "home") {
+            // Nothing: the home page as it opens, but a test run (no first-start setup over it).
         } else if (c == "setup") {
             mobile::StartSetup(*myContext);
         }

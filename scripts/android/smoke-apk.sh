@@ -186,8 +186,9 @@ fi
 check extrude-field
 
 # 14b. The extrude's choices are in the top island (18.10): a tap on one sets it (the log says so).
-adb shell input tap $((w / 2)) $((h / 3))   # off the field: the numpad goes
-sleep 2
+# On the example part: there is a body, so every operation can be chosen.
+adb logcat -c
+start touchkeys,example,extrude 30
 read -r cid cix cx0 cy0 cs0 < <(blog | sed -n 's/.*Touch: choice \([a-z-]*\) \([0-9]*\) at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\).*/\1 \2 \3 \4 \5/p' | head -1)
 if [ -n "${cs0:-}" ]; then
     adb shell input tap $(dp $(( cx0 + cs0 / 2 ))) $(dp $(( cy0 + 15 )))
@@ -211,7 +212,7 @@ echo "touch: $(tr -d '\r' < "$OUT/breezecad.log" | grep -o 'Touch: .*' | tail -1
 # says "once more", the app stays in front; the second leaves. Then started again.
 focused() { adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | grep -c "$PACKAGE"; }
 adb logcat -c
-start "" 15
+start home 15   # "home": a test run — no first-start setup over the home page
 adb shell input keyevent KEYCODE_BACK
 sleep 2
 shot 15-back-once 1

@@ -693,7 +693,7 @@ void DrawChoiceIsland(AppContext& app, const char* id, const std::vector<const M
                 const float is = ui.S(22);
                 ui.icons.Draw(dl, icon, {x + (w - is) / 2, at.y + (h - is) / 2}, is, off ? Color{1, 1, 1, 0.3f} : Color{1, 1, 1, 1});
             }
-            if (logged.empty() && !on && !off) {
+            if (logged.empty() && !on && !off && a.x >= at.x && b.x <= at.x + width) {   // a visible one
                 logged = grp.id + std::to_string(i);   // once: the emulator taps the first item that can be chosen
                 log::Info("Touch: choice {} {} at {:.0f},{:.0f} size {:.0f}", grp.id, i, a.x, a.y, w);
             }
