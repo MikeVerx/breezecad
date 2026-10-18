@@ -24,15 +24,20 @@
                  android:extractNativeLibs="true"
                  android:allowBackup="false"
                  android:resizeableActivity="true"
+                 android:enableOnBackInvokedCallback="false"
                  android:theme="@android:style/Theme.Material.Light.NoActionBar.Fullscreen">
         <!-- Always landscape on a phone (ADR-0004); turning the phone over flips
-             it, the activity is not recreated on rotation or a keyboard. -->
+             it, the activity is not recreated on rotation or a keyboard.
+             enableOnBackInvokedCallback="false": "Back" comes as KEYCODE_BACK
+             (Esc in the program, a second one leaves) — on Android 16 with
+             target 36 the system no longer sends it otherwise. -->
         <activity android:name=".BreezeActivity"
                   android:exported="true"
                   android:screenOrientation="sensorLandscape"
                   android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|layoutDirection|locale"
                   android:windowSoftInputMode="adjustNothing|stateHidden"
-                  android:launchMode="singleTask">
+                  android:launchMode="singleTask"
+                  android:enableOnBackInvokedCallback="false">
             <meta-data android:name="android.app.lib_name" android:value="breezecad" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

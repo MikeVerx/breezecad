@@ -9,6 +9,7 @@
 #include "platform/FileDialogs.h"
 
 #include "core/Log.h"
+#include "core/Monitor.h"
 #include "platform/Android.h"
 #include "platform/Window.h"
 
@@ -23,6 +24,9 @@ namespace bz::platform {
 namespace {
 
 std::optional<android::PickResult> Wait(android::PickResult::Kind kind) {
+    // The loop waits for the system's picker on purpose: no hang report however
+    // long the user looks for the file (it said "не отвечает" after 8 s, 18.10.2026).
+    const mon::Waiting waiting;
     while (android_app* app = android::App()) {
         Window::WaitEvents(0.25);
         if (auto r = android::TakePickResult()) {

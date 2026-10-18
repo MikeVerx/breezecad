@@ -32,7 +32,12 @@ NDK_BIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
 # 36.0.0-rc…) make an APK that release Android refuses to install.
 TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | grep -E '/[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
 PLATFORM=$(ls -d "$ANDROID_HOME"/platforms/android-* | grep -E '/android-[0-9]+$' | sort -V | tail -1)
-TARGET_SDK=${PLATFORM##*-}
+# The target is fixed, not "whatever the runner has": a new target changes how the
+# system treats the app (Android 16 with target 36 stopped sending "Back", 18.10.2026).
+# Raise it on purpose, after checking the behaviour changes of that Android.
+PLATFORM_SDK=${PLATFORM##*-}
+TARGET_SDK=36
+[ "$PLATFORM_SDK" -lt "$TARGET_SDK" ] && TARGET_SDK=$PLATFORM_SDK
 case "$ABI" in
     arm64-v8a) triple=aarch64-linux-android ;;
     x86_64)    triple=x86_64-linux-android ;;
