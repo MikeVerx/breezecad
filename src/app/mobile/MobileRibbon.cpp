@@ -339,7 +339,8 @@ struct PhoneGroup {
 const std::vector<PhoneGroup>& PhoneGroups(AppContext& app, Session& session) {
     static const std::vector<PhoneGroup> sketch{
         {N_("Эскиз"), {"sketch.start"}},
-        {N_("Размеры"), {"sketch.dimension", "sketch.arrangeDimensions"}},
+        // «Основное» (the author, 18.10): dimensions and both projections — one row, the first thing.
+        {N_("Основное"), {"sketch.dimension", "sketch.arrangeDimensions", "sketch.project", "sketch.projectFixed"}},
         {N_("Создать"), {"sketch.line", "sketch.circle", "sketch.arc", "sketch.rectangle", "sketch.point", "sketch.spline", "sketch.text"}},
         {N_("Зависимости"),
          {"sketch.coincident", "sketch.horizontal", "sketch.vertical", "sketch.fix", "sketch.parallel", "sketch.perpendicular", "sketch.equal",
@@ -349,7 +350,7 @@ const std::vector<PhoneGroup>& PhoneGroups(AppContext& app, Session& session) {
          {"sketch.trim", "sketch.extend", "sketch.offset", "sketch.fillet", "sketch.move", "sketch.rotate", "sketch.copy", "sketch.scale",
           "sketch.split", "edit.delete"},
          true},
-        {N_("Массив и модель"), {"sketch.patternRect", "sketch.patternCircular", "sketch.mirror", "sketch.project", "sketch.projectFixed"}},
+        {N_("Массив"), {"sketch.patternRect", "sketch.patternCircular", "sketch.mirror"}},
         {N_("Формат и вид"), {"sketch.construction", "sketch.centerline", "sketch.ortho", "sketch.lookAt"}},
     };
     static const std::vector<PhoneGroup> model{
