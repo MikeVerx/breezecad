@@ -251,6 +251,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myContext = std::make_unique<AppContext>(AppContext{*myUi, mySettings, myWorkspace, myActions, myNotes, *myAutosave,
                                                         myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}, {}});
     RegisterActions(*myContext);
+    LoadStandardPacks(*myContext);
     StartModules();
     for (const auto& [id, chord] : mySettings.shortcuts) myActions.SetChord(id, ActionRegistry::ParseChord(chord));
 

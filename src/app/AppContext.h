@@ -68,6 +68,16 @@ struct ShellState {
     std::string        shortcutNote;             ///< "taken from …" after a reassignment
     bool               showMassProperties = false;   ///< the "МЦХ" window
     bool               showLibrary = false;          ///< the standard parts window ("Библиотека")
+    /// "В библиотеку": the open part saved as an item of the user's library
+    /// (SaveToLibrary.cpp). `variables` are the part's user variables, `use`
+    /// says which become columns; `cells` holds the rows as typed.
+    struct SaveToLibrary {
+        bool                                  open = false;
+        std::string                           title, group = "Мои изделия";
+        std::vector<std::string>              variables;
+        std::vector<char>                     use;
+        std::vector<std::vector<std::string>> cells;
+    } saveToLibrary;
     /// The "Создать" window: the folder shown and the template chosen in it.
     struct NewDocument {
         bool        open = false;
@@ -80,6 +90,7 @@ struct ShellState {
         struct Pick {
             std::string standard, size;   ///< doc::parts ids
             double      length = 0;
+            std::vector<std::pair<std::string, double>> inputs{};   ///< typed sizes (a sheet's width), doc::parts::Inputs
         };
         int              family = 0;        ///< filter: 0 ГОСТ, 1 ISO, 2 DIN
         std::set<int>    openGroups;        ///< expanded folders (index in parts::Groups())
@@ -89,6 +100,11 @@ struct ShellState {
         bool             dropWasher = true, dropNut = true;   ///< AutoDrop: add them with the screw
         std::string      appearance;        ///< empty: the default of the kind
         std::vector<Pick> recent;           ///< newest first
+        bool             sizeListOpen = false;   ///< the list of sizes is dropped down: Esc closes it, not the window
+        std::string      sizeFilter;             ///< typed in that list: only the sizes containing it
+        bool             sizeFilterActive = false;   ///< that filter had the keyboard last frame
+        std::string      confirmRemove;          ///< a user's item asked to be removed: the second click removes it
+        int              phoneGroup = -1;        ///< the phone: the folder shown (index in parts::Groups())
     } library;
 
     render::DisplayStyle displayStyle = render::DisplayStyle::ShadedWithEdges;

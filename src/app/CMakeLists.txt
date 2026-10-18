@@ -56,6 +56,7 @@ set(BZ_APP_SOURCES
     shell/Bars.cpp
     shell/CrashWindow.cpp
     shell/Dialogs.cpp
+    shell/SaveToLibrary.cpp
     shell/NewDocumentDialog.cpp
     shell/Header.cpp
     shell/HomeScreen.cpp
@@ -88,6 +89,7 @@ set(BZ_APP_SOURCES
     mobile/MobileRibbon.cpp
     mobile/Numpad.cpp
     mobile/PhoneHome.cpp
+    mobile/PhoneLibrary.cpp
     mobile/TouchInput.cpp)
 
 if(ANDROID)

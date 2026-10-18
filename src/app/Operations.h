@@ -20,8 +20,17 @@ void SaveDocument(AppContext& app, bool saveAs);
 /// Installs a module package (.bzmod), or asks for one when none is given;
 /// says how it went and shows it in "Настройки → Модули".
 void InstallModule(AppContext& app, std::optional<std::filesystem::path> package = {});
-/// A file dropped on the window: a module package is installed, anything
-/// else is opened as a document.
+/// Loads the packs of standard parts (doc::parts, StandardPacks.h): the
+/// user's folder first (a pack installed there replaces the shipped copy of
+/// it), then the shipped ones. Packs that could not be read are reported.
+void LoadStandardPacks(AppContext& app);
+/// Adds a pack of standard parts (.bzlib) to the user's library folder, or
+/// asks for one when none is given; reloads the packs and says how it went.
+void InstallStandardPack(AppContext& app, std::optional<std::filesystem::path> file = {});
+/// The user's folder of packs of standard parts.
+std::filesystem::path StandardPackDir();
+/// A file dropped on the window: a module package is installed, a pack of
+/// standard parts added to the library, anything else opened as a document.
 void OpenDropped(AppContext& app, const std::filesystem::path& file);
 void ExportDocument(AppContext& app, ExportFormat format);
 /// Closes a tab; asks about unsaved changes first.
