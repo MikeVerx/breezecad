@@ -396,7 +396,7 @@ void CommandCell(AppContext& app, const char* id, bool active, ImVec2 at, ImVec2
     ImGui::PushID(id);
     const bool clicked = ImGui::InvisibleButton("##cell", size);
     const bool held = ImGui::IsItemActive();
-    const Color bg = active ? c.accent : held ? c.pressed : c.field;
+    const Color bg = active ? c.accent : held ? c.pressed : c.segmentTrack;   // a plate in both themes
     dl->AddRectFilled(at, {at.x + size.x, at.y + size.y}, ui::ToU32(bg), ui.S(8));
     const float is = ui.S(22);
     const std::string icon = exportCell ? std::string("export") : std::string(a->icon);

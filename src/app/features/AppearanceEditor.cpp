@@ -527,7 +527,7 @@ void AppearanceEditor::DrawPhonePanel(AppContext& app, Session& session, float w
         const doc::Appearance* a = Chosen();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(46);
-        dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.field), ui.S(10));
+        dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.segmentTrack), ui.S(10));
         Sample(app, dl, {p.x + ui.S(8), p.y + ui.S(8)}, h - ui.S(16), a);
         const std::string name = a ? NameOf(*a) : std::string(Tr("По умолчанию"));
         ui::FittedText(dl, ui.fonts.medium, ui.S(13), {p.x + h + ui.S(4), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, p.x + width - ui.S(6),
@@ -542,7 +542,7 @@ void AppearanceEditor::DrawPhonePanel(AppContext& app, Session& session, float w
         const char* label;
         int page;
     };
-    const Way ways[] = {{"ui-materials", Tr("Из библиотеки"), 1}, {"ui-palette", Tr("Мои цвета"), 2}, {"ui-plus", Tr("Создать цвет"), 3}};
+    const Way ways[] = {{"ui-folder", Tr("Из библиотеки"), 1}, {"ui-palette", Tr("Мои цвета"), 2}, {"ui-plus", Tr("Создать цвет"), 3}};
     for (const Way& w : ways) {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(42);

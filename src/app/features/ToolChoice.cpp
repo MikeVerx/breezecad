@@ -72,8 +72,20 @@ int ToolChoice(AppContext& app, const char* id, const char* title, std::span<con
         ImGui::SetCursorScreenPos(at);
         ImGui::PushID(static_cast<int>(i));
         const bool enabled = !(disabledMask & (1 << i));
-        if (ui::IconButton(ui, "##choice", items[i].icon, 34, 22, Tr(items[i].label), enabled, static_cast<int>(i) == current))
-            chosen = static_cast<int>(i);
+        const bool on = static_cast<int>(i) == current;
+        // The mockup 8a: bordered squares; the chosen one tinted with an accent border; one that
+        // cannot be chosen now pale (colour icons are not tinted by ImGui, so drawn by hand).
+        const bool clicked = ImGui::InvisibleButton("##choice", {button, button});
+        const bool hovered = ImGui::IsItemHovered();
+        const ui::ThemeColors& c = ui.C();
+        const ImVec2 b{at.x + button, at.y + button};
+        dl->AddRectFilled(at, b, ui::ToU32(on ? c.accentSoft : hovered && enabled ? c.hover : c.field), ui.S(7));
+        dl->AddRect(at, b, ui::ToU32(on ? c.accent : c.fieldBorder), ui.S(7), 0, ui.S(on ? 1.5f : 1.0f));
+        const float is = ui.S(22);
+        ui.icons.Draw(dl, items[i].icon, {at.x + (button - is) / 2, at.y + (button - is) / 2}, is,
+                      enabled ? Color{1, 1, 1, 1} : Color{1, 1, 1, 0.3f});
+        ui::ItemTooltip(ui, Tr(items[i].label));
+        if (clicked && enabled) chosen = static_cast<int>(i);
         ImGui::PopID();
         at.x += button + gap;
     }
