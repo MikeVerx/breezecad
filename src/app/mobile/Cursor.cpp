@@ -17,7 +17,8 @@ void DrawDropCursor(AppContext& app, ImDrawList* dl) {
     const MobileState& m = app.shell.mobile;
     if (!CursorActive(app) || !m.cursorShown) return;
     const ui::ThemeColors& c = app.ui.C();
-    const float k = static_cast<float>(app.settings.mobile.labelScale);
+    // The labels' scale on top of the interface scale (at 125 % the drop stayed small).
+    const float k = static_cast<float>(app.settings.mobile.labelScale) * app.ui.scale;
     const ImVec2 tip = m.cursorTip;
     // From the tip toward the round end: down, unless the tip is pressed
     // against the view's edge and the finger is off to a side.

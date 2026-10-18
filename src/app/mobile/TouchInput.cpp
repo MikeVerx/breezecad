@@ -72,7 +72,7 @@ ImVec2 TipOf(const MobileState& m, ImVec2 finger, float reach) {
 } // namespace
 
 float CursorReach(const AppContext& app) {
-    return static_cast<float>(app.settings.mobile.cursorReach * app.settings.mobile.labelScale);
+    return static_cast<float>(app.settings.mobile.cursorReach * app.settings.mobile.labelScale) * app.ui.scale;
 }
 
 bool CursorActive(const AppContext& app) {
