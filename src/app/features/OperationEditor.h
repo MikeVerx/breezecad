@@ -49,6 +49,7 @@ public:
     virtual bool HasApply() const { return true; }
 
     virtual const char* Title() const = 0;    ///< "Выдавливание", shown in the status bar
+    virtual const char* Icon() const { return "ui-wrench"; }   ///< its icon, next to the title
     virtual std::string Hint() const = 0;     ///< what to do, for the status bar
 };
 

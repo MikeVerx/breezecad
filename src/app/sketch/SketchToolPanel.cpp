@@ -73,8 +73,9 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
     const UnitSystem& units = session.doc.units;
     const bool polygon = myTool == SketchTool::Rectangle && myOptions.rectangle == RectangleMode::Polygon;
 
-    // Header: tool icon and name, close returns to selection.
-    {
+    // Header: tool icon and name, close returns to selection. Not on the phone: the name is in
+    // block 2's status line and ✕ under block 1 closes the tool.
+    if (!app.shell.mobile.phone) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(48);

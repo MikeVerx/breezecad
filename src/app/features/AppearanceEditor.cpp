@@ -827,8 +827,8 @@ void AppearanceEditor::DrawPanel(AppContext& app, Session& session) {
     const ui::ThemeColors& c = ui.C();
     const float width = ImGui::GetContentRegionAvail().x;
 
-    // Header: icon, title, close.
-    {
+    // Header: icon, title, close (not on the phone: block 2's status line and ✕ under block 1).
+    if (!app.shell.mobile.phone) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(48);

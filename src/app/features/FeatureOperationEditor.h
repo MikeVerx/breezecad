@@ -34,7 +34,7 @@ public:
 
 protected:
     /// Icon of the panel header ("tree-extrude").
-    virtual const char* Icon() const = 0;
+    const char* Icon() const override = 0;
     /// Fills the text fields from the feature (when the panel opens).
     virtual void LoadTexts(const doc::Feature& feature) = 0;
     /// The panel's own content.

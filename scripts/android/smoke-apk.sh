@@ -85,7 +85,7 @@ adb shell input tap $cx $cy
 shot 4-sketch 2
 check sketch
 ok_x=$(( b1 - $(dp 30) ))               # OK: block 1's row, nearest the model
-ok_y=$(( h - $(dp 26) - $(dp 25) ))      # above the beard, middle of the row
+ok_y=$(( h - $(dp 25) ))                # the row is block 1's bottom (18.10), its middle
 adb shell input tap $ok_x $ok_y
 adb shell input swipe $cx $cy $((cx + w / 10)) $((cy - h / 8)) 500
 adb shell input tap $ok_x $ok_y

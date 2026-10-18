@@ -79,7 +79,7 @@ void ActionButton(AppContext& app, const char* id, float size, float icon, bool 
 
 /// Commands that can go to the hotbar ("+").
 constexpr const char* kHotbarChoices[] = {
-    "view.section",   "tools.measure", "view.home",       "view.fit",      "view.shaded",       "view.edges",
+    "view.section",   "view.home",       "view.fit",      "view.shaded",       "view.edges",
     "view.wireframe", "view.transparent", "sketch.lookAt", "sketch.dimension", "sketch.line",     "sketch.circle",
     "sketch.rectangle", "feature.extrude", "feature.fillet", "file.exportStl", "tools.massProperties", "view.background",
     "view.appearance",
@@ -111,6 +111,12 @@ void DrawCameraPanel(AppContext& app, ImVec2 pos, ImVec2 size) {
     MainMenuPopup(app);
     std::vector<std::string>& bar = app.settings.mobile.hotbar;
     if (!m.controlsHidden) {
+        // Save, open and the ruler always sit under the logo (the author, 18.10: they left block 1's brow).
+        for (const char* id : {"file.save", "file.open", "tools.measure"}) {
+            place();
+            ActionButton(app, id, b / ui.scale, 20, std::strcmp(id, "tools.measure") == 0 && app.shell.measuring);
+        }
+        y += ui.S(6);   // a gap: the fixed buttons, then the user's
         place();
         if (ui::IconButton(ui, "##hotbar-add", "ui-plus", b, 18, Tr("Добавить кнопку"))) ImGui::OpenPopup("##hotbar-pick");
     }
@@ -162,14 +168,6 @@ bool HasToolPanel(AppContext& app, Session& session) {
            (session.activeSketch && app.sketch.HasToolPanel());
 }
 
-const char* CurrentTask(AppContext& app, Session& session) {
-    if (const OperationEditor* op = app.ops.Active()) return op->Title();
-    if (app.shell.measuring && session.mode == EditMode::Model) return Tr("Измерение");
-    if (session.mode == EditMode::Sketch) return Tr("Эскиз");
-    if (session.mode == EditMode::PickPlane) return Tr("Выберите плоскость");
-    return "";
-}
-
 void DrawRowButton(AppContext& app, const char* id, const char* icon, const char* tip, ImVec2 p, ImVec2 s, bool on, bool primary,
                    bool enabled, bool* clicked, bool* held) {
     ui::Ui& ui = app.ui;
@@ -199,7 +197,8 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
     const float edge = onLeft ? pos.x : pos.x + size.x;
     dl->AddLine({onLeft ? pos.x + size.x - 1 : pos.x, pos.y}, {onLeft ? pos.x + size.x - 1 : pos.x, pos.y + size.y}, ui::ToU32(c.divider));
 
-    // Brow: (logo) · save · open · ruler.
+    // Brow, only without the camera panel (no hotbar): logo · save · open · ruler.
+    // With the hotbar they live there and block 1 starts with its tabs.
     float x = pos.x + ui.S(6) + pad;
     const float by = pos.y + std::max(0.0f, m.insets.top) + (ui.S(kBrow) - ui.S(36)) / 2;
     if (logoHere) {
@@ -210,12 +209,14 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
         MainMenuPopup(app);
         x += ui.S(40);
     }
-    for (const char* id : {"file.save", "file.open", "tools.measure"}) {
-        ImGui::SetCursorScreenPos({x, by});
-        ActionButton(app, id, 36, 20, std::strcmp(id, "tools.measure") == 0 && app.shell.measuring);
-        x += ui.S(40);
+    if (logoHere) {
+        for (const char* id : {"file.save", "file.open", "tools.measure"}) {
+            ImGui::SetCursorScreenPos({x, by});
+            ActionButton(app, id, 36, 20, std::strcmp(id, "tools.measure") == 0 && app.shell.measuring);
+            x += ui.S(40);
+        }
     }
-    float y = pos.y + std::max(0.0f, m.insets.top) + ui.S(kBrow);
+    float y = pos.y + std::max(0.0f, m.insets.top) + (logoHere ? ui.S(kBrow) : ui.S(4));
 
     // Tabs: tree / tool / dimensions. A new tool's panel comes forward by itself.
     const bool tool = HasToolPanel(app, session);
@@ -260,7 +261,7 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
     y += ui.S(kTabs);
 
     // Content, then the numpad when a value is typed, the row, the beard.
-    const float bottom = pos.y + size.y - ui.S(kBeard) - m.insets.bottom;
+    const float bottom = pos.y + size.y - m.insets.bottom;   // the row is the block's bottom (no beard)
     const float rowTop = bottom - ui.S(kRow);
     const float padH = m.numpad ? NumpadHeight(ui) : 0.0f;
     const float contentH = rowTop - padH - y;
@@ -361,9 +362,45 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
         }
     }
 
-    // Beard: what is going on (and what to do next, as the status bar says).
-    std::string beard = CurrentTask(app, session);
-    if (CursorActive(app) && m.cursorShown && session.mode != EditMode::Sketch) {
+    dl->AddLine({pos.x, rowTop}, {pos.x + size.x, rowTop}, ui::ToU32(c.divider));
+    (void)edge;
+    EndArea();
+}
+
+// --- Block 2 ---------------------------------------------------------------------
+
+/// What block 2's status line says.
+struct StatusText {
+    const char* icon = nullptr;
+    std::string main;   ///< the open tool, or the document
+    std::string mode;   ///< "3D-модель", "Эскиз", "Вид", "Сборка"
+    bool mono = false;  ///< coordinates
+};
+
+StatusText Status(AppContext& app, Session& session) {
+    MobileState& m = app.shell.mobile;
+    StatusText st;
+    st.mode = session.assembly ? Tr("Сборка")
+              : session.mode == EditMode::Sketch ? Tr("Эскиз")
+              : session.mode == EditMode::PickPlane ? Tr("Выбор плоскости")
+              : app.shell.ribbonTab == RibbonTab::View ? Tr("Вид") : Tr("3D-модель");
+    if (CursorActive(app) && m.cursorShown && m.boxMode) {
+        st.icon = "ui-frame";
+        st.main = m.boxHeld ? Tr("Рамка: второй угол — ОК") : Tr("Рамка: первый угол — ОК");
+        st.mode.clear();
+        return st;
+    }
+    if (const OperationEditor* op = app.ops.Active()) {
+        st.icon = op->Icon();
+        st.main = op->Title();
+    } else if (app.shell.measuring && session.mode == EditMode::Model) {
+        st.icon = "measure";
+        st.main = Tr("Измерение");
+    } else if (session.mode == EditMode::Sketch && app.sketch.Tool() != SketchTool::Select) {
+        const SketchToolInfo& info = InfoOf(app.sketch.Tool());
+        st.icon = info.icon;
+        st.main = Tr(info.label);
+    } else if (CursorActive(app) && m.cursorShown && session.mode != EditMode::Sketch) {
         // The model point under the tip (read again only when the tip moved).
         static ImVec2 pickedAt{-1, -1};
         static std::optional<Vec3> picked;
@@ -372,45 +409,19 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
             const auto hit = app.viewport.Pick({m.cursorTip.x - m.viewMin.x, m.cursorTip.y - m.viewMin.y});
             picked = hit ? std::optional<Vec3>(hit->point) : std::nullopt;
         }
-        if (picked) beard = std::format("X {:.1f}  Y {:.1f}  Z {:.1f}", picked->x, picked->y, picked->z) + (beard.empty() ? "" : " · " + beard);
-    }
-    if (const OperationEditor* op = app.ops.Active()) {
-        if (const std::string hint = op->Hint(); !hint.empty()) beard += " · " + hint;
-    }
-    if (CursorActive(app) && m.cursorShown && m.boxMode) beard += m.boxHeld ? Tr(" · рамка: второй угол — ОК") : Tr(" · рамка: первый угол — ОК");
-    dl->AddRectFilled({pos.x, bottom}, {pos.x + size.x, pos.y + size.y}, ui::ToU32(c.statusBar));
-    OperationEditor* applying = app.ops.Active();
-    if (applying && !applying->HasApply()) applying = nullptr;
-    if (applying) {
-        // An operation open: the bottom line is "Применить" (commit, stay for the next
-        // one) — the panel keeps its height for the fields. Отмена/ОК are the row above.
-        const ImVec2 a{pos.x + pad + ui.S(4), bottom + ui.S(2)}, b{pos.x + size.x - ui.S(4), bottom + ui.S(kBeard) - ui.S(2)};
-        ImGui::SetCursorScreenPos(a);
-        const bool clicked = ImGui::InvisibleButton("##beard-apply", {b.x - a.x, b.y - a.y});
-        const bool held = ImGui::IsItemActive();
-        dl->AddRectFilled(a, b, ui::ToU32(held ? c.pressed : c.accentSoft), ui.S(6));
-        dl->AddRect(a, b, ui::ToU32(c.accentSoftBorder), ui.S(6));
-        const char* label = Tr("Применить");
-        const float fs = ui.S(12.5f);
-        const ImVec2 ts = ui.fonts.medium->CalcTextSizeA(fs, FLT_MAX, 0, label);
-        dl->AddText(ui.fonts.medium, fs, {(a.x + b.x - ts.x) / 2, (a.y + b.y - ts.y) / 2}, ui::ToU32(c.accent), label);
-        if (clicked) {
-            Session& s = session;
-            app.Later([&app, &s, applying] {
-                if (app.ops.Active() == applying) applying->Apply(app, s);
-            });
+        if (picked) {
+            st.main = std::format("X {:.1f}  Y {:.1f}  Z {:.1f}", picked->x, picked->y, picked->z);
+            st.mono = true;
+            st.mode.clear();
+            return st;
         }
-    } else {
-        ImGui::PushClipRect({pos.x, bottom}, {pos.x + size.x - ui.S(4), pos.y + size.y}, true);
-        dl->AddText(ui.fonts.mono, ui.S(10.5f), {pos.x + ui.S(10) + pad, bottom + (ui.S(kBeard) - ui.S(11)) / 2},
-                    ui::ToU32(c.textSecondary), beard.c_str());
-        ImGui::PopClipRect();
     }
-    (void)edge;
-    EndArea();
+    if (st.main.empty()) {
+        st.icon = session.assembly ? "tree-assembly" : session.mode == EditMode::Sketch ? "tree-sketch" : "tree-part";
+        st.main = session.Title();
+    }
+    return st;
 }
-
-// --- Block 2 ---------------------------------------------------------------------
 
 void DrawSearch(AppContext& app, ImVec2 pos, float width, float height) {
     ui::Ui& ui = app.ui;
@@ -481,20 +492,21 @@ void DrawBlock2(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
         // "Завершить эскиз" pinned above the list (soft accent, ADR-0004).
         if (session.mode == EditMode::Sketch) {
             const Action* finish = app.actions.Find("sketch.finish");
-            const ImVec2 a{pos.x + ui.S(6), y + ui.S(4)}, b{pos.x + inner - ui.S(6), y + ui.S(48)};
+            // Compact (the author's mockups, 18.10): one slim line, the list gets the room.
+            const ImVec2 a{pos.x + ui.S(8), y + ui.S(2)}, b{pos.x + inner - ui.S(8), y + ui.S(38)};
             ImGui::SetCursorScreenPos(a);
             if (ImGui::InvisibleButton("##finish-sketch", {b.x - a.x, b.y - a.y}) && finish->IsEnabled()) Run(app, "sketch.finish");
             dl->AddRectFilled(a, b, ui::ToU32(ImGui::IsItemActive() ? c.pressed : c.accentSoft), ui.S(10));
             dl->AddRect(a, b, ui::ToU32(c.accentSoftBorder), ui.S(10));
-            const float is = ui.S(22);
+            const float is = ui.S(20);
             if (iconsOnly) {
                 ui.icons.Draw(dl, finish->icon, {(a.x + b.x - is) / 2, (a.y + b.y - is) / 2}, is, {1, 1, 1, 1});
             } else {
                 ui.icons.Draw(dl, finish->icon, {a.x + ui.S(8), (a.y + b.y - is) / 2}, is, {1, 1, 1, 1});
-                dl->AddText(ui.fonts.medium, ui.S(14), {a.x + ui.S(38), (a.y + b.y - ui.S(14)) / 2 - ui.S(1)}, ui::ToU32(c.accent),
-                            Tr("Завершить эскиз"));
+                ui::FittedText(dl, ui.fonts.medium, ui.S(13), {a.x + ui.S(36), (a.y + b.y - ui.S(13)) / 2 - ui.S(1)}, b.x - ui.S(6),
+                               ui::ToU32(c.accent), Tr("Завершить эскиз"));
             }
-            y += ui.S(52);
+            y += ui.S(42);
         }
         BeginArea("##block2-list", {pos.x + (onRight ? pad : 0), y}, {inner, bottom - y}, c.panel, true);
         m.flyItems.clear();   // refilled by the open group, if it is still there
@@ -502,23 +514,38 @@ void DrawBlock2(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
         EndArea();
     }
 
-    // Beard: "Готово" and an empty bar, or a rebuild's progress ("74/100").
+    // The status line (the author, 18.10): what is open and in which mode — "▭ Прямоугольник · Эскиз";
+    // a rebuild's progress ("74/100") on the right while it runs. With the cursor in 3D: the point under the tip.
     {
         dl->AddRectFilled({pos.x, bottom}, {pos.x + size.x, pos.y + size.y}, ui::ToU32(c.statusBar));
-        const kernel::Model::Progress p = session.Rebuilding() ? session.RebuildProgress() : kernel::Model::Progress{};
-        const std::string text = p.total > 0 ? std::format("{}/{}", p.done, p.total) : std::string(Tr("Готово"));
+        dl->AddLine({pos.x, bottom}, {pos.x + size.x, bottom}, ui::ToU32(c.divider));
+        const StatusText st = Status(app, session);
         const float fy = bottom + ui.S(kBeard) / 2;
-        float barX = pos.x + ui.S(8);
-        if (!iconsOnly) {
-            dl->AddText(ui.fonts.bodySmall, ui.S(10.5f), {pos.x + ui.S(10), fy - ui.S(6.5f)}, ui::ToU32(c.textSecondary), text.c_str());
-            barX += ui.fonts.bodySmall->CalcTextSizeA(ui.S(10.5f), FLT_MAX, 0, text.c_str()).x + ui.S(10);
+        float tx = pos.x + ui.S(8) + (onRight ? pad : 0.0f);
+        const float right = pos.x + size.x - ui.S(8) - (onRight ? 0.0f : pad);
+        if (st.icon) {
+            ui.icons.Draw(dl, st.icon, {tx, fy - ui.S(7)}, ui.S(14), c.accent);
+            tx += ui.S(19);
         }
-        const float barEnd = pos.x + inner - ui.S(10);
-        if (barEnd > barX) {
-            dl->AddRectFilled({barX, fy - ui.S(2)}, {barEnd, fy + ui.S(2)}, ui::ToU32(c.fieldBorder), ui.S(2));
-            if (p.total > 0)
-                dl->AddRectFilled({barX, fy - ui.S(2)}, {barX + (barEnd - barX) * static_cast<float>(p.done) / static_cast<float>(p.total), fy + ui.S(2)},
-                                  ui::ToU32(c.accent), ui.S(2));
+        const kernel::Model::Progress p = session.Rebuilding() ? session.RebuildProgress() : kernel::Model::Progress{};
+        float textEnd = right;
+        if (p.total > 0 && !iconsOnly) {
+            const std::string prog = std::format("{}/{}", p.done, p.total);
+            const float pw = ui.fonts.mono->CalcTextSizeA(ui.S(10.5f), FLT_MAX, 0, prog.c_str()).x;
+            dl->AddText(ui.fonts.mono, ui.S(10.5f), {right - pw, fy - ui.S(6)}, ui::ToU32(c.accent), prog.c_str());
+            textEnd = right - pw - ui.S(6);
+        }
+        if (!iconsOnly && textEnd > tx) {
+            ImGui::PushClipRect({tx, bottom}, {textEnd, pos.y + size.y}, true);
+            ImFont* font = st.mono ? ui.fonts.mono : ui.fonts.bodySmall;
+            const float fs = ui.S(st.mono ? 10.5f : 11.5f);
+            dl->AddText(font, fs, {tx, fy - fs * 0.6f}, ui::ToU32(c.text), st.main.c_str());
+            if (!st.mode.empty()) {
+                const float mw = font->CalcTextSizeA(fs, FLT_MAX, 0, st.main.c_str()).x;
+                const std::string tail = " · " + st.mode;
+                dl->AddText(ui.fonts.bodySmall, ui.S(11.5f), {tx + mw, fy - ui.S(11.5f) * 0.6f}, ui::ToU32(c.textMuted), tail.c_str());
+            }
+            ImGui::PopClipRect();
         }
     }
     EndArea();

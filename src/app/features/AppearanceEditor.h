@@ -49,6 +49,7 @@ public:
     void        DrawInViewport(AppContext& app, Session& session, const ViewportFrame& vf) override;
     bool        PicksFaces() const override { return true; }
     const char* Title() const override { return Tr("Внешний вид"); }
+    const char* Icon() const override { return "appearance"; }
     std::string Hint() const override;
 
     /// The appearance picker of the top toolbar (as in Inventor): the part's
