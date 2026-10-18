@@ -727,6 +727,113 @@ body = ''.join(cell(12 + (i % 4) * 276, 12 + (i // 4) * 292, *c) for i, c in enu
 pages['10-cursors'] = page(body + '<div class="abs" style="left:12px;bottom:-2px;color:#9AA1AB;font-size:11px"></div>', C_CSS)
 
 
+# 11. The drop cursor redrawn (the author 18.10: "а как бы ты каплю нарисовал?") and the full 3D tab of block 2.
+import math
+
+SIZES['11-drop-cursor'] = (1120, 600)
+D11_CSS = C_CSS + """
+.cc.w{width:544px}
+.st11{position:absolute;font-size:10.5px;color:#9AA1AB;text-align:center;width:90px}
+"""
+
+
+def tear(tx, ty, cx, cy, r):
+    d = cy - ty
+    a = math.asin(r / d)
+    x1, y1 = cx + r * math.cos(a), cy - r * math.sin(a)
+    x2, y2 = cx - r * math.cos(a), cy - r * math.sin(a)
+    return f'M{tx} {ty} L{x1:.1f} {y1:.1f} A{r} {r} 0 1 1 {x2:.1f} {y2:.1f} Z'
+
+
+def dropA(cx, cy, tx, ty, c, state='idle'):
+    """Lens: a frosted round end (the finger shows through), a needle tip that never covers the point, a halo dot."""
+    uid = f'{cx}{cy}{state}'
+    fill = {'idle': c + '1f', 'snap': c + '24', 'press': c + '55'}[state]
+    s = (f'<defs><radialGradient id="lg{uid}" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#fff" stop-opacity=".22"/>'
+         f'<stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>'
+         f'<filter id="sh{uid}" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#000" flood-opacity=".55"/></filter></defs>'
+         f'<g filter="url(#sh{uid})"><path d="{tear(tx, ty + 9, cx, cy, 21)}" fill="{fill}" stroke="{c}" stroke-width="1.8" stroke-linejoin="round"/></g>'
+         f'<circle cx="{cx}" cy="{cy}" r="21" fill="url(#lg{uid})"/>'
+         f'<line x1="{tx}" y1="{ty + 9}" x2="{tx}" y2="{ty + 4}" stroke="{c}" stroke-width="1.4"/>'
+         f'<circle cx="{tx}" cy="{ty}" r="7" fill="none" stroke="{c}" stroke-width="1" opacity=".55"/>'
+         f'<circle cx="{tx}" cy="{ty}" r="2.4" fill="#fff"/>')
+    if state == 'snap':
+        s += f'<rect x="{tx - 6}" y="{ty - 6}" width="12" height="12" rx="1.5" fill="none" stroke="{c}" stroke-width="1.6"/>'
+    return s
+
+
+def dropB(cx, cy, tx, ty, c, state='idle'):
+    """Notch: an outline drop open at the very tip — the point sits in the gap, nothing of the cursor covers it."""
+    p = tear(tx, ty, cx, cy, 20)
+    return (f'<path d="{p}" fill="{c}14" stroke="{c}" stroke-width="2" stroke-linejoin="round"/>'
+            f'<circle cx="{tx}" cy="{ty}" r="8" fill="#1c1f24"/>'
+            f'<circle cx="{tx}" cy="{ty}" r="2.4" fill="{c}"/><circle cx="{cx}" cy="{cy}" r="6" fill="none" stroke="{c}" stroke-width="1.4" opacity=".6"/>')
+
+
+def dropC(cx, cy, tx, ty, c, state='idle'):
+    """Solid gem: a filled drop with a gradient and a white facet; the tip is a crisp white dot."""
+    uid = f'g{cx}{cy}'
+    return (f'<defs><linearGradient id="{uid}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/>'
+            f'<stop offset=".45" stop-color="{c}"/><stop offset="1" stop-color="{c}" stop-opacity=".55"/></linearGradient></defs>'
+            f'<path d="{tear(tx, ty + 6, cx, cy, 19)}" fill="url(#{uid})" opacity=".85" stroke="#fff" stroke-opacity=".5" stroke-width="1"/>'
+            f'<path d="M{cx - 10} {cy - 6} Q{cx - 9} {cy - 15} {cx - 2} {cy - 18}" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".7"/>'
+            f'<circle cx="{tx}" cy="{ty}" r="3" fill="#fff" stroke="{c}" stroke-width="1.4"/>')
+
+
+def dropD(cx, cy, tx, ty, c, state='idle'):
+    """Liquid: the drop stretches while the finger moves fast and snaps back; a ripple ring when it sticks to a point."""
+    s = (f'<path d="{tear(tx, ty, cx, cy, 18)}" fill="{c}22" stroke="{c}" stroke-width="1.8"/>'
+         f'<ellipse cx="{cx}" cy="{cy + 6}" rx="22" ry="7" fill="none" stroke="{c}" stroke-width="1" opacity=".35"/>'
+         f'<circle cx="{tx}" cy="{ty}" r="2.4" fill="#fff"/>')
+    return s
+
+
+def cell11(x, y, title, fn, desc):
+    return cell(x, y, title, fn(78, 200, 78, 136, B), fn(190, 200, 190, 118, G), desc)
+
+
+body11 = (cell11(12, 12, 'А. Линза', dropA, 'Круг-линза: палец просвечивает, лёгкий блик и тень. Кончик — игла с ореолом: сама точка ничем не закрыта.')
+          + cell11(288, 12, 'Б. С вырезом', dropB, 'Контур открыт у самого кончика — точка в «окошке», вокруг пусто. Самый точный.')
+          + cell11(564, 12, 'В. Самоцвет', dropC, 'Залитая капля с бликом, как камень. Нарядно, хорошо видно на любом фоне.')
+          + cell11(840, 12, 'Г. Жидкая', dropD, 'Тянется при быстром движении и «плюхается» обратно; тень-лужица под пальцем.'))
+# The states of «А» (my pick): idle, snap to a point, pressed (OK held), the precise mode (tip slower than the finger).
+states = (f'<div class="cc w" style="left:12px;top:304px"><div class="t">А — состояния</div><div class="lineA"></div>'
+          f'<svg style="position:absolute;left:0;top:0" width="544" height="280">'
+          + dropA(70, 200, 70, 136, B) + dropA(196, 200, 196, 118, G, 'snap') + dropA(322, 200, 322, 136, B, 'press')
+          + dropA(448, 200, 448, 136, '#F5A524')
+          + '<path d="M448 214 v26" stroke="#F5A524" stroke-width="1" stroke-dasharray="2 3"/></svg>'
+          + ''.join(f'<div class="st11" style="left:{x - 45}px;top:84px">{t}</div>' for x, t in
+                    [(70, 'покой'), (196, 'привязка к точке'), (322, 'нажата ✓'), (448, 'точный режим')])
+          + '<div class="d">Привязка: значок формы цели (квадрат — точка, треугольник — середина, ✕ — на кривой). '
+            'Нажатие — капля заливается. Точный режим — оранжевая, кончик идёт медленнее пальца.</div></div>')
+states += ('<div class="cc w" style="left:564px;top:304px;background:#1c1f24"><div class="t">Почему так</div>'
+           '<div class="d" style="top:44px;bottom:auto;font-size:12.5px;line-height:1.55;color:#cfd4da">'
+           '• Нынешняя капля закрывает точку своим острием — у «А» острие кончается иглой, точка свободна.<br>'
+           '• Круг под пальцем полупрозрачный — видно, что под пальцем.<br>'
+           '• Тень отделяет курсор от чертежа на любом фоне, в том числе в светлой теме.<br>'
+           '• Цвета состояний: синий — работа, зелёный — привязка, оранжевый — точно.<br>'
+           '• Форма та же, что сейчас, — привыкать не нужно, это доводка, а не замена.</div></div>')
+pages['11-drop-cursor'] = page(body11 + states, D11_CSS)
+
+# 12. Block 2, the full 3D-model tab (what the ribbon really has), shown taller than the phone so the fold is visible.
+SIZES['12-model-tab'] = (420, 560)
+T12 = R7_CSS + """body{width:420px;height:560px}
+.fold{left:0;width:180px;height:0;border-top:2px dashed #F5A524;z-index:30}
+"""
+tab = ('<div class="abs b2" style="left:20px;right:auto;width:180px;height:560px;bottom:auto">'
+       '<div class="brow" style="height:38px;gap:8px;padding:0 8px"><span style="font-size:11px;color:#4CBB7F;font-family:monospace">74</span>'
+       f'<div class="search">{icon("ui-search", 14)}Поиск</div></div>'
+       + g7('ЭСКИЗ И РАБ. ЭЛЕМЕНТЫ', ['sketch', 'work-plane', 'work-axis', 'work-point'])
+       + g7('СОЗДАТЬ', ['extrude', 'revolve', 'sweep', 'loft', 'coil'])
+       + g7('ИЗМЕНИТЬ', ['hole', 'fillet', 'chamfer', 'thread', 'shell', 'cut-section'])
+       + g7('МАССИВ', ['pattern-rect', 'pattern-circular', 'mirror'])
+       + g7('ДИАГНОСТИКА', ['measure', 'section', 'mass-properties', 'interference'])
+       + g7('ИЗДЕЛИЯ И ЭКСПОРТ', ['library', 'export'])
+       + '</div><div class="abs fold" style="left:20px;top:384px"></div>')
+pages['12-model-tab'] = page(tab + note('Край экрана<br>телефона (412 dp)', 'left:212px;top:368px')
+    + note('Всё самое частое — без прокрутки.<br>Ниже края — диагностика,<br>библиотека и экспорт<br>(экспорт — один значок,<br>формат выбирается в списке).', 'left:212px;top:130px'), T12)
+
+
 if __name__ == '__main__':
     only = sys.argv[1:]
     with sync_playwright() as p:
