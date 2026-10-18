@@ -550,6 +550,183 @@ pages['8a-desktop-extrude'] = page(rail + pn + dview
            'Текстовые полосы «Прямое / Обратное / В обе стороны» уходят.', 'left:420px;top:24px'), D_CSS)
 
 
+# 9. Appearance on the phone (the author 18.10): the top island chooses Тело / Грань; block 1 has three buttons —
+# the library, my colours, create a colour; lists open over block 1 with ✕ in the top right corner; ✓ / ✕ at the bottom.
+P9_CSS = R7C_CSS + """
+.sw{border-radius:50%;flex:none;border:1px solid rgba(255,255,255,.18)}
+.big3{margin:4px 10px 0;height:40px;border-radius:10px;background:var(--field);display:flex;align-items:center;gap:10px;padding:0 12px;font-size:12.5px}
+.cur{margin:4px 10px 2px;display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:10px;background:#20242a}
+.cur small{display:block;color:var(--mut);font-size:10.5px}
+.recent{display:flex;gap:8px;padding:2px 12px}
+.pop{left:40px;top:0;width:186px;bottom:52px;background:#20242a;border-right:1px solid var(--div);z-index:40;box-shadow:8px 0 22px rgba(0,0,0,.45)}
+.pop .ph{height:42px;display:flex;align-items:center;padding:0 6px 0 12px;font-weight:600;border-bottom:1px solid var(--div)}
+.pop .ph .x{margin-left:auto;width:32px;height:32px;border-radius:9px;background:var(--field);display:flex;align-items:center;justify-content:center}
+.pop .gh{font-size:9.5px;letter-spacing:.8px;color:var(--mut);padding:8px 12px 3px}
+.pop .li{height:34px;display:flex;align-items:center;gap:9px;padding:0 10px 0 12px;font-size:12px;white-space:nowrap;overflow:hidden}
+.pop .li.on{background:var(--accSoft);color:#cfdcff}
+.seg2{margin:0 10px;display:flex;gap:4px}
+.seg2 div{flex:1;height:30px;border-radius:8px;background:var(--field);display:flex;align-items:center;justify-content:center;gap:6px;font-size:11.5px;color:var(--t2)}
+.seg2 .on{background:var(--accSoft);outline:1px solid var(--accB);color:#cfdcff}
+.sv{margin:0 10px;height:92px;border-radius:8px;background:linear-gradient(transparent,#000),linear-gradient(90deg,#fff,#CDA955);position:relative}
+.hue{margin:6px 10px 0;height:12px;border-radius:6px;background:linear-gradient(90deg,red,#ff0,lime,cyan,blue,#f0f,red);position:relative}
+.knob{position:absolute;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #000}
+"""
+
+
+def swatch(hexc, finish='matte', size=24, alpha=1.0):
+    c = '#' + hexc
+    if finish == 'metal':
+        bg = f'radial-gradient(circle at 32% 28%,#fff 0,{c} 45%,#20242a 130%)'
+    elif finish == 'glass':
+        bg = f'radial-gradient(circle at 32% 28%,rgba(255,255,255,.9) 0,rgba(180,200,220,{alpha}) 50%,rgba(40,50,60,.6) 120%)'
+    else:
+        bg = c
+    return f'<div class="sw" style="width:{size}px;height:{size}px;background:{bg}"></div>'
+
+
+LOOKS = [('МЕТАЛЛЫ', [('B9C0C8', 'Сталь', 'metal'), ('D3D8DE', 'Нержавеющая сталь', 'metal'), ('DCE1E6', 'Алюминий', 'metal'),
+                      ('2F3742', 'Воронёная сталь', 'metal'), ('5C6066', 'Чугун', 'matte'), ('A9A79F', 'Титан', 'metal'),
+                      ('C77845', 'Медь', 'metal'), ('CDA955', 'Латунь', 'metal'), ('E6BC48', 'Золото', 'metal')]),
+         ('ПЛАСТИК', [('F1F1EE', 'Пластик белый', 'matte'), ('2A2C2F', 'Пластик чёрный', 'matte'), ('8E959D', 'Пластик серый', 'matte')])]
+
+ti_9 = ('<div class="abs isl ti7" style="right:auto;padding:0 3px;gap:3px">'
+        f'<div class="m on">{icon("tree-part", 16)}Тело</div><div class="m">{icon("work-plane", 16)}Грань</div></div>')
+view_9 = f'<div class="abs view"><div class="abs" style="left:110px;top:90px">{MODEL}</div>{AXIS3}{islands7(ti_9)}</div>'
+b2_9 = ('<div class="abs b2"><div class="brow" style="height:38px;gap:8px;padding:0 8px"><span style="font-size:11px;color:#4CBB7F;font-family:monospace">74</span>'
+        f'<div class="search">{icon("ui-search", 14)}Поиск</div></div>'
+        + g7('ЭСКИЗ И РАБ. ЭЛЕМЕНТЫ', ['sketch', 'work-plane', 'work-axis', 'work-point'])
+        + g7('СОЗДАТЬ', ['extrude', 'revolve', 'hole', 'loft', 'sweep', 'coil', 'thread'])
+        + g7('ИЗМЕНИТЬ', ['fillet', 'chamfer', 'shell'])
+        + g7('ВИД', ['appearance', 'section', 'measure'], ('appearance',))
+        + status7('appearance', 'Внешний вид', '3D-модель') + '</div>')
+
+b1_9a = (f'<div class="abs b1">{tabs7()}'
+         f'<div class="fl">Сейчас</div><div class="cur">{swatch("CDA955", "metal", 30)}<div>Латунь<small>металл · из библиотеки</small></div></div>'
+         f'<div class="big3">{icon("ui-materials", 18)}Из библиотеки<span style="margin-left:auto">{icon("ui-chevron-right", 14)}</span></div>'
+         f'<div class="big3">{icon("ui-palette", 18)}Мои цвета<span style="margin-left:auto">{icon("ui-chevron-right", 14)}</span></div>'
+         f'<div class="big3">{icon("ui-plus", 18)}Создать цвет<span style="margin-left:auto">{icon("ui-chevron-right", 14)}</span></div>'
+         '<div class="fl">Недавние</div><div class="recent">'
+         + swatch('CDA955', 'metal') + swatch('2A2C2F') + swatch('D13B32') + swatch('B9C0C8', 'metal') + swatch('E6F0F8', 'glass', 24, .5)
+         + f'</div>{row7(cursor=False)}</div>')
+pages['9a-look-tool'] = page(hotbar7() + b1_9a + view_9 + b2_9 + strip()
+    + note('Островок сверху: <b>Тело / Грань</b> (что красит тап по модели).<br>'
+           'Блок 1: текущий вид, три кнопки, недавние — тап по кружку сразу берёт вид.<br>'
+           '<b>✓</b> — готово, <b>✕</b> — откатить покраску по шагам, потом закрыть.', 'left:240px;top:292px'), P9_CSS)
+
+# 9b. «Из библиотеки» opened: a scrolling list over block 1, ✕ in the top right corner closes it (the action row stays).
+lst = ''
+for grp, items in LOOKS:
+    lst += f'<div class="gh">{grp}</div>' + ''.join(
+        f'<div class="li{" on" if n == "Латунь" else ""}">{swatch(h, f, 22)}{n}{"<span style=margin-left:auto>" + icon("ui-check", 14, "#9db6ff") + "</span>" if n == "Латунь" else ""}</div>'
+        for h, n, f in items)
+pop_b = (f'<div class="abs pop"><div class="ph">Библиотека<div class="x">{icon("ui-close", 16)}</div></div>'
+         f'<div style="height:306px;overflow:hidden;position:relative">{lst}<div class="abs vscroll" style="top:8px;height:110px"></div></div></div>')
+pages['9b-look-library'] = page(hotbar7() + b1_9a + pop_b + view_9 + b2_9 + strip()
+    + note('Список поверх блока 1, листается. Тап по строке — вид выбран<br>(список остаётся открытым, можно сразу тапать по модели).<br>'
+           '<b>✕ вверху справа</b> — закрыть список. ✓ / ✕ внизу видны всегда.<br>'
+           'Так же открываются любые длинные списки: размеры резьбы, «Мои цвета» и т. п.', 'left:240px;top:276px'), P9_CSS)
+
+# 9c. «Создать цвет»: the same pop-up with the editor of a new look.
+pop_c = (f'<div class="abs pop"><div class="ph">Новый цвет<div class="x">{icon("ui-close", 16)}</div></div>'
+         '<div style="height:306px;overflow:hidden;position:relative">'
+         '<div class="fl">Название</div><div class="fld" style="height:30px">Латунь тёмная</div>'
+         '<div class="fl">Вид</div><div class="seg2"><div class="on">Цвет</div><div>Картинка</div></div>'
+         '<div class="fl">Цвет граней</div><div class="sv"><div class="knob" style="left:120px;top:30px"></div></div>'
+         '<div class="hue"><div class="knob" style="left:16px;top:-1px"></div></div>'
+         '<div class="fl">Поверхность</div><div class="seg2">'
+         f'<div>{swatch("A88A45", "matte", 16)}Мат.</div><div class="on">{swatch("A88A45", "metal", 16)}Мет.</div><div>{swatch("A88A45", "glass", 16, .5)}Стекло</div></div>'
+         '<div class="abs vscroll" style="top:8px;height:200px"></div></div>'
+         '<div class="abs" style="left:10px;right:10px;bottom:8px;height:34px;border-radius:9px;background:var(--acc);display:flex;align-items:center;justify-content:center;font-weight:500">Сохранить в «Мои»</div></div>')
+pages['9c-look-create'] = page(hotbar7() + b1_9a + pop_c + view_9 + b2_9 + strip()
+    + note('«Создать цвет» — та же всплывашка: название, цвет или картинка, оттенок,<br>поверхность (матовая · металл · стекло); ниже прокруткой — цвет рёбер, прозрачность.<br>'
+           '«Сохранить в «Мои»» — вид сохранён и сразу выбран, всплывашка закрывается.', 'left:240px;top:292px'), P9_CSS)
+
+
+# 10. Touch cursor concepts (the author 18.10: "предложи красивые варианты курсоров"). Each: tip above the finger
+# (offset as in the settings), the finger's place, and how it shows a snap (green).
+SIZES['10-cursors'] = (1120, 600)
+C_CSS = """
+body{width:1120px;height:600px;background:#121418}
+.cc{position:absolute;width:268px;height:280px;border-radius:14px;overflow:hidden;border:1px solid #2a2e35;
+    background-image:linear-gradient(#2a2e35 1px,transparent 1px),linear-gradient(90deg,#2a2e35 1px,transparent 1px);background-size:22px 22px;background-color:#1c1f24}
+.cc .t{position:absolute;left:12px;top:10px;font-weight:600;font-size:14px;color:#E6E8EB}
+.cc .d{position:absolute;left:12px;right:12px;bottom:10px;font-size:11px;color:#AEB4BD;line-height:1.35}
+.fing{position:absolute;width:44px;height:44px;border-radius:50%;background:radial-gradient(rgba(255,214,180,.22),rgba(255,214,180,.05));border:1px dashed rgba(255,214,180,.35)}
+.lineA{position:absolute;left:0;right:0;top:118px;height:1px;background:#8a4447}
+"""
+B = '#6E9BFF'; G = '#4CD07D'
+
+
+def cell(x, y, title, svg_idle, svg_snap, desc):
+    return (f'<div class="cc" style="left:{x}px;top:{y}px"><div class="t">{title}</div><div class="lineA"></div>'
+            f'<svg style="position:absolute;left:0;top:0" width="268" height="280">{svg_idle}{svg_snap}</svg>'
+            f'<div class="fing" style="left:56px;top:178px"></div><div class="fing" style="left:168px;top:178px"></div>'
+            f'<div class="d">{desc}</div></div>')
+
+# finger centres: (78,200) and (190,200); tips 64 px above: (78,136) / snap at (190,118) on the red line
+def drop(cx, cy, tx, ty, c):
+    return (f'<path d="M{tx} {ty} L{cx+13} {cy-14} A18 18 0 1 1 {cx-13} {cy-14} Z" fill="{c}22" stroke="{c}" stroke-width="1.8"/>'
+            f'<circle cx="{tx}" cy="{ty}" r="2.6" fill="#fff"/>')
+def reticle(cx, cy, tx, ty, c, snap=False):
+    s = (f'<line x1="{cx}" y1="{cy-22}" x2="{tx}" y2="{ty+11}" stroke="{c}" stroke-width="1.2" stroke-dasharray="3 3" opacity=".8"/>'
+         f'<circle cx="{tx}" cy="{ty}" r="9" fill="none" stroke="{c}" stroke-width="1.8"/>'
+         f'<path d="M{tx-16} {ty}h6M{tx+10} {ty}h6M{tx} {ty-16}v6M{tx} {ty+10}v6" stroke="{c}" stroke-width="1.8" stroke-linecap="round"/>'
+         f'<circle cx="{tx}" cy="{ty}" r="1.8" fill="#fff"/><circle cx="{cx}" cy="{cy}" r="22" fill="none" stroke="{c}" stroke-width="1.5" opacity=".55"/>')
+    if snap: s += f'<rect x="{tx-5}" y="{ty-5}" width="10" height="10" fill="none" stroke="{c}" stroke-width="1.6" transform="rotate(45 {tx} {ty})"/>'
+    return s
+def nib(cx, cy, tx, ty, c):
+    return (f'<path d="M{tx} {ty} L{tx+9} {ty+30} Q{cx+20} {cy-6} {cx} {cy+22} Q{cx-20} {cy-6} {tx-9} {ty+30} Z" fill="{c}26" stroke="{c}" stroke-width="1.6" stroke-linejoin="round"/>'
+            f'<line x1="{tx}" y1="{ty+4}" x2="{tx}" y2="{ty+22}" stroke="{c}" stroke-width="1.2"/><circle cx="{tx}" cy="{ty+24}" r="2.4" fill="{c}"/>'
+            f'<circle cx="{tx}" cy="{ty}" r="2.4" fill="#fff"/>')
+def orbit(cx, cy, tx, ty, c):
+    return (f'<circle cx="{cx}" cy="{cy}" r="24" fill="none" stroke="{c}" stroke-width="3" stroke-dasharray="30 8" opacity=".85"/>'
+            f'<path d="M{cx-8} {cy-23} L{tx} {ty+8} L{cx+8} {cy-23}" fill="{c}30" stroke="{c}" stroke-width="1.2"/>'
+            f'<circle cx="{tx}" cy="{ty}" r="7" fill="{c}" opacity=".25"/><circle cx="{tx}" cy="{ty}" r="3.5" fill="#fff" stroke="{c}" stroke-width="1.6"/>')
+def needle(cx, cy, tx, ty, c):
+    return (f'<line x1="{tx}" y1="{ty}" x2="{cx}" y2="{cy-14}" stroke="{c}" stroke-width="2.2" stroke-linecap="round"/>'
+            f'<circle cx="{cx}" cy="{cy}" r="14" fill="{c}" opacity=".9"/><circle cx="{cx-4}" cy="{cy-4}" r="4" fill="#fff" opacity=".55"/>'
+            f'<circle cx="{tx}" cy="{ty}" r="5" fill="none" stroke="{c}" stroke-width="1.6"/><circle cx="{tx}" cy="{ty}" r="1.6" fill="#fff"/>')
+def arrow(cx, cy, tx, ty, c):
+    return (f'<path d="M{tx} {ty} l0 26 l7 -6 l5 11 l5 -2 l-5 -11 l9 0 Z" fill="#fff" stroke="#111" stroke-width="1.3" stroke-linejoin="round"/>'
+            f'<path d="M{tx+12} {ty+36} Q{cx+6} {cy-30} {cx} {cy-20}" fill="none" stroke="{c}" stroke-width="1.3" stroke-dasharray="3 3"/>'
+            f'<circle cx="{cx}" cy="{cy}" r="20" fill="{c}18" stroke="{c}" stroke-width="1.6"/>')
+
+def two(fn, **kw):
+    return fn(78, 200, 78, 136, B, **kw) if fn is not reticle else fn(78, 200, 78, 136, B)
+
+cells = [
+    ('1. Капля (сейчас)', drop(78, 200, 78, 136, B), drop(190, 200, 190, 118, G),
+     'Классика: острие — кончик, круг под пальцем. Привязка — капля зеленеет.'),
+    ('2. Прицел', reticle(78, 200, 78, 136, B), reticle(190, 200, 190, 118, G, True),
+     'Как в шутере: перекрестье в точке, тонкий поводок к кольцу пальца. Привязка — ромб в центре.'),
+    ('3. Перо', nib(78, 200, 78, 136, B), nib(190, 200, 190, 118, G),
+     'Перьевая ручка: щель указывает точку. «Черчение» буквально, ощущение инструмента.'),
+    ('4. Орбита', orbit(78, 200, 78, 136, B), orbit(190, 200, 190, 118, G),
+     'Кольцо-джойстик вокруг пальца и светящаяся точка. Игровой, лёгкий, почти не закрывает чертёж.'),
+    ('5. Игла', needle(78, 200, 78, 136, B), needle(190, 200, 190, 118, G),
+     'Булавка вверх ногами: шарик под пальцем, игла к кончику. Очень тонкий — видно всё вокруг точки.'),
+    ('6. Стрелка с ручкой', arrow(78, 200, 78, 136, B), arrow(190, 200, 190, 118, G),
+     'Привычная стрелка мыши, пунктир к пальцу. Понятно с первого раза, но меньше «изюма».'),
+    ('7. Неон', '', '', ''),
+    ('8. Минимал', '', '', ''),
+]
+# 7. Neon: glowing ring at the tip with a soft trail; 8. Minimal: just a dot + a hair-thin ring, the finger ring hidden.
+NEON = lambda cx, cy, tx, ty, c: (f'<defs><filter id="gl{cx}" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="3"/></filter></defs>'
+    f'<circle cx="{tx}" cy="{ty}" r="10" fill="none" stroke="{c}" stroke-width="3" filter="url(#gl{cx})"/>'
+    f'<circle cx="{tx}" cy="{ty}" r="10" fill="none" stroke="#fff" stroke-width="1.2"/><circle cx="{tx}" cy="{ty}" r="2" fill="#fff"/>'
+    f'<path d="M{tx} {ty+12} L{cx} {cy-20}" stroke="{c}" stroke-width="4" opacity=".35" filter="url(#gl{cx})"/>'
+    f'<path d="M{tx} {ty+12} L{cx} {cy-20}" stroke="{c}" stroke-width="1"/>')
+MINI = lambda cx, cy, tx, ty, c: (f'<circle cx="{tx}" cy="{ty}" r="12" fill="none" stroke="{c}" stroke-width="1" opacity=".8"/>'
+    f'<circle cx="{tx}" cy="{ty}" r="3" fill="{c}"/><circle cx="{tx}" cy="{ty}" r="1.2" fill="#fff"/>'
+    f'<path d="M{cx-6} {cy-26}l6 -6 6 6" fill="none" stroke="{c}" stroke-width="1.6" stroke-linecap="round" opacity=".7"/>')
+cells[6] = ('7. Неон', NEON(78, 200, 78, 136, B), NEON(190, 200, 190, 118, G),
+            'Светящееся кольцо в точке, светящийся поводок. Красиво на тёмной теме, «как в игре».')
+cells[7] = ('8. Минимал', MINI(78, 200, 78, 136, B), MINI(190, 200, 190, 118, G),
+            'Только точка с тонким кольцом и уголок над пальцем. Чертёж закрыт меньше всего.')
+body = ''.join(cell(12 + (i % 4) * 276, 12 + (i // 4) * 292, *c) for i, c in enumerate(cells))
+pages['10-cursors'] = page(body + '<div class="abs" style="left:12px;bottom:-2px;color:#9AA1AB;font-size:11px"></div>', C_CSS)
+
+
 if __name__ == '__main__':
     only = sys.argv[1:]
     with sync_playwright() as p:
