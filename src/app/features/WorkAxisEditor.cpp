@@ -107,7 +107,7 @@ void WorkAxisEditor::DrawInViewport(AppContext& app, Session& session, const Vie
 void WorkAxisEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::WorkAxisFeature&>(feature);
     ui::Ui& ui = app.ui;
-    static constexpr std::array<ChoiceItem, 4> methods{{{nullptr, N_("Ось цилиндра")}, {nullptr, N_("По ребру")}, {nullptr, N_("Две плоскости")}, {nullptr, N_("Две точки")}}};
+    static constexpr std::array<ChoiceItem, 4> methods{{{"wa-cylinder", N_("Ось цилиндра")}, {"wa-edge", N_("По ребру")}, {"wa-two-planes", N_("Две плоскости")}, {"wa-two-points", N_("Две точки")}}};
     // The panel shows the methods in this order; the enum is Edge, Cylinder, Planes, Points.
     static constexpr std::array<WorkAxisMethod, 4> order{WorkAxisMethod::Cylinder, WorkAxisMethod::Edge, WorkAxisMethod::Planes,
                                                          WorkAxisMethod::Points};

@@ -280,7 +280,7 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
                 ImGui::EndCombo();
             }
             ImGui::Dummy({0, ui.S(6)});
-            static constexpr std::array<ChoiceItem, 4> styles{{{nullptr, N_("Обычный")}, {nullptr, N_("Жирный")}, {nullptr, N_("Курсив")}, {nullptr, N_("Жирн. курсив")}}};
+            static constexpr std::array<ChoiceItem, 4> styles{{{"text-regular", N_("Обычный")}, {"text-bold", N_("Жирный")}, {"text-italic", N_("Курсив")}, {"text-bold-italic", N_("Жирн. курсив")}}};
             myOptions.textStyle = ToolChoice(app, "text-style", N_("Начертание"), styles, myOptions.textStyle, inner);
             ImGui::Dummy({0, ui.S(6)});
             static constexpr std::array<ChoiceItem, 3> across{{{"align-left", N_("Влево")}, {"align-centre", N_("По центру")}, {"align-right", N_("Вправо")}}};
@@ -300,7 +300,7 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
                                                            : Trf("Выбрано элементов: {}", mySelection.size());
             ui::FieldLabel(ui, chosen.c_str());
             ImGui::Dummy({0, ui.S(6)});
-            static constexpr std::array<ChoiceItem, 2> steps{{{nullptr, N_("Элементы")}, {nullptr, N_("Линия зеркала")}}};
+            static constexpr std::array<ChoiceItem, 2> steps{{{"mirror-step-items", N_("Элементы")}, {"mirror-step-line", N_("Линия зеркала")}}};
             const int current = myMirrorAxisStep ? 1 : 0;
             const int chosenStep = ToolChoice(app, "mirror-step", N_("Шаг"), steps, current, inner, mySelection.empty() ? 0b10 : 0);
             if (chosenStep != current) myMirrorAxisStep = chosenStep == 1;
@@ -327,7 +327,7 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
                 button = Tr("Масштабировать");
                 Caption(ui, myClicks.empty() ? Tr("Щёлкните базовую точку — она останется на месте.") : Tr("Базовая точка выбрана (щелчок — другая)."), inner);
             } else if (myTool == SketchTool::PatternRect) {
-                static constexpr std::array<ChoiceItem, 2> dirs{{{nullptr, N_("Вдоль X")}, {nullptr, N_("Вдоль Y")}}};
+                static constexpr std::array<ChoiceItem, 2> dirs{{{"along-x", N_("Вдоль X")}, {"along-y", N_("Вдоль Y")}}};
                 const int current = myOptions.vertical1 ? 1 : 0;
                 if (const int d = ToolChoice(app, "dir", N_("Направление"), dirs, current, inner); d != current) myOptions.vertical1 = d == 1;
                 ImGui::Dummy({0, ui.S(8)});

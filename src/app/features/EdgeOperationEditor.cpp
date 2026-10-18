@@ -208,7 +208,7 @@ void ChamferEditor::DrawSize(AppContext& app, Session& session, doc::EdgeFeature
     }
     Gap(app);
     {
-        static constexpr std::array<ChoiceItem, 2> sides{{{nullptr, N_("Прямо")}, {nullptr, N_("Наоборот")}}};
+        static constexpr std::array<ChoiceItem, 2> sides{{{"chamfer-side1", N_("Прямо")}, {"chamfer-side2", N_("Наоборот")}}};
         const int current = f.flipped ? 1 : 0;
         if (const int chosen = ToolChoice(app, "chamfer-side", N_("Опорная грань"), sides, current, width); chosen != current) {
             f.flipped = chosen == 1;

@@ -194,7 +194,7 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
     ui::Ui& ui = app.ui;
 
     {
-        static constexpr std::array<ChoiceItem, 5> methods{{{nullptr, N_("Смещение")}, {nullptr, N_("Посередине")}, {nullptr, N_("Под углом")}, {nullptr, N_("По 3 точкам")}, {nullptr, N_("Касательно к цилиндру")}}};
+        static constexpr std::array<ChoiceItem, 5> methods{{{"wp-offset", N_("Смещение")}, {"wp-mid", N_("Посередине")}, {"wp-angle", N_("Под углом")}, {"wp-3pt", N_("По 3 точкам")}, {"wp-tangent", N_("Касательно к цилиндру")}}};
         const int current = static_cast<int>(f.method);
         if (const int chosen = ToolChoice(app, "method", N_("Способ"), methods, current, width); chosen != current) {
             f.method = static_cast<WorkPlaneMethod>(chosen);
@@ -280,7 +280,7 @@ void WorkPlaneEditor::DrawBody(AppContext& app, Session& session, doc::Feature& 
     }
     if (f.method != WorkPlaneMethod::Midplane) {
         Gap(app);
-        static constexpr std::array<ChoiceItem, 2> labels{{{nullptr, N_("По нормали")}, {nullptr, N_("Обратно")}}};
+        static constexpr std::array<ChoiceItem, 2> labels{{{"flip-normal", N_("По нормали")}, {"flip-reverse", N_("Обратно")}}};
         const int current = f.reversed ? 1 : 0;
         const int chosen = ToolChoice(app, "direction", N_("Направление"), labels, current, width);
         if (chosen != current) {
