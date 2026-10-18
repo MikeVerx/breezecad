@@ -185,18 +185,26 @@ else
 fi
 check extrude-field
 
-# 14b. The extrude's choices are in the top island (18.10): a tap on one sets it (the log says so).
-# On the example part: there is a body, so every operation can be chosen.
-adb logcat -c
-start touchkeys,example,extrude 30
-read -r cid cix cx0 cy0 cs0 < <(blog | sed -n 's/.*Touch: choice \([a-z-]*\) \([0-9]*\) at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\).*/\1 \2 \3 \4 \5/p' | head -1)
-if [ -n "${cs0:-}" ]; then
-    adb shell input tap $(dp $(( cx0 + cs0 / 2 ))) $(dp $(( cy0 + 15 )))
-    shot 14b-choice-tapped 3
-    if blog | grep -q "Choice: $cid $cix"; then
-        echo "step choice-tap: $cid set to $cix"
+# 14b. The extrude's choices are in the top island (18.10). In a new part no operation but
+# «new body» can be chosen, and the emulator's view is narrow: the island is swiped sideways
+# first (it scrolls), then the first item that can be chosen is tapped — the log says it took.
+adb shell input tap $((w / 2)) $((h / 3))   # off the field: the numpad goes
+sleep 2
+read -r ix iy iw ih < <(blog | sed -n 's/.*Touch: choices ##island-choices at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' | tail -1)
+if [ -n "${iw:-}" ]; then
+    adb shell input swipe $(dp $(( ix + iw - 12 ))) $(dp $(( iy + ih / 2 ))) $(dp $(( ix + 12 ))) $(dp $(( iy + ih / 2 ))) 600
+    sleep 2
+    read -r cid cix cx0 cy0 cs0 < <(blog | sed -n 's/.*Touch: choice \([a-z-]*\) \([0-9]*\) at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\).*/\1 \2 \3 \4 \5/p' | tail -1)
+    if [ -n "${cs0:-}" ]; then
+        adb shell input tap $(dp $(( cx0 + cs0 / 2 ))) $(dp $(( cy0 + 15 )))
+        shot 14b-choice-tapped 3
+        if blog | grep -q "Choice: $cid $cix"; then
+            echo "step choice-tap: $cid set to $cix (after a swipe)"
+        else
+            echo "step choice-tap: FAILED — no «Choice: $cid $cix» ($(blog | grep -o 'Choice: .*' | tr '\n' ';'))"; broken=1
+        fi
     else
-        echo "step choice-tap: FAILED — no «Choice: $cid $cix» ($(blog | grep -o 'Choice: .*' | tr '\n' ';'))"; broken=1
+        echo "step choice-tap: FAILED — nothing to choose in the island after the swipe"; broken=1
     fi
 else
     echo "step choice-tap: FAILED — no choice island in the log"; broken=1
@@ -214,8 +222,7 @@ focused() { adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | gre
 adb logcat -c
 start home 15   # "home": a test run — no first-start setup over the home page
 adb shell input keyevent KEYCODE_BACK
-sleep 2
-shot 15-back-once 1
+sleep 1
 if [ "$(focused)" -gt 0 ] && blog | grep -q "Back: once more"; then
     echo "step back-once: stayed, asked for a second"
 else

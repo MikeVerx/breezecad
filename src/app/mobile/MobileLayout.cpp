@@ -670,7 +670,14 @@ void DrawChoiceIsland(AppContext& app, const char* id, const std::vector<const M
     const ImVec2 mouse = ImGui::GetMousePos();
     dl->PushClipRect({at.x + ui.S(2), at.y}, {at.x + width - ui.S(2), at.y + h}, true);
     float x = at.x + ui.S(3) - scroll;
-    static std::string logged;
+    // For the emulator's check: where the island is, and the first visible item that can be
+    // chosen (written again whenever that changes — after a scroll, say).
+    static std::string loggedIsland, logged;
+    bool candidateLogged = false;
+    if (const std::string place = std::format("{} {:.0f},{:.0f} {:.0f}", id, at.x, at.y, width); place != loggedIsland && !held) {
+        loggedIsland = place;
+        log::Info("Touch: choices {} at {:.0f},{:.0f} size {:.0f}x{:.0f}", id, at.x, at.y, width, h);
+    }
     for (std::size_t g = 0; g < groups.size(); ++g) {
         const MobileState::ChoiceGroup& grp = *groups[g];
         if (g) {
@@ -693,9 +700,12 @@ void DrawChoiceIsland(AppContext& app, const char* id, const std::vector<const M
                 const float is = ui.S(22);
                 ui.icons.Draw(dl, icon, {x + (w - is) / 2, at.y + (h - is) / 2}, is, off ? Color{1, 1, 1, 0.3f} : Color{1, 1, 1, 1});
             }
-            if (logged.empty() && !on && !off && a.x >= at.x && b.x <= at.x + width) {   // a visible one
-                logged = grp.id + std::to_string(i);   // once: the emulator taps the first item that can be chosen
-                log::Info("Touch: choice {} {} at {:.0f},{:.0f} size {:.0f}", grp.id, i, a.x, a.y, w);
+            if (!candidateLogged && !held && !on && !off && a.x >= at.x && b.x <= at.x + width) {   // a visible one
+                candidateLogged = true;
+                if (const std::string key = std::format("{} {} {:.0f}", grp.id, i, a.x); key != logged) {
+                    logged = key;
+                    log::Info("Touch: choice {} {} at {:.0f},{:.0f} size {:.0f}", grp.id, i, a.x, a.y, w);
+                }
             }
             if (released && dragged < ui.S(8) && mouse.x >= a.x && mouse.x < b.x && !off) {
                 m.pickedChoice = grp.id;

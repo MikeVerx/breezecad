@@ -153,14 +153,14 @@ int Key(const AInputEvent* e, const InputSink& sink) {
         // "Back" is Esc inside the program; with nothing left to close, the system's.
         if (sink.backLeaves && sink.backLeaves()) {
             // Leaving takes two: the first "back" (often a stray edge swipe) only says so,
-            // a second within 2 s goes to the system (the author, 18.10.2026).
+            // a second within 3 s goes to the system (the author, 18.10.2026).
             static std::chrono::steady_clock::time_point armedUntil{};
             static bool passing = false;
             if (down) {
                 const auto now = std::chrono::steady_clock::now();
                 passing = now < armedUntil;
                 if (!passing) {
-                    armedUntil = now + std::chrono::seconds(2);
+                    armedUntil = now + std::chrono::seconds(3);
                     if (sink.backHint) sink.backHint();
                 }
             }
