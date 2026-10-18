@@ -46,6 +46,10 @@ void Application::StartAndroid() {
         return myWorkspace.ShowsHome() && !myShell.showSettings && !myShell.newDocument.open && !myShell.showAbout &&
                !myShell.mobile.lastCrash.open && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
     };
+    sink.backHint = [this] {
+        log::Info("Back: once more to leave");
+        myNotes.Info(Tr("Проведите «Назад» ещё раз, чтобы выйти"));
+    };
     sink.volume = [this](int direction) {
         if (!mySettings.mobile.volumeZoom || myWorkspace.ShowsHome() || !myWorkspace.Active()) return false;
         const ImVec2 a = myShell.mobile.viewMin, b = myShell.mobile.viewMax;

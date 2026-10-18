@@ -189,12 +189,34 @@ adb logcat -d -s BreezeCAD:* > "$OUT/breezecad.log"
 adb logcat -d '*:E' > "$OUT/errors.log"
 grep -E "OpenGL ES|Window:|ERROR|WARN|test commands" "$OUT/breezecad.log" | head -20
 echo "touch: $(tr -d '\r' < "$OUT/breezecad.log" | grep -o 'Touch: .*' | tail -12 | tr '\n' ';')"
+
+# 15. "Back" on the home page (18.10: an edge swipe closed the app): the first only
+# says "once more", the app stays in front; the second leaves. Then started again.
+focused() { adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | grep -c "$PACKAGE"; }
+adb logcat -c
+start "" 15
+adb shell input keyevent KEYCODE_BACK
+sleep 2
+shot 15-back-once 1
+if [ "$(focused)" -gt 0 ] && blog | grep -q "Back: once more"; then
+    echo "step back-once: stayed, asked for a second"
+else
+    echo "step back-once: FAILED — focus $(focused), log: $(blog | grep -o 'Back: .*' | tr '\n' ';')"; broken=1
+fi
+adb shell input keyevent KEYCODE_BACK
+sleep 3
+if [ "$(focused)" -eq 0 ]; then
+    echo "step back-twice: left"
+else
+    echo "step back-twice: FAILED — still in front"; broken=1
+fi
+start "" 15
 if [ $failed -ne 0 ] || [ -z "$(alive)" ]; then
     echo "the app died:"; grep -E "FATAL|DEBUG|libbreezecad|backtrace|#[0-9]+ pc|AndroidRuntime" "$OUT/errors.log" | head -60
     exit 1
 fi
 if [ $broken -ne 0 ]; then
-    echo "a tap check failed (steps 13–14 above)"
+    echo "a tap check failed (steps 13–15 above)"
     exit 1
 fi
 echo "smoke test passed"
