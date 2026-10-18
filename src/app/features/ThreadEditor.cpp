@@ -104,7 +104,7 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
     Gap(app);
 
     {
-        static constexpr std::array<ChoiceItem, 2> kinds{{{nullptr, N_("Настоящая")}, {nullptr, N_("Условная")}}};
+        static constexpr std::array<ChoiceItem, 2> kinds{{{"thread-real", N_("Настоящая")}, {"thread-cosmetic", N_("Условная")}}};
         const int current = f.cosmetic ? 1 : 0;
         if (const int picked = ToolChoice(app, "kind", N_("Вид"), kinds, current, width); picked != current) {
             f.cosmetic = picked == 1;
@@ -123,7 +123,7 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
     Gap(app);
 
     {
-        static constexpr std::array<ChoiceItem, 2> labels{{{nullptr, N_("Вся грань")}, {nullptr, N_("На длину")}}};
+        static constexpr std::array<ChoiceItem, 2> labels{{{"thread-full", N_("Вся грань")}, {"thread-length", N_("На длину")}}};
         const int current = f.fullLength ? 0 : 1;
         if (const int chosen = ToolChoice(app, "extent", N_("Длина"), labels, current, width); chosen != current) {
             f.fullLength = chosen == 0;
@@ -134,7 +134,7 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
         ImGui::Dummy({0, ui.S(6)});
         ParameterField(app, session, "length", myLength, f.length, width, false);
         ImGui::Dummy({0, ui.S(6)});
-        static constexpr std::array<ChoiceItem, 2> ends{{{nullptr, N_("С начала")}, {nullptr, N_("С другого конца")}}};
+        static constexpr std::array<ChoiceItem, 2> ends{{{"thread-from-start", N_("С начала")}, {"thread-from-end", N_("С другого конца")}}};
         const int current = f.fromOtherEnd ? 1 : 0;
         if (const int chosen = ToolChoice(app, "end", N_("Откуда"), ends, current, width); chosen != current) {
             f.fromOtherEnd = chosen == 1;
@@ -143,7 +143,7 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
     }
     Gap(app);
 
-    static constexpr std::array<ChoiceItem, 2> hands{{{nullptr, N_("Правая")}, {nullptr, N_("Левая")}}};
+    static constexpr std::array<ChoiceItem, 2> hands{{{"hand-right", N_("Правая")}, {"hand-left", N_("Левая")}}};
     const int current = f.leftHanded ? 1 : 0;
     if (const int chosen = ToolChoice(app, "hand", N_("Направление"), hands, current, width); chosen != current) {
         f.leftHanded = chosen == 1;

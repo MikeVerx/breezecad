@@ -239,7 +239,7 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
                     if (whole) myOptions.polygonSides = static_cast<int>(std::lround(*n));
                 }
                 ImGui::Dummy({0, ui.S(8)});
-                static constexpr std::array<ChoiceItem, 2> kinds{{{nullptr, N_("Вписанный")}, {nullptr, N_("Описанный")}}};
+                static constexpr std::array<ChoiceItem, 2> kinds{{{"poly-inscribed", N_("Вписанный")}, {"poly-circumscribed", N_("Описанный")}}};
                 const int kind = myOptions.polygonInscribed ? 0 : 1;
                 if (const int k = ToolChoice(app, "kind", N_("Многоугольник"), kinds, kind, inner); k != kind) {
                     myOptions.polygonInscribed = k == 0;
@@ -283,10 +283,10 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
             static constexpr std::array<ChoiceItem, 4> styles{{{nullptr, N_("Обычный")}, {nullptr, N_("Жирный")}, {nullptr, N_("Курсив")}, {nullptr, N_("Жирн. курсив")}}};
             myOptions.textStyle = ToolChoice(app, "text-style", N_("Начертание"), styles, myOptions.textStyle, inner);
             ImGui::Dummy({0, ui.S(6)});
-            static constexpr std::array<ChoiceItem, 3> across{{{nullptr, N_("Влево")}, {nullptr, N_("По центру")}, {nullptr, N_("Вправо")}}};
+            static constexpr std::array<ChoiceItem, 3> across{{{"align-left", N_("Влево")}, {"align-centre", N_("По центру")}, {"align-right", N_("Вправо")}}};
             myOptions.textHAlign = ToolChoice(app, "text-h", N_("Выравнивание в рамке"), across, myOptions.textHAlign, inner);
             ImGui::Dummy({0, ui.S(4)});
-            static constexpr std::array<ChoiceItem, 3> down{{{nullptr, N_("Вниз")}, {nullptr, N_("Посередине")}, {nullptr, N_("Вверх")}}};
+            static constexpr std::array<ChoiceItem, 3> down{{{"valign-bottom", N_("Вниз")}, {"valign-middle", N_("Посередине")}, {"valign-top", N_("Вверх")}}};
             myOptions.textVAlign = ToolChoice(app, "text-v", N_("По вертикали"), down, myOptions.textVAlign, inner);
             Caption(ui, Tr("Щелчок ставит рамку по размеру текста, протяжка задаёт её размер. Рамку можно образмерить и повернуть (уберите её горизонтальность)."), inner);
             ApplyTextOptions(session);   // the edited text follows the panel at once

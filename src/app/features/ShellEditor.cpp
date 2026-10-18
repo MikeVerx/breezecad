@@ -58,7 +58,7 @@ void ShellEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feat
     ParameterField(app, session, "thickness", myThickness, f.thickness, width, myFocusFirstField);
     Gap(app);
 
-    static constexpr std::array<ChoiceItem, 2> sides{{{nullptr, N_("Внутрь")}, {nullptr, N_("Наружу")}}};
+    static constexpr std::array<ChoiceItem, 2> sides{{{"shell-in", N_("Внутрь")}, {"shell-out", N_("Наружу")}}};
     const int current = f.outward ? 1 : 0;
     if (const int chosen = ToolChoice(app, "side", N_("Направление"), sides, current, width); chosen != current && chosen >= 0) {
         f.outward = chosen == 1;

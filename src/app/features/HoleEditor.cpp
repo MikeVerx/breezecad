@@ -285,7 +285,7 @@ void HoleEditor::DrawFaceSection(AppContext& app, Session& session, doc::HoleFea
         ImGui::Dummy({width, h});
     }
     {
-        static constexpr std::array<ChoiceItem, 2> modes{{{nullptr, N_("Центр по щелчку")}, {nullptr, N_("Соосно")}}};
+        static constexpr std::array<ChoiceItem, 2> modes{{{"hole-at-click", N_("Центр по щелчку")}, {"hole-coaxial", N_("Соосно")}}};
         const int current = myCoaxial ? 1 : 0;
         if (const int chosen = ToolChoice(app, "centre-mode", N_("Центр"), modes, current, width); chosen != current) myCoaxial = chosen == 1;
         ImGui::Dummy({0, ui.S(4)});
@@ -367,7 +367,7 @@ void HoleEditor::DrawSizes(AppContext& app, Session& session, doc::HoleFeature& 
     ui::Ui& ui = app.ui;
 
     {
-        static constexpr std::array<ChoiceItem, 3> labels{{{nullptr, N_("Простое")}, {nullptr, N_("Цековка")}, {nullptr, N_("Зенковка")}}};
+        static constexpr std::array<ChoiceItem, 3> labels{{{"hole-simple", N_("Простое")}, {"hole-cbore", N_("Цековка")}, {"hole-csink", N_("Зенковка")}}};
         const int current = static_cast<int>(f.type);
         const int chosen = ToolChoice(app, "type", N_("Тип"), labels, current, width);
         if (chosen != current) {
@@ -396,7 +396,7 @@ void HoleEditor::DrawSizes(AppContext& app, Session& session, doc::HoleFeature& 
     }
 
     {
-        static constexpr std::array<ChoiceItem, 2> labels{{{nullptr, N_("На расстояние")}, {nullptr, N_("Насквозь")}}};
+        static constexpr std::array<ChoiceItem, 2> labels{{{"ext-distance", N_("На расстояние")}, {"ext-through", N_("Насквозь")}}};
         const int current = f.throughAll ? 1 : 0;
         const int chosen = ToolChoice(app, "depth-kind", N_("Глубина"), labels, current, width);
         if (chosen != current) {

@@ -273,7 +273,7 @@ void MirrorEditor::DrawInViewport(AppContext& app, Session& session, const Viewp
 
 void MirrorEditor::DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) {
     auto& f = static_cast<doc::MirrorFeature&>(feature);
-    static constexpr std::array<ChoiceItem, 2> what{{{nullptr, N_("Операции")}, {nullptr, N_("Тело целиком")}}};
+    static constexpr std::array<ChoiceItem, 2> what{{{"mirror-features", N_("Операции")}, {"mirror-body", N_("Тело целиком")}}};
     const int current = f.wholeBody ? 1 : 0;
     if (const int chosen = ToolChoice(app, "mirror-what", N_("Что отражать"), what, current, width); chosen != current) {
         f.wholeBody = chosen == 1;

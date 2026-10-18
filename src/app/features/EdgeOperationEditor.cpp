@@ -64,7 +64,7 @@ void EdgeOperationEditor::DrawBody(AppContext& app, Session& session, doc::Featu
     const ui::ThemeColors& c = ui.C();
 
     {
-        static constexpr std::array<ChoiceItem, 2> modes{{{nullptr, N_("Ребро")}, {nullptr, N_("Грань целиком")}}};
+        static constexpr std::array<ChoiceItem, 2> modes{{{"pick-edge", N_("Ребро")}, {"pick-face", N_("Грань целиком")}}};
         const int current = myByFace ? 1 : 0;
         if (const int chosen = ToolChoice(app, "pick-mode", N_("Щелчок выбирает"), modes, current, width); chosen != current) myByFace = chosen == 1;
         Caption(app, myByFace ? Tr("Все рёбра грани разом. Убрать отдельные потом можно в режиме «Ребро».")
@@ -172,7 +172,7 @@ void ChamferEditor::DrawSize(AppContext& app, Session& session, doc::EdgeFeature
     auto& f = static_cast<doc::ChamferFeature&>(feature);
     using doc::ChamferMode;
     {
-        static constexpr std::array<ChoiceItem, 3> modes{{{nullptr, N_("Равные")}, {nullptr, N_("С углом")}, {nullptr, N_("Два размера")}}};
+        static constexpr std::array<ChoiceItem, 3> modes{{{"chamfer-equal", N_("Равные")}, {"chamfer-angle", N_("С углом")}, {"chamfer-two", N_("Два размера")}}};
         const int current = static_cast<int>(f.mode);
         if (const int chosen = ToolChoice(app, "chamfer-mode", N_("Способ"), modes, current, width); chosen != current) {
             f.mode = static_cast<ChamferMode>(chosen);

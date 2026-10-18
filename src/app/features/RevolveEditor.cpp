@@ -88,7 +88,7 @@ void RevolveEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
     }
     if (f.extent == RevolveExtent::Angle) {
         Gap(app);
-        static constexpr std::array<ChoiceItem, 2> labels{{{nullptr, N_("Прямое")}, {nullptr, N_("Обратное")}}};
+        static constexpr std::array<ChoiceItem, 2> labels{{{"rev-dir1", N_("Прямое")}, {"rev-dir2", N_("Обратное")}}};
         const int current = f.reversed ? 1 : 0;
         const int chosen = ToolChoice(app, "dir", N_("Направление"), labels, current, width);
         if (chosen != current) {

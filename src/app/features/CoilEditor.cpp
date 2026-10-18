@@ -49,7 +49,7 @@ void CoilEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSolid
     ParameterField(app, session, "turns", myTurns, f.turns, width, false);
     Gap(app);
 
-    static constexpr std::array<ChoiceItem, 2> hands{{{nullptr, N_("Правая")}, {nullptr, N_("Левая")}}};
+    static constexpr std::array<ChoiceItem, 2> hands{{{"hand-right", N_("Правая")}, {"hand-left", N_("Левая")}}};
     const int current = f.leftHanded ? 1 : 0;
     const int chosen = ToolChoice(app, "hand", N_("Навивка"), hands, current, width);
     if (chosen != current) {

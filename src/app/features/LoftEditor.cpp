@@ -64,7 +64,7 @@ void LoftEditor::DrawBody(AppContext& app, Session& session, doc::Feature& featu
     FeatureChecklist(app, session, f.sections, IsSketch, width, Tr("Нет эскизов. Нарисуйте сечения на разных плоскостях."));
     Gap(app);
 
-    static constexpr std::array<ChoiceItem, 2> kinds{{{nullptr, N_("Плавные")}, {nullptr, N_("Прямые")}}};
+    static constexpr std::array<ChoiceItem, 2> kinds{{{"loft-smooth", N_("Плавные")}, {"loft-straight", N_("Прямые")}}};
     const int ruled = f.ruled ? 1 : 0;
     const int pick = ToolChoice(app, "ruled", N_("Переходы"), kinds, ruled, width);
     if (pick != ruled) {
