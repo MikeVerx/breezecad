@@ -349,7 +349,10 @@ int Application::Run() {
         } else {
             // Wakes up for autosave and theme checks; often enough to show
             // a rebuild running on another thread.
-            platform::Window::WaitEvents(WaitsForBackground() ? 1.0 / 30.0 : 1.0);
+            // A message on screen wakes the loop when it starts to fade out.
+            const double wait = std::min(WaitsForBackground() ? 1.0 / 30.0 : 1.0,
+                                         myNotes.SecondsToNextChange(platform::Window::Time()) + 0.001);
+            platform::Window::WaitEvents(wait);
         }
         const double now = platform::Window::Time();
 #if defined(__ANDROID__)
@@ -448,6 +451,7 @@ void Application::StartModules() {
 
 const char* Application::WhyAnotherFrame() const {
     if (myBusy) return "animation";
+    if (myNotes.Animating(platform::Window::Time())) return "animation";
     // Only a 3D view on screen needs drawing: on the home page nothing renders
     // it, so "needs render" stayed true and the window redrew ~130 times a
     // second doing nothing (testers' logs, 2026-10).
