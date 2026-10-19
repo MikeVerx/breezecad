@@ -36,11 +36,13 @@ add_executable(bz_tests
     kernel/LoftTests.cpp
     kernel/MeasureTests.cpp
     kernel/ExtrudeToFaceTests.cpp
+    kernel/ExtrudeToCurvedTests.cpp
     kernel/ModelTests.cpp
     kernel/PatternTests.cpp
     kernel/ProjectionTests.cpp
     kernel/RevolvedProjectionTests.cpp
     kernel/RevolveTests.cpp
+    kernel/RevolveProjectedTests.cpp
     kernel/SectionTests.cpp
     kernel/ShellTests.cpp
     kernel/StandardPartsTests.cpp
