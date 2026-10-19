@@ -158,7 +158,9 @@ TEST_CASE("a cylinder's rim seen from the side projects to its diameter") {
 
 TEST_CASE("an arc seen edge-on covers only the part it spans") {
     // A half cylinder (x >= 0): its top rim is a half circle from y = -10 to 10 through x = 10.
-    const TopoDS_Shape box = BRepPrimAPI_MakeBox(gp_Pnt(0, -10, 0), 10, 20, 25).Shape();
+    // The box overhangs the cylinder (no tangent faces: OCCT on Windows
+    // crashed in that boolean) and ends above and below it.
+    const TopoDS_Shape box = BRepPrimAPI_MakeBox(gp_Pnt(0, -12, -1), 12, 24, 27).Shape();
     const TopoDS_Shape cylinder = BRepPrimAPI_MakeCylinder(gp_Ax2(gp::Origin(), gp::DZ()), 10, 25).Shape();
     const TopoDS_Shape halfCylinder = BRepAlgoAPI_Common(cylinder, box).Shape();
     TopTools_IndexedMapOfShape edges;
