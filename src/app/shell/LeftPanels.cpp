@@ -150,11 +150,13 @@ void DrawVariablesPanel(AppContext& app, Session& session, float width) {
         const float vw = ui.fonts.mono->CalcTextSizeA(ui.S(12), FLT_MAX, 0, value.c_str()).x;
         dl->AddText(ui.fonts.mono, ui.S(12), {x0 + inner - vw - ui.S(6), rp.y + ui.S(7)},
                     ui::ToU32(p.HasError() ? c.danger : c.textSecondary), value.c_str());
-        ImGui::SetCursorScreenPos({x0, rp.y});
-        ImGui::Dummy({inner, ui.S(28)});
-        if (p.HasError()) ui::ItemTooltip(ui, Tr(p.error).c_str());
         dl->AddLine({x0, rp.y + ui.S(29)}, {x0 + inner, rp.y + ui.S(29)}, ui::ToU32(c.dividerSoft));
-        ImGui::Dummy({0, ui.S(2)});
+        // The whole row is the last item: the caller's context menu
+        // ("Удалить переменную") and the error tooltip attach to it. It used
+        // to be a 2 px spacer under the line — the menu could not be opened.
+        ImGui::SetCursorScreenPos({x0, rp.y});
+        ImGui::Dummy({inner, ui.S(30) + ImGui::GetStyle().ItemSpacing.y});   // the height the row and its spacer had
+        if (p.HasError()) ui::ItemTooltip(ui, Tr(p.error).c_str());
         ImGui::PopID();
         return result;
     };
