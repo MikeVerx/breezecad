@@ -336,3 +336,29 @@ TEST_CASE("a deleted dimension still referenced does not come back under a new o
     ex->distance.name = "";     // ...is gone, "t" still refers to it
     CHECK(plate.doc.NextParameterName() == "d10");
 }
+
+TEST_CASE("switching the document units keeps the part the same size, undo restores the texts") {
+    for (const LengthUnit unit : {LengthUnit::Inch, LengthUnit::Centimeter, LengthUnit::Meter}) {
+        CAPTURE(static_cast<int>(unit));
+        Plate plate;   // width 60 (variable), d1 = width, d2 = d1 * 2 / 3, d3 = 10
+        REQUIRE(plate.doc.EvaluateParameters() == 0);
+        auto* ex = plate.doc.FindAs<ExtrudeFeature>(plate.extrudeId);
+        const auto* sk = plate.doc.FindAs<SketchFeature>(plate.sketchId);
+        const double depth = ex->distance.value, height = sk->sketch.constraints[6].parameter.value;
+        UnitSystem other = plate.doc.units;
+        other.length = unit;
+        doc::History history;
+        history.Execute(plate.doc, doc::SetUnits(other));
+        REQUIRE(plate.doc.EvaluateParameters() == 0);
+        CHECK(ex->distance.value == doctest::Approx(depth));
+        CHECK(sk->sketch.constraints[6].parameter.value == doctest::Approx(height));
+        CHECK(plate.doc.variables[0].value == doctest::Approx(60.0));
+        CHECK(ex->distance.expression == "10mm");
+        CHECK(sk->sketch.constraints[6].parameter.expression == "d1 * 2 / 3");   // nothing in it depends on units
+        history.Undo(plate.doc);
+        CHECK(ex->distance.expression == "10");
+        CHECK(plate.doc.variables[0].expression == "60");
+        REQUIRE(plate.doc.EvaluateParameters() == 0);
+        CHECK(ex->distance.value == doctest::Approx(depth));
+    }
+}

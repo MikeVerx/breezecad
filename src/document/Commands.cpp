@@ -4,6 +4,8 @@
 
 #include <format>
 #include <utility>
+#include <unordered_map>
+#include <optional>
 
 namespace bz::doc {
 
@@ -184,16 +186,42 @@ public:
     explicit SetUnitsCommand(UnitSystem other) : myOther(other) {}
 
     std::string Label() const override { return "Единицы измерения"; }
-    void Do(Document& doc) override { Swap(doc); }
-    void Undo(Document& doc) override { Swap(doc); }
 
-private:
-    void Swap(Document& doc) {
+    void Do(Document& doc) override {
+        // A plain number takes the document unit: "10" was 10 mm and would be
+        // 10 in after the switch — the whole part 25.4 times bigger. Every
+        // expression first gets the old unit written where it depends on it.
+        myTexts.clear();
+        std::unordered_map<std::string, NamedValue> named;
+        for (const Parameter* p : std::as_const(doc).AllParameters())
+            if (!p->name.empty()) named.emplace(p->name, NamedValue{p->value, p->quantity});
+        const NameLookup lookup = [&](std::string_view name) -> std::optional<NamedValue> {
+            const auto it = named.find(std::string(name));
+            if (it == named.end()) return std::nullopt;
+            return it->second;
+        };
+        const std::vector<Parameter*> all = doc.AllParameters();
+        for (std::size_t i = 0; i < all.size(); ++i) {
+            std::string text = ExpressionInUnits(all[i]->expression, all[i]->quantity, doc.units, myOther, lookup);
+            if (text == all[i]->expression) continue;
+            myTexts.emplace_back(i, all[i]->expression);
+            all[i]->expression = std::move(text);
+        }
         std::swap(doc.units, myOther);
-        doc.MarkChanged(0);   // plain numbers in expressions now mean other units
+        doc.MarkChanged(0);
     }
 
+    void Undo(Document& doc) override {
+        std::swap(doc.units, myOther);
+        const std::vector<Parameter*> all = doc.AllParameters();
+        for (const auto& [i, text] : myTexts)
+            if (i < all.size()) all[i]->expression = text;
+        doc.MarkChanged(0);
+    }
+
+private:
     UnitSystem myOther;
+    std::vector<std::pair<std::size_t, std::string>> myTexts;   ///< by position in AllParameters, as before Do
 };
 
 class SetPartInfoCommand final : public Command {

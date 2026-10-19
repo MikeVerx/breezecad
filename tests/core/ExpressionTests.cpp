@@ -125,3 +125,45 @@ TEST_CASE("renaming in an expression touches whole names only") {
     CHECK(RenameInExpression("12,5", "d1", "w") == "12,5");
     CHECK(RenameInExpression("", "d1", "w").empty());
 }
+
+TEST_CASE("expressions rewritten for other document units mean the same") {
+    const UnitSystem mm{};
+    UnitSystem inch = mm;
+    inch.length = LengthUnit::Inch;
+    UnitSystem rad = mm;
+    rad.angle = AngleUnit::Radian;
+    const NameLookup look = [](std::string_view n) -> std::optional<NamedValue> {
+        if (n == "w") return NamedValue{60, Quantity::Length};
+        if (n == "k") return NamedValue{2, Quantity::Scalar};
+        if (n == "a") return NamedValue{kPi / 6, Quantity::Angle};
+        return std::nullopt;
+    };
+    struct Case { const char* text; Quantity q; const UnitSystem* to; const char* expected; };
+    const Case cases[] = {
+        {"10", Quantity::Length, &inch, "10mm"},
+        {"12,5", Quantity::Length, &inch, "12,5mm"},
+        {"10mm", Quantity::Length, &inch, "10mm"},
+        {"w / 2", Quantity::Length, &inch, "w / 2"},
+        {"w + 5", Quantity::Length, &inch, "w + 5mm"},
+        {"5 + w", Quantity::Length, &inch, "5mm + w"},
+        {"(10+5)*2", Quantity::Length, &inch, "((10+5)*2)*1mm"},
+        {"k*10", Quantity::Length, &inch, "(k*10)*1mm"},
+        {"max(10; w)", Quantity::Length, &inch, "max(10mm; w)"},
+        {"-10", Quantity::Length, &inch, "(-10)*1mm"},
+        {"90", Quantity::Angle, &rad, "90deg"},
+        {"atan(1) + 5", Quantity::Angle, &rad, "atan(1) + 5deg"},
+        {"sin(30) * w", Quantity::Length, &rad, "sin(30deg) * w"},
+        {"3", Quantity::Scalar, &inch, "3"},
+        {"10", Quantity::Length, &mm, "10"},
+        {"2 +", Quantity::Length, &inch, "2 +"},   // cannot be evaluated: left as it was
+    };
+    for (const Case& c : cases) {
+        CAPTURE(c.text);
+        const std::string out = ExpressionInUnits(c.text, c.q, mm, *c.to, look);
+        CHECK(out == c.expected);
+        const auto before = EvaluateExpression(c.text, c.q, mm, look);
+        const auto after = EvaluateExpression(out, c.q, *c.to, look);
+        CHECK(before.HasValue() == after.HasValue());
+        if (before && after) CHECK(*after == doctest::Approx(*before));
+    }
+}
