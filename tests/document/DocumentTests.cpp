@@ -327,3 +327,12 @@ TEST_CASE("a name that exists but cannot be used is not reported as unknown") {
         CHECK(plate.doc.variables[i].error.find("Циклическая") != std::string::npos);
     }
 }
+
+TEST_CASE("a deleted dimension still referenced does not come back under a new one") {
+    Plate plate;   // d1, d2 in the sketch, d3 the extrusion
+    auto* ex = plate.doc.FindAs<ExtrudeFeature>(plate.extrudeId);
+    ex->distance.name = "d9";   // the largest...
+    plate.doc.variables.push_back({"t", "d9 / 2", Quantity::Length, 0, {}});
+    ex->distance.name = "";     // ...is gone, "t" still refers to it
+    CHECK(plate.doc.NextParameterName() == "d10");
+}

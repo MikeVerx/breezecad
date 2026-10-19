@@ -113,14 +113,21 @@ std::string Document::UniqueFeatureName(std::string_view base) const {
 std::string Document::NextParameterName() const {
     // One past the largest "dN" in use, like Inventor: numbers are not reused,
     // so a deleted d3 does not come back with another meaning.
+    // Names still referenced by an expression count too: the largest dN
+    // deleted (d7, with "d7 * 2" left in d8) would otherwise come back as the
+    // next new dimension, and d8 would silently follow a stranger.
     int largest = 0;
-    for (const Parameter* p : AllParameters()) {
-        if (p->name.size() < 2 || p->name[0] != 'd') continue;
+    const auto take = [&](std::string_view name) {
+        if (name.size() < 2 || name[0] != 'd') return;
         int n = 0;
-        const char* begin = p->name.data() + 1;
-        const char* end = p->name.data() + p->name.size();
+        const char* begin = name.data() + 1;
+        const char* end = name.data() + name.size();
         const auto [ptr, ec] = std::from_chars(begin, end, n);
         if (ec == std::errc{} && ptr == end) largest = std::max(largest, n);
+    };
+    for (const Parameter* p : AllParameters()) {
+        take(p->name);
+        for (const std::string& used : ReferencedNames(p->expression)) take(used);
     }
     return "d" + std::to_string(largest + 1);
 }
