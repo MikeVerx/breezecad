@@ -163,18 +163,31 @@ int Document::EvaluateParameters() {
         }
         mark = Mark::InProgress;
 
+        // A name that exists but cannot be used here: said as it is, not as
+        // "unknown name" (the user would look for a typo that is not there).
+        std::string cycle;
+        bool self = false;
         const NameLookup lookup = [&](std::string_view name) -> std::optional<NamedValue> {
             const auto it = byName.find(std::string(name));
-            if (it == byName.end() || it->second == p) return std::nullopt;
+            if (it == byName.end()) return std::nullopt;
+            if (it->second == p) {
+                self = true;
+                return std::nullopt;
+            }
             evaluate(it->second);
-            if (marks[it->second] != Mark::Done) return std::nullopt;   // part of a cycle
+            if (marks[it->second] != Mark::Done) {   // part of a cycle
+                if (cycle.empty()) cycle = it->second->name;
+                return std::nullopt;
+            }
             return NamedValue{it->second->value, it->second->quantity};
         };
         Expected<double> result = EvaluateExpression(p->expression, p->quantity, units, lookup);
         if (result) {
             if (p->error.empty()) p->value = *result;
         } else if (p->error.empty()) {
-            p->error = result.GetError().message;
+            p->error = self              ? std::format("«{}» ссылается сам на себя", p->name)
+                       : !cycle.empty() ? std::format("Циклическая ссылка через «{}»", cycle)
+                                        : result.GetError().message;
         }
         marks[p] = Mark::Done;
     };

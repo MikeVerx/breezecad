@@ -13,8 +13,10 @@
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
 
+#include <algorithm>
 #include <array>
 #include <format>
+#include <utility>
 
 namespace bz::app {
 namespace {
@@ -180,21 +182,43 @@ void DrawVariablesPanel(AppContext& app, Session& session, float width) {
             }
         }
         if (erase) {
+            // A variable still used would leave its users with "unknown name":
+            // say where it is used instead of breaking them silently.
+            std::vector<std::string> users;
+            for (const Parameter* q : std::as_const(session.doc).AllParameters()) {
+                if (q == &p) continue;
+                const std::vector<std::string> names = ReferencedNames(q->expression);
+                if (std::ranges::find(names, p.name) != names.end()) users.push_back(q->name.empty() ? q->expression : q->name);
+            }
+            if (!users.empty()) {
+                std::string list;
+                for (std::size_t k = 0; k < users.size() && k < 5; ++k) list += (k ? ", " : "") + users[k];
+                if (users.size() > 5) list += ", …";
+                app.notes.Error(Trf("«{}» используется: {}. Сначала уберите её из этих выражений", p.name, list));
+                break;
+            }
             std::vector<Parameter> vars = session.doc.variables;
             vars.erase(vars.begin() + static_cast<std::ptrdiff_t>(i));
             session.Execute(doc::SetVariables(std::move(vars)));
             break;
         }
-        if (expr || !newName.empty()) {
-            std::vector<Parameter> vars = session.doc.variables;
-            if (expr) vars[i].expression = *expr;
-            if (!newName.empty()) {
-                if (!IsValidVariableName(newName)) {
-                    app.notes.Error(Trf("Имя «{}» не подходит: буквы, цифры и «_», начинается с буквы", newName));
-                    break;
-                }
-                vars[i].name = newName;
+        if (!newName.empty() && newName != p.name) {
+            if (!IsValidVariableName(newName)) {
+                app.notes.Error(Trf("Имя «{}» не подходит: буквы, цифры и «_», начинается с буквы", newName));
+                break;
             }
+            const auto taken = std::as_const(session.doc).AllParameters();
+            if (std::ranges::any_of(taken, [&](const Parameter* q) { return q->name == newName; })) {
+                app.notes.Error(Trf("Имя «{}» уже занято", newName));
+                break;
+            }
+            // The expressions that use the variable follow its new name.
+            session.Execute(doc::RenameVariable(i, newName));
+            break;   // the table changed; draw the rest next frame
+        }
+        if (expr) {
+            std::vector<Parameter> vars = session.doc.variables;
+            vars[i].expression = *expr;
             session.Execute(doc::SetVariables(std::move(vars)));
             break;   // the table changed; draw the rest next frame
         }
