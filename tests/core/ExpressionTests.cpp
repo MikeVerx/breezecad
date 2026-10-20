@@ -114,3 +114,14 @@ TEST_CASE("B-10: absurdly nested or long expressions are refused, not a stack ov
     CHECK(Eval("--2") == doctest::Approx(2.0));
     CHECK(Eval("2^3^2") == doctest::Approx(512.0));
 }
+
+TEST_CASE("renaming in an expression touches whole names only") {
+    CHECK(RenameInExpression("d1 * 2 + d10 - d1d1", "d1", "w") == "w * 2 + d10 - d1d1");
+    CHECK(RenameInExpression("5d1 + d1", "d1", "w") == "5d1 + w");          // "5d1" is a number with junk, left alone
+    CHECK(RenameInExpression("max(d1;d1)", "d1", "ширина") == "max(ширина;ширина)");
+    CHECK(RenameInExpression("ширина/2", "ширина", "w") == "w/2");
+    CHECK(RenameInExpression("mm + 3mm", "mm", "x") == "x + 3mm");         // a unit after a number stays
+    CHECK(RenameInExpression("sin (a) + sin", "sin", "x") == "sin (a) + x"); // a call stays
+    CHECK(RenameInExpression("12,5", "d1", "w") == "12,5");
+    CHECK(RenameInExpression("", "d1", "w").empty());
+}

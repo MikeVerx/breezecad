@@ -409,6 +409,35 @@ std::vector<std::string> ReferencedNames(std::string_view text) {
     return names;
 }
 
+std::string RenameInExpression(std::string_view text, std::string_view from, std::string_view to) {
+    // The same scan as ReferencedNames: what it reports as a name is what is renamed.
+    std::string out;
+    std::size_t i = 0;
+    while (i < text.size()) {
+        const char c = text[i];
+        if (std::isdigit(static_cast<unsigned char>(c)) || c == '.') {
+            const std::size_t start = i;
+            while (i < text.size() && (std::isdigit(static_cast<unsigned char>(text[i])) || text[i] == '.')) ++i;
+            while (i < text.size() && IsIdentChar(text[i])) ++i;   // "25mm", "1e3"
+            out.append(text.substr(start, i - start));
+            continue;
+        }
+        if (!IsIdentStart(c)) {
+            out.push_back(c);
+            ++i;
+            continue;
+        }
+        const std::size_t start = i;
+        while (i < text.size() && IsIdentChar(text[i])) ++i;
+        const std::string_view word = text.substr(start, i - start);
+        std::size_t j = i;
+        while (j < text.size() && std::isspace(static_cast<unsigned char>(text[j]))) ++j;
+        const bool isCall = j < text.size() && text[j] == '(';
+        out.append(word == from && !isCall ? to : word);
+    }
+    return out;
+}
+
 bool IsValidVariableName(std::string_view name) {
     if (name.empty() || !IsIdentStart(name.front())) return false;
     for (char c : name)

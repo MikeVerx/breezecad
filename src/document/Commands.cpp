@@ -1,5 +1,7 @@
 #include "document/Commands.h"
 
+#include "core/Expression.h"
+
 #include <format>
 #include <utility>
 
@@ -138,6 +140,45 @@ private:
     std::vector<Parameter> myOther;
 };
 
+class RenameVariableCommand final : public Command {
+public:
+    RenameVariableCommand(std::size_t index, std::string name) : myIndex(index), myName(std::move(name)) {}
+
+    std::string Label() const override { return "Переименование переменной"; }
+
+    void Do(Document& doc) override {
+        if (myIndex >= doc.variables.size()) return;
+        Parameter& v = doc.variables[myIndex];
+        myOld = v.name;
+        v.name = myName;
+        // Every expression that used the old name follows; the old texts are
+        // kept by position (the same document state on undo, so the same order).
+        myTexts.clear();
+        const std::vector<Parameter*> all = doc.AllParameters();
+        for (std::size_t i = 0; i < all.size(); ++i) {
+            std::string renamed = RenameInExpression(all[i]->expression, myOld, myName);
+            if (renamed == all[i]->expression) continue;
+            myTexts.emplace_back(i, all[i]->expression);
+            all[i]->expression = std::move(renamed);
+        }
+        doc.MarkChanged(0);
+    }
+
+    void Undo(Document& doc) override {
+        if (myIndex >= doc.variables.size()) return;
+        const std::vector<Parameter*> all = doc.AllParameters();
+        for (const auto& [i, text] : myTexts)
+            if (i < all.size()) all[i]->expression = text;
+        doc.variables[myIndex].name = myOld;
+        doc.MarkChanged(0);
+    }
+
+private:
+    std::size_t myIndex;
+    std::string myName, myOld;
+    std::vector<std::pair<std::size_t, std::string>> myTexts;
+};
+
 class SetUnitsCommand final : public Command {
 public:
     explicit SetUnitsCommand(UnitSystem other) : myOther(other) {}
@@ -258,6 +299,10 @@ std::unique_ptr<Command> SetEndMarker(const Document& doc, std::size_t index) {
 
 std::unique_ptr<Command> SetVariables(std::vector<Parameter> variables) {
     return std::make_unique<SetVariablesCommand>(std::move(variables));
+}
+
+std::unique_ptr<Command> RenameVariable(std::size_t index, std::string name) {
+    return std::make_unique<RenameVariableCommand>(index, std::move(name));
 }
 
 std::unique_ptr<Command> SetUnits(UnitSystem units) {
