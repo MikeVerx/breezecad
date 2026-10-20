@@ -10,7 +10,8 @@
 // a–d are the user's own variables, typed as letters; "пред." puts the value
 // last confirmed in a field (a value used again and again, the author's ask);
 // ↑ ↓ go to the field before or after; ⌨ the full keyboard (functions, new
-// names); ↵ confirms. The line above the keys shows what the field holds:
+// names); ↵ confirms. The line above the keys shows what the field holds,
+// with its caret (a finger on it moves the caret there):
 // the field itself may be scrolled out of sight.
 //
 // Its keys are not ImGui buttons: a click elsewhere would end the editing of
@@ -19,8 +20,13 @@
 #include "app/mobile/MobileLayout.h"
 
 #include "core/I18n.h"
+#include "core/Log.h"
 
 #include <imgui_internal.h>
+
+#include <algorithm>
+#include <cfloat>
+#include <cmath>
 
 namespace bz::app::mobile {
 namespace {
@@ -77,15 +83,64 @@ void DrawNumpad(AppContext& app, ImVec2 pos, ImVec2 size) {
     m.numpadMax = {pos.x + size.x + ui.S(4), pos.y + size.y + ui.S(2)};
     dl->AddRectFilled({pos.x - ui.S(4), pos.y - ui.S(2)}, {pos.x + size.x + ui.S(4), pos.y + size.y + ui.S(2)}, ui::ToU32(c.panel));
 
-    // What the field holds now.
-    const ImGuiContext& g = *GImGui;
-    if (g.ActiveId != 0 && g.InputTextState.ID == g.ActiveId)
-        m.editingText.assign(g.InputTextState.TextA.Data, static_cast<std::size_t>(std::max(0, g.InputTextState.TextLen)));
+    // What the field holds now, with its caret: the field itself may be out of
+    // sight, so this line is where the text is edited — a finger on it puts the
+    // caret there (the author, 20.10: three digits could only be erased from
+    // the end to change the first one).
+    ImGuiContext& g = *GImGui;
+    ImGuiInputTextState* state = g.ActiveId != 0 && g.InputTextState.ID == g.ActiveId ? &g.InputTextState : nullptr;
+    if (state) m.editingText.assign(state->TextA.Data, static_cast<std::size_t>(std::max(0, state->TextLen)));
+    const std::string& line = m.editingText;
+    const int length = static_cast<int>(line.size());
+    ImFont* lineFont = ui.fonts.mono;
+    const float lineFs = ui.S(15);
+    const auto widthTo = [&](int bytes) { return lineFont->CalcTextSizeA(lineFs, FLT_MAX, 0, line.c_str(), line.c_str() + bytes).x; };
     const float lineH = ui.S(30);
+    const float textX = pos.x + ui.S(8), visible = size.x - ui.S(16);
+    m.numpadLineMin = pos;
+    m.numpadLineMax = {pos.x + size.x, pos.y + lineH};
+    if (std::abs(m.numpadLogged.x - pos.x) > 1 || std::abs(m.numpadLogged.y - pos.y) > 1) {   // the emulator's check taps it
+        m.numpadLogged = pos;
+        log::Info("Touch: numpad at {:.0f},{:.0f} size {:.0f}x{:.0f} line {:.0f}", pos.x, pos.y, size.x, size.y, lineH);
+    }
+    if (state && m.caretTapX >= 0) {
+        // The character boundary nearest the finger (UTF-8: never inside a letter).
+        const float x = m.caretTapX - textX + m.numpadScroll;
+        int best = 0;
+        float bestDistance = FLT_MAX;
+        for (int i = 0; i <= length;) {
+            const float d = std::abs(widthTo(i) - x);
+            if (d < bestDistance) {
+                bestDistance = d;
+                best = i;
+            }
+            if (i == length) break;
+            unsigned int ch = 0;
+            i += std::max(1, ImTextCharFromUtf8(&ch, line.c_str() + i, line.c_str() + length));
+        }
+        ui.caretRequest = best;   // the field puts its caret there on its next frame
+        log::Info("Numpad: caret to {}", best);
+    }
+    m.caretTapX = -1;
+    const int caret = state ? std::clamp(state->GetCursorPos(), 0, length) : length;
+    const int selA = state ? std::clamp(std::min(state->GetSelectionStart(), state->GetSelectionEnd()), 0, length) : caret;
+    const int selB = state ? std::clamp(std::max(state->GetSelectionStart(), state->GetSelectionEnd()), 0, length) : caret;
+    // A long line moves left so the caret stays in sight.
+    const float caretX = widthTo(caret), total = widthTo(length);
+    if (total <= visible) m.numpadScroll = 0;
+    else if (caretX - m.numpadScroll > visible - ui.S(2)) m.numpadScroll = caretX - visible + ui.S(2);
+    else if (caretX - m.numpadScroll < 0) m.numpadScroll = caretX;
+    m.numpadScroll = std::clamp(m.numpadScroll, 0.0f, std::max(0.0f, total - visible + ui.S(2)));
+
     dl->AddRectFilled(pos, {pos.x + size.x, pos.y + lineH}, ui::ToU32(c.field), ui.S(6));
     dl->AddRect(pos, {pos.x + size.x, pos.y + lineH}, ui::ToU32(c.accent), ui.S(6));
-    dl->PushClipRect(pos, {pos.x + size.x - ui.S(6), pos.y + lineH}, true);
-    dl->AddText(ui.fonts.mono, ui.S(15), {pos.x + ui.S(8), pos.y + (lineH - ui.S(15)) / 2}, ui::ToU32(c.text), m.editingText.c_str());
+    dl->PushClipRect({pos.x + ui.S(4), pos.y}, {pos.x + size.x - ui.S(6), pos.y + lineH}, true);
+    const float ty = pos.y + (lineH - lineFs) / 2, x0 = textX - m.numpadScroll;
+    if (selA != selB)
+        dl->AddRectFilled({x0 + widthTo(selA), ty - ui.S(2)}, {x0 + widthTo(selB), ty + lineFs + ui.S(2)}, ui::ToU32(c.accentSoft), ui.S(2));
+    dl->AddText(lineFont, lineFs, {x0, ty}, ui::ToU32(c.text), line.c_str());
+    if (state && selA == selB)   // the caret, steady (a blinking one would keep the screen redrawing)
+        dl->AddLine({x0 + caretX, ty - ui.S(2)}, {x0 + caretX, ty + lineFs + ui.S(2)}, ui::ToU32(c.accent), ui.S(2));
     dl->PopClipRect();
 
     const float top = pos.y + lineH + ui.S(4);
@@ -132,6 +187,7 @@ void FireNumpadKey(AppContext& app, int code) {
         case NumpadNextField: Press(ImGuiKey_Tab); break;
         case NumpadKeyboard:  m.fullKeyboard = true; break;
         case NumpadEnter:
+            log::Info("Numpad: enter \"{}\"", m.editingText);
             if (!m.editingText.empty()) m.previousValue = m.editingText;
             Press(ImGuiKey_Enter);
             break;

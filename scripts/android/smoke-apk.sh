@@ -140,6 +140,9 @@ check layout-editor
 broken=0
 adb logcat -d -s BreezeCAD:* > "$OUT/breezecad-1.log"   # steps 1–12: the log is cleared below
 blog() { adb logcat -d -s BreezeCAD:* | tr -d '\r'; }
+# A line in the log. grep -q would stop reading early and, with pipefail, the adb on the
+# left of the pipe dies of SIGPIPE: the check failed with the line right there (20.10).
+bhas() { blog | grep -c "$@" >/dev/null; }
 
 # 13. A folding group's opener in block 2 (18.10: «Изменить» of the 3D tab) tapped: the group opens.
 adb logcat -c
@@ -148,7 +151,7 @@ read -r mx my ms < <(blog | sed -n 's/.*Touch: fold [^ ]* at \([0-9-]*\),\([0-9-
 if [ -n "${ms:-}" ]; then
     adb shell input tap $(dp $(( mx + ms / 2 ))) $(dp $(( my + ms / 2 )))
     shot 13-fold-tapped 3
-    if blog | grep -q "Fold: open"; then
+    if bhas "Fold: open"; then
         echo "step fold-tap: the group opened ($(blog | grep -o 'Fold: .*' | tr '\n' ';'))"
     else
         echo "step fold-tap: FAILED — the group did not open ($(blog | grep -o 'Fold: .*' | tr '\n' ';'))"; broken=1
@@ -156,7 +159,7 @@ if [ -n "${ms:-}" ]; then
     # Tapped again: it folds back (and stays folded for the next steps).
     adb shell input tap $(dp $(( mx + ms / 2 ))) $(dp $(( my + ms / 2 )))
     sleep 2
-    blog | grep -q "Fold: closed" && echo "step fold-tap: folded back" || { echo "step fold-tap: FAILED — did not fold back"; broken=1; }
+    bhas "Fold: closed" && echo "step fold-tap: folded back" || { echo "step fold-tap: FAILED — did not fold back"; broken=1; }
 else
     echo "step fold-tap: FAILED — no opener in the log"; broken=1
 fi
@@ -194,6 +197,30 @@ else
 fi
 check extrude-field
 
+# 14a. The numpad's line (20.10): a tap at its start puts the caret before the value, "9" goes
+# there and ↵ enters it — "10" becomes "910", not erased digit by digit from the end.
+read -r nx ny nw nh nl < <(blog | sed -n 's/.*Touch: numpad at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\) line \([0-9]*\).*/\1 \2 \3 \4 \5/p' | tail -1)
+if [ -n "${nl:-}" ]; then
+    kh=$(( (nh - nl - 4) / 4 ))    # the keys: 7 columns, 4 rows under the line (mobile/Numpad.cpp)
+    key() { echo "$(dp $(( nx + nw * ($1 * 2 + ${3:-1}) / 14 ))) $(dp $(( ny + nl + 4 + kh * $2 + kh / 2 )))"; }
+    adb shell input tap $(dp $(( nx + 3 ))) $(dp $(( ny + nl / 2 )))
+    sleep 1
+    adb shell input tap $(key 2 0)          # 9
+    sleep 1
+    shot 14a-numpad-caret 1
+    adb shell input tap $(key 5 3 2)        # ↵ (two columns wide)
+    sleep 1
+    entered=$(blog | sed -n 's/.*Numpad: enter "\(.*\)".*/\1/p' | tail -1)
+    if bhas "Numpad: caret to 0" && [ "${entered:0:1}" = "9" ] && [ ${#entered} -gt 1 ]; then
+        echo "step numpad-caret: the caret went to the start, entered \"$entered\""
+    else
+        echo "step numpad-caret: FAILED — $(blog | grep -o 'Numpad: .*' | tr '\n' ';')"; broken=1
+    fi
+else
+    echo "step numpad-caret: FAILED — no numpad in the log"; broken=1
+fi
+check numpad-caret
+
 # 14b. The extrude's choices are in the top island (18.10). In a new part no operation but
 # «new body» can be chosen, and the emulator's view is narrow: the island is swiped sideways
 # first (it scrolls), then the first item that can be chosen is tapped — the log says it took.
@@ -207,7 +234,7 @@ if [ -n "${iw:-}" ]; then
     if [ -n "${cs0:-}" ]; then
         adb shell input tap $(dp $(( cx0 + cs0 / 2 ))) $(dp $(( cy0 + 15 )))
         shot 14b-choice-tapped 3
-        if blog | grep -q "Choice: $cid $cix"; then
+        if bhas "Choice: $cid $cix"; then
             echo "step choice-tap: $cid set to $cix (after a swipe)"
         else
             echo "step choice-tap: FAILED — no «Choice: $cid $cix» ($(blog | grep -o 'Choice: .*' | tr '\n' ';'))"; broken=1
@@ -219,6 +246,25 @@ else
     echo "step choice-tap: FAILED — no choice island in the log"; broken=1
 fi
 check choice-tap
+
+# 14c. A dimension tapped while another one is typed (20.10): its name goes into the field.
+adb logcat -c
+start touchkeys,new,sketch,dims 25
+sleep 3   # the view fits the rectangle first (the labels are logged where they end up)
+read -r dx dy < <(blog | sed -n 's/.*Touch: dimension d1 at \([0-9-]*\),\([0-9-]*\).*/\1 \2/p' | tail -1)
+if [ -n "${dy:-}" ] && [ "$(blog | grep -o 'Keyboard: numpad [a-z]*' | tail -1)" = "Keyboard: numpad on" ]; then
+    adb shell input tap $(dp $dx) $(dp $dy)
+    sleep 2
+    shot 14c-dimension-name 1
+    if bhas "Numpad: dimension d1 typed into the field"; then
+        echo "step dimension-name: d1 went into the field"
+    else
+        echo "step dimension-name: FAILED — tapped $dx,$dy; $(blog | grep -o -E '(Numpad|Touch): .*' | tail -6 | tr '\n' ';')"; broken=1
+    fi
+else
+    echo "step dimension-name: FAILED — no d1 label or no numpad ($(blog | grep -o -E 'Touch: dimension .*|Keyboard: numpad [a-z]*' | tr '\n' ';'))"; broken=1
+fi
+check dimension-name
 
 adb logcat -d -s BreezeCAD:* > "$OUT/breezecad.log"
 adb logcat -d '*:E' > "$OUT/errors.log"
@@ -232,7 +278,7 @@ adb logcat -c
 start home 15   # "home": a test run — no first-start setup over the home page
 adb shell input keyevent KEYCODE_BACK
 sleep 1
-if [ "$(focused)" -gt 0 ] && blog | grep -q "Back: once more"; then
+if [ "$(focused)" -gt 0 ] && bhas "Back: once more"; then
     echo "step back-once: stayed, asked for a second"
 else
     echo "step back-once: FAILED — focus $(focused), log: $(blog | grep -o 'Back: .*' | tr '\n' ';')"; broken=1

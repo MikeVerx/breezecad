@@ -85,6 +85,15 @@ struct MobileState {
     std::vector<NumpadKey> numpadKeys;
     ImVec2 numpadMin{0, 0}, numpadMax{0, 0};   ///< the whole plate: a touch between keys goes nowhere
     int numpadDown = -1;   ///< the key under a finger now (drawn pressed)
+    /// The line above the keys (what the field holds): a finger on it puts the
+    /// text caret there, a drag moves it (Numpad applies `caretTapX`, then -1).
+    ImVec2 numpadLineMin{0, 0}, numpadLineMax{0, 0};
+    float  caretTapX = -1;
+    float  numpadScroll = 0;   ///< how far a long text in that line is moved left to show the caret
+    ImVec2 numpadLogged{-1, -1};   ///< where the numpad was last written to the log
+    /// The cursor's tip moved while a value is typed: ✓ puts the name of a
+    /// dimension under the tip into the field instead of entering the value.
+    bool   tipAimed = false;
 
     // --- Value input ---
     bool        numpad = false;        ///< the numpad is up in block 1 (a field is being typed in)
