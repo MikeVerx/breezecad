@@ -107,6 +107,9 @@ bool IsHollowed(const TopoDS_Shape& body, const TopoDS_Shape& result, bool outwa
 
 Expected<TopoDS_Shape> MakeShell(const TopoDS_Shape& body, const std::vector<TopoDS_Face>& open, double thickness, bool outward) {
     if (thickness <= 1e-6) return Error{"Толщина должна быть больше нуля"};
+    // Thinner than OCCT's tolerances can follow it fails like a too thick
+    // wall did, and the message said "too thick" (0.0001 mm in the tests).
+    if (thickness < 1e-3) return Error{"Толщина слишком маленькая (меньше 0,001 мм)"};
     // The OCCT offset cannot shift an edge whose faces go from a corner to
     // tangent along it (a square-to-circle loft). Its simple per-face offset
     // "succeeds" there but gives faces turned the wrong way, so it is not
