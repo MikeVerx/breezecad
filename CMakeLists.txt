@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(BreezeCAD
-    VERSION 0.2.3
+    VERSION 0.2.3.1
     DESCRIPTION "Free offline parametric CAD"
     LANGUAGES C CXX)
 # What the program calls itself: the number above plus a stage ("-Beta";
