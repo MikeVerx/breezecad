@@ -348,7 +348,12 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
         if (!revolved) edges = app.viewport.PickFaceEdges(pixel);
     }
     if (revolved) edges.clear();
-    if (edges.empty() && !revolved) return;
+    if (edges.empty() && !revolved) {
+        // A body of revolution that could not be projected says why (it
+        // used to end here in silence: "the click did nothing").
+        if (!revolvedProblem.empty()) app.notes.Info(Tr(revolvedProblem));
+        return;
+    }
 
     auto before = f->Clone();
     sketch::Sketch& sk = f->sketch;
@@ -367,9 +372,41 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
         placed.push_back(id);
         return id;
     };
+    int added = 0, already = 0;
+    // The same curve already in the sketch (a body of revolution clicked a
+    // second time): drawn twice it doubled every region edge.
+    const auto present = [&](const kernel::ProjectedCurve& c) {
+        const auto close = [&](Vec2 a, Vec2 b) { return (a - b).Length() < tolerance; };
+        switch (c.kind) {
+            case kernel::ProjectedCurve::Kind::Line:
+                return std::ranges::any_of(sk.lines, [&](const sketch::Line& l) {
+                    const Vec2 a = sk.PositionOf(l.start), b = sk.PositionOf(l.end);
+                    return (close(a, c.start) && close(b, c.end)) || (close(a, c.end) && close(b, c.start));
+                });
+            case kernel::ProjectedCurve::Kind::Circle:
+                return std::ranges::any_of(sk.circles, [&](const sketch::Circle& o) {
+                    return close(sk.PositionOf(o.center), c.centre) && std::abs(o.radius - c.radius) < tolerance;
+                });
+            case kernel::ProjectedCurve::Kind::Arc:
+                return std::ranges::any_of(sk.arcs, [&](const sketch::Arc& a) {
+                    return close(sk.PositionOf(a.center), c.centre) && close(sk.PositionOf(a.start), c.start) &&
+                           close(sk.PositionOf(a.end), c.end);
+                });
+            case kernel::ProjectedCurve::Kind::Ellipse:
+                return std::ranges::any_of(sk.ellipses, [&](const sketch::Ellipse& e) {
+                    return close(sk.PositionOf(e.center), c.centre) && close(sk.PositionOf(e.major), c.start) &&
+                           close(sk.PositionOf(e.minor), c.end);
+                });
+        }
+        return false;
+    };
     // Puts one projected curve into the sketch; `link` makes it follow the
     // model edge. Returns false when there is nothing to draw.
     const auto place = [&](const kernel::ProjectedCurve& projected, const doc::EdgeReference* link, bool axis) {
+        if (!link && present(projected)) {
+            ++already;
+            return false;
+        }
         ObjectId curve;
         switch (projected.kind) {
             case kernel::ProjectedCurve::Kind::Line:
@@ -388,12 +425,18 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
                 for (auto& a : sk.arcs)
                     if (a.id == curve) a.projected = true;
                 break;
+            case kernel::ProjectedCurve::Kind::Ellipse:
+                // Held by its three points (projected, so fixed for the solver).
+                curve = sk.AddEllipse(ids, point(projected.centre), point(projected.start), point(projected.end));
+                break;
         }
         if (myOptions.style != LineStyle::Normal && !axis) {   // "Вспомогат." chosen before picking
             if (sketch::Line* l = sk.FindLine(curve)) l->construction = true;
             if (sketch::Circle* c = sk.FindCircle(curve)) c->construction = true;
             for (auto& a : sk.arcs)
                 if (a.id == curve) a.construction = true;
+            for (auto& e : sk.ellipses)
+                if (e.id == curve) e.construction = true;
         }
         if (myOptions.projectLinked && link) {
             f->projections.push_back({*link, curve});
@@ -416,6 +459,7 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
                 size.parameter.value = 2 * c->radius;
                 sk.AddConstraint(ids, size);
             }
+            if (const sketch::Ellipse* e = sk.FindEllipse(curve)) own = {e->center, e->major, e->minor};
             for (auto& a : sk.arcs)
                 if (a.id == curve) {
                     a.projected = false;
@@ -433,7 +477,6 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
         }
         return true;
     };
-    int added = 0, already = 0;
     std::string problem;
     for (const doc::EdgeReference& edge : edges) {
         bool known = false;
@@ -455,10 +498,11 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
         // Not linked to the model: an outline is not an edge to find again.
         if (revolved->axis && place(*revolved->axis, nullptr, true)) ++added;
         if (revolved->centre) {
+            const std::size_t count = sk.points.size();
             const ObjectId c = point(*revolved->centre);
             if (!myOptions.projectLinked)
                 if (sketch::Point* pt = sk.FindPoint(c)) pt->projected = false;
-            ++added;
+            if (sk.points.size() > count) ++added;
         }
         for (const kernel::ProjectedCurve& c : revolved->outline) added += place(c, nullptr, false) ? 1 : 0;
         for (const kernel::ProjectedCurve& c : revolved->section) added += place(c, nullptr, false) ? 1 : 0;

@@ -10,9 +10,10 @@
 namespace bz::kernel {
 
 struct ProjectedCurve {
-    enum class Kind : unsigned char { Line, Circle, Arc } kind = Kind::Line;
-    Vec2   start, end;      ///< line ends; arc ends, counter-clockwise on the sketch plane
-    Vec2   centre;          ///< circles and arcs
+    enum class Kind : unsigned char { Line, Circle, Arc, Ellipse } kind = Kind::Line;
+    Vec2   start, end;      ///< line ends; arc ends, counter-clockwise on the sketch plane;
+                            ///< ellipse: the ends of its major and minor axes
+    Vec2   centre;          ///< circles, arcs and ellipses
     double radius = 0.0;
 };
 
