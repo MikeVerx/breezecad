@@ -5,7 +5,9 @@
 #include "app/sketch/DimensionLayout.h"
 #include "app/sketch/SketchOverlay.h"
 #include "core/I18n.h"
+#include "core/Log.h"
 #include "document/Commands.h"
+#include "document/Recompute.h"
 #include "sketch/Solver.h"
 #include "sketch/SplineGeometry.h"
 #include "ui/Widgets.h"
@@ -15,6 +17,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <tuple>
 
 namespace bz::app {
 
@@ -408,6 +411,7 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
     }
     const SketchView view{f->placement.frame, vf};
     ImDrawList* dl = ImGui::GetWindowDrawList();
+    myLastView = vf;
 
     const double step = app.settings.gridStep > 0 ? app.settings.gridStep : AdaptiveGridStep(view.MmPerPixel());
     DrawSketchGrid(app.ui, dl, view, step);
@@ -432,6 +436,18 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
     style.glyphs = glyphs;
     for (ObjectId id : myPicks) style.picked.push_back(id);
     DrawSketch(app.ui, dl, *f, view, session.doc.units, style);
+    if (myLogLabels)   // where each label is, whenever that changes (the emulator taps them)
+        for (const sketch::Constraint& c : f->sketch.constraints) {
+            if (!sketch::IsDimensional(c.type) || c.parameter.name.empty()) continue;
+            const auto layout = LayoutDimension(f->sketch, c, session.doc.units);
+            if (!layout) continue;
+            const ImVec2 at = view.ToScreen(layout->label);
+            auto known = std::find_if(myLoggedLabels.begin(), myLoggedLabels.end(), [&](const auto& e) { return e.first == c.id; });
+            if (known != myLoggedLabels.end() && std::abs(known->second.x - at.x) < 1 && std::abs(known->second.y - at.y) < 1) continue;
+            if (known == myLoggedLabels.end()) myLoggedLabels.emplace_back(c.id, at);
+            else known->second = at;
+            log::Info("Touch: dimension {} at {:.0f},{:.0f}", c.parameter.name, at.x, at.y);
+        }
 
     // Typing a number while a tool with sizes is on goes to its first field
     // (as in Inventor: click the start, type the length); Backspace erases,
@@ -753,6 +769,44 @@ void SketchEditor::HandleInlineEdit(AppContext& app, Session& session, const Ske
     session.CommitInPlaceEdit(std::move(before), Trf("Размер {}", c->parameter.name));
     myEditDimension = {};
     KeepSketchInView(app, session);
+}
+
+void SketchEditor::MakeDimensionTest(Session& session) {
+    doc::SketchFeature* f = Active(session);
+    if (!f) return;
+    sketch::Sketch& sk = f->sketch;
+    IdGenerator& ids = session.doc.Ids();
+    const ObjectId p[4] = {sk.AddPoint(ids, {-20, -10}), sk.AddPoint(ids, {20, -10}), sk.AddPoint(ids, {20, 10}), sk.AddPoint(ids, {-20, 10})};
+    for (int i = 0; i < 4; ++i) sk.AddLine(ids, p[i], p[(i + 1) % 4]);
+    ObjectId last;
+    for (const auto& [a, b, value] : {std::tuple{p[0], p[1], "40"}, std::tuple{p[1], p[2], "20"}}) {
+        sketch::Constraint c;
+        c.type = sketch::ConstraintType::Distance;
+        c.refs = {a, b, {}};
+        c.parameter.name = session.doc.NextParameterName();
+        c.parameter.expression = value;
+        c.parameter.quantity = Quantity::Length;
+        last = sk.AddConstraint(ids, c);
+    }
+    session.doc.EvaluateParameters();
+    doc::SolveSketch(*f);
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    if (const sketch::Constraint* c = sk.FindConstraint(last)) StartInlineEdit(*c);
+    myLogLabels = true;
+}
+
+std::optional<std::string> SketchEditor::DimensionNameAt(const Session& session, ImVec2 screen) const {
+    if (!myLastView || session.mode != EditMode::Sketch) return std::nullopt;
+    const auto* f = session.doc.FindAs<doc::SketchFeature>(session.activeSketch);
+    if (!f) return std::nullopt;
+    const ViewportFrame& vf = *myLastView;
+    if (screen.x < vf.min.x || screen.y < vf.min.y || screen.x > vf.max.x || screen.y > vf.max.y) return std::nullopt;
+    const SketchView view{f->placement.frame, vf};
+    const SketchHit hit = HitTest(f->sketch, view, screen, session.doc.units);
+    if (hit.kind != sketch::EntityKind::Constraint || hit.id == myEditDimension) return std::nullopt;
+    const sketch::Constraint* c = f->sketch.FindConstraint(hit.id);
+    if (!c || !sketch::IsDimensional(c->type) || c->reference || c->parameter.name.empty()) return std::nullopt;
+    return c->parameter.name;
 }
 
 std::string SketchEditor::Hint(const Session& session) const {

@@ -107,6 +107,15 @@ public:
     SnapKind CurrentSnap() const { return mySnap.kind; }
     /// Projection linked to the model (it follows it) or a fixed copy.
     bool ProjectsLinked() const { return myOptions.projectLinked; }
+    /// The name of the driving dimension of the open sketch drawn at `screen`
+    /// (as the view was last drawn), not the one being edited; nullopt when
+    /// there is none. A touch on a dimension while a value is typed puts this
+    /// name into the field (the phone: a click would take the field's focus).
+    std::optional<std::string> DimensionNameAt(const Session& session, ImVec2 screen) const;
+    /// The emulator's check (Application::RunTestCommands "dims"): a rectangle
+    /// with two dimensions in the open sketch, the second one being edited, and
+    /// the labels' places written to the log so the check can tap them.
+    void MakeDimensionTest(Session& session);
     void SetProjectLinked(bool linked) { myOptions.projectLinked = linked; }
     void SetTool(AppContext& app, Session& session, SketchTool tool);
     /// Esc: drops the current step, then the tool, then leaves the sketch.
@@ -282,6 +291,9 @@ private:
 
     // inline dimension value editor
     ObjectId    myEditDimension;
+    std::optional<ViewportFrame> myLastView;   ///< the view as last drawn (DimensionNameAt)
+    bool myLogLabels = false;                  ///< MakeDimensionTest: the labels' places go to the log
+    std::vector<std::pair<ObjectId, ImVec2>> myLoggedLabels;
     std::string myEditText;
     bool        myEditFocus = false;
     bool        myEditTyped = false;   ///< the value was changed (a clicked name is then added, not put instead)

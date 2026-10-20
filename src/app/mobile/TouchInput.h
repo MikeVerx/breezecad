@@ -43,7 +43,7 @@ public:
     bool Busy() const;
 
 private:
-    enum class Route : unsigned char { Ui, View, Pen, Mouse, Numpad, Ignored };
+    enum class Route : unsigned char { Ui, View, Pen, Mouse, Numpad, NumpadLine, Ignored };
     struct UiFinger {
         int    id = -1;
         ImVec2 start{0, 0}, at{0, 0};
@@ -66,6 +66,10 @@ private:
     void Pos(ImVec2 at, ImGuiMouseSource source = ImGuiMouseSource_TouchScreen);
     void Button(int button, bool down, ImGuiMouseSource source = ImGuiMouseSource_TouchScreen);
     void Click(ImVec2 at, int button);
+    /// A value is typed on the numpad and a sketch dimension is at `at`: its
+    /// name goes into the field at the caret (true), no click (it would take
+    /// the field's focus and the value with it).
+    bool TypeDimensionName(AppContext& app, ImVec2 at);
 
     std::vector<PointerEvent> myQueue;
     std::map<int, Route>      myRoutes;
@@ -79,6 +83,7 @@ private:
     // The precise cursor (speed < 1): the tip moves a part of the finger's travel from where it was
     bool   myRelative = false;
     ImVec2 myAnchorFinger{0, 0}, myAnchorTip{0, 0};
+    ImVec2 myCursorStart{0, 0}, myCursorLast{0, 0};   ///< the finger moving the cursor: where it went down, where it is
     float  myRelativeTravel = 0;
     double myRelativeSince = 0;
     ImVec2                    myMouse{-1, -1};   ///< last position given to ImGui

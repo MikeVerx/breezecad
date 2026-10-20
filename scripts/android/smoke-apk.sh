@@ -194,6 +194,30 @@ else
 fi
 check extrude-field
 
+# 14a. The numpad's line (20.10): a tap at its start puts the caret before the value, "9" goes
+# there and ↵ enters it — "10" becomes "910", not erased digit by digit from the end.
+read -r nx ny nw nh nl < <(blog | sed -n 's/.*Touch: numpad at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\) line \([0-9]*\).*/\1 \2 \3 \4 \5/p' | tail -1)
+if [ -n "${nl:-}" ]; then
+    kh=$(( (nh - nl - 4) / 4 ))    # the keys: 7 columns, 4 rows under the line (mobile/Numpad.cpp)
+    key() { echo "$(dp $(( nx + nw * ($1 * 2 + ${3:-1}) / 14 ))) $(dp $(( ny + nl + 4 + kh * $2 + kh / 2 )))"; }
+    adb shell input tap $(dp $(( nx + 3 ))) $(dp $(( ny + nl / 2 )))
+    sleep 1
+    adb shell input tap $(key 2 0)          # 9
+    sleep 1
+    shot 14a-numpad-caret 1
+    adb shell input tap $(key 5 3 2)        # ↵ (two columns wide)
+    sleep 1
+    entered=$(blog | sed -n 's/.*Numpad: enter "\(.*\)".*/\1/p' | tail -1)
+    if blog | grep -q "Numpad: caret to 0" && [ "${entered:0:1}" = "9" ] && [ ${#entered} -gt 1 ]; then
+        echo "step numpad-caret: the caret went to the start, entered \"$entered\""
+    else
+        echo "step numpad-caret: FAILED — $(blog | grep -o 'Numpad: .*' | tr '\n' ';')"; broken=1
+    fi
+else
+    echo "step numpad-caret: FAILED — no numpad in the log"; broken=1
+fi
+check numpad-caret
+
 # 14b. The extrude's choices are in the top island (18.10). In a new part no operation but
 # «new body» can be chosen, and the emulator's view is narrow: the island is swiped sideways
 # first (it scrolls), then the first item that can be chosen is tapped — the log says it took.
@@ -219,6 +243,25 @@ else
     echo "step choice-tap: FAILED — no choice island in the log"; broken=1
 fi
 check choice-tap
+
+# 14c. A dimension tapped while another one is typed (20.10): its name goes into the field.
+adb logcat -c
+start touchkeys,new,sketch,dims 25
+sleep 2
+read -r dx dy < <(blog | sed -n 's/.*Touch: dimension d1 at \([0-9-]*\),\([0-9-]*\).*/\1 \2/p' | tail -1)
+if [ -n "${dy:-}" ] && [ "$(blog | grep -o 'Keyboard: numpad [a-z]*' | tail -1)" = "Keyboard: numpad on" ]; then
+    adb shell input tap $(dp $dx) $(dp $dy)
+    sleep 2
+    shot 14c-dimension-name 1
+    if blog | grep -q "Numpad: dimension d1 typed into the field"; then
+        echo "step dimension-name: d1 went into the field"
+    else
+        echo "step dimension-name: FAILED — tapped $dx,$dy; $(blog | grep -o -E '(Numpad|Touch): .*' | tail -6 | tr '\n' ';')"; broken=1
+    fi
+else
+    echo "step dimension-name: FAILED — no d1 label or no numpad ($(blog | grep -o -E 'Touch: dimension .*|Keyboard: numpad [a-z]*' | tr '\n' ';'))"; broken=1
+fi
+check dimension-name
 
 adb logcat -d -s BreezeCAD:* > "$OUT/breezecad.log"
 adb logcat -d '*:E' > "$OUT/errors.log"
