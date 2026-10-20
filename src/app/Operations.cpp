@@ -6,6 +6,7 @@
 #include "app/sketch/SketchEditor.h"
 #include "core/I18n.h"
 #include "core/Log.h"
+#include "core/PathText.h"
 #include "document/BzcFile.h"
 #include "document/Commands.h"
 #include "document/Origin.h"
@@ -156,6 +157,13 @@ void RequestClose(AppContext& app, int index) {
 }
 
 void RecoverDocument(AppContext& app, const RecoverableDocument& rec) {
+    // The original open in a tab already: two tabs on one file would replace
+    // each other's work on save.
+    for (const auto& open : app.workspace.sessions)
+        if (!open->path.empty() && !rec.original.empty() && SameFile(open->path, rec.original)) {
+            app.notes.Error(Trf("«{}» уже открыт: закройте его вкладку и восстановите копию снова", rec.title));
+            return;
+        }
     Expected<std::unique_ptr<Session>> loaded = Workspace::LoadSession(rec.copy, nullptr);
     if (!loaded) {
         app.notes.Error(Trf("Копию не удалось открыть: {}", Tr(loaded.GetError().message)));
