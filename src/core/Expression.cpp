@@ -2,10 +2,12 @@
 
 #include "core/Math.h"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cmath>
 #include <format>
+#include <vector>
 
 namespace bz {
 namespace {
@@ -20,8 +22,15 @@ struct Dim {
 };
 
 struct Value {
-    double v = 0.0;
-    Dim    dim;
+    double      v = 0.0;
+    Dim         dim;
+    std::size_t from = 0, to = 0;   ///< the text it was read from
+};
+
+/// A plain part of an expression that took the field's unit (see Adopt).
+struct Adoption {
+    std::size_t from = 0, to = 0;
+    Dim         dim;
 };
 
 Dim DimOf(Quantity q) {
@@ -95,6 +104,7 @@ public:
 
     /// Converts a plain number to `dim` by applying the document units.
     Value Adopt(Value plain, Dim dim) const {
+        if (dim == Dim{1, 0} || dim == Dim{0, 1}) myAdopted.push_back({plain.from, plain.to, dim});
         if (dim == Dim{1, 0}) plain.v = myUnits.ToInternal(plain.v, Quantity::Length);
         if (dim == Dim{0, 1}) plain.v = myUnits.ToInternal(plain.v, Quantity::Angle);
         plain.dim = dim;
@@ -128,6 +138,8 @@ private:
             if (!rhs) return rhs;
             Expected<Value> sum = AddSub(*lhs, *rhs, op == '-');
             if (!sum) return sum;
+            sum->from = lhs->from;
+            sum->to = rhs->to;
             lhs = sum;
         }
     }
@@ -149,13 +161,14 @@ private:
             ++myPos;
             Expected<Value> rhs = ParsePower();
             if (!rhs) return rhs;
+            const std::size_t from = lhs->from;
             if (op == '*') {
                 lhs = Value{lhs->v * rhs->v,
-                            {lhs->dim.length + rhs->dim.length, lhs->dim.angle + rhs->dim.angle}};
+                            {lhs->dim.length + rhs->dim.length, lhs->dim.angle + rhs->dim.angle}, from, rhs->to};
             } else {
                 if (rhs->v == 0.0) return Error{"Деление на ноль"};
                 lhs = Value{lhs->v / rhs->v,
-                            {lhs->dim.length - rhs->dim.length, lhs->dim.angle - rhs->dim.angle}};
+                            {lhs->dim.length - rhs->dim.length, lhs->dim.angle - rhs->dim.angle}, from, rhs->to};
             }
         }
     }
@@ -178,7 +191,7 @@ private:
             const int n = static_cast<int>(e);
             dim = {dim.length * n, dim.angle * n};
         }
-        return Value{std::pow(base->v, e), dim};
+        return Value{std::pow(base->v, e), dim, base->from, exponent->to};
     }
 
     Expected<Value> ParseUnary() {
@@ -186,10 +199,12 @@ private:
         if (guard.TooDeep()) return Error{"Слишком сложное выражение"};
         SkipSpaces();
         if (Peek() == '-' || Peek() == '+') {
+            const std::size_t from = myPos;
             const bool negate = Peek() == '-';
             ++myPos;
             Expected<Value> v = ParseUnary();
             if (v && negate) v->v = -v->v;
+            if (v) v->from = from;
             return v;
         }
         return ParsePrimary();
@@ -198,6 +213,7 @@ private:
     Expected<Value> ParsePrimary() {
         SkipSpaces();
         const char c = Peek();
+        const std::size_t from = myPos;
         if (c == '(') {
             ++myPos;
             Expected<Value> v = ParseExpr();
@@ -205,10 +221,19 @@ private:
             SkipSpaces();
             if (Peek() != ')') return Error{"Не хватает закрывающей скобки"};
             ++myPos;
+            v->from = from;
+            v->to = myPos;
             return v;
         }
-        if (std::isdigit(static_cast<unsigned char>(c)) || c == '.') return ParseNumber();
-        if (IsIdentStart(c)) return ParseName();
+        const auto spanned = [&](Expected<Value> v) {
+            if (v) {
+                v->from = from;
+                v->to = myPos;
+            }
+            return v;
+        };
+        if (std::isdigit(static_cast<unsigned char>(c)) || c == '.') return spanned(ParseNumber());
+        if (IsIdentStart(c)) return spanned(ParseName());
         if (c == '\0') return Error{"Пустое выражение"};
         return Error{std::format("Неожиданный символ «{}»", c)};
     }
@@ -355,6 +380,10 @@ private:
     std::size_t        myPos       = 0;
     int                myDepth     = 0;
     int                myCallDepth = 0;
+
+public:
+    /// Plain parts that took the field's unit, in the order they did.
+    mutable std::vector<Adoption> myAdopted;
 };
 
 } // namespace
@@ -378,6 +407,78 @@ Expected<double> EvaluateExpression(std::string_view text, Quantity expected,
     }
     if (!std::isfinite(v.v)) return Error{"Результат не является конечным числом"};
     return v.v;
+}
+
+namespace {
+
+std::string_view UnitName(LengthUnit u) {
+    switch (u) {
+        case LengthUnit::Millimeter: return "mm";
+        case LengthUnit::Centimeter: return "cm";
+        case LengthUnit::Meter:      return "m";
+        case LengthUnit::Inch:       return "in";
+    }
+    return "mm";
+}
+
+std::string_view UnitName(AngleUnit u) { return u == AngleUnit::Radian ? "rad" : "deg"; }
+
+/// True when `text` is a single number with nothing after it ("12,5").
+bool PlainNumber(std::string_view text) {
+    if (text.empty() || !(std::isdigit(static_cast<unsigned char>(text.front())) || text.front() == '.')) return false;
+    for (const char c : text)
+        if (!std::isdigit(static_cast<unsigned char>(c)) && c != '.' && c != ',' && c != 'e' && c != 'E' && c != '+' && c != '-')
+            return false;
+    return true;
+}
+
+} // namespace
+
+std::string ExpressionInUnits(std::string_view text, Quantity expected, const UnitSystem& from, const UnitSystem& to,
+                              const NameLookup& lookup) {
+    if (from.length == to.length && from.angle == to.angle) return std::string(text);
+    if (text.size() > kMaxExpressionLength) return std::string(text);
+    Parser parser(text, from, lookup);
+    Expected<Value> result = parser.ParseAll();
+    if (!result) return std::string(text);
+    Value v = *result;
+    const Dim want = DimOf(expected);
+    if (v.dim.IsNone() && !want.IsNone()) v = parser.Adopt(v, want);
+
+    // Every adopted part whose unit changes gets the old unit written out:
+    // "(" before it and ")*1mm" after it, or just "mm" after a lone number.
+    struct Insert {
+        std::size_t at;
+        long long   order;   // at one place: closings of inner parts first, then openings of outer ones
+        std::string text;
+    };
+    std::vector<Insert> inserts;
+    for (const Adoption& a : parser.myAdopted) {
+        const bool length = a.dim == Dim{1, 0};
+        if (length ? from.length == to.length : from.angle == to.angle) continue;
+        const std::string_view unit = length ? UnitName(from.length) : UnitName(from.angle);
+        const std::string_view part = text.substr(a.from, a.to - a.from);
+        const auto size = static_cast<long long>(a.to - a.from);   // shorter = inner
+        if (PlainNumber(part)) {
+            inserts.push_back({a.to, -(1LL << 40) + size, std::string(unit)});
+        } else {
+            inserts.push_back({a.from, (1LL << 40) - size, "("});
+            inserts.push_back({a.to, -(1LL << 40) + size, std::format(")*1{}", unit)});
+        }
+    }
+    if (inserts.empty()) return std::string(text);
+    std::sort(inserts.begin(), inserts.end(), [](const Insert& x, const Insert& y) {
+        return x.at != y.at ? x.at < y.at : x.order < y.order;
+    });
+    std::string out;
+    std::size_t pos = 0;
+    for (const Insert& in : inserts) {
+        out.append(text.substr(pos, in.at - pos));
+        out += in.text;
+        pos = in.at;
+    }
+    out.append(text.substr(pos));
+    return out;
 }
 
 std::vector<std::string> ReferencedNames(std::string_view text) {
@@ -407,6 +508,35 @@ std::vector<std::string> ReferencedNames(std::string_view text) {
         if (!seen) names.push_back(word);
     }
     return names;
+}
+
+std::string RenameInExpression(std::string_view text, std::string_view from, std::string_view to) {
+    // The same scan as ReferencedNames: what it reports as a name is what is renamed.
+    std::string out;
+    std::size_t i = 0;
+    while (i < text.size()) {
+        const char c = text[i];
+        if (std::isdigit(static_cast<unsigned char>(c)) || c == '.') {
+            const std::size_t start = i;
+            while (i < text.size() && (std::isdigit(static_cast<unsigned char>(text[i])) || text[i] == '.')) ++i;
+            while (i < text.size() && IsIdentChar(text[i])) ++i;   // "25mm", "1e3"
+            out.append(text.substr(start, i - start));
+            continue;
+        }
+        if (!IsIdentStart(c)) {
+            out.push_back(c);
+            ++i;
+            continue;
+        }
+        const std::size_t start = i;
+        while (i < text.size() && IsIdentChar(text[i])) ++i;
+        const std::string_view word = text.substr(start, i - start);
+        std::size_t j = i;
+        while (j < text.size() && std::isspace(static_cast<unsigned char>(text[j]))) ++j;
+        const bool isCall = j < text.size() && text[j] == '(';
+        out.append(word == from && !isCall ? to : word);
+    }
+    return out;
 }
 
 bool IsValidVariableName(std::string_view name) {

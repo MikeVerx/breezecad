@@ -849,6 +849,14 @@ bool PlaceProjected(sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& pc
                 return true;
             }
             return false;
+        case ProjectedCurve::Kind::Ellipse:
+            if (const sketch::Ellipse* e = sk.FindEllipse(curve)) {
+                move(e->center, pc.centre);
+                move(e->major, pc.start);
+                move(e->minor, pc.end);
+                return true;
+            }
+            return false;
     }
     return false;
 }

@@ -231,3 +231,22 @@ TEST_CASE("Component pattern: rectangular and circular") {
     const ObjectId none = a.AddPattern(bad).id;
     CHECK_FALSE(kernel::ApplyPattern(model, a, none));
 }
+
+TEST_CASE("Component pattern: 500 x 500 is refused (the limit is on the instances made)") {
+    Assembly a;
+    const ObjectId pin = a.AddComponent("pin.bzc", "Штифт").id;
+    kernel::AssemblyModel model;
+    ComponentPattern r;
+    r.kind = PatternKind::Rectangular;
+    r.seed = {pin};
+    r.count1 = 500, r.spacing1 = 1;
+    r.count2 = 500, r.spacing2 = 1;
+    const ObjectId rect = a.AddPattern(r).id;
+    CHECK_FALSE(kernel::ApplyPattern(model, a, rect));
+    CHECK(a.components.size() == 1);
+    ComponentPattern c;
+    c.kind = PatternKind::Circular;
+    c.seed = {pin};
+    c.count = 100000;
+    CHECK_FALSE(kernel::ApplyPattern(model, a, a.AddPattern(c).id));
+}

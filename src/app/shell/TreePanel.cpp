@@ -131,6 +131,8 @@ RowResult Row(AppContext& app, const char* id, const std::string& name, const Ro
 std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
     if (const auto* ex = dynamic_cast<const doc::ExtrudeFeature*>(&f)) {
         if (ex->extent == doc::ExtentType::ThroughAll) return Tr("насквозь");
+        if (ex->extent == doc::ExtentType::ToPlane)   // the distance is not used: up to what
+            return ex->toPlane || !ex->toFace.IsSet() || !ex->toFace.curved ? Tr("до плоскости") : Tr("до грани");
         if (ex->extent == doc::ExtentType::Asymmetric)   // 10 / 5 мм
             return FormatValue(ex->distance.value, Quantity::Length, d.units) + " / " +
                    FormatValue(ex->distance2.value, Quantity::Length, d.units) + " " + UnitLabel(Quantity::Length, d.units);

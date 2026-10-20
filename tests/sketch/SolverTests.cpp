@@ -3,8 +3,10 @@
 
 #include <doctest.h>
 
+#include <array>
 #include <chrono>
 #include <cmath>
+#include <vector>
 
 using namespace bz;
 using namespace bz::sketch;
@@ -347,4 +349,69 @@ TEST_CASE("B-03: a huge angle dimension does not hang the solver") {
         (void)Solve(sk);
         CHECK(std::chrono::steady_clock::now() - start < std::chrono::seconds(2));
     }
+}
+
+namespace {
+/// `n` separate rectangles, each with its sides held and two sizes.
+struct ManyRects {
+    Sketch      sk;
+    IdGenerator ids;
+    std::vector<std::array<ObjectId, 4>> corners;
+    explicit ManyRects(int n) {
+        sk.EnsureOrigin(ids);
+        for (int k = 0; k < n; ++k) {
+            const double x = (k % 20) * 30, y = (k / 20) * 30;
+            std::array<ObjectId, 4> p{sk.AddPoint(ids, {x + 0.3, y - 0.2}), sk.AddPoint(ids, {x + 20.5, y + 0.4}),
+                                      sk.AddPoint(ids, {x + 19.6, y + 10.3}), sk.AddPoint(ids, {x - 0.2, y + 9.7})};
+            ObjectId l[4];
+            for (std::size_t i = 0; i < 4; ++i) l[i] = sk.AddLine(ids, p[i], p[(i + 1) % 4]);
+            sk.AddConstraint(ids, Geo(ConstraintType::Horizontal, l[0]));
+            sk.AddConstraint(ids, Geo(ConstraintType::Horizontal, l[2]));
+            sk.AddConstraint(ids, Geo(ConstraintType::Vertical, l[1]));
+            sk.AddConstraint(ids, Geo(ConstraintType::Vertical, l[3]));
+            sk.AddConstraint(ids, Dim(ConstraintType::Distance, 20, p[0], p[1]));
+            sk.AddConstraint(ids, Dim(ConstraintType::Distance, 10, p[1], p[2]));
+            corners.push_back(p);
+        }
+    }
+};
+} // namespace
+
+// Unconnected shapes are solved as separate systems: one dense system of
+// 200 rectangles took 2 s per drag frame (0.25 s for 100).
+TEST_CASE("200 unconnected rectangles solve and drag quickly") {
+    ManyRects r(200);
+    const auto start = std::chrono::steady_clock::now();
+    REQUIRE(Solve(r.sk).converged);
+    SolveOptions drag;
+    drag.drags = {{r.corners[0][0], {5, 5}}};
+    for (int i = 0; i < 5; ++i) REQUIRE(Solve(r.sk, drag).converged);
+    CHECK(std::chrono::steady_clock::now() - start < std::chrono::milliseconds(1500));   // debug builds and emulators too
+    CHECK(Analyze(r.sk).degreesOfFreedom == 400);
+}
+
+TEST_CASE("dragging one shape leaves the shapes not tied to it where they are") {
+    ManyRects r(3);
+    REQUIRE(Solve(r.sk).converged);
+    const Vec2 other = r.sk.PositionOf(r.corners[2][0]);
+    SolveOptions drag;
+    drag.drags = {{r.corners[0][0], {-40, -40}}};
+    REQUIRE(Solve(r.sk, drag).converged);
+    CHECK((r.sk.PositionOf(r.corners[0][0]) - Vec2{-40, -40}).Length() < 1e-6);
+    CHECK((r.sk.PositionOf(r.corners[2][0]) - other).Length() < 1e-12);
+}
+
+TEST_CASE("a conflict in one shape leaves the whole sketch untouched") {
+    ManyRects r(3);
+    REQUIRE(Solve(r.sk).converged);
+    const Vec2 before = r.sk.PositionOf(r.corners[1][2]);
+    for (auto& p : r.sk.points)
+        if (p.id == r.corners[1][2]) p.pos = p.pos + Vec2{3, 3};   // the free shape is moved off...
+    r.sk.AddConstraint(r.ids, Dim(ConstraintType::Distance, 50, r.corners[0][0], r.corners[0][1]));   // ...and another conflicts
+    const Vec2 moved = r.sk.PositionOf(r.corners[1][2]);
+    const SolveResult result = Solve(r.sk);
+    CHECK_FALSE(result.converged);
+    CHECK_FALSE(result.failing.empty());
+    CHECK((r.sk.PositionOf(r.corners[1][2]) - moved).Length() < 1e-12);   // not solved halfway
+    CHECK((moved - before).Length() > 1);
 }

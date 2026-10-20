@@ -69,6 +69,13 @@
 #include <GLFW/glfw3.h>   // glfwGetTime for camera animation
 #endif
 
+#include <Select3D_SensitiveTriangulation.hxx>
+#include <Standard_Version.hxx>
+#if OCC_VERSION_HEX >= 0x070700
+#include <Select3D_SensitiveCylinder.hxx>
+#include <Select3D_SensitiveSphere.hxx>
+#endif
+
 #include <algorithm>
 #include <format>
 #include <type_traits>
@@ -204,6 +211,64 @@ std::optional<doc::FaceReference> FaceReferenceOf(const TopoDS_Face& face) {
     if (!normal) return std::nullopt;
     return doc::FaceReference{*normal, point, true};
 }
+
+/// OCCT 7.7+ picks cylindrical, conical and spherical faces by analytic
+/// shapes (Select3D_SensitiveCylinder / Sphere). On faces made by our
+/// extrusions OCCT 7.8 places the cylinder wrongly (z -25..0 for a boss
+/// standing at z 5..30): the face is drawn but the cursor passes through it,
+/// to whatever is behind — a boss could not be measured, extruded up to or
+/// projected. Those faces are picked by their triangles instead (the shaded
+/// display has meshed them already), as every other curved face is.
+void PickCurvedFacesByMesh(const Handle(SelectMgr_Selection)& selection) {
+#if OCC_VERSION_HEX >= 0x070700
+    std::vector<Handle(Select3D_SensitiveEntity)> entities;
+    bool replaced = false;
+    for (const Handle(SelectMgr_SensitiveEntity)& entity : selection->Entities()) {
+        Handle(Select3D_SensitiveEntity) sensitive = entity->BaseSensitive();
+        if (sensitive->IsKind(STANDARD_TYPE(Select3D_SensitiveCylinder)) || sensitive->IsKind(STANDARD_TYPE(Select3D_SensitiveSphere))) {
+            const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(sensitive->OwnerId());
+            if (!owner.IsNull() && owner->Shape().ShapeType() == TopAbs_FACE) {
+                TopLoc_Location location;
+                const Handle(Poly_Triangulation) mesh = BRep_Tool::Triangulation(TopoDS::Face(owner->Shape()), location);
+                if (!mesh.IsNull() && mesh->NbTriangles() > 0) {
+                    Handle(Select3D_SensitiveTriangulation) triangles = new Select3D_SensitiveTriangulation(owner, mesh, location, true);
+                    triangles->SetSensitivityFactor(sensitive->SensitivityFactor());
+                    sensitive = triangles;
+                    replaced = true;
+                }
+            }
+        }
+        entities.push_back(sensitive);
+    }
+    if (!replaced) return;
+    selection->Clear();
+    for (const Handle(Select3D_SensitiveEntity)& e : entities) selection->Add(e);
+#else
+    (void)selection;
+#endif
+}
+
+/// A body as shown: AIS_ColoredShape whose curved faces pick by their mesh.
+class BodyShape : public AIS_ColoredShape {
+public:
+    using AIS_ColoredShape::AIS_ColoredShape;
+    void ComputeSelection(const Handle(SelectMgr_Selection)& selection, const Standard_Integer mode) override {
+        AIS_ColoredShape::ComputeSelection(selection, mode);
+        PickCurvedFacesByMesh(selection);
+    }
+    DEFINE_STANDARD_RTTI_INLINE(BodyShape, AIS_ColoredShape)
+};
+
+/// The same for a plain AIS_Shape (the bodies picked "as they were").
+class PickShape : public AIS_Shape {
+public:
+    using AIS_Shape::AIS_Shape;
+    void ComputeSelection(const Handle(SelectMgr_Selection)& selection, const Standard_Integer mode) override {
+        AIS_Shape::ComputeSelection(selection, mode);
+        PickCurvedFacesByMesh(selection);
+    }
+    DEFINE_STANDARD_RTTI_INLINE(PickShape, AIS_Shape)
+};
 
 /// The owner by which the face selection mode of `shape` picks `face`
 /// (null if that mode was never computed or the face is not there).
@@ -748,7 +813,7 @@ void Viewport::Sync(const kernel::Model& model) {
             m.spare.erase(kept);
             continue;
         }
-        Handle(AIS_ColoredShape) ais = new AIS_ColoredShape(body.shape);
+        Handle(AIS_ColoredShape) ais = new BodyShape(body.shape);
         m.ApplyLook({body.id, ais});
         m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_FACE), false);
         m.shown.push_back({body.id, ais});
@@ -1416,7 +1481,7 @@ void Viewport::BeginPickingOriginal(const kernel::Model& model, std::size_t feat
         // Shaded (a wireframe presentation is never found by the selector),
         // but with fully transparent faces: only its edges show, over the
         // preview, in the edge colour.
-        Handle(AIS_Shape) ais = new AIS_Shape(body);
+        Handle(AIS_Shape) ais = new PickShape(body);
         m.ApplyStyle(ais, false);
         Handle(Prs3d_Drawer) drawer = ais->Attributes();
         drawer->SetFaceBoundaryDraw(true);

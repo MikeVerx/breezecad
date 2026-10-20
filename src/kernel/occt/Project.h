@@ -10,8 +10,10 @@
 namespace bz::kernel::occt {
 
 /// `edge` projected onto the plane of `frame`, in its coordinates. Lines of
-/// any direction, and circles and arcs that lie parallel to the plane; other
-/// edges (an ellipse in projection, splines) are reported as errors.
+/// any direction; circles and arcs parallel to the plane as they are, seen
+/// edge-on as the line they cover (a cylinder's rim from the side); a whole
+/// circle at a slant as an ellipse. Other edges (a slanted arc, splines) are
+/// reported as errors.
 Expected<ProjectedCurve> ProjectEdge(const TopoDS_Edge& edge, const Frame& frame);
 
 /// The body of revolution `face` belongs to (the faces of `body` around the

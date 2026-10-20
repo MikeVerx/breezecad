@@ -45,7 +45,29 @@ bool Notifications::Draw(ui::Ui& ui, ImVec2 bottomRight, double now) {
                     nullptr, maxWidth);
         y = p.y - ui.S(8);
     }
-    return true;
+    // A message that just sits there needs no frames: a whole 3D frame per
+    // vsync for 8 s after every error was the busiest the idle window got.
+    return Animating(now);
+}
+
+namespace {
+constexpr double kFadeIn = 0.15, kFadeOut = 0.4;   // s, as Draw fades them
+}
+
+bool Notifications::Animating(double now) const {
+    for (const Note& n : myNotes) {
+        if (n.shownAt < 0) return true;
+        const double age = now - n.shownAt;
+        if (age < kFadeIn || age > n.duration - kFadeOut) return true;
+    }
+    return false;
+}
+
+double Notifications::SecondsToNextChange(double now) const {
+    double next = 1e9;
+    for (const Note& n : myNotes)
+        if (n.shownAt >= 0) next = std::min(next, n.shownAt + n.duration - kFadeOut - now);
+    return std::max(next, 0.0);
 }
 
 } // namespace bz::app

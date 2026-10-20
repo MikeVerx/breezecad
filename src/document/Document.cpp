@@ -113,14 +113,21 @@ std::string Document::UniqueFeatureName(std::string_view base) const {
 std::string Document::NextParameterName() const {
     // One past the largest "dN" in use, like Inventor: numbers are not reused,
     // so a deleted d3 does not come back with another meaning.
+    // Names still referenced by an expression count too: the largest dN
+    // deleted (d7, with "d7 * 2" left in d8) would otherwise come back as the
+    // next new dimension, and d8 would silently follow a stranger.
     int largest = 0;
-    for (const Parameter* p : AllParameters()) {
-        if (p->name.size() < 2 || p->name[0] != 'd') continue;
+    const auto take = [&](std::string_view name) {
+        if (name.size() < 2 || name[0] != 'd') return;
         int n = 0;
-        const char* begin = p->name.data() + 1;
-        const char* end = p->name.data() + p->name.size();
+        const char* begin = name.data() + 1;
+        const char* end = name.data() + name.size();
         const auto [ptr, ec] = std::from_chars(begin, end, n);
         if (ec == std::errc{} && ptr == end) largest = std::max(largest, n);
+    };
+    for (const Parameter* p : AllParameters()) {
+        take(p->name);
+        for (const std::string& used : ReferencedNames(p->expression)) take(used);
     }
     return "d" + std::to_string(largest + 1);
 }
@@ -163,18 +170,31 @@ int Document::EvaluateParameters() {
         }
         mark = Mark::InProgress;
 
+        // A name that exists but cannot be used here: said as it is, not as
+        // "unknown name" (the user would look for a typo that is not there).
+        std::string cycle;
+        bool self = false;
         const NameLookup lookup = [&](std::string_view name) -> std::optional<NamedValue> {
             const auto it = byName.find(std::string(name));
-            if (it == byName.end() || it->second == p) return std::nullopt;
+            if (it == byName.end()) return std::nullopt;
+            if (it->second == p) {
+                self = true;
+                return std::nullopt;
+            }
             evaluate(it->second);
-            if (marks[it->second] != Mark::Done) return std::nullopt;   // part of a cycle
+            if (marks[it->second] != Mark::Done) {   // part of a cycle
+                if (cycle.empty()) cycle = it->second->name;
+                return std::nullopt;
+            }
             return NamedValue{it->second->value, it->second->quantity};
         };
         Expected<double> result = EvaluateExpression(p->expression, p->quantity, units, lookup);
         if (result) {
             if (p->error.empty()) p->value = *result;
         } else if (p->error.empty()) {
-            p->error = result.GetError().message;
+            p->error = self              ? std::format("«{}» ссылается сам на себя", p->name)
+                       : !cycle.empty() ? std::format("Циклическая ссылка через «{}»", cycle)
+                                        : result.GetError().message;
         }
         marks[p] = Mark::Done;
     };

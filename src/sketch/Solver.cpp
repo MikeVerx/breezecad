@@ -53,30 +53,6 @@ double SumSquares(const std::vector<double>& v) {
     return s;
 }
 
-/// Jacobian of all equations over free unknowns, by central differences.
-/// Each equation only touches a handful of unknowns, so this is cheap.
-Matrix Jacobian(const EquationSystem& sys, const Columns& cols, std::vector<double> xs) {
-    Matrix J(static_cast<int>(sys.equations.size()), cols.count);
-    for (std::size_t row = 0; row < sys.equations.size(); ++row) {
-        const Equation& eq = sys.equations[row];
-        for (const int u : eq.Unknowns()) {
-            const int col = cols.ofUnknown[static_cast<std::size_t>(u)];
-            if (col < 0) continue;
-
-            double& xu = xs[static_cast<std::size_t>(u)];
-            const double saved = xu;
-            const double h = 1e-7 * std::max(1.0, std::abs(saved));
-            xu = saved + h;
-            const double fPlus = sys.Residual(eq, xs);
-            xu = saved - h;
-            const double fMinus = sys.Residual(eq, xs);
-            xu = saved;
-            J.At(static_cast<int>(row), col) = (fPlus - fMinus) / (2.0 * h);
-        }
-    }
-    return J;
-}
-
 /// Solves the symmetric positive definite system A y = b in place (Cholesky).
 /// Returns false when A is not positive definite.
 bool SolveSpd(Matrix& A, std::vector<double>& b) {
@@ -106,24 +82,109 @@ bool SolveSpd(Matrix& A, std::vector<double>& b) {
     return true;
 }
 
-/// Minimum-norm damped Gauss-Newton: dx = -J^T (J J^T + mu I)^-1 F.
-/// The minimum-norm step moves under-defined geometry as little as possible.
-bool Iterate(EquationSystem& sys, int maxIterations) {
-    const Columns cols(sys);
-    std::vector<double> f = Residuals(sys, sys.x);
-    if (sys.equations.empty() || MaxAbs(f) < kTolerance) return true;
-    if (cols.count == 0) return false;
+/// One independent part of the system: some equations and the free
+/// unknowns only they share (unknown index -> its column in this part).
+struct Block {
+    std::vector<int> equations;
+    std::vector<int> unknowns;   ///< free unknown indices, column k = unknowns[k]
+};
 
-    const int m = static_cast<int>(sys.equations.size());
+/// Splits the system into parts that share no free unknown. A sketch of
+/// separate shapes is many small systems, not one big one: the dense
+/// algebra below grows as the cube of the size, so 100 unconnected
+/// rectangles took 0.25 s a frame to drag (2 s for 200), and the shapes
+/// already in place are not touched at all. Equations with no free unknown
+/// at all go to `fixedOnly`.
+std::vector<Block> Blocks(const EquationSystem& sys, const Columns& cols, std::vector<int>& fixedOnly) {
+    std::vector<int> parent(static_cast<std::size_t>(cols.count));
+    for (int i = 0; i < cols.count; ++i) parent[static_cast<std::size_t>(i)] = i;
+    const auto find = [&](int c) {
+        while (parent[static_cast<std::size_t>(c)] != c) {
+            parent[static_cast<std::size_t>(c)] = parent[static_cast<std::size_t>(parent[static_cast<std::size_t>(c)])];
+            c = parent[static_cast<std::size_t>(c)];
+        }
+        return c;
+    };
+    std::vector<int> firstCol(sys.equations.size(), -1);
+    for (std::size_t e = 0; e < sys.equations.size(); ++e)
+        for (const int u : sys.equations[e].Unknowns()) {
+            const int col = cols.ofUnknown[static_cast<std::size_t>(u)];
+            if (col < 0) continue;
+            if (firstCol[e] < 0) firstCol[e] = col;
+            else parent[static_cast<std::size_t>(find(col))] = find(firstCol[e]);
+        }
+    std::vector<int> blockOfRoot(static_cast<std::size_t>(cols.count), -1);
+    std::vector<Block> blocks;
+    const auto blockOf = [&](int col) -> Block& {
+        int& b = blockOfRoot[static_cast<std::size_t>(find(col))];
+        if (b < 0) {
+            b = static_cast<int>(blocks.size());
+            blocks.emplace_back();
+        }
+        return blocks[static_cast<std::size_t>(b)];
+    };
+    for (std::size_t e = 0; e < sys.equations.size(); ++e) {
+        if (firstCol[e] < 0) fixedOnly.push_back(static_cast<int>(e));
+        else blockOf(firstCol[e]).equations.push_back(static_cast<int>(e));
+    }
+    for (std::size_t u = 0; u < sys.x.size(); ++u) {
+        const int col = cols.ofUnknown[u];
+        if (col >= 0 && blockOfRoot[static_cast<std::size_t>(find(col))] >= 0) blockOf(col).unknowns.push_back(static_cast<int>(u));
+    }
+    return blocks;
+}
+
+std::vector<double> Residuals(const EquationSystem& sys, const std::vector<int>& equations, const std::vector<double>& xs) {
+    std::vector<double> f(equations.size());
+    for (std::size_t i = 0; i < f.size(); ++i) f[i] = sys.Residual(sys.equations[static_cast<std::size_t>(equations[i])], xs);
+    return f;
+}
+
+/// Jacobian of a block's equations over its unknowns (`colOf` maps each
+/// to its column, -1 elsewhere), by central differences. Each equation only
+/// touches a handful of unknowns, so this is cheap.
+Matrix BlockJacobian(const EquationSystem& sys, const Block& block, const std::vector<int>& colOf) {
+    const int m = static_cast<int>(block.equations.size()), n = static_cast<int>(block.unknowns.size());
+    Matrix J(m, n);
+    std::vector<double> xs = sys.x;
+    for (int row = 0; row < m; ++row) {
+        const Equation& eq = sys.equations[static_cast<std::size_t>(block.equations[static_cast<std::size_t>(row)])];
+        for (const int u : eq.Unknowns()) {
+            const int col = colOf[static_cast<std::size_t>(u)];
+            if (col < 0) continue;
+            double& xu = xs[static_cast<std::size_t>(u)];
+            const double saved = xu;
+            const double h = 1e-7 * std::max(1.0, std::abs(saved));
+            xu = saved + h;
+            const double fPlus = sys.Residual(eq, xs);
+            xu = saved - h;
+            const double fMinus = sys.Residual(eq, xs);
+            xu = saved;
+            J.At(row, col) = (fPlus - fMinus) / (2.0 * h);
+        }
+    }
+    return J;
+}
+
+/// Minimum-norm damped Gauss-Newton on one block: dx = -J^T (J J^T + mu I)^-1 F.
+/// The minimum-norm step moves under-defined geometry as little as possible.
+bool IterateBlock(EquationSystem& sys, const Block& block, std::vector<int>& colOf, int maxIterations) {
+    std::vector<double> f = Residuals(sys, block.equations, sys.x);
+    if (MaxAbs(f) < kTolerance) return true;
+    const int m = static_cast<int>(block.equations.size());
+    const int n = static_cast<int>(block.unknowns.size());
+    for (int k = 0; k < n; ++k) colOf[static_cast<std::size_t>(block.unknowns[static_cast<std::size_t>(k)])] = k;
+
+    bool done = false;
     double mu = 1e-10;
-    for (int iter = 0; iter < maxIterations; ++iter) {
-        const Matrix J = Jacobian(sys, cols, sys.x);
+    for (int iter = 0; iter < maxIterations && !done; ++iter) {
+        const Matrix J = BlockJacobian(sys, block, colOf);
 
         Matrix A(m, m);
         for (int i = 0; i < m; ++i)
             for (int j = 0; j <= i; ++j) {
                 double s = 0.0;
-                for (int k = 0; k < cols.count; ++k) s += J.At(i, k) * J.At(j, k);
+                for (int k = 0; k < n; ++k) s += J.At(i, k) * J.At(j, k);
                 A.At(i, j) = s;
                 A.At(j, i) = s;
             }
@@ -134,8 +195,8 @@ bool Iterate(EquationSystem& sys, int maxIterations) {
             mu *= 100.0;
             continue;
         }
-        std::vector<double> dx(static_cast<std::size_t>(cols.count), 0.0);
-        for (int k = 0; k < cols.count; ++k)
+        std::vector<double> dx(static_cast<std::size_t>(n), 0.0);
+        for (int k = 0; k < n; ++k)
             for (int i = 0; i < m; ++i) dx[static_cast<std::size_t>(k)] -= J.At(i, k) * y[static_cast<std::size_t>(i)];
 
         // Backtracking: accept the first step length that reduces the error.
@@ -143,11 +204,8 @@ bool Iterate(EquationSystem& sys, int maxIterations) {
         bool accepted = false;
         for (double step = 1.0; step > 1e-4; step *= 0.5) {
             std::vector<double> trial = sys.x;
-            for (std::size_t u = 0; u < trial.size(); ++u) {
-                const int col = cols.ofUnknown[u];
-                if (col >= 0) trial[u] += step * dx[static_cast<std::size_t>(col)];
-            }
-            std::vector<double> fTrial = Residuals(sys, trial);
+            for (int k = 0; k < n; ++k) trial[static_cast<std::size_t>(block.unknowns[static_cast<std::size_t>(k)])] += step * dx[static_cast<std::size_t>(k)];
+            std::vector<double> fTrial = Residuals(sys, block.equations, trial);
             if (SumSquares(fTrial) < before) {
                 sys.x = std::move(trial);
                 f = std::move(fTrial);
@@ -155,11 +213,28 @@ bool Iterate(EquationSystem& sys, int maxIterations) {
                 break;
             }
         }
-        if (MaxAbs(f) < kTolerance) return true;
+        if (MaxAbs(f) < kTolerance) {
+            done = true;
+            break;
+        }
         mu = accepted ? std::max(mu * 0.1, 1e-12) : mu * 100.0;
-        if (mu > 1e6) return false;
+        if (mu > 1e6) break;
     }
-    return MaxAbs(f) < kTolerance;
+    for (const int u : block.unknowns) colOf[static_cast<std::size_t>(u)] = -1;
+    return done || MaxAbs(f) < kTolerance;
+}
+
+/// Solves every independent block of the system on its own.
+bool Iterate(EquationSystem& sys, int maxIterations) {
+    const Columns cols(sys);
+    std::vector<int> fixedOnly;
+    const std::vector<Block> blocks = Blocks(sys, cols, fixedOnly);
+    // Equations between fixed unknowns only: nothing can make them hold.
+    if (MaxAbs(Residuals(sys, fixedOnly, sys.x)) >= kTolerance) return false;
+    std::vector<int> colOf(sys.x.size(), -1);
+    bool ok = true;
+    for (const Block& block : blocks) ok = IterateBlock(sys, block, colOf, maxIterations) && ok;
+    return ok;
 }
 
 /// Gauss-Jordan elimination. Returns the rank; `determined[c]` is true for
@@ -202,16 +277,30 @@ int Reduce(Matrix J, std::vector<bool>& determined) {
     return rank;
 }
 
-/// Degrees of freedom of a system at its current values.
+/// Degrees of freedom of a system at its current values, block by block
+/// (the rank of a block-diagonal Jacobian is the sum of the blocks' ranks).
 int DegreesOfFreedom(const EquationSystem& sys, std::vector<bool>* determinedUnknowns = nullptr) {
     const Columns cols(sys);
-    std::vector<bool> determinedCols;
-    const int rank = Reduce(Jacobian(sys, cols, sys.x), determinedCols);
+    std::vector<int> fixedOnly;
+    const std::vector<Block> blocks = Blocks(sys, cols, fixedOnly);
     if (determinedUnknowns) {
-        determinedUnknowns->assign(sys.x.size(), true);   // fixed unknowns are determined
-        for (std::size_t u = 0; u < sys.x.size(); ++u) {
-            const int col = cols.ofUnknown[u];
-            if (col >= 0) (*determinedUnknowns)[u] = determinedCols[static_cast<std::size_t>(col)];
+        // Fixed unknowns are determined; free ones only if their block says so.
+        determinedUnknowns->assign(sys.x.size(), true);
+        for (std::size_t u = 0; u < sys.x.size(); ++u)
+            if (cols.ofUnknown[u] >= 0) (*determinedUnknowns)[u] = false;
+    }
+    std::vector<int> colOf(sys.x.size(), -1);
+    int rank = 0;
+    for (const Block& block : blocks) {
+        const int n = static_cast<int>(block.unknowns.size());
+        for (int k = 0; k < n; ++k) colOf[static_cast<std::size_t>(block.unknowns[static_cast<std::size_t>(k)])] = k;
+        const Matrix J = BlockJacobian(sys, block, colOf);
+        std::vector<bool> determinedCols;
+        rank += Reduce(J, determinedCols);
+        for (int k = 0; k < n; ++k) {
+            const auto u = static_cast<std::size_t>(block.unknowns[static_cast<std::size_t>(k)]);
+            if (determinedUnknowns) (*determinedUnknowns)[u] = determinedCols[static_cast<std::size_t>(k)];
+            colOf[u] = -1;
         }
     }
     return cols.count - rank;

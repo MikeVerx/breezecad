@@ -680,7 +680,7 @@ void DrawPatternProperties(AppContext& app, Session& session, const assembly::Co
     switch (pattern.kind) {
         case assembly::PatternKind::Holes: {
             const Component* holder = st.assembly.FindComponent(pattern.rim.component);
-            LabelText(ui, Trf("Во все отверстия ⌀{} мм на «{}», как у образца", FormatNumber(2 * pattern.rim.radius, 2),
+            LabelText(ui, Trf("Во все отверстия Ø{} мм на «{}», как у образца", FormatNumber(2 * pattern.rim.radius, 2),
                               holder ? holder->name : "?"),
                       ui.C().textMuted);
             break;

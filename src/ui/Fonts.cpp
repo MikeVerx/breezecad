@@ -7,17 +7,20 @@
 namespace bz::ui {
 namespace {
 
-/// Latin, Latin-1, Cyrillic, general punctuation (— … «»), degree, diameter,
-/// arrows and math signs used in the UI.
+/// Latin, Latin-1, Cyrillic, Greek, general punctuation (— … «»), degree,
+/// diameter, arrows and math signs used in the UI. A character outside these
+/// ranges (or missing from the font) is drawn as "?": the diameter sign is Ø
+/// (U+00D8), not ⌀ (U+2300), which IBM Plex lacks.
 const ImWchar* GlyphRanges() {
     static const ImWchar ranges[] = {
         0x0020, 0x00FF,   // Basic Latin + Latin-1 (°, ±, ×, «», Ø)
+        0x0370, 0x03FF,   // Greek: Δ in the measure panel; μ, π for later (IBM Plex Sans has them, Mono lacks Δ)
         0x0400, 0x04FF,   // Cyrillic
         0x2010, 0x2044,   // dashes, quotes, ellipsis
         0x2070, 0x209F,   // super/subscripts
         0x2116, 0x2116,   // №
         0x2190, 0x21FF,   // arrows
-        0x2212, 0x2264,   // minus, ≈, ≠, ≤, ≥
+        0x2212, 0x2265,   // minus, ≈, ≠, ≤, ≥
         0,
     };
     return ranges;
