@@ -7,6 +7,11 @@
 
 namespace bz::kernel {
 
+namespace {
+/// Instances one component pattern may make (a typo must not freeze the assembly).
+constexpr long long kMaxInstances = 500;
+} // namespace
+
 using assembly::Component;
 using assembly::ComponentPattern;
 using assembly::Constraint;
@@ -152,6 +157,9 @@ Expected<std::vector<PatternSpot>> PatternSpots(const AssemblyModel& model, cons
             const Vec3 d1 = p.direction1.Normalized(), d2 = p.direction2.Normalized();
             if (p.count1 < 1 || p.count2 < 1 || d1.Length() < 0.5 || (p.count2 > 1 && d2.Length() < 0.5))
                 return Error{"Неверные направления или количество массива"};
+            // The limit is on the instances made (the panel allows 500 per direction: 500 x 500 froze it).
+            if (static_cast<long long>(p.count1) * p.count2 > kMaxInstances)
+                return Error{std::format("Слишком много экземпляров: {} × {} (больше {})", p.count1, p.count2, kMaxInstances)};
             for (int j = 0; j < p.count2; ++j)
                 for (int i = 0; i < p.count1; ++i)
                     if (i || j) spots.push_back({Shift(d1 * (i * p.spacing1) + d2 * (j * p.spacing2)), {}});
@@ -166,6 +174,7 @@ Expected<std::vector<PatternSpot>> PatternSpots(const AssemblyModel& model, cons
                 d = c->placement.Direction(p.axis.direction);
             }
             if (d.Length() < 1e-9 || p.count < 2) return Error{"Неверная ось или количество массива"};
+            if (p.count > kMaxInstances) return Error{std::format("Слишком много экземпляров (больше {})", kMaxInstances)};
             const bool round = std::abs(p.angle) >= 2 * kPi - 1e-9;
             const double step = round ? 2 * kPi / p.count : p.angle / (p.count - 1);
             for (int k = 1; k < p.count; ++k) {
