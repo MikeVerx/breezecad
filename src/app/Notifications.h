@@ -17,8 +17,15 @@ public:
     void Error(std::string text) { Push(std::move(text), Kind::Error, 8.0); }
 
     /// Draws active messages stacked above `bottomRight`. Returns true while
-    /// any message is visible (the frame loop keeps redrawing to fade them).
+    /// one of them fades in or out (only then the frame loop keeps drawing).
     bool Draw(ui::Ui& ui, ImVec2 bottomRight, double now);
+
+    /// True while a message fades in or out, is new, or is due to go away:
+    /// a frame is needed now. A message simply on screen needs none.
+    bool Animating(double now) const;
+    /// Seconds until a message starts to fade out (the loop sleeps no
+    /// longer than that); a large number when there are none.
+    double SecondsToNextChange(double now) const;
 
 private:
     struct Note {
