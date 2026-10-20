@@ -44,7 +44,6 @@ TEST_CASE("B-01: a part with fields of the wrong type is rejected, not thrown") 
         R"({"features":[5]})",
         R"({"features":[{"type":7,"id":1}]})",
         R"({"nextId":"9"})",
-        R"({"features":[{"type":"sketch","id":1,"name":"s","curves":[{"type":3}]}]})",
     };
     for (const char* json : samples) {
         LoadsWithoutThrowing(json);
@@ -53,6 +52,29 @@ TEST_CASE("B-01: a part with fields of the wrong type is rejected, not thrown") 
     // Harmless damage still loads as before.
     LoadsWithoutThrowing(R"({"variables":{"a":1}})");
     LoadsWithoutThrowing(R"({"features":[{"type":"sketch","id":1,"name":"s","points":5}]})");
+}
+
+TEST_CASE("damage inside one operation keeps it as it was and opens the rest of the part") {
+    const std::string json = R"({"features":[
+        {"type":"sketch","id":1,"name":"Эскиз1","curves":[{"type":3}]},
+        {"type":"workplane","id":2,"name":"Плоскость1"}]})";
+    LoadsWithoutThrowing(json);
+    doc::LoadReport report;
+    auto loaded = doc::DocumentFromJson(json, &report);
+    REQUIRE(loaded);
+    REQUIRE(loaded->FeatureCount() == 2);
+    const doc::Feature* damaged = loaded->Find(ObjectId{1});
+    REQUIRE(damaged);
+    CHECK(damaged->Type() == "sketch");                       // saved back as a sketch
+    CHECK(damaged->status.state == doc::FeatureState::Error);
+    CHECK(damaged->name == "Эскиз1");
+    CHECK_FALSE(report.warnings.empty());
+    // Saved and opened again: the damaged fields are still there, unchanged.
+    const std::string again = doc::DocumentToJson(*loaded);
+    CHECK(again.find("\"curves\"") != std::string::npos);
+    auto reloaded = doc::DocumentFromJson(again);
+    REQUIRE(reloaded);
+    CHECK(reloaded->FeatureCount() == 2);
 }
 
 TEST_CASE("B-01: an assembly with fields of the wrong type is rejected, not thrown") {

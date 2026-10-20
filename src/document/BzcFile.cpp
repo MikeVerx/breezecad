@@ -1,5 +1,7 @@
 #include "document/BzcFile.h"
 
+#include "core/Log.h"
+
 #include "core/PathText.h"
 #include "document/DocumentTypes.h"
 #include "document/FeatureRegistry.h"
@@ -130,7 +132,29 @@ Expected<Document> DocumentFromJsonUnguarded(std::string_view text, LoadReport* 
         if (!ReadMember(j, "id", feature->id) || !feature->id || !ReadMember(j, "name", feature->name) ||
             !ReadMember(j, "suppressed", feature->suppressed) || !ReadMember(j, "hidden", feature->hidden))
             return Error{"Повреждена операция в дереве"};
-        if (Status s = feature->LoadFields(j); !s) return s.GetError();
+        // Damage inside one operation costs that operation, not the part: it
+        // is kept as it was in the file (saved back unchanged, not built) and
+        // the rest of the tree opens. Losing the whole project to one bad
+        // value was worse than any half-open state.
+        std::string damage;
+        try {
+            if (Status s = feature->LoadFields(j); !s) damage = s.GetError().message;
+        } catch (const Json::exception& e) {
+            log::Warn("Damaged operation {} in the file: {}", feature->id.value, e.what());
+            damage = "поле с данными не того типа";
+        }
+        if (!damage.empty()) {
+            auto kept = std::make_unique<UnknownFeature>();
+            kept->typeId = type;
+            kept->id = feature->id;
+            kept->name = feature->name;
+            kept->suppressed = feature->suppressed;
+            kept->hidden = feature->hidden;
+            (void)kept->LoadFields(j);
+            kept->status = {FeatureState::Error, std::format("Операция повреждена в файле и не строится: {}", damage)};
+            if (report) report->warnings.push_back(std::format("«{}»: операция повреждена ({}), сохранена как есть", kept->name, damage));
+            feature = std::move(kept);
+        }
         doc.Insert(std::move(feature), doc.FeatureCount());
     }
 
@@ -156,7 +180,8 @@ Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
     try {
         return DocumentFromJsonUnguarded(text, report);
     } catch (const Json::exception& e) {
-        return Error{std::format("Содержимое документа повреждено: {}", e.what())};
+        log::Warn("Damaged document: {}", e.what());   // the library's wording: for the log, not the user
+        return Error{"Содержимое документа повреждено: поле с данными не того типа"};
     }
 }
 
