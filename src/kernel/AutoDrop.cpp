@@ -55,7 +55,7 @@ Expected<AutoDropPlan> PlanAutoDrop(const AssemblyModel& model, const assembly::
     plan.holeDiameter = 2 * rim.radius;
     plan.size = parts::SizeForHole(*screw, plan.holeDiameter);
     if (plan.size.empty())
-        return Error{std::format("{}: нет размера для отверстия ⌀{:.1f} мм", screw->title, plan.holeDiameter)};
+        return Error{std::format("{}: нет размера для отверстия Ø{:.1f} мм", screw->title, plan.holeDiameter)};
     const std::optional<HoleStack> stack = model.StackAt(a, rim);
     if (!stack) return Error{"Под отверстием нет материала"};
     plan.stack = stack->thickness;

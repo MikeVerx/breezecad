@@ -113,8 +113,12 @@ ImVec2 Pill(ui::Ui& ui, const char* id, ImVec2 centre, bool vertical, float alph
     dl->AddRect(a, b, ui::ToU32(c.selection.WithAlpha(alpha)), r, 0, ui.S(2));
     const ImU32 ink = ui::ToU32(c.selection.WithAlpha(alpha));
     if (vertical) {
-        dl->AddText(ui.fonts.medium, ui.S(13), {centre.x - ui.S(4), a.y + ui.S(6)}, ink, "\xCB\x84");    // ˄
-        dl->AddText(ui.fonts.medium, ui.S(13), {centre.x - ui.S(4), b.y - ui.S(20)}, ink, "\xCB\x85");   // ˅
+        // Chevrons drawn as lines: ˄ ˅ are not in IBM Plex (they came out as "?").
+        const float w = ui.S(4), t = a.y + ui.S(13), u = b.y - ui.S(13);
+        const ImVec2 up[] = {{centre.x - w, t + w / 2}, {centre.x, t - w / 2}, {centre.x + w, t + w / 2}};
+        const ImVec2 down[] = {{centre.x - w, u - w / 2}, {centre.x, u + w / 2}, {centre.x + w, u - w / 2}};
+        dl->AddPolyline(up, 3, ink, ImDrawFlags_None, ui.S(1.6f));
+        dl->AddPolyline(down, 3, ink, ImDrawFlags_None, ui.S(1.6f));
         dl->AddLine({centre.x - ui.S(7), centre.y - ui.S(4)}, {centre.x + ui.S(7), centre.y - ui.S(4)}, ink, ui.S(2));
         dl->AddLine({centre.x - ui.S(7), centre.y + ui.S(4)}, {centre.x + ui.S(7), centre.y + ui.S(4)}, ink, ui.S(2));
     } else {
@@ -316,7 +320,7 @@ void EditIsland(AppContext& app) {
     dl->AddRect({r.min.x - ui.S(4), r.min.y - ui.S(4)}, {r.max.x + ui.S(4), r.max.y + ui.S(4)}, ui::ToU32(c.selection), ui.S(14), 0, ui.S(2.5f));
     const float tagY = place->bottom ? r.min.y - ui.S(22) : r.max.y + ui.S(22);
     Tag(ui, {std::clamp((r.min.x + r.max.x) / 2, v.min.x + ui.S(90), v.max.x - ui.S(90)), tagY},
-        Tr("\xE2\x97\x80 тяни вдоль края \xE2\x96\xB6"));   // ◀ … ▶
+        Tr("\xE2\x86\x90 тяни вдоль края \xE2\x86\x92"));   // ← … → (◀ ▶ are not in IBM Plex)
     // Its size: a slider in the middle of the view.
     const float sw = std::min(ui.S(330), v.max.x - v.min.x - ui.S(40));
     const ImVec2 at{(v.min.x + v.max.x - sw) / 2, (v.min.y + v.max.y) / 2 - ui.S(18)};
