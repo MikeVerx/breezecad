@@ -5,6 +5,7 @@
   <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-windows.zip"><b>Windows</b></a> ·
   <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-macos.zip"><b>macOS</b></a> ·
   <a href="https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-linux.tar.gz"><b>Linux</b></a> ·
+  <a href="https://github.com/MikeVerx/breezecad/releases/download/android-build/BreezeCAD-android.apk"><b>Android</b></a> ·
   <a href="https://github.com/MikeVerx/breezecad/releases/tag/modules"><b>Modules</b></a> ·
   <a href="#build-from-source">Build from source</a> ·
   <a href="docs/ARCHITECTURE.md">Architecture</a> ·
@@ -69,7 +70,8 @@ catalogs — see [`translations/`](translations/README.md).
 The whole modeller on an Android phone, laid out for the thumbs: commands on the
 right, the tree and the tool's settings on the left, a drop-shaped cursor whose tip
 never hides the point you work on, and a numpad for values. Get
-[`BreezeCAD-android.apk`](https://github.com/MikeVerx/breezecad/releases/latest) from the release (ARM 64-bit, Android 9+).
+[`BreezeCAD-android.apk`](https://github.com/MikeVerx/breezecad/releases/download/android-build/BreezeCAD-android.apk) (ARM 64-bit, Android 9+): open the link on the
+phone, allow installing from that source; a new build installs over the old one.
 
 <p align="center"><img src="docs/images/android-model.png" alt="BreezeCAD on an Android phone: a flange in the 3D view" width="100%"></p>
 
@@ -83,7 +85,7 @@ never hides the point you work on, and a numpad for values. Get
 ## Download
 
 The freshest build of the `next` branch, rebuilt after every change that
-passes the tests on all three systems ([all files](https://github.com/MikeVerx/breezecad/releases/tag/next-build)).
+passes the tests on all systems ([all files](https://github.com/MikeVerx/breezecad/releases/tag/next-build)).
 Unpack and run — nothing to install.
 
 | System | Download | Status |
@@ -91,6 +93,7 @@ Unpack and run — nothing to install.
 | Windows 10/11, 64-bit | [BreezeCAD-windows.zip](https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-windows.zip) | main platform, in beta test |
 | macOS 14+ on Apple silicon (M1 and newer) | [BreezeCAD-macos.zip](https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-macos.zip) | new: built and tested in CI, first runs on real Macs now |
 | Linux x86_64 (Ubuntu 20.04+, Debian 10+, Fedora and other distributions from 2019 on) | [BreezeCAD-linux.tar.gz](https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-linux.tar.gz) | built, tested and started in CI |
+| Android 9+, ARM 64-bit (phones and tablets) | [BreezeCAD-android.apk](https://github.com/MikeVerx/breezecad/releases/download/android-build/BreezeCAD-android.apk) | beta: stability checked on a OnePlus Nord CE5 (over 60 fps) — ready for new challenges |
 
 **macOS, first start:** the app is not signed by a paid Apple certificate
 yet, so macOS stops it once. Right-click `BreezeCAD.app` → **Open** → **Open**;
