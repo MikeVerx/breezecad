@@ -243,6 +243,15 @@ void Application::RunTestCommands() {
             myShell.showSettings = true;
         } else if (c == "touchkeys") {
             myTestTouchKeys = true;   // as on a phone with no keyboard plugged in
+        } else if (c == "dims") {
+            // A rectangle with two dimensions, the second one being typed: the
+            // emulator taps the first one and expects its name in the field.
+            if (Session* s = myWorkspace.Active(); s && s->mode == EditMode::Sketch) {
+                myContext->sketch.MakeDimensionTest(*s);
+                // Fitted: in the new document's view the 40x20 rectangle was a few
+                // pixels and the labels lay over each other (the tap hit the typed one).
+                myActions.Run("view.fit");
+            }
         } else if (c == "extrude") {
             myActions.Run("feature.extrude");   // its distance field: the emulator taps it (smoke-apk.sh)
         } else if (c == "numpad") {

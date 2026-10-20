@@ -79,6 +79,7 @@ Expected<std::vector<PatternFeature::Copy>> PatternFeature::Copies() const {
         if (!n) return n.GetError();
         if (angle.HasError()) return Error{angle.error};
         // A full turn: n copies around; a part of a turn: first and last at its ends.
+        if (*n > 1 && std::abs(angle.value) < 1e-9) return Error{"Угол массива равен нулю: все копии легли бы на образец"};
         const bool fullTurn = std::abs(std::abs(angle.value) - 2 * kPi) < 1e-9;
         const double step = *n <= 1 ? 0.0 : fullTurn ? angle.value / *n : angle.value / (*n - 1);
         for (int i = 1; i < *n; ++i) copies.push_back(Copy{Vec3{}, step * i});
@@ -88,8 +89,13 @@ Expected<std::vector<PatternFeature::Copy>> PatternFeature::Copies() const {
     if (!n1) return n1.GetError();
     const Expected<int> n2 = useDirection2 ? Count(count2) : Expected<int>(1);
     if (!n2) return n2.GetError();
+    // The limit is on the copies made: 1000 x 1000 is a million of them.
+    if (static_cast<long long>(*n1) * *n2 > kMaxCopies)
+        return Error{std::format("Слишком много копий: {} × {} (больше {})", *n1, *n2, kMaxCopies)};
     for (const Parameter* p : {&spacing1, &spacing2})
         if (p->HasError()) return Error{p->error};
+    if ((*n1 > 1 && std::abs(spacing1.value) < 1e-9) || (*n2 > 1 && std::abs(spacing2.value) < 1e-9))
+        return Error{"Шаг массива равен нулю: все копии легли бы на образец"};
     const Vec3 step1 = AxisDirection(direction1) * (reversed1 ? -spacing1.value : spacing1.value);
     const Vec3 step2 = AxisDirection(direction2) * (reversed2 ? -spacing2.value : spacing2.value);
     for (int j = 0; j < *n2; ++j)

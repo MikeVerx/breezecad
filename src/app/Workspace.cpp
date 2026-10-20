@@ -137,6 +137,14 @@ bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settin
                                                      {{name, "*" + ext}}, ext);
         if (!chosen) return false;
         target = *chosen;
+        // Another tab with that file would go on with its own copy: whichever
+        // was saved last would silently replace the other's work.
+        for (const auto& other : sessions)
+            if (other.get() != &session && !other->path.empty() && SameFile(other->path, target)) {
+                notes.Error(Trf("«{}» открыт в другой вкладке: закройте её или сохраните под другим именем",
+                                ToUtf8(target.filename())));
+                return false;
+            }
     }
     return SaveTo(session, target, notes, settings);
 }

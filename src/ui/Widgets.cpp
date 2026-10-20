@@ -300,6 +300,20 @@ bool LinkButton(Ui& ui, const char* id, const char* label) {
     return clicked;
 }
 
+namespace {
+
+/// The active value field takes the caret position asked for (Ui::caretRequest).
+int ApplyCaretRequest(ImGuiInputTextCallbackData* data) {
+    Ui& ui = *static_cast<Ui*>(data->UserData);
+    if (ui.caretRequest >= 0) {
+        data->CursorPos = data->SelectionStart = data->SelectionEnd = std::clamp(ui.caretRequest, 0, data->BufTextLen);
+        ui.caretRequest = -1;
+    }
+    return 0;
+}
+
+} // namespace
+
 FieldResult ExpressionField(Ui& ui, const char* id, std::string& text, std::string_view unit, const std::string& error,
                             float width, bool focusNow, bool showFx, bool caretAtEnd) {
     FieldResult result;
@@ -332,7 +346,8 @@ FieldResult ExpressionField(Ui& ui, const char* id, std::string& text, std::stri
         return 0;
     };
     result.edited = caretAtEnd ? ImGui::InputText("##value", &text, ImGuiInputTextFlags_CallbackAlways, toEnd)
-                               : ImGui::InputText("##value", &text, ImGuiInputTextFlags_AutoSelectAll);
+                               : ImGui::InputText("##value", &text, ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_CallbackAlways,
+                                                  ApplyCaretRequest, &ui);
     result.active = ImGui::IsItemActive();
     const bool enter = EnterPressed(false);
     result.submitted = enter && (result.active || ImGui::IsItemDeactivated());
@@ -422,8 +437,9 @@ bool CommitInput(Ui& ui, const char* id, const std::string& value, EditState& st
     ImGui::SetNextItemWidth(width);
     // Starting to edit selects the whole value: typing replaces it, as in
     // Inventor's parameter table.
-    if (hint) ImGui::InputTextWithHint(id, hint, &buffer, ImGuiInputTextFlags_AutoSelectAll);
-    else ImGui::InputText(id, &buffer, ImGuiInputTextFlags_AutoSelectAll);
+    constexpr ImGuiInputTextFlags flags = ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_CallbackAlways;
+    if (hint) ImGui::InputTextWithHint(id, hint, &buffer, flags, ApplyCaretRequest, &ui);
+    else ImGui::InputText(id, &buffer, flags, ApplyCaretRequest, &ui);
     const bool activated = ImGui::IsItemActivated();
     const bool active = ImGui::IsItemActive();
     const bool deactivated = ImGui::IsItemDeactivated();

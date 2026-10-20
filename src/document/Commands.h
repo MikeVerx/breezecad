@@ -77,7 +77,13 @@ std::unique_ptr<Command> SetEndMarker(const Document& doc, std::size_t index);
 /// Replaces the whole variables table.
 std::unique_ptr<Command> SetVariables(std::vector<Parameter> variables);
 
-/// Changes the document's display units (values stay the same physically).
+/// Renames variable `index` to `name` and every reference to it in the
+/// expressions of the document (variables, dimensions, operations), as one
+/// undo step. The caller checks that `name` is valid and free.
+std::unique_ptr<Command> RenameVariable(std::size_t index, std::string name);
+
+/// Changes the document's units. Values stay the same physically: plain
+/// numbers that took the old unit get it written out ("10" -> "10mm").
 std::unique_ptr<Command> SetUnits(UnitSystem units);
 
 /// Changes the part's name, designation or material.

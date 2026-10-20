@@ -1,5 +1,9 @@
 #include "kernel/occt/Extrude.h"
 
+#include "core/FaultGuard.h"
+#include "core/Log.h"
+
+#include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <gp_Pnt2d.hxx>
 #include <Geom_Surface.hxx>
@@ -9,6 +13,8 @@
 #include <BRepClass_FaceClassifier.hxx>
 #include <BRepClass3d_SolidClassifier.hxx>
 #include <BRepAlgoAPI_Splitter.hxx>
+#include <BRepBuilderAPI_MakeVertex.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <gp_Pln.hxx>
 #include <TopoDS_Solid.hxx>
@@ -150,9 +156,28 @@ Expected<TopoDS_Shape> MakeExtrusion(const std::vector<TopoDS_Face>& faces, cons
     if (faces.empty()) return Error{"Нет замкнутого контура для выдавливания"};
     if (f.extent == doc::ExtentType::ToPlane && untilFace) {
         // Up to a curved face: far enough towards it, then cut off by it.
-        GProp_GProps props;
-        BRepGProp::SurfaceProperties(*untilFace, props);
-        const gp_Pnt c = props.CentreOfMass();
+        // Towards the place where the face was picked (as it is now): the
+        // centre of mass of a curved face can be anywhere — on a cylinder's
+        // axis, in the sketch plane, above a trough's bottom.
+        gp_Pnt c;
+        bool found = false;
+        if (f.toFace.IsSet()) {
+            const Vec3 p = f.toFace.point;
+            try {
+                BRepExtrema_DistShapeShape nearest(BRepBuilderAPI_MakeVertex(gp_Pnt(p.x, p.y, p.z)).Vertex(), *untilFace);
+                if (nearest.IsDone() && nearest.NbSolution() > 0) {
+                    c = nearest.PointOnShape2(1);
+                    found = true;
+                }
+            } catch (const Standard_Failure&) {
+                // the centre of mass below
+            }
+        }
+        if (!found) {
+            GProp_GProps props;
+            BRepGProp::SurfaceProperties(*untilFace, props);
+            c = props.CentreOfMass();
+        }
         const double gap = (Vec3{c.X(), c.Y(), c.Z()} - frame.origin).Dot(frame.normal);
         gp_Vec dir(frame.normal.x, frame.normal.y, frame.normal.z);
         if (gap < 0) dir.Reverse();
@@ -310,23 +335,41 @@ Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const std::vecto
 }
 
 TopoDS_Shape Clean(const TopoDS_Shape& shape) {
-    ShapeUpgrade_UnifySameDomain unify(shape, true, true, true);
+    auto* unify = new ShapeUpgrade_UnifySameDomain(shape, true, true, true);
     // Curved faces next to free-form ones (a cylinder cut by a thread
-    // groove) are left as they are: merging them can take OCCT minutes.
+    // groove), or bounded by an intersection curve of two curved surfaces (a
+    // tube cut by a ring across it), are left as they are: merging them can
+    // take OCCT minutes — or, for the ring, longer than anyone waits.
     TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
     TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
     const auto typeOf = [](const TopoDS_Shape& face) { return BRepAdaptor_Surface(TopoDS::Face(face)).GetType(); };
     const auto freeform = [&](const TopoDS_Shape& face) { return typeOf(face) > GeomAbs_Torus; };
+    const auto intersection = [](const TopoDS_Shape& edge) {
+        const TopoDS_Edge& e = TopoDS::Edge(edge);
+        return !BRep_Tool::Degenerated(e) && BRepAdaptor_Curve(e).GetType() > GeomAbs_Parabola;
+    };
     for (TopExp_Explorer f(shape, TopAbs_FACE); f.More(); f.Next()) {
         if (typeOf(f.Current()) == GeomAbs_Plane) continue;
         bool touches = freeform(f.Current());
-        for (TopExp_Explorer e(f.Current(), TopAbs_EDGE); e.More() && !touches; e.Next())
+        for (TopExp_Explorer e(f.Current(), TopAbs_EDGE); e.More() && !touches; e.Next()) {
+            touches = intersection(e.Current());
             for (const TopoDS_Shape& other : edgeFaces.FindFromKey(e.Current())) touches = touches || freeform(other);
+        }
         if (touches)
-            for (TopExp_Explorer e(f.Current(), TopAbs_EDGE); e.More(); e.Next()) unify.KeepShape(e.Current());
+            for (TopExp_Explorer e(f.Current(), TopAbs_EDGE); e.More(); e.Next()) unify->KeepShape(e.Current());
     }
-    unify.Build();
-    return unify.Shape();
+    // UnifySameDomain itself faults on some shapes (OCCT 7.8: a revolve of a
+    // profile made of hundreds of short lines — SIGSEGV in IntUnifyFaces).
+    // Cleaning is a nicety: on a fault the shape goes on as the boolean or
+    // sweep made it. The half-built object is left alone (leaked), its state
+    // after the jump is not to be trusted even by its destructor.
+    TopoDS_Shape result;
+    if (!guard::RunGuarded([&] { unify->Build(); result = unify->Shape(); })) {
+        log::Warn("Clean: OCCT fault in UnifySameDomain, the shape is left as it is");
+        return shape;
+    }
+    delete unify;
+    return result;
 }
 
 } // namespace bz::kernel::occt

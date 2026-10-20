@@ -130,6 +130,20 @@ void TouchInput::Click(ImVec2 at, int button) {
     Button(button, false);
 }
 
+bool TouchInput::TypeDimensionName(AppContext& app, ImVec2 at) {
+    const MobileState& m = app.shell.mobile;
+    ImGuiIO& io = ImGui::GetIO();
+    const Session* s = app.Doc();
+    if (!m.numpad || !io.WantTextInput || !s) return false;
+    const std::optional<std::string> name = app.sketch.DimensionNameAt(*s, at);
+    if (!name) return false;
+    io.AddInputCharactersUTF8(name->c_str());
+    myQueued = std::max(myQueued, 3);
+    log::Info("Numpad: dimension {} typed into the field", *name);
+    mon::Action("touch", "имя размера в поле");
+    return true;
+}
+
 void TouchInput::Wheel(float dx, float dy) {
     // One wheel step scrolls about five lines of text in ImGui.
     const float step = 5.0f * ImGui::GetTextLineHeightWithSpacing() / std::max(0.1f, myScrollSpeed);
@@ -199,6 +213,7 @@ void TouchInput::BeginFrame(AppContext& app, double now) {
             m.cursorTip = tip;
         }
     }
+    if (!ImGui::GetIO().WantTextInput) m.tipAimed = false;
     RunRowButtons(app);
     PlaceMouse(app);
     m.framesWanted = Busy() ? 2 : 0;
@@ -229,6 +244,13 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
             myQueued = std::max(myQueued, 2);
             return;
         }
+        // The line with the field's text: the caret goes where the finger is.
+        if (Inside(at, m.numpadLineMin, m.numpadLineMax)) {
+            myRoutes[e.id] = Route::NumpadLine;
+            m.caretTapX = at.x;
+            myQueued = std::max(myQueued, 2);
+            return;
+        }
         // Between the keys: the panel drawn under the numpad must not get it.
         if (Inside(at, m.numpadMin, m.numpadMax)) {
             myRoutes[e.id] = Route::Ignored;
@@ -253,7 +275,12 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
     const auto it = myRoutes.find(e.id);
     if (it == myRoutes.end()) return;
     const Route route = it->second;
-    if (route == Route::Numpad) {
+    if (route == Route::NumpadLine) {
+        if (e.action == PointerAction::Move || e.action == PointerAction::Up) {
+            m.caretTapX = at.x;   // dragged along the line: the caret follows
+            myQueued = std::max(myQueued, 2);
+        }
+    } else if (route == Route::Numpad) {
         if (e.action == PointerAction::Up && m.numpadDown >= 0 && m.numpadDown < static_cast<int>(m.numpadKeys.size())) {
             const MobileState::NumpadKey& key = m.numpadKeys[static_cast<std::size_t>(m.numpadDown)];
             // Held backspace already repeated: no extra one on release.
@@ -409,7 +436,9 @@ void TouchInput::ApplyGestures(AppContext& app) {
 
     const float reach = CursorReach(app);
     const float speed = static_cast<float>(app.settings.mobile.cursorSpeed);
+    if (step.cursorFinger) myCursorLast = ToIm(*step.cursorFinger);
     if (step.cursorStarted) {
+        if (step.cursorFinger) myCursorStart = ToIm(*step.cursorFinger);
         m.cursorBefore = m.cursorShown ? m.cursorTip : ImVec2{-1, -1};
         // The precise cursor: with a tip already shown it does not jump under
         // the finger; it moves a part of the finger's travel from where it is.
@@ -446,6 +475,13 @@ void TouchInput::ApplyGestures(AppContext& app) {
     }
     if (step.cursorEnded) {
         m.cursorDragging = false;
+        if (ImGui::GetIO().WantTextInput) {
+            // A value is typed and the drop moved: a dimension tapped with the finger
+            // (the tip stays above the finger) or reached with the tip puts its name
+            // into the field (the author, 20.10: tapping one did nothing).
+            const bool tap = std::hypot(myCursorLast.x - myCursorStart.x, myCursorLast.y - myCursorStart.y) <= mySlop;
+            m.tipAimed = !((tap && TypeDimensionName(app, myCursorLast)) || TypeDimensionName(app, m.cursorTip));
+        }
         // A tap with the precise cursor still puts the tip over the tapped spot.
         if (myRelative && myRelativeTravel <= mySlop && ImGui::GetTime() - myRelativeSince < app.settings.mobile.longPress) {
             m.cursorTip = TipOf(m, myAnchorFinger, reach);
@@ -454,7 +490,7 @@ void TouchInput::ApplyGestures(AppContext& app) {
         myRelative = false;
     }
 
-    if (step.tap) {
+    if (step.tap && !TypeDimensionName(app, ToIm(*step.tap))) {
         Click(ToIm(*step.tap), ImGuiMouseButton_Left);
         mon::Action("touch", "касание");
     }
@@ -489,10 +525,15 @@ void TouchInput::RunRowButtons(AppContext& app) {
     const bool cursor = CursorActive(app) && m.cursorShown;
     if (m.okPressed) {
         m.okPressed = false;
-        if (ImGui::GetIO().WantTextInput) {
+        if (ImGui::GetIO().WantTextInput && cursor && m.tipAimed && TypeDimensionName(app, m.cursorTip)) {
+            // The tip moved onto a dimension while a value is typed: its name goes
+            // into the field (as a tap on it without the cursor); ✓ again enters it.
+            m.tipAimed = false;
+        } else if (ImGui::GetIO().WantTextInput) {
             // A value being typed: ✓ enters it (as ↵), never a click at the tip —
             // that click landed off the field and the value was lost (17.10, the
             // circle's 20 mm). The next ✓ goes on as usual.
+            m.tipAimed = false;
             ImGuiIO& io = ImGui::GetIO();
             if (!m.editingText.empty()) m.previousValue = m.editingText;
             io.AddKeyEvent(ImGuiKey_Enter, true);

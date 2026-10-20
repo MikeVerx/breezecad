@@ -31,6 +31,52 @@ namespace {
 Vec3 ToVec(const gp_Pnt& p) { return {p.X(), p.Y(), p.Z()}; }
 Vec3 ToVec(const gp_Dir& d) { return {d.X(), d.Y(), d.Z()}; }
 
+/// A circle or arc not parallel to the sketch plane. Seen edge-on (its plane
+/// across the sketch plane: the rim of a cylinder looked at from the side) it
+/// covers a line; a whole circle at a slant is an ellipse.
+Expected<ProjectedCurve> ProjectSlantedCircle(const BRepAdaptor_Curve& curve, const gp_Circ& circle, bool closed,
+                                              const Frame& frame) {
+    const Vec3 axis = ToVec(circle.Axis().Direction());
+    const Vec3 centre = ToVec(circle.Location());
+    const double r = circle.Radius();
+    const double facing = std::abs(axis.Dot(frame.normal));
+    // The circle's diameter that stays its full length on the plane.
+    const Vec3 along = axis.Cross(frame.normal).Normalized();
+    ProjectedCurve out;
+    if (facing < 1e-7) {
+        // The extreme positions along that diameter: the ends of the arc and,
+        // if the arc passes them, the points where it turns back.
+        const gp_Ax2& pos = circle.Position();
+        const double cx = ToVec(pos.XDirection()).Dot(along), cy = ToVec(pos.YDirection()).Dot(along);
+        const double t0 = std::atan2(cy, cx);
+        double lo = 1e300, hi = -1e300;
+        const auto take = [&](double t) {
+            const double s = r * (std::cos(t) * cx + std::sin(t) * cy);
+            lo = std::min(lo, s);
+            hi = std::max(hi, s);
+        };
+        const double a = curve.FirstParameter(), b = curve.LastParameter();
+        take(a);
+        take(b);
+        for (const double t : {t0, t0 + kPi})
+            for (int k = -2; k <= 2; ++k)
+                if (const double tk = t + 2 * kPi * k; closed || (tk > a && tk < b)) take(tk);
+        if (hi - lo < 1e-6) return Error{"Дуга смотрит прямо на плоскость эскиза — в проекции точка"};
+        out.kind = ProjectedCurve::Kind::Line;
+        out.start = frame.ToLocal(centre + along * lo);
+        out.end = frame.ToLocal(centre + along * hi);
+        return out;
+    }
+    if (!closed) return Error{"Дуга не параллельна плоскости эскиза — в проекции дуга эллипса (пока не поддерживается)"};
+    // The other axis: the circle's diameter across `along`, shortened by the slant.
+    const Vec3 across = axis.Cross(along).Normalized();
+    out.kind = ProjectedCurve::Kind::Ellipse;
+    out.centre = frame.ToLocal(centre);
+    out.start = frame.ToLocal(centre + along * r);
+    out.end = frame.ToLocal(centre + across * r);
+    return out;
+}
+
 } // namespace
 
 Expected<ProjectedCurve> ProjectEdge(const TopoDS_Edge& edge, const Frame& frame) {
@@ -52,11 +98,10 @@ Expected<ProjectedCurve> ProjectEdge(const TopoDS_Edge& edge, const Frame& frame
         case GeomAbs_Circle: {
             const gp_Circ circle = curve.Circle();
             const double facing = ToVec(circle.Axis().Direction()).Dot(frame.normal);
-            if (std::abs(facing) < 0.9999)
-                return Error{"Окружность не параллельна плоскости эскиза — в проекции эллипс (пока не поддерживается)"};
+            const bool closed = first.IsNull() || BRep_Tool::Pnt(first).Distance(BRep_Tool::Pnt(last)) < 1e-7;
+            if (std::abs(facing) < 0.9999) return ProjectSlantedCircle(curve, circle, closed, frame);
             out.centre = frame.ToLocal(ToVec(circle.Location()));
             out.radius = circle.Radius();
-            const bool closed = first.IsNull() || BRep_Tool::Pnt(first).Distance(BRep_Tool::Pnt(last)) < 1e-7;
             if (closed) {
                 out.kind = ProjectedCurve::Kind::Circle;
                 return out;
@@ -129,8 +174,58 @@ bool AroundAxis(const TopoDS_Face& face, const gp_Ax1& axis) {
 
 Vec3 ToVec(const gp_Vec& v) { return {v.X(), v.Y(), v.Z()}; }
 
+/// A section curve (OCCT gives them as B-splines) that is really a straight
+/// line or an arc on the sketch plane, as that one curve: the meridian of a
+/// sphere or a torus is a circle. As short lines it was hundreds of them —
+/// a heavy sketch, and turning them made a revolve OCCT faulted on.
+std::optional<ProjectedCurve> FitLineOrArc(const BRepAdaptor_Curve& curve, const Frame& frame, double tolerance) {
+    constexpr int steps = 48;
+    std::vector<Vec2> p;
+    for (int i = 0; i <= steps; ++i)
+        p.push_back(frame.ToLocal(ToVec(curve.Value(curve.FirstParameter() + (curve.LastParameter() - curve.FirstParameter()) * i / steps))));
+    const Vec2 a = p.front(), m = p[steps / 2], b = p.back();
+    const bool closed = (b - a).Length() < tolerance;
+    if (!closed && (b - a).Length() > tolerance) {
+        const Vec2 d = (b - a).Normalized();
+        if (std::ranges::all_of(p, [&](Vec2 q) { return std::abs(d.Cross(q - a)) < tolerance; })) {
+            ProjectedCurve line;
+            line.start = a;
+            line.end = b;
+            return line;
+        }
+    }
+    // The circle through three points (for a closed curve: a quarter and three quarters round).
+    const Vec2 q1 = closed ? p[steps / 4] : a, q2 = m, q3 = closed ? p[3 * steps / 4] : b;
+    const double det = 2 * ((q2.x - q1.x) * (q3.y - q1.y) - (q2.y - q1.y) * (q3.x - q1.x));
+    if (std::abs(det) < 1e-12) return std::nullopt;
+    const double s1 = q2.x * q2.x - q1.x * q1.x + q2.y * q2.y - q1.y * q1.y;
+    const double s2 = q3.x * q3.x - q1.x * q1.x + q3.y * q3.y - q1.y * q1.y;
+    const Vec2 c{(s1 * (q3.y - q1.y) - s2 * (q2.y - q1.y)) / det, (s2 * (q2.x - q1.x) - s1 * (q3.x - q1.x)) / det};
+    const double r = (q1 - c).Length();
+    if (!std::ranges::all_of(p, [&](Vec2 q) { return std::abs((q - c).Length() - r) < tolerance; })) return std::nullopt;
+    ProjectedCurve arc;
+    arc.centre = c;
+    arc.radius = r;
+    if (closed) {
+        arc.kind = ProjectedCurve::Kind::Circle;
+        return arc;
+    }
+    arc.kind = ProjectedCurve::Kind::Arc;
+    const auto angle = [&](Vec2 q) { return std::atan2(q.y - c.y, q.x - c.x); };
+    const auto ccwSpan = [](double from, double to) {
+        double d = to - from;
+        while (d < 0) d += 2 * kPi;
+        return d;
+    };
+    arc.start = a;
+    arc.end = b;
+    if (ccwSpan(angle(a), angle(m)) > ccwSpan(angle(a), angle(b))) std::swap(arc.start, arc.end);
+    return arc;
+}
+
 /// Curves of `shape` (section edges) on the sketch plane: lines and circles
-/// as they are, anything else as a chain of short lines.
+/// as they are, curves that are really lines or arcs as those, anything else
+/// as a chain of short lines.
 void AddCurves(const TopoDS_Shape& shape, const Frame& frame, double deflection, std::vector<ProjectedCurve>& out) {
     for (TopExp_Explorer e(shape, TopAbs_EDGE); e.More(); e.Next()) {
         const TopoDS_Edge& edge = TopoDS::Edge(e.Current());
@@ -142,6 +237,10 @@ void AddCurves(const TopoDS_Shape& shape, const Frame& frame, double deflection,
                 continue;
             }
             if (curve.GetType() == GeomAbs_Line) continue;   // seen end-on: a point
+        }
+        if (const std::optional<ProjectedCurve> simple = FitLineOrArc(curve, frame, std::max(deflection * 0.05, 1e-5))) {
+            out.push_back(*simple);
+            continue;
         }
         GCPnts_QuasiUniformDeflection points(curve, deflection);
         if (!points.IsDone() || points.NbPoints() < 2) continue;
@@ -155,6 +254,32 @@ void AddCurves(const TopoDS_Shape& shape, const Frame& frame, double deflection,
             out.push_back(line);
             prev = next;
         }
+    }
+}
+
+bool SameLine(const ProjectedCurve& a, const ProjectedCurve& b) {
+    if (a.kind != ProjectedCurve::Kind::Line || b.kind != ProjectedCurve::Kind::Line) return false;
+    constexpr double tol = 1e-5;
+    return ((a.start - b.start).Length() < tol && (a.end - b.end).Length() < tol) ||
+           ((a.start - b.end).Length() < tol && (a.end - b.start).Length() < tol);
+}
+
+/// The rims of the faces (circles around the axis that are not shared by two
+/// of them) seen edge-on: the lines that close the outline where no flat end
+/// face does it already — a cylinder boss standing on a plate, a cylinder
+/// clicked on its own. Together with the profile's sides they make the
+/// rectangle a cylinder is from the side.
+void AddRims(const TopoDS_Shape& faces, const gp_Ax1& axis, const Frame& frame, std::vector<ProjectedCurve>& out) {
+    TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+    TopExp::MapShapesAndAncestors(faces, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
+    for (int i = 1; i <= edgeFaces.Extent(); ++i) {
+        const TopoDS_Edge& edge = TopoDS::Edge(edgeFaces.FindKey(i));
+        if (BRep_Tool::Degenerated(edge) || edgeFaces(i).Extent() > 1) continue;
+        const BRepAdaptor_Curve c(edge);
+        if (c.GetType() != GeomAbs_Circle || !SameAxis(c.Circle().Axis(), axis)) continue;
+        const Expected<ProjectedCurve> rim = ProjectEdge(edge, frame);
+        if (!rim) continue;
+        if (std::none_of(out.begin(), out.end(), [&](const ProjectedCurve& o) { return SameLine(o, *rim); })) out.push_back(*rim);
     }
 }
 
@@ -275,8 +400,12 @@ Expected<RevolvedProjection> ProjectRevolved(const TopoDS_Shape& body, const Top
             line.start = frame.ToLocal(ToVec(gp_Vec(o.XYZ()) + gp_Vec(a) * (lo - margin)));
             line.end = frame.ToLocal(ToVec(gp_Vec(o.XYZ()) + gp_Vec(a) * (hi + margin)));
             out.axis = line;
-            if (along) AddCurves(meridian, frame, deflection, out.outline);
-            else out.outlineSkipped = true;
+            if (along) {
+                AddCurves(meridian, frame, deflection, out.outline);
+                AddRims(faces, *axis, frame, out.outline);
+            } else {
+                out.outlineSkipped = true;
+            }
         }
 
         // Where the sketch plane cuts the body (if it does, and is not the

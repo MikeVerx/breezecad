@@ -288,3 +288,77 @@ TEST_CASE("hiding a feature is saved, undone and needs no rebuild") {
     history.Redo(plate.doc);
     CHECK(plate.doc.Find(plate.extrudeId)->hidden);
 }
+
+TEST_CASE("renaming a variable renames it in every expression, undo puts it all back") {
+    Plate plate;   // the sketch's width dimension is "width"
+    plate.doc.variables.push_back({"half", "width / 2 + widths", Quantity::Length, 0, {}});
+    plate.doc.variables.push_back({"widths", "1", Quantity::Length, 0, {}});
+    auto* ex = plate.doc.FindAs<ExtrudeFeature>(plate.extrudeId);
+    ex->distance.expression = "width/6 + sqrt(width*width)/60";
+    REQUIRE(plate.doc.EvaluateParameters() == 0);
+    const auto* sk = plate.doc.FindAs<SketchFeature>(plate.sketchId);
+    const std::string sketchBefore = sk->sketch.constraints[5].parameter.expression;
+
+    doc::History history;
+    history.Execute(plate.doc, doc::RenameVariable(0, "w"));
+    CHECK(plate.doc.variables[0].name == "w");
+    CHECK(plate.doc.variables[1].expression == "w / 2 + widths");   // "widths" is another name
+    CHECK(ex->distance.expression == "w/6 + sqrt(w*w)/60");
+    CHECK(plate.doc.EvaluateParameters() == 0);
+    CHECK(ex->distance.value == doctest::Approx(11.0));
+
+    history.Undo(plate.doc);
+    CHECK(plate.doc.variables[0].name == "width");
+    CHECK(plate.doc.variables[1].expression == "width / 2 + widths");
+    CHECK(ex->distance.expression == "width/6 + sqrt(width*width)/60");
+    CHECK(sk->sketch.constraints[5].parameter.expression == sketchBefore);
+    CHECK(plate.doc.EvaluateParameters() == 0);
+}
+
+TEST_CASE("a name that exists but cannot be used is not reported as unknown") {
+    Plate plate;
+    plate.doc.variables.push_back({"a", "a + 1", Quantity::Length, 0, {}});
+    plate.doc.variables.push_back({"b", "c + 1", Quantity::Length, 0, {}});
+    plate.doc.variables.push_back({"c", "b + 1", Quantity::Length, 0, {}});
+    plate.doc.EvaluateParameters();
+    CHECK(plate.doc.variables[1].error.find("сам на себя") != std::string::npos);
+    for (const std::size_t i : {2u, 3u}) {
+        CAPTURE(i);
+        CHECK(plate.doc.variables[i].error.find("Циклическая") != std::string::npos);
+    }
+}
+
+TEST_CASE("a deleted dimension still referenced does not come back under a new one") {
+    Plate plate;   // d1, d2 in the sketch, d3 the extrusion
+    auto* ex = plate.doc.FindAs<ExtrudeFeature>(plate.extrudeId);
+    ex->distance.name = "d9";   // the largest...
+    plate.doc.variables.push_back({"t", "d9 / 2", Quantity::Length, 0, {}});
+    ex->distance.name = "";     // ...is gone, "t" still refers to it
+    CHECK(plate.doc.NextParameterName() == "d10");
+}
+
+TEST_CASE("switching the document units keeps the part the same size, undo restores the texts") {
+    for (const LengthUnit unit : {LengthUnit::Inch, LengthUnit::Centimeter, LengthUnit::Meter}) {
+        CAPTURE(static_cast<int>(unit));
+        Plate plate;   // width 60 (variable), d1 = width, d2 = d1 * 2 / 3, d3 = 10
+        REQUIRE(plate.doc.EvaluateParameters() == 0);
+        auto* ex = plate.doc.FindAs<ExtrudeFeature>(plate.extrudeId);
+        const auto* sk = plate.doc.FindAs<SketchFeature>(plate.sketchId);
+        const double depth = ex->distance.value, height = sk->sketch.constraints[6].parameter.value;
+        UnitSystem other = plate.doc.units;
+        other.length = unit;
+        doc::History history;
+        history.Execute(plate.doc, doc::SetUnits(other));
+        REQUIRE(plate.doc.EvaluateParameters() == 0);
+        CHECK(ex->distance.value == doctest::Approx(depth));
+        CHECK(sk->sketch.constraints[6].parameter.value == doctest::Approx(height));
+        CHECK(plate.doc.variables[0].value == doctest::Approx(60.0));
+        CHECK(ex->distance.expression == "10mm");
+        CHECK(sk->sketch.constraints[6].parameter.expression == "d1 * 2 / 3");   // nothing in it depends on units
+        history.Undo(plate.doc);
+        CHECK(ex->distance.expression == "10");
+        CHECK(plate.doc.variables[0].expression == "60");
+        REQUIRE(plate.doc.EvaluateParameters() == 0);
+        CHECK(ex->distance.value == doctest::Approx(depth));
+    }
+}

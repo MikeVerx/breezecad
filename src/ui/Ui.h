@@ -16,6 +16,10 @@ struct Ui {
     Icons&       icons;
     float        scale = 1.0f;   ///< UI scale: logical pixels per design pixel
     bool         keyHints = true; ///< show keyboard shortcuts on buttons and in menus (off on a touch screen with no keyboard)
+    /// Where the text caret of the value field being typed in should go (a byte
+    /// offset; -1: nowhere). Set by the phone's numpad line, applied once by
+    /// the field (ExpressionField, CommitInput) on its next frame.
+    int          caretRequest = -1;
 
     /// Design pixels -> ImGui coordinates.
     float S(float designPixels) const { return designPixels * scale; }

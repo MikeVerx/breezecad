@@ -49,6 +49,20 @@ Expected<double> EvaluateExpression(std::string_view text,
 /// parameter dependencies and detect cycles.
 std::vector<std::string> ReferencedNames(std::string_view text);
 
+/// `text` with every reference to the name `from` (a whole name, not part
+/// of another or a unit after a number) replaced by `to`: renaming a
+/// variable keeps the expressions that use it working.
+std::string RenameInExpression(std::string_view text, std::string_view from, std::string_view to);
+
+/// `text` rewritten so that it means the same in the document units `to`
+/// as it does in `from`: a plain number that takes the document's length or
+/// angle unit gets the old unit written out ("10" -> "10mm", "(10+5)*2" ->
+/// "((10+5)*2)*1mm"), while plain factors stay plain ("w / 2"). The text is
+/// returned unchanged when nothing in it depends on the units, and as it was
+/// when it cannot be evaluated at all.
+std::string ExpressionInUnits(std::string_view text, Quantity expected, const UnitSystem& from, const UnitSystem& to,
+                              const NameLookup& lookup);
+
 /// True for a valid user variable name: a letter or '_' followed by
 /// letters, digits or '_'; not a unit or function name.
 bool IsValidVariableName(std::string_view name);

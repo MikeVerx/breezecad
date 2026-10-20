@@ -10,6 +10,8 @@
 
 #include <doctest.h>
 
+#include <chrono>
+
 using namespace bz;
 using namespace bz::test;
 using doc::FeatureState;
@@ -281,4 +283,43 @@ TEST_CASE("the operation under a point of the model") {
     CHECK(model.FeatureAt({13, 10, 5}, p.d, p.d.FeatureCount()) == p.hole->id);   // the hole's wall
     CHECK(model.FeatureAt({50, 30, 10}, p.d, p.d.FeatureCount()) == p.d.Features()[1]->id);   // the plate's top
     CHECK_FALSE(model.FeatureAt({500, 0, 0}, p.d, p.d.FeatureCount()));
+}
+
+// A typo must not freeze the program: the limit is on the copies made, so
+// two directions of 1000 each (999 999 copies) are refused like 3000 in one.
+TEST_CASE("a rectangular pattern of 1000 x 1000 is refused, not built") {
+    Plate p;
+    auto& pattern = p.Add<doc::PatternFeature>();
+    pattern.sources = {p.hole->id};
+    pattern.count1.expression = "1000";
+    pattern.spacing1.expression = "0.1";
+    pattern.useDirection2 = true;
+    pattern.count2.expression = "1000";
+    pattern.spacing2.expression = "0.06";
+    const auto start = std::chrono::steady_clock::now();
+    kernel::Model model;
+    model.Rebuild(p.d);
+    CHECK(std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count() < 5);
+    CHECK(pattern.status.state == FeatureState::Error);
+}
+
+TEST_CASE("pattern copies that all land on the original: an error, not a silent no-op") {
+    for (const bool circular : {false, true}) {
+        CAPTURE(circular);
+        Plate p;
+        auto& pattern = p.Add<doc::PatternFeature>();
+        pattern.sources = {p.hole->id};
+        if (circular) {
+            pattern.kind = doc::PatternKind::Circular;
+            pattern.circularCount.expression = "4";
+            pattern.angle.expression = "0";
+        } else {
+            pattern.count1.expression = "4";
+            pattern.spacing1.expression = "0";
+        }
+        kernel::Model model;
+        model.Rebuild(p.d);
+        CHECK(pattern.status.state != FeatureState::Ok);
+        CHECK(model.Volume() == doctest::Approx(kPlate - kHole).epsilon(1e-6));
+    }
 }
