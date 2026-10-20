@@ -801,12 +801,30 @@ std::optional<std::string> SketchEditor::DimensionNameAt(const Session& session,
     if (!f) return std::nullopt;
     const ViewportFrame& vf = *myLastView;
     if (screen.x < vf.min.x || screen.y < vf.min.y || screen.x > vf.max.x || screen.y > vf.max.y) return std::nullopt;
+    // Only the labels, nearest first: HitTest gives the points priority, and on a small
+    // or zoomed-out view a label lies next to a corner — the tap took the point and the
+    // name never went into the field (the emulator, 20.10). The label being typed is
+    // left out, so a tap where two overlap still gives the other one.
     const SketchView view{f->placement.frame, vf};
-    const SketchHit hit = HitTest(f->sketch, view, screen, session.doc.units);
-    if (hit.kind != sketch::EntityKind::Constraint || hit.id == myEditDimension) return std::nullopt;
-    const sketch::Constraint* c = f->sketch.FindConstraint(hit.id);
-    if (!c || !sketch::IsDimensional(c->type) || c->reference || c->parameter.name.empty()) return std::nullopt;
-    return c->parameter.name;
+    const float slack = 4.0f;   // a finger is less exact than the mouse
+    const sketch::Constraint* best = nullptr;
+    float bestDistance = 0;
+    for (const sketch::Constraint& c : f->sketch.constraints) {
+        if (!sketch::IsDimensional(c.type) || c.reference || c.parameter.name.empty() || c.id == myEditDimension) continue;
+        const auto layout = LayoutDimension(f->sketch, c, session.doc.units);
+        if (!layout) continue;
+        const ImVec2 at = view.ToScreen(layout->label);
+        const float halfW = 6.0f + 3.6f * static_cast<float>(layout->text.size()) + slack, halfH = 11.0f + slack;
+        const float dx = std::abs(screen.x - at.x), dy = std::abs(screen.y - at.y);
+        if (dx >= halfW || dy >= halfH) continue;
+        const float d = std::hypot(dx, dy);
+        if (!best || d < bestDistance) {
+            best = &c;
+            bestDistance = d;
+        }
+    }
+    if (!best) return std::nullopt;
+    return best->parameter.name;
 }
 
 std::string SketchEditor::Hint(const Session& session) const {
