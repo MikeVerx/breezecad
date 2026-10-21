@@ -56,6 +56,12 @@ public:
     bool ExportTo(Session& session, ExportFormat format, const std::filesystem::path& target, Notifications& notes,
                   std::string* error = nullptr);
 
+    /// Copies the parts of `session` (an assembly) that do not lie with it
+    /// into its folder (assembly::GatherParts), the copies and problems
+    /// reported in `notes`. False when a copy could not be made.
+    static bool GatherParts(Session& session, const std::filesystem::path& from, const std::filesystem::path& to,
+                            Notifications& notes);
+
     /// Closes without asking (the caller has dealt with unsaved changes).
     void Close(int index);
 

@@ -13,6 +13,7 @@ add_executable(bz_tests
     ${PROJECT_SOURCE_DIR}/src/app/Settings.cpp
     ${PROJECT_SOURCE_DIR}/src/app/mobile/Gestures.cpp
     assembly/AssemblyFileTests.cpp
+    assembly/PartsBesideTests.cpp
     assembly/SolverTests.cpp
     core/CrashCodeTests.cpp
     core/ExpressionTests.cpp

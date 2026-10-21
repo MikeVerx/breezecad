@@ -96,6 +96,16 @@ bool WriteBack(const std::filesystem::path& local);
 /// The local copy for the document `uri` named `name`: the one it already
 /// has, or a new place no other document uses (cache/documents/<n>/).
 std::filesystem::path LocalCopyFor(const std::string& uri, const std::string& name);
+/// Whether `local` is the copy of a document of the projects folder. All of
+/// them lie in one folder (cache/projects/<folder>/), as the documents lie in
+/// theirs: an assembly refers to its parts by name, here as on a computer.
+bool InProjects(const std::filesystem::path& local);
+/// `local`, or — when it stands for a projects-folder document but lies
+/// elsewhere (a copy made by 0.2.3.x) — the copy among the others, made from it.
+std::filesystem::path Settle(const std::filesystem::path& local);
+/// Copies a projects-folder document to `local` again (Import: an empty one
+/// never replaces the copy). Nothing for other files.
+void FetchAgain(const std::filesystem::path& local);
 /// Remembers that `local` stands for the document `uri` (a "save as" answer).
 void Link(const std::filesystem::path& local, const std::string& uri);
 /// Whether `local` stands for a document outside the app (SAF).

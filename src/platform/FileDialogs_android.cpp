@@ -104,6 +104,24 @@ std::optional<fs::path> ShowSaveDialog(const std::string&, const fs::path& sugge
     return local;
 }
 
+fs::path SettledDocument(const fs::path& file) { return android::Settle(file); }
+
+fs::path NewFileBeside(const fs::path& document, const std::string& name) {
+    // The projects folder is flat and the only place a new file reaches.
+    if (!android::InProjects(document)) return {};
+    return android::CreateInProjects(FreeName(name));
+}
+
+bool PartsInSubfolders() { return false; }
+
+std::string BesideProblem(const fs::path& document) {
+    if (android::InProjects(document)) return {};
+    return "Детали сборки сохраняются рядом с ней в папке проектов: выберите папку проектов "
+           "(меню → «Папка проектов…») и сохраните сборку в неё";
+}
+
+void RefreshDocument(const fs::path& file) { android::FetchAgain(file); }
+
 bool FileWritten(const fs::path& file) {
     // A file of the app's own (the cache, a share) has no document elsewhere.
     if (!android::IsImported(file)) return true;

@@ -114,6 +114,11 @@ bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Se
         return false;
     }
     (*loaded)->path = file;
+    // Its parts as they are now in their folder (Android: fetched again from
+    // the projects folder — they may come from a computer).
+    if ((*loaded)->assembly)
+        for (const assembly::Component& c : (*loaded)->assembly->assembly.components)
+            platform::RefreshDocument(assembly::ResolvePartPath(file, c.path));
     sessions.push_back(std::move(*loaded));
     Activate(static_cast<int>(sessions.size()) - 1);
     settings.AddRecent(file);
@@ -149,8 +154,31 @@ bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settin
     return SaveTo(session, target, notes, settings);
 }
 
-bool Workspace::SaveTo(Session& session, const std::filesystem::path& target, Notifications& notes, Settings& settings,
+bool Workspace::GatherParts(Session& session, const std::filesystem::path& from, const std::filesystem::path& to,
+                            Notifications& notes) {
+    if (!session.assembly) return true;
+    assembly::PartFolder folder;
+    folder.newFile = [&to](const std::string& name) { return platform::NewFileBeside(to, name); };
+    folder.written = [](const std::filesystem::path& file) { return platform::FileWritten(file); };
+    folder.subfolders = platform::PartsInSubfolders();
+    const assembly::GatherResult gathered = assembly::GatherParts(session.assembly->assembly, from, to, folder);
+    for (const std::string& p : gathered.problems) notes.Error(Tr(p));
+    if (!gathered.copied.empty()) {
+        std::string names;
+        for (const std::string& n : gathered.copied) names += (names.empty() ? "" : ", ") + n;
+        notes.Info(Trf("Детали скопированы в папку сборки: {}", names));
+        log::Info("Assembly {}: parts copied beside it: {}", ToUtf8(to.filename()), names);
+    }
+    if (!gathered.ok)
+        if (const std::string why = platform::BesideProblem(to); !why.empty()) notes.Error(Tr(why));
+    return gathered.ok;
+}
+
+bool Workspace::SaveTo(Session& session, const std::filesystem::path& requested, Notifications& notes, Settings& settings,
                        std::string* error) {
+    // Android: a projects-folder document whose copy lies apart from the
+    // others (made by 0.2.3.x) is saved beside them from now on.
+    const std::filesystem::path target = platform::SettledDocument(requested);
 #if defined(__ANDROID__)
     // The local copy of a document lives in the app's cache, which the system
     // may clear while the app is away: its folder made again.
@@ -159,8 +187,26 @@ bool Workspace::SaveTo(Session& session, const std::filesystem::path& target, No
         std::filesystem::create_directories(target.parent_path(), ec);
     }
 #endif
+    // An assembly takes its parts along: each one lies in its folder (a part
+    // from elsewhere is copied there), so the folder carried to another
+    // computer or phone opens whole. The paths are then relative to `target`.
+    const std::filesystem::path from = session.path;
+    if (session.assembly) {
+        if (!GatherParts(session, from, target, notes)) {
+            assembly::RebasePaths(session.assembly->assembly, target, from);
+            const std::string message = Tr("Сборка НЕ сохранена: не все её детали удалось положить рядом с ней");
+            if (error) *error = message;
+            notes.Error(message);
+            return false;
+        }
+        session.path = target;   // the paths are relative to it already: written as they are
+    }
     const Status status = session.WriteFile(target, kGenerator);
     if (!status) {
+        if (session.assembly) {
+            assembly::RebasePaths(session.assembly->assembly, target, from);
+            session.path = from;
+        }
         if (error) *error = status.GetError().message;
         notes.Error(Trf("Не удалось сохранить: {}", Tr(status.GetError().message)));
         return false;
