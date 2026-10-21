@@ -25,6 +25,7 @@ add_executable(bz_tests
     document/AppearanceTests.cpp
     document/CorruptFileTests.cpp
     document/DocumentTests.cpp
+    document/SaveTests.cpp
     document/StandardPacksTests.cpp
     kernel/AssemblyModelTests.cpp
     kernel/AutoDropTests.cpp

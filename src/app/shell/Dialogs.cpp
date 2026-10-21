@@ -1111,8 +1111,10 @@ void DrawKeyboardSettings(AppContext& app, float width) {
             nlohmann::json j = nlohmann::json::object();
             for (const Action& a : app.actions.All())
                 if (!a.label.empty() && a.run) j[a.id] = ActionRegistry::ChordText(a.chord);
-            std::ofstream(*file, std::ios::binary) << j.dump(2);
-            app.notes.Success(Tr("Сочетания сохранены"));
+            bool written = static_cast<bool>(std::ofstream(*file, std::ios::binary) << j.dump(2));
+            if (written && !platform::FileWritten(*file)) written = false;
+            if (written) app.notes.Success(Tr("Сочетания сохранены"));
+            else app.notes.Error(Tr("Не удалось записать файл в выбранную папку"));
         }
     }
     ImGui::SameLine(0, ui.S(8));

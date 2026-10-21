@@ -266,6 +266,18 @@ else
 fi
 check dimension-name
 
+# 14d. Saving reaches the document (0.2.3.2: the projects folder kept an empty
+# file, and opening it wiped the work). "Сохранить" into a document outside the
+# app, the empty document of 0.2.3.1 opened again, a document that cannot be written.
+adb logcat -c
+start saveback 25
+if bhas "Saveback: ok"; then
+    echo "step saveback: saved, reopened, an empty document did not wipe the copy ($(blog | grep -o 'Saveback: .*' | tr '\n' ';'))"
+else
+    echo "step saveback: FAILED — $(blog | grep -o 'Saveback: .*' | tr '\n' ';')"; broken=1
+fi
+check saveback
+
 adb logcat -d -s BreezeCAD:* > "$OUT/breezecad.log"
 adb logcat -d '*:E' > "$OUT/errors.log"
 grep -E "OpenGL ES|Window:|ERROR|WARN|test commands" "$OUT/breezecad.log" | head -20
@@ -296,7 +308,7 @@ if [ $failed -ne 0 ] || [ -z "$(alive)" ]; then
     exit 1
 fi
 if [ $broken -ne 0 ]; then
-    echo "a tap check failed (steps 13–15 above)"
+    echo "a check failed (steps 13–15 above)"
     exit 1
 fi
 echo "smoke test passed"

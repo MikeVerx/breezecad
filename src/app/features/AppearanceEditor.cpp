@@ -330,6 +330,10 @@ void AppearanceEditor::WriteIntoParts(AppContext& app, Session& session, const d
                 app.notes.Error(Tr(s.GetError().message));
                 continue;
             }
+            if (!platform::FileWritten(file)) {
+                app.notes.Error(Trf("Не удалось записать деталь «{}» в её папку", name));
+                continue;
+            }
             open->MarkSaved();
             ++written;
             continue;
@@ -342,6 +346,10 @@ void AppearanceEditor::WriteIntoParts(AppContext& app, Session& session, const d
         apply(part->look, list);
         if (const Status s = doc::SaveBzc(*part, file, PartGenerator()); !s) {
             app.notes.Error(Tr(s.GetError().message));
+            continue;
+        }
+        if (!platform::FileWritten(file)) {
+            app.notes.Error(Trf("Не удалось записать деталь «{}» в её папку", name));
             continue;
         }
         ++written;
@@ -617,8 +625,9 @@ void AppearanceEditor::DrawLibrary(AppContext& app, float width) {
         if (ui::LinkButton(ui, "##export-looks", Tr("Экспорт «Моих»…"))) {
             if (const auto file = platform::ShowSaveDialog(Tr("Экспорт внешних видов"), platform::DocumentsDir() / "appearances.zip",
                                                            {{Tr("Пакет внешних видов"), "*.zip"}}, ".zip")) {
-                if (const Status s = myLibrary.Export(myLibrary.Items(), *file); s) app.notes.Success(Tr("Внешние виды сохранены"));
-                else app.notes.Error(Tr(s.GetError().message));
+                if (const Status s = myLibrary.Export(myLibrary.Items(), *file); !s) app.notes.Error(Tr(s.GetError().message));
+                else if (!platform::FileWritten(*file)) app.notes.Error(Tr("Не удалось записать файл в выбранную папку"));
+                else app.notes.Success(Tr("Внешние виды сохранены"));
             }
         }
     }

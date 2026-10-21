@@ -37,7 +37,12 @@ std::optional<std::filesystem::path> ShowSaveDialog(const std::string& title, co
     const std::string result = pfd::save_file(title, ToUtf8(suggested), Flatten(filters)).result();
     if (result.empty()) return std::nullopt;
     std::filesystem::path path = PathFromUtf8(result);
-    if (path.extension() != extension) path += extension;
+    // "Деталь.BZC" is a .bzc already (it became "Деталь.BZC.bzc").
+    std::string typed = ToUtf8(path.extension()), wanted = extension;
+    for (std::string* t : {&typed, &wanted})
+        for (char& ch : *t)
+            if (ch >= 'A' && ch <= 'Z') ch = static_cast<char>(ch - 'A' + 'a');
+    if (typed != wanted) path += PathFromUtf8(extension);
     return path;
 }
 
