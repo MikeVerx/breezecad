@@ -1,4 +1,6 @@
 #pragma once
+
+#include <cstdint>
 // Touch, stylus and mouse on a touch screen (docs/ADR/0004-mobile-touch-ui.md):
 // where each pointer belongs, and what ImGui and the 3D view get from it.
 //
@@ -61,6 +63,10 @@ private:
     void ApplyGestures(AppContext& app);
     void RunRowButtons(AppContext& app);
     void PlaceMouse(AppContext& app);
+    /// «Зажать»: the left button down at the cursor's tip / up again there
+    /// (`putBack`: what the hold changed is undone).
+    void StartHold(AppContext& app);
+    void EndHold(AppContext& app, bool putBack);
 
     // ImGui's input queue, with the touch screen as the mouse's source.
     void Pos(ImVec2 at, ImGuiMouseSource source = ImGuiMouseSource_TouchScreen);
@@ -96,6 +102,11 @@ private:
     bool   myPenButton = false;   ///< its button held at the touch: right click or a frame
     bool   myPenFraming = false;
     int    myQueued = 0;          ///< frames still needed for queued clicks
+    // «Зажать»
+    std::uint64_t  myHoldRevision = 0;        ///< the document's content when the hold began
+    const void*    myHoldSession = nullptr;   ///< the document held in (another one shown: let go)
+    std::uint64_t  myPutBackFrom = 0;         ///< ✕ while holding: undo when the content moved from this…
+    int            myPutBackIn = 0;           ///< …this many frames later (the release is taken first)
     float  mySlop = 10.0f;        ///< the user's tap slop (dp)
     float  myScrollSpeed = 1.0f;
     // The numpad (its keys are not ImGui items: see mobile/Numpad.cpp)

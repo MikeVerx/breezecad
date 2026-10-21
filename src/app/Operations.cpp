@@ -497,6 +497,14 @@ void DeletePressed(AppContext& app) {
     }
 }
 
+bool CanDelete(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s || app.ops.Active()) return false;
+    if (s->mode == EditMode::Sketch) return app.sketch.HasSelection();
+    if (s->assembly) return s->assembly->selected.IsValid();
+    return s->selectedFeature && s->doc.Find(s->selectedFeature);
+}
+
 void SetTheme(AppContext& app, ThemeChoice theme) {
     app.settings.theme = theme;
 }

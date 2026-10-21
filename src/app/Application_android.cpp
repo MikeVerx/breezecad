@@ -322,6 +322,19 @@ void Application::RunTestCommands() {
             mobile::OpenLayoutEditor(*myContext);
         } else if (c == "home") {
             // Nothing: the home page as it opens, but a test run (no first-start setup over it).
+        } else if (c == "holdtest") {
+            // «Зажать» (smoke-apk.sh): a line chosen in the sketch, the cursor on and
+            // off the line — the hold takes the chosen line and it follows the tip.
+            if (Session* s = myWorkspace.Active(); s && s->mode == EditMode::Sketch) {
+                myContext->sketch.MakeHoldTest(*s);
+                myActions.Run("view.fit");
+                mobile::MobileState& m = myShell.mobile;
+                m.cursorInSketch = true;
+                m.cursorShown = true;
+                m.cursorTip = {(m.viewMin.x + m.viewMax.x) / 2, (m.viewMin.y + m.viewMax.y) / 2 + 40};
+                m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + mobile::CursorReach(*myContext)};
+                log::Info("Touch: drop at {:.0f},{:.0f}", m.cursorFinger.x, m.cursorFinger.y);
+            }
         } else if (c == "setup") {
             mobile::StartSetup(*myContext);
         } else if (c == "saveback") {

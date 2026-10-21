@@ -336,6 +336,7 @@ void SketchEditor::DeleteSelection(Session& session) {
     doc::SketchFeature* f = Active(session);
     if (!f || mySelection.empty()) return;
     auto before = f->Clone();
+    log::Info("Sketch: {} deleted", mySelection.size());
     for (ObjectId id : mySelection) f->sketch.Remove(id);
     f->PruneProjections();
     mySelection.clear();
@@ -532,6 +533,23 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
             myPressedOnEntity = false;
         myDragEntity = myHover.id;
         if (cursor) myDragStart = *cursor;
+        myGrabbed = false;
+        if (!myHover && myGrabSelection) {
+            for (const ObjectId id : mySelection) {
+                const sketch::EntityKind kind = f->sketch.KindOf(id);
+                const sketch::Constraint* c = f->sketch.FindConstraint(id);
+                const bool draggable = kind == sketch::EntityKind::Point || kind == sketch::EntityKind::Line ||
+                                       kind == sketch::EntityKind::Circle || kind == sketch::EntityKind::Arc ||
+                                       (c && sketch::IsDimensional(c->type));
+                if (!draggable) continue;
+                myPressedOnEntity = true;
+                myDragEntity = id;
+                myBoxStart.reset();
+                myGrabbed = true;
+                break;
+            }
+        }
+        myGrabSelection = false;
     }
 
     // Double click on a text: its panel, to change the words and the format.
@@ -624,6 +642,7 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
         myBoxStart.reset();
         if (myDragging) {
             const bool label = f->sketch.FindConstraint(myDragEntity) != nullptr;
+            if (cursor) log::Info("Sketch: moved by {:.1f},{:.1f}{}", (*cursor - myDragStart).x, (*cursor - myDragStart).y, myGrabbed ? " (the selection, grabbed)" : "");
             session.CommitInPlaceEdit(std::move(myDragBefore), label ? Tr("Перемещение размера") : Tr("Перемещение в эскизе"));
         } else if (myHover) {
             // Click: select; Shift or Ctrl add to the selection. The phone has no Ctrl:
@@ -633,11 +652,12 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
                 if (mySelection.count(myHover.id)) mySelection.erase(myHover.id);
                 else mySelection.insert(myHover.id);
             }
-        } else if (!io.KeyShift && !io.KeyCtrl) {
+        } else if (!io.KeyShift && !io.KeyCtrl && !myGrabbed) {   // a grab let go unmoved keeps the choice
             mySelection.clear();
         }
         myDragging = false;
         myPressedOnEntity = false;
+        myGrabbed = false;
         myDragOrigins.clear();
     }
     (void)app;
@@ -793,6 +813,16 @@ void SketchEditor::MakeDimensionTest(Session& session) {
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
     if (const sketch::Constraint* c = sk.FindConstraint(last)) StartInlineEdit(*c);
     myLogLabels = true;
+}
+
+void SketchEditor::MakeHoldTest(Session& session) {
+    doc::SketchFeature* f = Active(session);
+    if (!f) return;
+    IdGenerator& ids = session.doc.Ids();
+    const ObjectId a = f->sketch.AddPoint(ids, {-15, -5}), b = f->sketch.AddPoint(ids, {15, 5});
+    const ObjectId line = f->sketch.AddLine(ids, a, b);
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    mySelection = {line};
 }
 
 std::optional<std::string> SketchEditor::DimensionNameAt(const Session& session, ImVec2 screen) const {

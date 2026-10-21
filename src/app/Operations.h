@@ -84,6 +84,8 @@ void EscapePressed(AppContext& app);
 void CancelPressed(AppContext& app);
 void EnterPressed(AppContext& app);
 void DeletePressed(AppContext& app);
+/// Whether DeletePressed has something to delete now (the phone's «Удалить» greys out otherwise).
+bool CanDelete(AppContext& app);
 
 void SetTheme(AppContext& app, ThemeChoice theme);
 

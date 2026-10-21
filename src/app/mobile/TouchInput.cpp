@@ -4,6 +4,7 @@
 #include "app/features/OperationEditors.h"
 #include "app/mobile/MobileLayout.h"
 #include "app/sketch/SketchEditor.h"
+#include "core/I18n.h"
 #include "core/Log.h"
 #include "core/Monitor.h"
 
@@ -234,6 +235,19 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
     }
     // A finger.
     myMouseInUse = false;
+    if (e.action == PointerAction::Down && m.holding) {
+        // Held: «Зажать» or ✓ lets go where the tip is, ✕ puts it back. They are
+        // taken here, before the panel: the mouse must not jump to the button
+        // with the thing still held (it would follow it there).
+        const auto on = [&at](const float* b) { return at.x >= b[0] && at.y >= b[1] && at.x < b[2] && at.y < b[3]; };
+        if (on(m.holdBox) || on(m.okBox) || on(m.cancelBox)) {
+            myRoutes[e.id] = Route::Ignored;
+            EndHold(app, on(m.cancelBox));
+            return;
+        }
+        // Any other panel: let go first, then the touch goes on as usual.
+        if (UiAt(at) || !Inside(at, m.viewMin, m.viewMax)) EndHold(app, false);
+    }
     if (e.action == PointerAction::Down && m.numpad && myNumpadId < 0) {
         for (std::size_t i = 0; i < m.numpadKeys.size(); ++i) {
             if (!Inside(at, m.numpadKeys[i].min, m.numpadKeys[i].max)) continue;
@@ -490,11 +504,13 @@ void TouchInput::ApplyGestures(AppContext& app) {
         myRelative = false;
     }
 
-    if (step.tap && !TypeDimensionName(app, ToIm(*step.tap))) {
+    if (step.tap && m.holding) {
+        // Held: a tap on the view is not a click somewhere else (the held thing would jump there).
+    } else if (step.tap && !TypeDimensionName(app, ToIm(*step.tap))) {
         Click(ToIm(*step.tap), ImGuiMouseButton_Left);
         mon::Action("touch", "касание");
     }
-    if (step.longPress) {
+    if (step.longPress && !m.holding) {
         const ImVec2 at = CursorActive(app) ? m.cursorTip : ToIm(*step.longPress);
         Click(at, ImGuiMouseButton_Right);   // the context menu
         mon::Action("touch", "зажатие");
@@ -520,8 +536,69 @@ void TouchInput::ApplyGestures(AppContext& app) {
     m.gestures = step;
 }
 
+void TouchInput::StartHold(AppContext& app) {
+    MobileState& m = app.shell.mobile;
+    Session* s = app.Doc();
+    if (!s || m.holding) return;
+    if (!(CursorActive(app) && m.cursorShown)) {
+        app.notes.Info(Tr("«Зажать» держит то, что под кончиком курсора: включите курсор"));
+        return;
+    }
+    if (m.boxMode) {   // a frame half made: dropped, the hold takes the button
+        if (m.boxHeld) Button(ImGuiMouseButton_Left, false);
+        m.boxMode = m.boxHeld = false;
+    }
+    myHoldRevision = s->ContentRevision();
+    myHoldSession = s;
+    // Nothing under the tip but something chosen: that is what follows (the
+    // author's case: a line chosen with ✓, the tip moved off it, «Зажать»).
+    app.sketch.GrabSelection(true);
+    Pos(m.cursorTip);
+    Button(ImGuiMouseButton_Left, true);
+    m.holding = true;
+    log::Info("Hold: on at {:.0f},{:.0f}", m.cursorTip.x, m.cursorTip.y);
+    mon::Action("touch", "зажать");
+}
+
+void TouchInput::EndHold(AppContext& app, bool putBack) {
+    MobileState& m = app.shell.mobile;
+    if (!m.holding) return;
+    m.holding = false;
+    Pos(m.cursorTip);
+    Button(ImGuiMouseButton_Left, false);
+    app.sketch.GrabSelection(false);
+    if (putBack) {
+        // The release is taken first (it commits the move, the fence…): undone
+        // once it is, if the content changed during the hold.
+        myPutBackFrom = myHoldRevision;
+        myPutBackIn = 4;
+        myQueued = std::max(myQueued, 6);
+    }
+    myHoldSession = nullptr;
+    log::Info("Hold: let go at {:.0f},{:.0f}{}", m.cursorTip.x, m.cursorTip.y, putBack ? ", put back" : "");
+    mon::Action("touch", putBack ? "отпустить с отменой" : "отпустить");
+}
+
 void TouchInput::RunRowButtons(AppContext& app) {
     MobileState& m = app.shell.mobile;
+    // Held, and the cursor went off or another document is shown: let go.
+    if (m.holding && (!(CursorActive(app) && m.cursorShown) || app.Doc() != myHoldSession)) EndHold(app, false);
+    if (myPutBackIn > 0 && --myPutBackIn == 0) {
+        if (Session* s = app.Doc(); s && s->ContentRevision() != myPutBackFrom) {
+            log::Info("Hold: put back (undo)");
+            app.Later([&app] { app.actions.Run("edit.undo"); });
+        }
+    }
+    if (m.deletePressed) {
+        m.deletePressed = false;
+        mon::Action("touch", "удалить");
+        app.Later([&app] { DeletePressed(app); });
+    }
+    if (m.holdPressed) {
+        m.holdPressed = false;
+        if (m.holding) EndHold(app, false);
+        else StartHold(app);
+    }
     const bool cursor = CursorActive(app) && m.cursorShown;
     if (m.okPressed) {
         m.okPressed = false;

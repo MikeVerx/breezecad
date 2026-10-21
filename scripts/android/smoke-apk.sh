@@ -278,6 +278,36 @@ else
 fi
 check saveback
 
+# 14e. «Зажать» and «Удалить» (22.10.2026): a line chosen, the cursor's tip off it; «Зажать» takes
+# the chosen line, the drop dragged — the line follows; «Зажать» again lets go (one move); «Удалить»
+# deletes the line.
+adb logcat -c
+start new,sketch,holdtest 25
+sleep 2
+read -r hx hy hw hh < <(blog | sed -n 's/.*Touch: row2 delete at [0-9-]*,[0-9-]* hold at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' | tail -1)
+read -r ex ey < <(blog | sed -n 's/.*Touch: row2 delete at \([0-9-]*\),\([0-9-]*\) hold.*/\1 \2/p' | tail -1)
+read -r fx fy < <(blog | sed -n 's/.*Touch: drop at \([0-9-]*\),\([0-9-]*\).*/\1 \2/p' | tail -1)
+if [ -n "${hh:-}" ] && [ -n "${fy:-}" ]; then
+    adb shell input tap $(dp $(( hx + hw / 2 ))) $(dp $(( hy + hh / 2 )))
+    sleep 2
+    shot 14e-hold-on 1
+    adb shell input swipe $(dp $fx) $(dp $fy) $(dp $(( fx + 40 ))) $(dp $(( fy - 30 ))) 900
+    sleep 2
+    adb shell input tap $(dp $(( hx + hw / 2 ))) $(dp $(( hy + hh / 2 )))
+    sleep 2
+    shot 14e-hold-moved 1
+    adb shell input tap $(dp $(( ex + hw / 2 ))) $(dp $(( ey + hh / 2 )))
+    sleep 2
+    if bhas "Hold: on" && bhas "Hold: let go" && bhas "Sketch: moved by .*grabbed" && bhas "Sketch: 1 deleted"; then
+        echo "step hold: held, the chosen line followed the tip, let go, deleted ($(blog | grep -o -E '(Hold|Sketch): .*' | tr '\n' ';'))"
+    else
+        echo "step hold: FAILED — $(blog | grep -o -E '(Hold|Sketch|Touch: finger).*' | tail -12 | tr '\n' ';')"; broken=1
+    fi
+else
+    echo "step hold: FAILED — no row or drop in the log"; broken=1
+fi
+check hold
+
 adb logcat -d -s BreezeCAD:* > "$OUT/breezecad.log"
 adb logcat -d '*:E' > "$OUT/errors.log"
 grep -E "OpenGL ES|Window:|ERROR|WARN|test commands" "$OUT/breezecad.log" | head -20

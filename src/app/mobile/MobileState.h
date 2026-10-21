@@ -57,6 +57,17 @@ struct MobileState {
     bool okPressed = false;       ///< a click at the cursor's tip (cursor on) or "confirm" (off)
     bool okLongPressed = false;   ///< confirm the operation, cursor or not
     bool cancelPressed = false;
+    bool deletePressed = false;   ///< «Удалить» (the Delete key)
+    bool holdPressed = false;     ///< «Зажать» tapped (taken on or off next frame)
+
+    // --- «Зажать»: the left button held down at the cursor's tip (22.10.2026) ---
+    // What a held mouse button does on a computer, with the cursor: what is
+    // under the tip (or the selection) follows it, the trim tool draws its
+    // fence. «Зажать» again or ✓ lets go where the tip is; ✕ puts it back.
+    bool holding = false;
+    float holdBox[4] = {};         ///< the row's «Зажать», ✓ and ✕ (x0 y0 x1 y1 each): a touch on
+    float okBox[4] = {};           ///< them while holding is taken before the panel (the mouse
+    float cancelBox[4] = {};       ///< must not jump to the button with the thing held)
 
     // --- This frame's gestures over the view (applied by the viewport) ---
     GestureStep gestures;

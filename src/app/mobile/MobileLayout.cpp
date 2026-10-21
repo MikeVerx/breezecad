@@ -265,8 +265,11 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
     // Content, then the numpad when a value is typed, the row, the beard.
     const float bottom = pos.y + size.y - m.insets.bottom;   // the row is the block's bottom (no beard)
     const float rowTop = bottom - ui.S(kRow);
+    // Above it a second row: «Удалить» over ✕, «Зажать» over ✓ (22.10.2026);
+    // the places over the frame and the cursor are kept for buttons to come.
+    const float row2Top = rowTop - ui.S(kRow);
     const float padH = m.numpad ? NumpadHeight(ui) : 0.0f;
-    const float contentH = rowTop - padH - y;
+    const float contentH = row2Top - padH - y;
     // The numpad takes the block when there is no room for both (a low phone
     // screen). The content is drawn anyway, at full height, under it: the value
     // being typed lives in a field there, and a field ImGui does not see for a
@@ -276,7 +279,7 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
     const bool room = contentH >= ui.S(40);
     {
         const ImVec2 cp{pos.x + pad, y};
-        BeginArea("##block1-content", cp, {size.x - pad - 1, room ? contentH : rowTop - y}, c.panel, true);
+        BeginArea("##block1-content", cp, {size.x - pad - 1, room ? contentH : row2Top - y}, c.panel, true);
         const float width = size.x - pad - 1;
         switch (m.block1Tab) {
             case 0:
@@ -303,7 +306,7 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
         }
         EndArea();
     }
-    if (m.numpad) DrawNumpad(app, {pos.x + ui.S(4) + pad, rowTop - padH + ui.S(2)}, {size.x - ui.S(8) - pad, padH - ui.S(4)});
+    if (m.numpad) DrawNumpad(app, {pos.x + ui.S(4) + pad, row2Top - padH + ui.S(2)}, {size.x - ui.S(8) - pad, padH - ui.S(4)});
     else m.numpadKeys.clear();
 
     // The row: from the screen's edge to the model — frame · cursor · cancel · OK.
@@ -352,12 +355,14 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
                     }
                     break;
                 case 2:
+                    m.cancelBox[0] = p.x, m.cancelBox[1] = p.y, m.cancelBox[2] = p.x + w, m.cancelBox[3] = p.y + h;
                     DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, false, false, true, &clicked, nullptr);
                     if (clicked) m.cancelPressed = true;
                     break;
                 default:
                 {
                     const OperationEditor* op = app.ops.Active();
+                    m.okBox[0] = p.x, m.okBox[1] = p.y, m.okBox[2] = p.x + w, m.okBox[3] = p.y + h;
                     // Green only when a tap applies: with the cursor on, ✓ is the cursor's click.
                     const bool ready = op && op->HasApply() && !m.boxMode && !(cursorOn && m.cursorShown) && op->Ready(session);
                     DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, m.boxHeld, true, true, &clicked, &held, ready);
@@ -367,6 +372,34 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
                     if (held) m.okLongPressed = true;   // a long press confirms the operation, cursor or not
                     break;
             }
+        }
+    }
+
+    // The second row: «Удалить» over ✕, «Зажать» over ✓ — mirrored with the rest for the left hand.
+    {
+        const float w = (size.x - pad - ui.S(8)) / 4.0f;
+        const float h = ui.S(kRow);
+        const auto placeOf = [&](int i) {
+            const int place = onLeft ? i : 3 - i;
+            return ImVec2{pos.x + pad + ui.S(4) + static_cast<float>(place) * w, row2Top};
+        };
+        bool clicked = false;
+        const ImVec2 del = placeOf(2);
+        DrawRowButton(app, "##row-delete", "ui-trash", Tr("Удалить"), del, {w, h}, false, false, CanDelete(app), &clicked, nullptr);
+        if (clicked) m.deletePressed = true;
+        // An open palm; a fist while it holds.
+        const ImVec2 hold = placeOf(3);
+        m.holdBox[0] = hold.x, m.holdBox[1] = hold.y, m.holdBox[2] = hold.x + w, m.holdBox[3] = hold.y + h;
+        clicked = false;
+        DrawRowButton(app, "##row-hold", m.holding ? "ui-hand-grab" : "ui-hand-open", Tr("Зажать"), hold, {w, h}, m.holding, false, true,
+                      &clicked, nullptr);
+        if (clicked) m.holdPressed = true;
+        // For the emulator's check (smoke-apk.sh): where the two are, written when they move.
+        static std::string logged;
+        if (const std::string place = std::format("{:.0f},{:.0f} {:.0f},{:.0f} {:.0f}x{:.0f}", del.x, del.y, hold.x, hold.y, w, h);
+            place != logged) {
+            logged = place;
+            log::Info("Touch: row2 delete at {:.0f},{:.0f} hold at {:.0f},{:.0f} size {:.0f}x{:.0f}", del.x, del.y, hold.x, hold.y, w, h);
         }
     }
 
@@ -392,6 +425,12 @@ StatusText Status(AppContext& app, Session& session) {
               : session.mode == EditMode::Sketch ? Tr("Эскиз")
               : session.mode == EditMode::PickPlane ? Tr("Выбор плоскости")
               : app.shell.ribbonTab == RibbonTab::View ? Tr("Вид") : Tr("3D-модель");
+    if (m.holding) {
+        st.icon = "ui-hand-grab";
+        st.main = Tr("Зажато: ведёт кончик курсора — «Зажать» или ✓ отпустить, ✕ вернуть");
+        st.mode.clear();
+        return st;
+    }
     if (CursorActive(app) && m.cursorShown && m.boxMode) {
         st.icon = "ui-frame";
         st.main = m.boxHeld ? Tr("Рамка: второй угол — ОК") : Tr("Рамка: первый угол — ОК");
