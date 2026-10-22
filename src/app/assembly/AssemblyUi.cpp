@@ -436,6 +436,9 @@ ObjectId PlaceFile(AppContext& app, Session& session, const std::filesystem::pat
 
     Component& c = st.assembly.AddComponent(assembly::RelativePartPath(session.path, file), "Деталь");
     const ObjectId id = c.id;
+    // A part from elsewhere is copied beside a saved assembly at once, so that
+    // "Открыть деталь" opens the copy it will use (a new assembly: at its first save).
+    if (!session.path.empty()) Workspace::GatherParts(session, session.path, session.path, app.notes);
     st.geometry.Update(st.assembly, session.path, &st.problems);
     Component& placed = *st.assembly.FindComponent(id);
     {

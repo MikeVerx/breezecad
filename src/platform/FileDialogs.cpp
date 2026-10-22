@@ -46,4 +46,23 @@ std::optional<std::filesystem::path> ShowSaveDialog(const std::string& title, co
     return path;
 }
 
+std::filesystem::path SettledDocument(const std::filesystem::path& file) { return file; }
+
+std::filesystem::path NewFileBeside(const std::filesystem::path& document, const std::string& name) {
+    const std::filesystem::path folder = document.parent_path();
+    const std::filesystem::path wanted = PathFromUtf8(name);
+    std::error_code ec;
+    if (!std::filesystem::exists(folder / wanted, ec)) return folder / wanted;
+    const std::string stem = ToUtf8(wanted.stem()), ext = ToUtf8(wanted.extension());
+    for (int n = 2;; ++n)
+        if (const auto candidate = folder / PathFromUtf8(stem + " (" + std::to_string(n) + ")" + ext); !std::filesystem::exists(candidate, ec))
+            return candidate;
+}
+
+bool PartsInSubfolders() { return true; }
+
+std::string BesideProblem(const std::filesystem::path&) { return {}; }
+
+void RefreshDocument(const std::filesystem::path&) {}
+
 } // namespace bz::platform

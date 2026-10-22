@@ -6,8 +6,11 @@
 #include "document/JsonIO.h"
 
 #include <array>
-#include <map>
 #include <format>
+#include <fstream>
+#include <iterator>
+#include <map>
+#include <optional>
 #include <utility>
 
 namespace bz::assembly {
@@ -333,6 +336,119 @@ std::filesystem::path ResolvePartPath(const std::filesystem::path& assemblyFile,
 
 void RebasePaths(Assembly& assembly, const std::filesystem::path& oldFile, const std::filesystem::path& newFile) {
     for (Component& c : assembly.components) c.path = RelativePartPath(newFile, ResolvePartPath(oldFile, c.path));
+}
+
+namespace {
+
+namespace fs = std::filesystem;
+
+/// The same place however written ("a/../b", a link, the letter case on Windows).
+fs::path Settled(const fs::path& p) {
+    std::error_code ec;
+    fs::path out = fs::weakly_canonical(p, ec);
+    if (ec) out = fs::absolute(p, ec).lexically_normal();
+    return out;
+}
+
+std::optional<std::string> Bytes(const fs::path& file) {
+    std::ifstream in(file, std::ios::binary);
+    if (!in) return std::nullopt;
+    return std::string(std::istreambuf_iterator<char>(in), {});
+}
+
+bool EndsWith(std::string_view text, std::string_view tail) {
+    return text.size() >= tail.size() && text.substr(text.size() - tail.size()) == tail;
+}
+
+} // namespace
+
+std::string CopyName(const fs::path& part, const fs::path& assemblyFile, const fs::path& previousAssemblyFile) {
+    std::string stem = ToUtf8(part.stem());
+    const std::string assembly = ToUtf8(assemblyFile.stem());
+    // A copy made for this assembly or the one it was saved as before: its part's own name.
+    for (const fs::path& a : {assemblyFile, previousAssemblyFile}) {
+        if (a.empty()) continue;
+        const std::string tail = " - " + ToUtf8(a.stem());
+        if (EndsWith(stem, tail) && stem.size() > tail.size()) {
+            stem.resize(stem.size() - tail.size());
+            break;
+        }
+    }
+    std::string ext = ToUtf8(part.extension());
+    if (ext.empty()) ext = ".bzc";
+    return stem + " - " + assembly + ext;
+}
+
+bool LiesWith(const fs::path& assemblyFile, const fs::path& part, bool subfolders) {
+    if (assemblyFile.empty()) return false;
+    const fs::path folder = Settled(assemblyFile).parent_path();
+    const fs::path file = Settled(part);
+    if (!subfolders) return file.parent_path() == folder;
+    const fs::path relative = file.lexically_relative(folder);
+    return !relative.empty() && *relative.begin() != "..";
+}
+
+GatherResult GatherParts(Assembly& assembly, const fs::path& from, const fs::path& to, const PartFolder& folder) {
+    GatherResult result;
+    std::map<std::string, fs::path> copies;   // source (settled) -> its copy; equal components share it
+    // Parts already with the assembly: a copy among them with the same content is used again.
+    std::vector<fs::path> with;
+    for (const Component& c : assembly.components)
+        if (const fs::path file = ResolvePartPath(from, c.path); LiesWith(to, file, folder.subfolders)) with.push_back(file);
+
+    for (Component& c : assembly.components) {
+        const fs::path source = ResolvePartPath(from, c.path);
+        if (LiesWith(to, source, folder.subfolders)) {
+            c.path = RelativePartPath(to, source);
+            continue;
+        }
+        const std::string key = ToUtf8(Settled(source));
+        if (const auto done = copies.find(key); done != copies.end()) {
+            c.path = RelativePartPath(to, done->second);
+            continue;
+        }
+        const std::optional<std::string> bytes = Bytes(source);
+        if (!bytes || bytes->empty()) {
+            // Not there (or empty): nothing to copy. The component keeps
+            // pointing where it did; the assembly shows the part missing.
+            result.problems.push_back(std::format("Деталь «{}» не найдена и не скопирована к сборке: {}",
+                                                  ToUtf8(source.stem()), ToUtf8(source)));
+            c.path = RelativePartPath(to, source);
+            continue;
+        }
+        const std::string name = CopyName(source, to, from);
+        fs::path copy;
+        // A copy made at an earlier save ("Вал - Узел.bzc", "Вал - Узел (2).bzc"), unchanged since.
+        const std::string copyStem = ToUtf8(PathFromUtf8(name).stem());
+        for (const fs::path& f : with)
+            if (const std::string n = ToUtf8(f.stem()); (n == copyStem || n.starts_with(copyStem + " (")) && Bytes(f) == bytes) {
+                copy = f;
+                break;
+            }
+        if (copy.empty()) {
+            copy = folder.newFile ? folder.newFile(name) : fs::path{};
+            bool done = !copy.empty();
+            if (done) {
+                std::ofstream out(copy, std::ios::binary | std::ios::trunc);
+                out.write(bytes->data(), static_cast<std::streamsize>(bytes->size()));
+                out.close();
+                done = static_cast<bool>(out);
+            }
+            if (done && folder.written) done = folder.written(copy);
+            if (!done) {
+                result.ok = false;
+                result.problems.push_back(std::format("Не удалось скопировать деталь «{}» в папку сборки", ToUtf8(source.stem())));
+                c.path = RelativePartPath(to, source);
+                continue;
+            }
+            result.copied.push_back(ToUtf8(copy.filename()));
+            with.push_back(copy);
+        }
+        copies[key] = copy;
+        c.path = RelativePartPath(to, copy);
+    }
+    assembly.Touch();
+    return result;
 }
 
 } // namespace bz::assembly

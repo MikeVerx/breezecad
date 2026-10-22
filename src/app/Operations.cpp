@@ -12,6 +12,7 @@
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
 #include "app/assembly/AssemblyUi.h"
+#include "assembly/AssemblyFile.h"
 #include "document/DocumentTypes.h"
 #include "document/StandardPacks.h"
 #include "document/StandardParts.h"
@@ -173,6 +174,9 @@ void RecoverDocument(AppContext& app, const RecoverableDocument& rec) {
     app.workspace.sessions.push_back(std::move(*loaded));
     app.workspace.Activate(static_cast<int>(app.workspace.sessions.size()) - 1);
     Session& s = *app.workspace.sessions.back();
+    // The copy's components refer to their parts from the autosave folder:
+    // from the original's place again (else none of them was found).
+    if (s.assembly) assembly::RebasePaths(s.assembly->assembly, rec.copy, rec.original);
     s.path = rec.original;
     s.untitledName = rec.title;
     // The recovered state is not in the original file.
