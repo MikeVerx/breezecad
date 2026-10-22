@@ -12,6 +12,8 @@
 #include "core/Math.h"
 #include "document/Appearance.h"
 
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -27,6 +29,12 @@ struct ComponentProperties {
 
     bool operator==(const ComponentProperties&) const = default;
 };
+
+/// The assembly's own origin (planes XY/XZ/YZ, axes, centre) as a fixed
+/// "component" constraints can tie to: never moves, has no part file, is
+/// not in `Assembly::components`. Its geometry is named by `GeometryRef::element`
+/// with the ids of doc::origin.
+inline constexpr ObjectId kAssemblyOrigin{~std::uint64_t{0}};
 
 struct Component {
     ObjectId            id;
@@ -48,8 +56,17 @@ enum class GeometryKind : unsigned char {
     Circle,     ///< a circular edge: centre + axis (the axis of "Вставка", the plane through the centre)
 };
 
+/// Where a constraint's geometry was taken from: decides how it is found
+/// again when the part changes.
+enum class PickSource : unsigned char {
+    Face,      ///< a face (its plane, axis...); found again by the pick point
+    Edge,      ///< an edge: a straight one gives an axis (a line), a round one a circle
+    Vertex,    ///< a corner of the body: a point
+    Element,   ///< a named element of the part: an origin plane/axis/point or a work feature (`element`)
+};
+
 struct GeometryRef {
-    ObjectId     component;
+    ObjectId     component;   ///< or kAssemblyOrigin
     GeometryKind kind = GeometryKind::Plane;
     Vec3         origin;           ///< point (plane, axis, circle centre...)
     Vec3         direction;        ///< normal or axis, unit; zero for a point
@@ -58,8 +75,13 @@ struct GeometryRef {
     /// Joints: the frame's X, across `direction` (part coordinates). Zero:
     /// one made from `direction` (see JointFrameX).
     Vec3         reference{};
+    PickSource   source = PickSource::Face;
+    /// PickSource::Element: doc::origin id (1..7) or the id of a work plane,
+    /// axis or point in the part (for kAssemblyOrigin: an origin id).
+    ObjectId     element;
 
     bool IsSet() const { return component.IsValid(); }
+    bool OnOrigin() const { return component == kAssemblyOrigin; }
     bool HasAxis() const {
         return kind == GeometryKind::Axis || kind == GeometryKind::Cylinder || kind == GeometryKind::Circle;
     }
@@ -81,10 +103,20 @@ enum class ConstraintType : unsigned char {
     Planar,      ///< "Плоское": Z opposed, planes `value` apart; slides in the plane, turns about Z
     Ball,        ///< "Шаровое": origins coincide; turns any way
     Rigid,       ///< "Жёсткое": frames coincide; nothing left
+
+    // Inventor-level additions.
+    Symmetry,    ///< "Симметрия": `second` is `first` mirrored in the plane `third` (planes, axes, points)
+    Gear,        ///< "Передача вращения": joint `driven` turns `ratio` times joint `drive` (gears, belts)
+    Screw,       ///< "Вращение–перемещение": slider `driven` moves `ratio` mm per turn of joint `drive` (rack, screw)
 };
 
+/// A transmission (Gear, Screw): ties two joints' coordinates, not geometry.
+constexpr bool IsTransmission(ConstraintType t) { return t == ConstraintType::Gear || t == ConstraintType::Screw; }
+
 /// A joint (Rotational…Rigid), not a plain constraint.
-constexpr bool IsJoint(ConstraintType t) { return t >= ConstraintType::Rotational; }
+constexpr bool IsJoint(ConstraintType t) { return t >= ConstraintType::Rotational && t <= ConstraintType::Rigid; }
+/// Mate and Angle can be given a range ("Пределы") instead of one value.
+constexpr bool HasRange(ConstraintType t) { return t == ConstraintType::Mate || t == ConstraintType::Angle; }
 
 /// What the one free coordinate of a joint measures.
 enum class JointMotion : unsigned char {
@@ -113,14 +145,26 @@ struct Constraint {
     std::string    name;            ///< "Совмещение:1"
     ConstraintType type = ConstraintType::Mate;
     GeometryRef    first, second;
-    double         value   = 0.0;   ///< gap / offset in mm; angle in radians
-    bool           flipped = false; ///< Mate: flush (normals the same way); Insert: aligned; Tangent: inside
+    GeometryRef    third;           ///< Symmetry: the plane of symmetry
+    double         value   = 0.0;   ///< gap / offset in mm; angle in radians; transmissions: offset of `driven`
+    bool           flipped = false; ///< Mate: flush (normals the same way); Insert: aligned; Tangent: inside;
+                                    ///< transmissions: turn the other way
     bool           suppressed = false;
     /// Joints with one coordinate: held at `position` (rad or mm, measured
     /// from where the frames' X agree / the origins' planes meet).
     bool           locked   = false;
     double         position = 0.0;
+    /// Joints: where the coordinate may go. Mate and Angle (HasRange): the
+    /// gap (mm) or angle (rad) may be anywhere between them instead of `value`.
     JointLimits    limits;
+    /// Transmissions: the joints tied and how. Gear: driven angle = ±ratio ×
+    /// drive angle; Screw: driven shift (mm) = ±ratio × drive turns.
+    ObjectId       drive, driven;
+    double         ratio = 1.0;
+    /// Transmissions: the joints' coordinates when the transmission last
+    /// held (rad or mm). Their changes are tied, not the coordinates, so a
+    /// joint may turn round and round. Kept by the solver, saved.
+    double         driveAt = 0.0, drivenAt = 0.0;
 
     // Computed by the solver, not saved.
     ConstraintState state = ConstraintState::Unknown;
@@ -222,6 +266,17 @@ public:
 
     /// Constraints that tie component `id`.
     std::vector<const Constraint*> ConstraintsOf(ObjectId id) const;
+    /// Components a constraint ties or moves (transmissions: those of its
+    /// joints); kAssemblyOrigin and ids no longer there are left out.
+    std::vector<ObjectId> ComponentsOf(const Constraint& c) const;
+    /// A component of this assembly or its origin.
+    bool Exists(ObjectId component) const { return component == kAssemblyOrigin || FindComponent(component); }
+    /// Where `component` is (the origin: at the origin).
+    Placement PlacementOf(ObjectId component) const;
+    /// Never moved by the solver: grounded, or the origin.
+    bool IsFixed(ObjectId component) const;
+    /// "Начало координат" or the component's tree name.
+    std::string NameOf(ObjectId component) const;
 
     /// Bumped on every change (redraw, autosave).
     std::uint64_t Revision() const { return myRevision; }
@@ -231,6 +286,9 @@ public:
     void          TouchLook() { ++myLookRevision; }
 
 private:
+    /// Removes transmissions whose joints are gone.
+    void DropOrphanTransmissions();
+
     IdGenerator   myIds;
     std::uint64_t myRevision = 0;
     std::uint64_t myLookRevision = 0;
@@ -238,5 +296,12 @@ private:
 
 /// "Совмещение", "Вставка"... (Russian; the UI translates).
 std::string_view ConstraintTitle(ConstraintType type);
+
+/// Geometry of an origin element (doc::origin ids) in its own coordinates:
+/// XY/XZ/YZ planes (normals as doc::origin), X/Y/Z axes, the centre point.
+/// nullopt for another id. `component` and `element` are filled in.
+std::optional<GeometryRef> OriginGeometry(ObjectId component, ObjectId element);
+/// "XY", "Ось X", "Центр"... (Russian; the UI translates).
+std::string_view OriginElementTitle(ObjectId element);
 
 } // namespace bz::assembly

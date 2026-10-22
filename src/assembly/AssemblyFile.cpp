@@ -29,7 +29,14 @@ constexpr std::array<std::pair<GeometryKind, std::string_view>, 6> kKinds{{
     {GeometryKind::Circle, "circle"},
 }};
 
-constexpr std::array<std::pair<ConstraintType, std::string_view>, 11> kTypes{{
+constexpr std::array<std::pair<PickSource, std::string_view>, 4> kSources{{
+    {PickSource::Face, "face"},
+    {PickSource::Edge, "edge"},
+    {PickSource::Vertex, "vertex"},
+    {PickSource::Element, "element"},
+}};
+
+constexpr std::array<std::pair<ConstraintType, std::string_view>, 14> kTypes{{
     {ConstraintType::Mate, "mate"},
     {ConstraintType::Insert, "insert"},
     {ConstraintType::Angle, "angle"},
@@ -41,6 +48,9 @@ constexpr std::array<std::pair<ConstraintType, std::string_view>, 11> kTypes{{
     {ConstraintType::Planar, "jointPlanar"},
     {ConstraintType::Ball, "jointBall"},
     {ConstraintType::Rigid, "jointRigid"},
+    {ConstraintType::Symmetry, "symmetry"},
+    {ConstraintType::Gear, "gear"},
+    {ConstraintType::Screw, "screw"},
 }};
 
 Json ToJson(const Placement& p) {
@@ -69,6 +79,8 @@ Json ToJson(const GeometryRef& g) {
     if (g.direction.Length() > 0) j["direction"] = jio::ToJson(g.direction);
     if (g.radius > 0) j["radius"] = g.radius;
     if (g.reference.Length() > 0) j["reference"] = jio::ToJson(g.reference);
+    if (g.source != PickSource::Face) j["from"] = jio::IdOf(kSources, g.source);
+    if (g.element) j["element"] = g.element.value;
     return j;
 }
 
@@ -100,7 +112,11 @@ bool Read(const Json& j, GeometryRef& out) {
     if (!jio::FromId(kKinds, kind, g.kind)) return false;
     if (!ReadMember(j, "component", g.component) || !ReadMember(j, "origin", g.origin) ||
         !ReadMember(j, "direction", g.direction) || !ReadMember(j, "radius", g.radius) ||
-        !ReadMember(j, "pick", g.pick) || !ReadMember(j, "reference", g.reference))
+        !ReadMember(j, "pick", g.pick) || !ReadMember(j, "reference", g.reference) ||
+        !ReadMember(j, "element", g.element))
+        return false;
+    if (const auto from = j.find("from"); from != j.end() &&
+        (!from->is_string() || !jio::FromId(kSources, from->get<std::string>(), g.source)))
         return false;
     out = g;
     return true;
@@ -126,12 +142,17 @@ std::string AssemblyToJson(const Assembly& a) {
     }
     Json constraints = Json::array();
     for (const Constraint& c : a.constraints) {
-        Json j{{"id", c.id.value},
-               {"name", c.name},
-               {"type", jio::IdOf(kTypes, c.type)},
-               {"first", ToJson(c.first)},
-               {"second", ToJson(c.second)},
-               {"value", c.value}};
+        Json j{{"id", c.id.value}, {"name", c.name}, {"type", jio::IdOf(kTypes, c.type)}, {"value", c.value}};
+        if (IsTransmission(c.type)) {
+            j["drive"] = c.drive.value;
+            j["driven"] = c.driven.value;
+            j["ratio"] = c.ratio;
+            j["at"] = Json::array({c.driveAt, c.drivenAt});
+        } else {
+            j["first"] = ToJson(c.first);
+            j["second"] = ToJson(c.second);
+            if (c.type == ConstraintType::Symmetry) j["third"] = ToJson(c.third);
+        }
         if (c.flipped) j["flipped"] = true;
         if (c.suppressed) j["suppressed"] = true;
         if (c.locked) j["locked"] = true;
@@ -218,25 +239,48 @@ Expected<Assembly> AssemblyFromJsonUnguarded(std::string_view text, std::vector<
             if (warnings) warnings->push_back(std::format("Зависимость типа «{}» не поддерживается и пропущена", type));
             continue;
         }
-        const auto first = j.find("first"), second = j.find("second");
+        const auto first = j.find("first"), second = j.find("second"), third = j.find("third");
+        const bool transmission = IsTransmission(c.type);
         if (!ReadMember(j, "id", c.id) || !c.id || !ReadMember(j, "name", c.name) ||
             !ReadMember(j, "value", c.value) || !ReadMember(j, "flipped", c.flipped) ||
-            !ReadMember(j, "suppressed", c.suppressed) || first == j.end() || second == j.end() ||
-            !Read(*first, c.first) || !Read(*second, c.second) || !ReadMember(j, "locked", c.locked) ||
-            !ReadMember(j, "position", c.position))
+            !ReadMember(j, "suppressed", c.suppressed) || !ReadMember(j, "locked", c.locked) ||
+            !ReadMember(j, "position", c.position) || !ReadMember(j, "drive", c.drive) ||
+            !ReadMember(j, "driven", c.driven) || !ReadMember(j, "ratio", c.ratio))
             return Error{"Повреждена зависимость сборки"};
+        if (!transmission && (first == j.end() || second == j.end() || !Read(*first, c.first) || !Read(*second, c.second)))
+            return Error{"Повреждена зависимость сборки"};
+        if (c.type == ConstraintType::Symmetry && (third == j.end() || !Read(*third, c.third)))
+            return Error{"Повреждена зависимость сборки"};
+        if (const auto at = j.find("at"); at != j.end()) {
+            if (!at->is_array() || at->size() != 2 || !(*at)[0].is_number() || !(*at)[1].is_number())
+                return Error{"Повреждена зависимость сборки"};
+            c.driveAt = (*at)[0].get<double>();
+            c.drivenAt = (*at)[1].get<double>();
+        }
         if (const auto lim = j.find("limits"); lim != j.end()) {
             if (!lim->is_object() || !ReadMember(*lim, "lower", c.limits.lower) || !ReadMember(*lim, "upper", c.limits.upper))
                 return Error{"Повреждена зависимость сборки"};
             c.limits.enabled = true;
         }
-        if (!a.FindComponent(c.first.component) || !a.FindComponent(c.second.component)) {
+        const bool gone = transmission ? false
+                                       : !a.Exists(c.first.component) || !a.Exists(c.second.component) ||
+                                             (c.type == ConstraintType::Symmetry && !a.Exists(c.third.component));
+        if (gone) {
             if (warnings) warnings->push_back(std::format("Зависимость «{}» ссылается на удалённый компонент и пропущена", c.name));
             continue;
         }
         reserve(c.id);
         a.constraints.push_back(std::move(c));
     }
+    // Transmissions: both joints must be there (they may come later in the file).
+    std::erase_if(a.constraints, [&](const Constraint& c) {
+        if (!IsTransmission(c.type)) return false;
+        const Constraint* d = a.FindConstraint(c.drive);
+        const Constraint* n = a.FindConstraint(c.driven);
+        const bool ok = d && n && IsJoint(d->type) && IsJoint(n->type);
+        if (!ok && warnings) warnings->push_back(std::format("Передача «{}» ссылается на удалённое соединение и пропущена", c.name));
+        return !ok;
+    });
 
     for (const Json& j : root.value("patterns", Json::array())) {
         ComponentPattern p;

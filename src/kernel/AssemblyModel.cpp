@@ -3,9 +3,16 @@
 #include "assembly/AssemblyFile.h"
 #include "core/PathText.h"
 #include "document/BzcFile.h"
+#include "document/Origin.h"
+#include "document/WorkAxisFeature.h"
+#include "document/WorkPlaneFeature.h"
+#include "document/WorkPointFeature.h"
+#include "kernel/occt/AssemblyModelImpl.h"
 #include "kernel/occt/ModelImpl.h"
 
 #include <BRepAdaptor_Curve.hxx>
+#include <BRep_Tool.hxx>
+#include <GCPnts_AbscissaPoint.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
@@ -20,12 +27,14 @@
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
 #include <TopTools_ListOfShape.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
 #include <gp_Trsf.hxx>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <format>
 #include <map>
@@ -42,14 +51,6 @@ namespace {
 Vec3   ToVec(const gp_XYZ& v) { return {v.X(), v.Y(), v.Z()}; }
 gp_Pnt ToPnt(Vec3 v) { return {v.x, v.y, v.z}; }
 
-gp_Trsf ToTrsf(const Placement& p) {
-    const auto& c = p.rotation.col;
-    gp_Trsf t;
-    t.SetValues(c[0].x, c[1].x, c[2].x, p.translation.x,   //
-                c[0].y, c[1].y, c[2].y, p.translation.y,   //
-                c[0].z, c[1].z, c[2].z, p.translation.z);
-    return t;
-}
 
 double DistanceTo(const TopoDS_Shape& shape, const gp_Pnt& p) {
     const TopoDS_Vertex probe = BRepBuilderAPI_MakeVertex(p);
@@ -154,6 +155,89 @@ GeometryRef CircleOf(const BRepAdaptor_Curve& curve, const TopTools_ListOfShape&
     return g;
 }
 
+/// A corner of the part: a vertex where a real edge ends (not only where a
+/// round edge or a seam closes on itself — that is no corner a user sees).
+bool IsCorner(const TopoDS_Vertex& vertex, const TopTools_IndexedDataMapOfShapeListOfShape& edgesOf,
+              const TopTools_IndexedDataMapOfShapeListOfShape& facesOf) {
+    const int i = edgesOf.FindIndex(vertex);
+    if (i == 0) return false;
+    for (const TopoDS_Shape& e : edgesOf.FindFromIndex(i)) {
+        const TopoDS_Edge edge = TopoDS::Edge(e);
+        const int k = facesOf.FindIndex(edge);
+        if (k == 0 || IsSeam(edge, facesOf.FindFromIndex(k))) continue;
+        if (BRep_Tool::IsClosed(edge)) continue;   // a full circle: its start is not a corner
+        return true;
+    }
+    return false;
+}
+
+/// The vertex of `shape` nearest `p` within `tolerance`, as a point.
+std::optional<GeometryRef> NearestVertex(const TopoDS_Shape& shape, Vec3 p, double tolerance) {
+    TopTools_IndexedDataMapOfShapeListOfShape edgesOf, facesOf;
+    TopExp::MapShapesAndAncestors(shape, TopAbs_VERTEX, TopAbs_EDGE, edgesOf);
+    TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, facesOf);
+    std::optional<GeometryRef> best;
+    double bestDistance = tolerance;
+    for (int i = 1; i <= edgesOf.Extent(); ++i) {
+        const TopoDS_Vertex vertex = TopoDS::Vertex(edgesOf.FindKey(i));
+        const Vec3 v = ToVec(BRep_Tool::Pnt(vertex).XYZ());
+        if ((v - p).Length() >= bestDistance || !IsCorner(vertex, edgesOf, facesOf)) continue;
+        const double d = (v - p).Length();
+        if (d >= bestDistance) continue;
+        bestDistance = d;
+        GeometryRef g;
+        g.kind = GeometryKind::Point;
+        g.source = assembly::PickSource::Vertex;
+        g.origin = v;
+        g.pick = v;
+        best = g;
+    }
+    return best;
+}
+
+/// The edge of `shape` nearest `p` within `tolerance`: a straight one as a
+/// line (its middle as the point), a round one as a circle. `straightOnly`:
+/// lines only. `along`: when set, only lines parallel to it (finding a
+/// picked edge again).
+std::optional<GeometryRef> NearestEdge(const TopoDS_Shape& shape, Vec3 p, double tolerance, bool straightOnly,
+                                       std::optional<Vec3> along = std::nullopt) {
+    TopTools_IndexedDataMapOfShapeListOfShape faces;
+    TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, faces);
+    std::optional<GeometryRef> best;
+    double bestDistance = tolerance;
+    const gp_Pnt at = ToPnt(p);
+    for (int i = 1; i <= faces.Extent(); ++i) {
+        const TopoDS_Edge edge = TopoDS::Edge(faces.FindKey(i));
+        if (IsSeam(edge, faces.FindFromIndex(i))) continue;
+        const BRepAdaptor_Curve curve(edge);
+        const GeomAbs_CurveType type = curve.GetType();
+        if (type != GeomAbs_Line && (straightOnly || type != GeomAbs_Circle)) continue;
+        if (along && (type != GeomAbs_Line || std::abs(ToVec(curve.Line().Direction().XYZ()).Dot(*along)) < 0.999)) continue;
+        Bnd_Box box;
+        BRepBndLib::Add(edge, box);
+        box.Enlarge(bestDistance);
+        if (box.IsOut(at)) continue;
+        const double d = DistanceTo(edge, at);
+        if (d >= bestDistance) continue;
+        bestDistance = d;
+        if (type == GeomAbs_Circle) {
+            GeometryRef g = CircleOf(curve, faces.FindFromIndex(i), p);
+            g.source = assembly::PickSource::Edge;
+            best = g;
+            continue;
+        }
+        GeometryRef g;
+        g.kind = GeometryKind::Axis;
+        g.source = assembly::PickSource::Edge;
+        g.direction = ToVec(curve.Line().Direction().XYZ()).Normalized();
+        const double mid = (curve.FirstParameter() + curve.LastParameter()) / 2;
+        g.origin = ToVec(curve.Value(mid).XYZ());   // the middle: found again by it
+        g.pick = g.origin;
+        best = g;
+    }
+    return best;
+}
+
 std::optional<GeometryRef> NearestCircle(const TopoDS_Shape& shape, Vec3 pick, double tolerance) {
     TopTools_IndexedDataMapOfShapeListOfShape faces;
     TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, faces);
@@ -205,33 +289,6 @@ Expected<LoadedPart> LoadPart(const std::filesystem::path& file) {
     return part;
 }
 
-struct AssemblyModel::Impl {
-    struct Part {
-        std::filesystem::file_time_type time{};
-        std::unique_ptr<LoadedPart>     loaded;
-        std::string                     problem;
-        bool                            reported = false;
-        TopoDS_Shape                    shape;         ///< all bodies, in the part's coordinates
-        TopoDS_Shape                    decorations;   ///< cosmetic threads
-        std::uint64_t                   generation = 0;
-    };
-    std::map<std::string, Part> parts;   ///< by absolute path
-    std::unordered_map<ObjectId, std::string> partOf;   ///< component -> key in `parts`
-    std::unordered_map<ObjectId, Placement>   placed;   ///< where each was shown
-
-    Model         own;
-    Model*        shown = &own;
-    std::uint64_t builtRevision = ~std::uint64_t{0};
-    std::uint64_t partsGeneration = 0, builtGeneration = ~std::uint64_t{0};
-
-    const Part* PartFor(ObjectId component) const {
-        const auto k = partOf.find(component);
-        if (k == partOf.end()) return nullptr;
-        const auto p = parts.find(k->second);
-        return p == parts.end() ? nullptr : &p->second;
-    }
-};
-
 AssemblyModel::AssemblyModel() : myImpl(std::make_unique<Impl>()) {}
 AssemblyModel::~AssemblyModel() = default;
 AssemblyModel::AssemblyModel(AssemblyModel&&) noexcept = default;
@@ -242,18 +299,58 @@ void AssemblyModel::ReloadParts() {
     ++myImpl->partsGeneration;
 }
 
+void AssemblyModel::UsePartInMemory(const std::filesystem::path& file, const doc::Document* doc, const Model* model) {
+    myImpl->inMemory[ToUtf8(file)] = {doc, model};
+}
+
+void AssemblyModel::ForgetPartInMemory(const std::filesystem::path& file) {
+    const std::string key = ToUtf8(file);
+    myImpl->inMemory.erase(key);
+    myImpl->parts.erase(key);   // read the file again: it may have been saved meanwhile
+    ++myImpl->partsGeneration;
+}
+
+bool AssemblyModel::IsPartInMemory(const std::filesystem::path& file) const { return myImpl->inMemory.contains(ToUtf8(file)); }
+
+void AssemblyModel::SetDiskCheckInterval(double seconds) { myImpl->diskInterval = seconds; }
+
 void AssemblyModel::Update(assembly::Assembly& a, const std::filesystem::path& assemblyFile,
                            std::vector<std::string>* problems) {
     Impl& m = *myImpl;
     std::vector<std::string> reloaded;
     m.partOf.clear();
+    // Files on disk change rarely: looking at every one each frame costs a
+    // system call per component per frame. They are looked at every so
+    // often; a component whose file is new to us, at once.
+    const auto now = std::chrono::steady_clock::now();
+    const bool lookAtDisk = m.diskInterval <= 0 ||
+                            std::chrono::duration<double>(now - m.lastDiskCheck).count() >= m.diskInterval;
+    if (lookAtDisk) m.lastDiskCheck = now;
     for (const assembly::Component& c : a.components) {
         const std::filesystem::path file = assembly::ResolvePartPath(assemblyFile, c.path);
         const std::string key = ToUtf8(file);
         m.partOf[c.id] = key;
+        auto it = m.parts.find(key);
+
+        // A part edited in memory: shown from its model whenever that changed.
+        if (const auto mem = m.inMemory.find(key); mem != m.inMemory.end()) {
+            const auto [doc, model] = mem->second;
+            const std::uint64_t revision = model->Revision();
+            if (it != m.parts.end() && it->second.memoryModel == model && it->second.memoryRevision == revision) continue;
+            Impl::Part part;
+            part.generation = ++m.partsGeneration;
+            part.memoryDoc = doc;
+            part.memoryModel = model;
+            part.memoryRevision = revision;
+            part.TakeShape(*model);
+            if (it != m.parts.end()) reloaded.push_back(key);
+            m.parts[key] = std::move(part);
+            continue;
+        }
+
+        if (it != m.parts.end() && !lookAtDisk) continue;
         std::error_code ec;
         const auto time = std::filesystem::last_write_time(file, ec);
-        auto it = m.parts.find(key);
         if (it != m.parts.end() && (ec || it->second.time == time)) continue;   // loaded and unchanged
 
         Impl::Part part;
@@ -261,16 +358,7 @@ void AssemblyModel::Update(assembly::Assembly& a, const std::filesystem::path& a
         part.generation = ++m.partsGeneration;
         if (Expected<LoadedPart> loaded = LoadPart(file)) {
             part.loaded = std::make_unique<LoadedPart>(std::move(*loaded));
-            const auto& impl = part.loaded->model.GetImpl();
-            BRep_Builder builder;
-            TopoDS_Compound bodies, decorations;
-            builder.MakeCompound(bodies);
-            builder.MakeCompound(decorations);
-            for (const Body& b : impl.bodies) builder.Add(bodies, b.shape);
-            for (const auto& [id, d] : impl.decorations)
-                if (!d.IsNull()) builder.Add(decorations, d);
-            part.shape = bodies;
-            part.decorations = decorations;
+            part.TakeShape(part.loaded->model);
         } else {
             part.problem = loaded.GetError().message;
         }
@@ -287,7 +375,8 @@ void AssemblyModel::Update(assembly::Assembly& a, const std::filesystem::path& a
     // geometry again by where it was picked.
     if (!reloaded.empty())
         for (assembly::Constraint& c : a.constraints)
-            for (GeometryRef* g : {&c.first, &c.second}) {
+            for (GeometryRef* g : {&c.first, &c.second, &c.third}) {
+                if (g == &c.third && c.type != assembly::ConstraintType::Symmetry) continue;
                 const auto k = m.partOf.find(g->component);
                 if (k != m.partOf.end() && std::find(reloaded.begin(), reloaded.end(), k->second) != reloaded.end())
                     Refresh(a, *g);
@@ -325,12 +414,12 @@ void AssemblyModel::ShowIn(Model& target) {
 
 const doc::Document* AssemblyModel::PartOf(ObjectId component) const {
     const Impl::Part* p = myImpl->PartFor(component);
-    return p && p->loaded ? &p->loaded->doc : nullptr;
+    return p ? p->Doc() : nullptr;
 }
 
 const Model* AssemblyModel::PartModelOf(ObjectId component) const {
     const Impl::Part* p = myImpl->PartFor(component);
-    return p && p->loaded ? &p->loaded->model : nullptr;
+    return p ? p->PartModel() : nullptr;
 }
 
 std::string AssemblyModel::ProblemOf(ObjectId component) const {
@@ -339,7 +428,7 @@ std::string AssemblyModel::ProblemOf(ObjectId component) const {
 }
 
 std::optional<GeometryRef> AssemblyModel::GeometryAt(const assembly::Assembly& a, ObjectId component, Vec3 worldPoint,
-                                                     AssemblyPick want) const {
+                                                     AssemblyPick want, double tolerance) const {
     const assembly::Component* c = a.FindComponent(component);
     const Impl::Part* part = myImpl->PartFor(component);
     if (!c || !part || part->shape.IsNull()) return std::nullopt;
@@ -348,8 +437,16 @@ std::optional<GeometryRef> AssemblyModel::GeometryAt(const assembly::Assembly& a
     try {
         if (want == AssemblyPick::Circle) {
             g = NearestCircle(part->shape, local, 1e300);
-        } else if (auto face = NearestFace(part->shape, ToPnt(local), 0.5)) {
-            g = FromFace(*face, local, want == AssemblyPick::Axis);
+            if (g) g->source = assembly::PickSource::Edge;
+        } else {
+            // Inventor picks what is nearest the cursor: a corner, then an
+            // edge, then the face itself.
+            if (want == AssemblyPick::Any && tolerance > 0) g = NearestVertex(part->shape, local, tolerance);
+            if (!g && (want == AssemblyPick::Any || want == AssemblyPick::Line) && tolerance > 0)
+                g = NearestEdge(part->shape, local, tolerance, want == AssemblyPick::Line);
+            if (!g)
+                if (auto face = NearestFace(part->shape, ToPnt(local), 0.5))
+                    g = FromFace(*face, local, want == AssemblyPick::Axis || want == AssemblyPick::Line);
         }
     } catch (const Standard_Failure&) {
         return std::nullopt;
@@ -358,12 +455,69 @@ std::optional<GeometryRef> AssemblyModel::GeometryAt(const assembly::Assembly& a
     return g;
 }
 
+std::optional<GeometryRef> AssemblyModel::ElementGeometry(ObjectId component, ObjectId element) const {
+    if (component == assembly::kAssemblyOrigin) return assembly::OriginGeometry(component, element);
+    const doc::Document* part = PartOf(component);
+    if (!part) return std::nullopt;
+    if (doc::origin::IsOriginElement(element)) return assembly::OriginGeometry(component, element);
+    GeometryRef g;
+    g.component = component;
+    g.source = assembly::PickSource::Element;
+    g.element = element;
+    if (const auto* wp = part->FindAs<doc::WorkPlaneFeature>(element); wp && wp->frame && !wp->suppressed) {
+        g.kind = GeometryKind::Plane;
+        g.origin = wp->frame->origin;
+        g.direction = wp->frame->normal.Normalized();
+    } else if (const auto* wa = part->FindAs<doc::WorkAxisFeature>(element); wa && wa->line && !wa->suppressed) {
+        g.kind = GeometryKind::Axis;
+        g.origin = wa->line->first;
+        g.direction = wa->line->second.Normalized();
+    } else if (const auto* pt = part->FindAs<doc::WorkPointFeature>(element); pt && pt->position && !pt->suppressed) {
+        g.kind = GeometryKind::Point;
+        g.origin = *pt->position;
+    } else {
+        return std::nullopt;
+    }
+    g.pick = g.origin;
+    return g;
+}
+
+std::vector<AssemblyModel::NamedElement> AssemblyModel::ElementsOf(ObjectId component) const {
+    namespace o = doc::origin;
+    std::vector<NamedElement> out;
+    for (ObjectId id : {o::kPlaneXY, o::kPlaneXZ, o::kPlaneYZ, o::kAxisX, o::kAxisY, o::kAxisZ, o::kPoint})
+        out.push_back({id, std::string(assembly::OriginElementTitle(id)), assembly::OriginGeometry(component, id)->kind});
+    if (component == assembly::kAssemblyOrigin) return out;
+    const doc::Document* part = PartOf(component);
+    if (!part) return out;
+    for (const auto& f : part->Features())
+        if (const auto g = ElementGeometry(component, f->id))
+            out.push_back({f->id, f->name, g->kind});
+    return out;
+}
+
 bool AssemblyModel::Refresh(const assembly::Assembly& a, GeometryRef& ref) const {
+    if (ref.OnOrigin()) return true;   // never changes
+    if (ref.source == assembly::PickSource::Element) {
+        // Named: taken again from the part as it is now.
+        std::optional<GeometryRef> found = ElementGeometry(ref.component, ref.element);
+        if (!found || found->kind != ref.kind) return false;
+        found->reference = ref.reference;
+        if (ref.direction.Length() > 0 && found->direction.Dot(ref.direction) < 0 && ref.kind != GeometryKind::Plane)
+            found->direction = -found->direction;
+        ref = *found;
+        return true;
+    }
     const Impl::Part* part = myImpl->PartFor(ref.component);
     if (!a.FindComponent(ref.component) || !part || part->shape.IsNull()) return false;
     std::optional<GeometryRef> found;
     try {
-        if (ref.kind == GeometryKind::Circle) {
+        if (ref.source == assembly::PickSource::Vertex) {
+            found = NearestVertex(part->shape, ref.origin, 1e300);
+        } else if (ref.source == assembly::PickSource::Edge && ref.kind == GeometryKind::Axis) {
+            // The straight edge along the same direction nearest where it was.
+            found = NearestEdge(part->shape, ref.pick, 1e300, true, ref.direction.Normalized());
+        } else if (ref.kind == GeometryKind::Circle) {
             // The circle of the same size nearest where it was.
             found = NearestCircle(part->shape, ref.origin, 1e300);
             if (found && std::abs(found->radius - ref.radius) > 1e-6) found.reset();
@@ -381,8 +535,13 @@ bool AssemblyModel::Refresh(const assembly::Assembly& a, GeometryRef& ref) const
                 if (d < best) {
                     best = d;
                     const Vec3 o = ToVec(s.Plane().Location().XYZ());
-                    found = GeometryRef{ref.component, GeometryKind::Plane, ref.pick - *n * (ref.pick - o).Dot(*n), *n, 0.0,
-                                        ref.pick - *n * (ref.pick - o).Dot(*n)};
+                    GeometryRef g;
+                    g.component = ref.component;
+                    g.kind = GeometryKind::Plane;
+                    g.origin = ref.pick - *n * (ref.pick - o).Dot(*n);
+                    g.direction = *n;
+                    g.pick = g.origin;
+                    found = g;
                 }
             }
         } else if (auto face = NearestFace(part->shape, ToPnt(ref.pick), 1e300)) {
@@ -393,6 +552,8 @@ bool AssemblyModel::Refresh(const assembly::Assembly& a, GeometryRef& ref) const
     }
     if (!found || found->kind != ref.kind) return false;
     found->component = ref.component;
+    found->source = ref.source;
+    found->reference = ref.reference;
     if (ref.kind != GeometryKind::Plane && ref.direction.Length() > 0 && found->direction.Dot(ref.direction) < 0)
         found->direction = -found->direction;   // an axis keeps the sense it had
     ref = *found;
@@ -532,6 +693,26 @@ std::optional<Model> AssemblyModel::PlacedModelOf(ObjectId component, const Plac
     ++impl.revision;
     return out;
 }
+
+Model AssemblyModel::ContextOf(const assembly::Assembly& a, ObjectId edited) const {
+    Model out;
+    Model::Impl& impl = out.EditImpl();
+    const assembly::Component* self = a.FindComponent(edited);
+    const Placement toEdited = self ? self->placement.Inverse() : Placement{};
+    for (const assembly::Component& c : a.components) {
+        if (c.id == edited || !c.visible) continue;
+        const Impl::Part* part = myImpl->PartFor(c.id);
+        if (!part || part->shape.IsNull()) continue;
+        const TopLoc_Location where(ToTrsf(toEdited * c.placement));
+        impl.bodies.push_back({c.id, c.name, part->shape.Moved(where)});
+        impl.infos.push_back({c.id, c.name});
+    }
+    impl.bodiesSet = true;
+    ++impl.revision;
+    return out;
+}
+
+std::uint64_t AssemblyModel::PartsGeneration() const { return myImpl->partsGeneration; }
 
 std::vector<ComponentClash> AssemblyModel::Clashes() const {
     const Model& shown = *myImpl->shown;

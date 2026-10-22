@@ -401,6 +401,15 @@ struct Viewport::Impl {
     std::vector<Handle(AIS_Shape)> planeShapes;   ///< their presentations
     std::vector<Handle(AIS_Shape)> overlapShapes;           ///< interferences shown
     std::uint64_t                  overlapRevision = 0;     ///< of the model they were taken from
+    /// The faded surroundings (Viewport::SetContext).
+    struct Context {
+        const kernel::Model*           model = nullptr;
+        std::uint64_t                  revision = 0;
+        std::vector<Handle(AIS_Shape)> shapes;
+        std::vector<ObjectId>          ids;
+        std::vector<TopoDS_Shape>      bodies;
+        bool                           picking = false;
+    } surroundings;
     std::vector<Handle(AIS_Shape)> copyShapes;              ///< pattern/mirror preview shown
     std::uint64_t                  copyRevision = 0;
     ObjectId                       copyFeature;
@@ -1365,6 +1374,71 @@ void Viewport::ShowInterferences(const kernel::Model* model) {
         m.context->Display(ais, AIS_Shaded, -1, false);
         m.overlapShapes.push_back(ais);
     }
+}
+
+void Viewport::SetContext(const kernel::Model* model) {
+    Impl& m = *myImpl;
+    Impl::Context& c = m.surroundings;
+    const std::uint64_t revision = model ? model->Revision() + 1 : 0;
+    if (model == c.model && revision == c.revision) return;
+    c.model = model;
+    c.revision = revision;
+    for (const auto& s : c.shapes) m.context->Remove(s, false);
+    c.shapes.clear();
+    c.ids.clear();
+    c.bodies.clear();
+    m.dirty = true;
+    if (!model) return;
+    // Faded and a little lighter than the part itself, outlined: enough to
+    // see where things are without hiding the part being edited.
+    const Color body = m.colors.body;
+    const Color faded{body.r * 0.6f + 0.4f, body.g * 0.6f + 0.4f, body.b * 0.6f + 0.4f, 1.0f};
+    for (const kernel::Body& b : model->GetImpl().bodies) {
+        Handle(AIS_Shape) ais = new AIS_Shape(b.shape);
+        ais->SetColor(ToQuantity(faded));
+        ais->SetMaterial(Graphic3d_MaterialAspect(Graphic3d_NameOfMaterial_UserDefined));
+        Handle(Prs3d_Drawer) drawer = ais->Attributes();
+        SetMeshPrecision(drawer, m.quality);
+        drawer->SetFaceBoundaryDraw(true);
+        drawer->SetFaceBoundaryUpperContinuity(GeomAbs_C1);
+        drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(m.colors.edges), Aspect_TOL_SOLID, 0.8));
+        ais->SetTransparency(0.7);
+        m.context->Display(ais, AIS_Shaded, -1, false);   // -1: no selection
+        if (c.picking) m.context->Activate(ais, AIS_Shape::SelectionMode(TopAbs_EDGE));
+        c.shapes.push_back(ais);
+        c.ids.push_back(b.id);
+        c.bodies.push_back(b.shape);
+    }
+}
+
+void Viewport::SetContextPicking(bool on) {
+    Impl& m = *myImpl;
+    Impl::Context& c = m.surroundings;
+    if (c.picking == on) return;
+    c.picking = on;
+    for (const auto& s : c.shapes) {
+        if (on) m.context->Activate(s, AIS_Shape::SelectionMode(TopAbs_EDGE));
+        else m.context->Deactivate(s);
+    }
+    m.dirty = true;
+}
+
+std::optional<Viewport::ContextEdge> Viewport::PickContextEdge(Vec2 pixel) {
+    Impl& m = *myImpl;
+    const Impl::Context& c = m.surroundings;
+    if (!c.picking || c.shapes.empty()) return std::nullopt;
+    const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
+    const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->Pick(px, py, m.view);
+    for (int i = 1; i <= selector->NbPicked(); ++i) {
+        const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
+        if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_EDGE) continue;
+        for (std::size_t b = 0; b < c.shapes.size(); ++b)
+            if (owner->Selectable() == c.shapes[b])
+                return ContextEdge{c.ids[b], kernel::occt::DescribeEdge(TopoDS::Edge(owner->Shape()), c.bodies[b])};
+    }
+    return std::nullopt;
 }
 
 void Viewport::ShowCopyPreview(const kernel::Model* model, ObjectId feature) {
