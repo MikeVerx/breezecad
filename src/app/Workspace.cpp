@@ -151,6 +151,14 @@ bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settin
 
 bool Workspace::SaveTo(Session& session, const std::filesystem::path& target, Notifications& notes, Settings& settings,
                        std::string* error) {
+#if defined(__ANDROID__)
+    // The local copy of a document lives in the app's cache, which the system
+    // may clear while the app is away: its folder made again.
+    if (platform::android::IsImported(target)) {
+        std::error_code ec;
+        std::filesystem::create_directories(target.parent_path(), ec);
+    }
+#endif
     const Status status = session.WriteFile(target, kGenerator);
     if (!status) {
         if (error) *error = status.GetError().message;
@@ -160,6 +168,20 @@ bool Workspace::SaveTo(Session& session, const std::filesystem::path& target, No
     // An assembly saved somewhere else refers to its parts from there now.
     if (session.assembly && session.path != target) assembly::RebasePaths(session.assembly->assembly, session.path, target);
     session.path = target;
+    // On Android `target` is a local copy: the document itself is in the
+    // projects folder or wherever the user picked. Until the copy reached
+    // it nothing is saved (0.2.3.2: it never did, the folder kept an empty
+    // file and the open copy was the only one). The work stays unsaved:
+    // the autosave keeps taking it, the next save tries again.
+    if (!platform::FileWritten(target)) {
+        const std::string message = Trf("Не удалось записать «{}» в папку проектов: документ НЕ сохранён. "
+                                        "Изменения не потеряны — документ открыт, сохраните его ещё раз",
+                                        ToUtf8(target.filename()));
+        if (error) *error = message;
+        notes.Error(message);
+        log::Error("Saved {} locally, but could not write it to its document", ToUtf8(target));
+        return false;
+    }
     session.MarkSaved();
     session.unsavedSince = -1.0;
     settings.AddRecent(target);
@@ -232,6 +254,12 @@ bool Workspace::ExportTo(Session& session, ExportFormat format, const std::files
     if (!status) {
         if (error) *error = status.GetError().message;
         notes.Error(Tr(status.GetError().message));
+        return false;
+    }
+    if (!platform::FileWritten(target)) {
+        const std::string message = Trf("Не удалось записать «{}» в выбранную папку", ToUtf8(target.filename()));
+        if (error) *error = message;
+        notes.Error(message);
         return false;
     }
     notes.Success(Trf("Экспортировано: {}", ToUtf8(target.filename())));

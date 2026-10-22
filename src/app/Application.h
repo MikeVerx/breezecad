@@ -119,6 +119,8 @@ private:
     bool AndroidBetweenFrames(double now);
     void CheckLastExit();
     void RunTestCommands();
+    /// Test command "saveback": a save reaches the document outside the app (smoke-apk.sh).
+    void TestSaveBack();
     mobile::TouchInput myTouch;
     int    myScreenRevision = -1;
     bool   myKeyboardUp = false;

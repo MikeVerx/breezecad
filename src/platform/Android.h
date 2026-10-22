@@ -93,6 +93,9 @@ std::filesystem::path CreateInProjects(const std::string& name);
 /// After the app wrote `local` (a file from Import or CreateInProjects):
 /// copies it to its document. False when it is not such a file or failed.
 bool WriteBack(const std::filesystem::path& local);
+/// The local copy for the document `uri` named `name`: the one it already
+/// has, or a new place no other document uses (cache/documents/<n>/).
+std::filesystem::path LocalCopyFor(const std::string& uri, const std::string& name);
 /// Remembers that `local` stands for the document `uri` (a "save as" answer).
 void Link(const std::filesystem::path& local, const std::string& uri);
 /// Whether `local` stands for a document outside the app (SAF).

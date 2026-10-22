@@ -10,10 +10,18 @@
 
 #include <miniz.h>
 
+#if defined(_WIN32)
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
 #include <cassert>
 
 #include <chrono>
+#include <cstdio>
 #include <format>
+#include <thread>
 #include <map>
 #include <fstream>
 #include <iterator>
@@ -49,6 +57,29 @@ Expected<std::string> ReadWholeFile(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) return Error{"Не удалось открыть файл"};
     return std::string(std::istreambuf_iterator<char>(in), {});
+}
+
+enum class WriteResult { Ok, CannotCreate, Failed };
+
+/// Writes `bytes` to `file` and waits until they are on the disk (fsync):
+/// a power cut right after "Сохранено" must not leave the new name over an
+/// empty file — the rename after this is what replaces the old document.
+WriteResult WriteDurably(const std::filesystem::path& file, const std::string& bytes) {
+#if defined(_WIN32)
+    std::FILE* f = _wfopen(file.c_str(), L"wb");
+#else
+    std::FILE* f = std::fopen(file.c_str(), "wb");
+#endif
+    if (!f) return WriteResult::CannotCreate;
+    bool ok = bytes.empty() || std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+    ok = std::fflush(f) == 0 && ok;
+#if defined(_WIN32)
+    ok = _commit(_fileno(f)) == 0 && ok;
+#else
+    ok = ::fsync(fileno(f)) == 0 && ok;
+#endif
+    ok = std::fclose(f) == 0 && ok;
+    return ok ? WriteResult::Ok : WriteResult::Failed;
 }
 
 /// Extracts one entry of an in-memory ZIP. Empty optional-like error when missing.
@@ -206,21 +237,29 @@ Status WriteBzcArchive(const std::filesystem::path& path, std::string_view docum
 
     std::filesystem::path temp = path;
     temp += ".saving";
-    {
-        std::ofstream out(temp, std::ios::binary | std::ios::trunc);
-        if (!out) {
-            std::error_code missing;
-            const bool exists = path.parent_path().empty() || std::filesystem::is_directory(path.parent_path(), missing);
-            const std::string folder = ToUtf8(path.parent_path());
-            return Error{exists ? std::format("Нет доступа к папке: {}", folder) : std::format("Папки нет: {}", folder)};
-        }
-        out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-        out.flush();
-        if (!out) return Error{"Не удалось записать файл (диск заполнен?)"};
-    }
     std::error_code ec;
-    std::filesystem::rename(temp, path, ec);
+    switch (WriteDurably(temp, bytes)) {
+    case WriteResult::Ok:
+        break;
+    case WriteResult::CannotCreate: {
+        std::error_code missing;
+        const bool exists = path.parent_path().empty() || std::filesystem::is_directory(path.parent_path(), missing);
+        const std::string folder = ToUtf8(path.parent_path());
+        return Error{exists ? std::format("Нет доступа к папке: {}", folder) : std::format("Папки нет: {}", folder)};
+    }
+    case WriteResult::Failed:
+        std::filesystem::remove(temp, ec);   // no half-written ".saving" left beside the document
+        return Error{"Не удалось записать файл (диск заполнен?)"};
+    }
+    // The old file is replaced only now, by a whole new one. On Windows an
+    // antivirus or a cloud folder may hold the old one for a moment: tried again.
+    for (int attempt = 0;; ++attempt) {
+        std::filesystem::rename(temp, path, ec);
+        if (!ec || attempt == 4) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
     if (ec) {
+        log::Warn("Saving {}: rename failed: {}", ToUtf8(path), ec.message());
         std::filesystem::remove(temp, ec);
         return Error{std::format("Не удалось заменить файл: {}", ToUtf8(path))};
     }
@@ -230,6 +269,9 @@ Status WriteBzcArchive(const std::filesystem::path& path, std::string_view docum
 Expected<BzcArchive> ReadBzcArchive(const std::filesystem::path& path) {
     Expected<std::string> bytes = ReadWholeFile(path);
     if (!bytes) return bytes.GetError();
+    // Its own words: "not a document" sent people looking for a wrong format,
+    // while the file had simply never been written (Android, up to 0.2.3.1).
+    if (bytes->empty()) return Error{"Файл пуст: документ в него не был записан"};
 
     mz_zip_archive zip{};
     if (!mz_zip_reader_init_mem(&zip, bytes->data(), bytes->size(), 0))

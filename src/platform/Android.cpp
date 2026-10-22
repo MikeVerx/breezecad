@@ -259,15 +259,46 @@ std::vector<FolderEntry> ListProjects() {
 
 fs::path Import(const std::string& uri, const std::string& name) {
     const fs::path local = LocalFor(uri, name.empty() ? std::string("document.bzc") : name);
+    // Into a file beside the copy first: the copy may be the only good one.
+    // Up to 0.2.3.1 a save never reached the projects folder (it kept an
+    // empty file), and opening that file copied the emptiness over the work.
+    fs::path incoming = local;
+    incoming += ".importing";
+    std::error_code made;
+    fs::create_directories(local.parent_path(), made);   // the system may have cleared the cache
     const bool copied = WithMethod("copyFromUri", "(Ljava/lang/String;Ljava/lang/String;)Z", [&](JNIEnv* env, jmethodID m) {
-        jstring a = Java(env, uri), b = Java(env, local.string());
+        jstring a = Java(env, uri), b = Java(env, incoming.string());
         const bool ok = env->CallBooleanMethod(Activity(), m, a, b);
         env->DeleteLocalRef(a);
         env->DeleteLocalRef(b);
         return ok;
     });
+    std::error_code ec;
     if (!copied) {
+        fs::remove(incoming, ec);
         log::Error("Android: cannot read {}", uri);
+        return {};
+    }
+    const auto size = [&ec](const fs::path& p) {
+        const auto n = fs::file_size(p, ec);
+        return ec ? std::uintmax_t{0} : n;
+    };
+    const std::uintmax_t had = size(local);
+    if (size(incoming) == 0 && had > 0) {
+        // The document is empty, its copy here is not: the copy is the work
+        // (a save of an older version that never got there). Kept, and given
+        // back to the document so the folder has it too.
+        fs::remove(incoming, ec);
+        log::Warn("Android: {} is empty; its local copy ({} bytes) kept and written back", uri, had);
+        Links()[local.string()] = uri;
+        SaveLinks();
+        WriteBack(local);
+        return local;
+    }
+    fs::rename(incoming, local, ec);
+    if (ec) {
+        fs::remove(incoming, ec);
+        log::Error("Android: cannot replace the copy of {}", uri);
         return {};
     }
     Links()[local.string()] = uri;
@@ -305,6 +336,8 @@ bool WriteBack(const fs::path& local) {
     if (!ok) log::Error("Android: cannot write {} back to {}", local.string(), uri);
     return ok;
 }
+
+fs::path LocalCopyFor(const std::string& uri, const std::string& name) { return LocalFor(uri, name); }
 
 void Link(const fs::path& local, const std::string& uri) {
     Links()[local.string()] = uri;

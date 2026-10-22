@@ -13,6 +13,7 @@
 #include "core/I18n.h"
 #include "core/Log.h"
 #include "core/PathText.h"
+#include "document/BzcFile.h"
 #include "document/Origin.h"
 #include "platform/Android.h"
 #include "platform/Paths.h"
@@ -21,6 +22,7 @@
 #include <imgui_impl_opengl3.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -208,6 +210,64 @@ void Application::CheckLastExit() {
     log::Warn("Android: the last run ended badly ({}), code {}", reason.empty() ? "a report was left" : reason, c.code);
 }
 
+void Application::TestSaveBack() {
+    // A save to a document outside the app, end to end, as "Сохранить" does it
+    // (0.2.3.2: it never reached the projects folder, which kept an empty
+    // file). The projects folder needs a person to pick it: a file:// URI
+    // stands for its document here, through the same copy back and forth.
+    namespace fs = std::filesystem;
+    const auto bytes = [](const fs::path& p) {
+        std::error_code ec;
+        const auto n = fs::file_size(p, ec);
+        return ec ? std::uintmax_t{0} : n;
+    };
+    std::error_code ec;
+    const fs::path folder = droid::DataDir() / "saveback";
+    fs::remove_all(folder, ec);
+    fs::create_directories(folder, ec);
+    const fs::path remote = folder / "saveback.bzc";
+    std::ofstream(remote, std::ios::binary).close();   // empty, as the folder's new document is made
+    const std::string uri = "file://" + remote.string();
+
+    NewDocument(*myContext);
+    Session* s = myWorkspace.Active();
+    if (!s) {
+        log::Error("Saveback: FAILED — no document");
+        return;
+    }
+    const fs::path local = droid::LocalCopyFor(uri, "saveback.bzc");
+    droid::Link(local, uri);
+    s->path = local;            // as after the first "Сохранить" into the projects folder
+    s->history.MarkUnsaved();
+    myActions.Run("file.save");   // Ctrl+S / the button: SaveDocument → Workspace::Save
+    const bool saved = !s->IsModified();
+    const std::uintmax_t written = bytes(remote);
+    const bool opens = static_cast<bool>(doc::LoadBzc(remote));
+    log::Info("Saveback: saved {}, the document has {} bytes, opens {}", saved, written, opens);
+
+    // The empty document of 0.2.3.1 opened: the copy here must stay, and go back to it.
+    fs::resize_file(remote, 0, ec);
+    const fs::path again = droid::Import(uri, "saveback.bzc");
+    const bool kept = again == local && bytes(local) > 0;
+    const bool healed = bytes(remote) > 0 && static_cast<bool>(doc::LoadBzc(remote));
+    log::Info("Saveback: the empty document kept the copy {}, got it back {}", kept, healed);
+
+    // A document that cannot be written: an error, and the work stays unsaved.
+    const fs::path lost = droid::LocalCopyFor("file:///nonexistent/saveback.bzc", "lost.bzc");
+    droid::Link(lost, "file:///nonexistent/saveback.bzc");
+    s->path = lost;
+    s->history.MarkUnsaved();
+    myActions.Run("file.save");
+    const bool refused = s->IsModified();
+    log::Info("Saveback: an unwritable document left the work unsaved {}", refused);
+
+    const bool ok = saved && written > 0 && opens && kept && healed && refused;
+    if (ok) log::Info("Saveback: ok");
+    else log::Error("Saveback: FAILED");
+    s->path = local;
+    s->history.MarkSaved();
+}
+
 void Application::RunTestCommands() {
     // A test run on the emulator (scripts/android/smoke-apk.sh): what to open
     // and do, so its screenshots show the program at work. Never set by a person.
@@ -264,6 +324,8 @@ void Application::RunTestCommands() {
             // Nothing: the home page as it opens, but a test run (no first-start setup over it).
         } else if (c == "setup") {
             mobile::StartSetup(*myContext);
+        } else if (c == "saveback") {
+            myContext->Later([this] { TestSaveBack(); });   // between frames, as a tap on "Сохранить" runs
         }
     }
     myFramesToDraw = std::max(myFramesToDraw, 5);
