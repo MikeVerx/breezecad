@@ -24,6 +24,7 @@
 #include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "app/assembly/AssemblyUi.h"
+#include "app/assembly/InPlace.h"
 #include "assembly/AssemblyFile.h"
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
@@ -236,6 +237,8 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         DrawAssemblyTree(app, session, width);
         return;
     }
+    // A part edited in place: whose it is and the way back, over its tree.
+    if (session.host) DrawInPlaceBar(app, session, width);
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     doc::Document& d = session.doc;
@@ -458,19 +461,45 @@ const char* ConstraintIcon(assembly::ConstraintType type) {
         case assembly::ConstraintType::Planar:      return "j-planar";
         case assembly::ConstraintType::Ball:        return "j-ball";
         case assembly::ConstraintType::Rigid:       return "j-rigid";
+        case assembly::ConstraintType::Symmetry:    return "a-symmetry";
+        case assembly::ConstraintType::Gear:        return "a-gear";
+        case assembly::ConstraintType::Screw:       return "a-screw";
     }
     return "a-mate";
 }
 
 void DrawAssemblyTree(AppContext& app, Session& session, float width) {
-    if (session.assembly->creating.active) {
-        DrawConstraintPanel(app, session, width);
-        return;
-    }
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     AssemblyState& st = *session.assembly;
     assembly::Assembly& a = st.assembly;
+    // A constraint or a new part being made: its panel on top, the tree under
+    // it to pick origin planes and work geometry from (as Inventor's browser).
+    const bool picking = st.creating.active || st.newPart.active;
+    if (st.creating.active) DrawConstraintPanel(app, session, width);
+    else if (st.newPart.active) DrawCreatePartPanel(app, session, width);
+    app.shell.hoveredElement = {};
+    // Origin planes, axes and centre, then work planes, axes and points of a
+    // component (or of the assembly itself), as rows under it.
+    const auto elementRows = [&](ObjectId owner, int depth, float rowWidth) {
+        const std::vector<kernel::AssemblyModel::NamedElement> elements = st.geometry.ElementsOf(owner);
+        for (const kernel::AssemblyModel::NamedElement& e : elements) {
+            RowStyle es;
+            es.depth = depth;
+            es.icon = e.kind == assembly::GeometryKind::Plane ? "tree-plane"
+                      : e.kind == assembly::GeometryKind::Axis ? "tree-axis"
+                                                               : "tree-point";
+            const std::string name = doc::origin::IsOriginElement(e.id) ? std::string(Tr(e.name)) : e.name;
+            ImGui::PushID(static_cast<int>(e.id.value));
+            const RowResult er = Row(app, "##element", name, es, rowWidth);
+            if (er.hovered) app.shell.hoveredElement = {owner, e.id};
+            if (er.clicked) {
+                const ObjectId element = e.id;
+                if (picking) app.Later([&app, &session, owner, element] { TakeElementPick(app, session, owner, element); });
+            }
+            ImGui::PopID();
+        }
+    };
     {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(40);
@@ -490,6 +519,20 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
         style.icon = "tree-assembly";
         if (Row(app, "##assembly", session.Title(), style, rowW).clicked) st.selected = {};
     }
+    // The assembly's own origin: planes to tie the first parts to.
+    {
+        RowStyle style;
+        style.depth = 1;
+        style.caret = true;
+        style.open = app.shell.elementsOpen.contains(assembly::kAssemblyOrigin);
+        style.icon = "tree-origin";
+        const RowResult r = Row(app, "##asm-origin", Tr("Начало координат"), style, rowW);
+        if (r.clicked || r.caretClicked) {
+            if (style.open) app.shell.elementsOpen.erase(assembly::kAssemblyOrigin);
+            else app.shell.elementsOpen.insert(assembly::kAssemblyOrigin);
+        }
+        if (style.open) elementRows(assembly::kAssemblyOrigin, 2, rowW);
+    }
 
     // Components, each with the constraints that tie it.
     for (const assembly::Component& comp : a.components) {
@@ -501,7 +544,7 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
         style.selected = st.selected == id;
         style.muted = !comp.visible;
         const auto constraints = a.ConstraintsOf(id);
-        style.caret = !constraints.empty();
+        style.caret = true;   // its origin and work geometry, its constraints
         style.open = app.shell.expanded.contains(id);
         if (const std::string problem = st.geometry.ProblemOf(id); !problem.empty()) {
             style.statusIcon = "status-error";
@@ -522,14 +565,13 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
             else app.shell.expanded.insert(id);
         }
         if (r.clicked) st.selected = id;
-        if (r.doubleClicked) {
-            const std::filesystem::path file = assembly::ResolvePartPath(session.path, comp.path);
-            app.Later([&app, file] { OpenDocument(app, file); });
-        }
+        if (r.doubleClicked && !picking) app.Later([&app, &session, id] { EditInPlace(app, session, id); });
         {
             ui::MenuStyle menu(ui);
             if (ImGui::BeginPopupContextItem("##comp-menu")) {
                 st.selected = id;
+                if (ui::MenuItem(ui, Tr("Править на месте"), nullptr, "edit-in-place"))
+                    app.Later([&app, &session, id] { EditInPlace(app, session, id); });
                 if (ui::MenuItem(ui, Tr("Открыть деталь"), nullptr, "ui-open")) {
                     const std::filesystem::path file = assembly::ResolvePartPath(session.path, comp.path);
                     app.Later([&app, file] { OpenDocument(app, file); });
@@ -551,6 +593,21 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
         }
         ImGui::PopID();
         if (!style.open) continue;
+        {
+            RowStyle os;
+            os.depth = 2;
+            os.caret = true;
+            os.open = app.shell.elementsOpen.contains(id);
+            os.icon = "tree-origin";
+            ImGui::PushID(static_cast<int>(id.value));
+            const RowResult orow = Row(app, "##comp-origin", Tr("Начало координат и рабочая геометрия"), os, rowW);
+            if (orow.clicked || orow.caretClicked) {
+                if (os.open) app.shell.elementsOpen.erase(id);
+                else app.shell.elementsOpen.insert(id);
+            }
+            if (os.open) elementRows(id, 3, rowW);
+            ImGui::PopID();
+        }
         for (const assembly::Constraint* con : constraints) {
             RowStyle cs;
             cs.depth = 2;
@@ -560,7 +617,12 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
             const ObjectId other = con->first.component == id ? con->second.component : con->first.component;
             if (const assembly::Component* o = a.FindComponent(other)) cs.meta = o->name;
             ImGui::PushID(static_cast<int>(con->id.value));
-            if (Row(app, "##in-comp", con->name, cs, rowW).clicked) st.selected = con->id;
+            if (Row(app, "##in-comp", con->name, cs, rowW).clicked) {
+                const ObjectId cid = con->id;
+                if (st.creating.active && assembly::IsTransmission(st.creating.constraint.type))
+                    app.Later([&app, &session, cid] { TakeJointPick(app, session, cid); });
+                else st.selected = cid;
+            }
             ImGui::PopID();
         }
     }
@@ -634,7 +696,12 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
             }
             ImGui::PushID(static_cast<int>(con.id.value));
             const RowResult r = Row(app, "##con", con.name, style, rowW);
-            if (r.clicked) st.selected = con.id;
+            if (r.clicked) {
+                const ObjectId cid = con.id;
+                if (st.creating.active && assembly::IsTransmission(st.creating.constraint.type))
+                    app.Later([&app, &session, cid] { TakeJointPick(app, session, cid); });
+                else st.selected = cid;
+            }
             {
                 ui::MenuStyle menu(ui);
                 if (ImGui::BeginPopupContextItem("##con-menu")) {

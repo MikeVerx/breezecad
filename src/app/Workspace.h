@@ -22,7 +22,14 @@ class Workspace {
 public:
     std::vector<std::unique_ptr<Session>> sessions;
 
+    /// The document in front: a part edited in place in the assembly in
+    /// front is that part (every part tool then works on it as is).
     Session* Active();
+    const Session* Active() const { return const_cast<Workspace*>(this)->Active(); }
+    /// The tab in front (the assembly, also while one of its parts is edited in place).
+    Session* ActiveTab();
+    /// `s` is open: a tab, or a part edited in one of the assemblies.
+    bool IsOpen(const Session* s) const;
     int  ActiveIndex() const { return myActive; }
     void Activate(int index);
 

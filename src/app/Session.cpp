@@ -108,6 +108,12 @@ std::string Session::Title() const {
     return {stem.begin(), stem.end()};
 }
 
+std::string Session::ContextName() const {
+    if (path.empty()) return untitledName;
+    const std::u8string stem = path.stem().u8string();
+    return {stem.begin(), stem.end()};
+}
+
 void Session::Execute(std::unique_ptr<doc::Command> command) {
     mon::Action("command", command->Label());
     history.Execute(doc, std::move(command));
@@ -145,6 +151,11 @@ Status Session::WriteFile(const std::filesystem::path& target, std::string_view 
     return assembly::SaveAssembly(*copy, target, generator);
 }
 
+bool Session::IsModified() const {
+    if (!assembly) return history.IsModified();
+    return assembly->IsModified() || assembly->PartsModified();
+}
+
 void Session::MarkSaved() {
     if (assembly) assembly->MarkSaved();
     else history.MarkSaved();
@@ -167,7 +178,7 @@ bool Session::Rebuild(double budgetMs) {
     if (assembly) {
         // Parts are rebuilt as they load; what is left is cheap (placing).
         prof::Scope scope("assembly");
-        const bool changed = assembly->Update(path);
+        const bool changed = assembly->Update(path, ContextName());
         myRebuilding = false;
         return changed;
     }

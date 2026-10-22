@@ -353,6 +353,14 @@ const std::vector<PhoneGroup>& PhoneGroups(AppContext& app, Session& session) {
         {N_("Массив"), {"sketch.patternRect", "sketch.patternCircular", "sketch.mirror"}},
         {N_("Формат и вид"), {"sketch.construction", "sketch.centerline", "sketch.ortho", "sketch.lookAt"}},
     };
+    // A part edited in place: «Вернуться» first, in the group with the sketch.
+    static const std::vector<PhoneGroup> modelInPlace{
+        {N_("Сборка и эскиз"), {"assembly.return", "sketch.start", "feature.workPlane", "feature.workAxis", "feature.workPoint"}},
+        {N_("Создать"), {"feature.extrude", "feature.revolve", "feature.sweep", "feature.loft", "feature.coil"}},
+        {N_("Изменить"), {"feature.hole", "feature.fillet", "feature.chamfer", "feature.thread", "feature.shell", "feature.section"}, true},
+        {N_("Массив"), {"feature.patternRect", "feature.patternCircular", "feature.mirror"}},
+        {N_("Диагностика"), {"tools.measure", "view.section", "tools.massProperties", "tools.interference"}},
+    };
     static const std::vector<PhoneGroup> model{
         {N_("Эскиз и раб. элементы"), {"sketch.start", "feature.workPlane", "feature.workAxis", "feature.workPoint"}},
         {N_("Создать"), {"feature.extrude", "feature.revolve", "feature.sweep", "feature.loft", "feature.coil"}},
@@ -362,11 +370,12 @@ const std::vector<PhoneGroup>& PhoneGroups(AppContext& app, Session& session) {
         {N_("Изделия и экспорт"), {"parts.library", "phone.export"}},
     };
     static const std::vector<PhoneGroup> assembly{
-        {N_("Компонент"), {"assembly.place", "assembly.placeStandard", "assembly.pattern"}},
-        {N_("Зависимости"), {"assembly.mate", "assembly.insert", "assembly.axisMate", "assembly.angle", "assembly.tangent"}, true},
+        {N_("Компонент"), {"assembly.place", "assembly.create", "assembly.placeStandard", "assembly.pattern", "assembly.editInPlace"}},
+        {N_("Зависимости"),
+         {"assembly.mate", "assembly.insert", "assembly.axisMate", "assembly.angle", "assembly.tangent", "assembly.symmetry"}, true},
         {N_("Соединения"),
          {"assembly.jointRotational", "assembly.jointSlider", "assembly.jointRigid", "assembly.jointCylindrical", "assembly.jointPlanar",
-          "assembly.jointBall"},
+          "assembly.jointBall", "assembly.gear", "assembly.screw"},
          true},
         {N_("Положение"), {"assembly.move", "assembly.rotate", "assembly.ground"}},
         {N_("Диагностика и экспорт"), {"tools.measure", "view.section", "tools.interference", "phone.export"}},
@@ -379,7 +388,8 @@ const std::vector<PhoneGroup>& PhoneGroups(AppContext& app, Session& session) {
     };
     if (app.shell.ribbonTab == RibbonTab::View) return view;
     if (session.assembly) return assembly;
-    return app.shell.ribbonTab == RibbonTab::Sketch ? sketch : model;
+    if (app.shell.ribbonTab == RibbonTab::Sketch) return sketch;
+    return session.host ? modelInPlace : model;
 }
 
 constexpr const char* kExports[] = {"file.exportStep", "file.exportStl", "file.export3mf"};

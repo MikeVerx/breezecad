@@ -13,6 +13,7 @@
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
 #include "app/assembly/AssemblyUi.h"
+#include "app/assembly/InPlace.h"
 #include "assembly/AssemblyFile.h"
 #include "document/DocumentTypes.h"
 #include "document/StandardPacks.h"
@@ -135,6 +136,8 @@ void SaveDocument(AppContext& app, bool saveAs) {
     Session* s = app.Doc();
     if (!s) return;
     app.ops.Commit(app, *s);
+    // A part edited in place is saved with its assembly (into its file beside it).
+    if (s->host) s = s->host;
 #if defined(__ANDROID__)
     // The phone: the first save (and «Сохранить как») asks the name and shows the folder.
     if (s->path.empty() || saveAs) {
@@ -488,8 +491,10 @@ void EscapePressed(AppContext& app) {
     } else if (s->assembly && AssemblyEscape(app, *s)) {
     } else if (!s->selectedFaces.empty()) {
         s->selectedFaces.clear();   // first the faces chosen in the view, then the tree
-    } else {
+    } else if (s->selectedFeature) {
         s->selectedFeature = {};
+    } else if (s->host) {
+        ReturnToAssembly(app);   // a part edited in place with nothing left to drop: back to its assembly
     }
 }
 

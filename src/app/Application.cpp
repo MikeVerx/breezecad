@@ -502,8 +502,8 @@ void Application::ReportRedraws(double now) {
 
 bool Application::WaitsForBackground() const {
     // Only the document on screen: another one takes its result when shown.
-    const int i = myWorkspace.ActiveIndex();
-    return i >= 0 && i < static_cast<int>(myWorkspace.sessions.size()) && myWorkspace.sessions[static_cast<std::size_t>(i)]->RebuildingInBackground();
+    const Session* s = myWorkspace.Active();
+    return s && s->RebuildingInBackground();
 }
 
 void Application::HandleCloseRequests() {
@@ -526,8 +526,12 @@ void Application::UpdateTitle() {
     // The testers' build says so in the title (and in screenshots of it).
     const std::string program = beta::Enabled() ? std::string("BreezeCAD ") + Version() + " \xE2\x80\x94 " + Tr("для бета-тестеров") : "BreezeCAD";
     std::string title = program;
-    if (Session* s = myWorkspace.Active(); s && !myWorkspace.ShowsHome())
-        title = s->Title() + (s->IsModified() ? " \xE2\x80\xA2" : "") + " \xE2\x80\x94 " + program;
+    if (Session* s = myWorkspace.Active(); s && !myWorkspace.ShowsHome()) {
+        // A part edited in place: "Узел › Вал", modified with its assembly.
+        const Session* tab = s->host ? s->host : s;
+        const std::string name = s->host ? tab->Title() + " \xE2\x80\xBA " + s->Title() : s->Title();
+        title = name + (tab->IsModified() ? " \xE2\x80\xA2" : "") + " \xE2\x80\x94 " + program;
+    }
     if (title != myTitle) {
         myTitle = title;
         myWindow.SetTitle(title);
@@ -591,10 +595,9 @@ void Application::LeaveSwitchedDocument(AppContext& app) {
     // were an extrude (18.10.2026). What was not confirmed is dropped, as when
     // another tool starts.
     Session* now = myWorkspace.Active();
+    // Open: a tab, or a part edited in place in one (it is not a tab of its own).
     const auto alive = [&](const Session* p) -> Session* {
-        for (const auto& s : myWorkspace.sessions)
-            if (s.get() == p) return s.get();
-        return nullptr;
+        return p && myWorkspace.IsOpen(p) ? const_cast<Session*>(p) : nullptr;
     };
     // An operation opened in another document than the one in front (it may have
     // been opened in the new one in the same frame, as the emulator's test does).
@@ -681,6 +684,15 @@ void Application::Frame() {
                 if (f->hidden) hidden.push_back(f->id);
             myViewport.SetHiddenBodies(std::move(hidden));
             myViewport.Sync(s->model);
+        }
+        // A part edited in place: the assembly around it follows its changes
+        // (shown from memory), and the other components stand faded around it.
+        if (s->host && s->host->assembly) {
+            prof::Scope scope("in-place");
+            s->host->assembly->Update(s->host->path, s->host->ContextName());
+            myViewport.SetContext(s->host->assembly->InPlaceContext());
+        } else {
+            myViewport.SetContext(nullptr);
         }
         if (s->assembly) {
             const doc::Look& look = s->assembly->ShownLook();

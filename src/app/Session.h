@@ -37,6 +37,12 @@ public:
     /// placed components (one body per component, body id = component id).
     std::unique_ptr<AssemblyState> assembly;
     bool IsAssembly() const { return assembly != nullptr; }
+
+    /// A part edited inside an assembly (AssemblyState::parts): that
+    /// assembly's session. It is saved with the assembly, not by itself.
+    Session* host = nullptr;
+    /// While edited in place: the component of `host` it is edited as.
+    ObjectId inPlaceOf;
     /// Makes this session an assembly (an empty one).
     AssemblyState& MakeAssembly();
     /// The kind of document (doc::DocumentTypes): "part" or "assembly".
@@ -69,7 +75,12 @@ public:
 
     /// File name without extension, or the untitled name.
     std::string Title() const;
-    bool IsModified() const { return assembly ? assembly->IsModified() : history.IsModified(); }
+    /// How parts edited in this assembly name it in their projections from
+    /// other parts (doc::ContextProjection::assembly): its file name without
+    /// extension, the untitled name before the first save.
+    std::string ContextName() const;
+    /// An assembly counts the parts edited in it too.
+    bool IsModified() const;
     bool CanUndo() const { return assembly ? assembly->CanUndo() : history.CanUndo(); }
     bool CanRedo() const { return assembly ? assembly->CanRedo() : history.CanRedo(); }
     std::string UndoLabel() const { return assembly ? assembly->UndoLabel() : history.UndoLabel(); }

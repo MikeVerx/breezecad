@@ -1,4 +1,6 @@
 #include "app/assembly/AssemblyUi.h"
+#include "app/assembly/InPlace.h"
+#include "app/viewport/Planes.h"
 #include "app/viewport/ViewPrompt.h"
 
 #include "app/Format.h"
@@ -211,18 +213,63 @@ kernel::AssemblyPick PickFor(assembly::ConstraintType type) {
     switch (type) {
         case assembly::ConstraintType::Insert:
         case assembly::ConstraintType::Rotational: return kernel::AssemblyPick::Circle;
-        case assembly::ConstraintType::AxisMate: return kernel::AssemblyPick::Axis;
-        default:                                 return kernel::AssemblyPick::Face;
+        case assembly::ConstraintType::AxisMate:   return kernel::AssemblyPick::Line;
+        // Inventor's mate takes what is under the cursor: a vertex, an edge or the face.
+        case assembly::ConstraintType::Mate:
+        case assembly::ConstraintType::Angle:
+        case assembly::ConstraintType::Symmetry:   return kernel::AssemblyPick::Any;
+        default:                                   return kernel::AssemblyPick::Face;
     }
 }
 
-/// Why `g` cannot be used for this constraint (with `first` already
-/// picked, if any), or nullptr when it can.
-const char* Unfit(assembly::ConstraintType type, const assembly::GeometryRef& g, const assembly::GeometryRef* first) {
+/// How near (mm) a vertex or an edge must be to the cursor to be taken
+/// rather than the face: a few pixels at the current zoom.
+double PickTolerance(const ViewportFrame& vf) { return 7.0 * vf.projection.mmPerPixel; }
+
+/// "plane", "axis"... of a picked geometry, for the panel.
+const char* KindName(const assembly::GeometryRef& g) {
     using assembly::GeometryKind;
+    using assembly::PickSource;
+    switch (g.kind) {
+        case GeometryKind::Plane:    return g.source == PickSource::Element ? N_("плоскость") : N_("грань");
+        case GeometryKind::Axis:     return g.source == PickSource::Edge ? N_("ребро") : N_("ось");
+        case GeometryKind::Point:    return g.source == PickSource::Vertex ? N_("вершина") : N_("точка");
+        case GeometryKind::Cylinder: return N_("цилиндр");
+        case GeometryKind::Sphere:   return N_("сфера");
+        case GeometryKind::Circle:   return N_("круглая кромка");
+    }
+    return "";
+}
+
+/// "Кронштейн:1, грань" — what a pick took.
+std::string PickTitle(const AssemblyState& st, const assembly::GeometryRef& g) {
+    std::string what = Tr(KindName(g));
+    if (g.source == assembly::PickSource::Element) what = Tr(std::string(assembly::OriginElementTitle(g.element)));
+    if (what.empty()) what = Tr(KindName(g));
+    return Trf("{}, {}", Tr(st.assembly.NameOf(g.component)), what);
+}
+
+/// Why `g` cannot be used for this constraint (with `first` already
+/// picked, if any; `picked`: how many are picked), or nullptr when it can.
+const char* Unfit(assembly::ConstraintType type, const assembly::GeometryRef& g, const assembly::GeometryRef* first, int picked = -1) {
+    using assembly::GeometryKind;
+    const auto family = [](const assembly::GeometryRef& r) {
+        return r.kind == GeometryKind::Plane ? 0 : r.kind == GeometryKind::Point || r.kind == GeometryKind::Sphere ? 2 : 1;
+    };
     switch (type) {
+        case assembly::ConstraintType::Symmetry:
+            if (picked == 2) {
+                if (g.kind != GeometryKind::Plane) return N_("Плоскость симметрии — плоская грань или плоскость начала координат");
+                break;
+            }
+            if (first && family(*first) != family(g))
+                return N_("Симметричными бывают две грани, две оси или две точки — выберите такую же");
+            break;
         case assembly::ConstraintType::Angle:
-            if (g.direction.Length() < 0.5) return N_("Для угла нужна плоская грань или ось");
+            if (g.direction.Length() < 0.5) return N_("Для угла нужна плоская грань, ось или прямое ребро");
+            break;
+        case assembly::ConstraintType::AxisMate:
+            if (!g.HasAxis()) return N_("Нужна ось: цилиндрическая грань или прямое ребро");
             break;
         case assembly::ConstraintType::Tangent:
             if (g.kind != GeometryKind::Plane && g.kind != GeometryKind::Cylinder && g.kind != GeometryKind::Sphere)
@@ -237,10 +284,9 @@ const char* Unfit(assembly::ConstraintType type, const assembly::GeometryRef& g,
             if (g.direction.Length() < 0.5) return N_("Нужна плоская или круглая грань: от неё берётся ось соединения");
             break;
         case assembly::ConstraintType::Mate:
-            if (first && first->kind == GeometryKind::Plane && g.HasAxis())
-                return nullptr;   // an axis in a plane
-            if (first && first->HasAxis() != g.HasAxis() && first->kind != GeometryKind::Plane && g.kind != GeometryKind::Plane)
-                return N_("Совмещаются две плоскости или две оси");
+            // Plane, line and point in any pair: face to face, a line in a
+            // plane, a point on a line, two points together (Inventor's mate).
+            if (g.kind == GeometryKind::Sphere) return N_("Для сферы — «Касание»");
             break;
         default: break;
     }
@@ -253,16 +299,27 @@ const char* PickPrompt(assembly::ConstraintType type, int picked) {
             return picked == 0 ? N_("Вставка: щёлкните у круглой кромки первого компонента (отверстие, торец)")
                                : N_("Вставка: щёлкните у круглой кромки второго компонента");
         case assembly::ConstraintType::AxisMate:
-            return picked == 0 ? N_("Совпадение осей: выберите цилиндрическую грань первого компонента")
-                               : N_("Совпадение осей: выберите цилиндрическую грань второго компонента");
+            return picked == 0 ? N_("Совпадение осей: выберите цилиндрическую грань или прямое ребро первого компонента")
+                               : N_("Совпадение осей: выберите цилиндрическую грань или прямое ребро второго компонента");
+        case assembly::ConstraintType::Symmetry:
+            return picked == 0   ? N_("Симметрия: выберите грань, ось или вершину первого компонента")
+                   : picked == 1 ? N_("Симметрия: выберите такую же у второго компонента")
+                                 : N_("Симметрия: выберите плоскость симметрии — грань или плоскость в дереве");
+        case assembly::ConstraintType::Gear:
+            return picked == 0 ? N_("Передача: выберите ведущее соединение «Вращение» — в дереве или щелчком по его детали")
+                               : N_("Передача: выберите ведомое соединение «Вращение»");
+        case assembly::ConstraintType::Screw:
+            return picked == 0 ? N_("Винт-рейка: выберите соединение «Вращение» (винт, шестерня) — в дереве или по детали")
+                               : N_("Винт-рейка: выберите соединение «Ползун» (гайка, рейка)");
         case assembly::ConstraintType::Angle:
-            return picked == 0 ? N_("Угол: выберите грань первого компонента") : N_("Угол: выберите грань второго компонента");
+            return picked == 0 ? N_("Угол: выберите грань или ребро первого компонента")
+                               : N_("Угол: выберите грань или ребро второго компонента");
         case assembly::ConstraintType::Tangent:
             return picked == 0 ? N_("Касание: выберите грань первого компонента")
                                : N_("Касание: выберите грань второго компонента");
         case assembly::ConstraintType::Mate:
-            return picked == 0 ? N_("Совмещение: выберите грань первого компонента")
-                               : N_("Совмещение: выберите грань второго компонента");
+            return picked == 0 ? N_("Совмещение: выберите грань, ребро или вершину первого компонента (или плоскость в дереве)")
+                               : N_("Совмещение: выберите грань, ребро или вершину второго компонента");
         case assembly::ConstraintType::Rotational:
             return picked == 0 ? N_("Вращение: щёлкните у круглой кромки неподвижного компонента")
                                : N_("Вращение: щёлкните у круглой кромки вращающегося компонента");
@@ -277,6 +334,61 @@ const char* PickPrompt(assembly::ConstraintType type, int picked) {
     return "";
 }
 
+/// Shows a constraint's geometry in the view: a plane as a square (or the
+/// plane overlay for named planes), a line as a long dash, a point as a dot.
+void DrawGeometryMark(AppContext& app, const ViewportFrame& vf, const AssemblyState& st, const assembly::GeometryRef& g,
+                      bool strong) {
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ui::ThemeColors& c = app.ui.C();
+    const Placement at = st.assembly.PlacementOf(g.component);
+    const Vec3 p = at.Point(g.origin);
+    const Vec3 d = g.direction.Length() > 0.5 ? at.Direction(g.direction).Normalized() : Vec3{};
+    // Sized to what is around: the component's box, or a fixed size.
+    double size = 40.0;
+    if (!g.OnOrigin())
+        if (const auto box = st.geometry.ComponentBounds(g.component)) size = std::max(10.0, (box->max - box->min).Length() * 0.35);
+    const ImU32 ink = ui::ToU32(strong ? c.accent : c.accent.WithAlpha(0.65f));
+    const float width = app.ui.S(strong ? 2.4f : 1.6f);
+    switch (g.kind) {
+        case assembly::GeometryKind::Plane: {
+            if (g.source == assembly::PickSource::Element) {
+                ShownPlane plane;
+                plane.id = g.element;
+                Vec3 x = std::abs(d.z) < 0.9 ? Vec3{0, 0, 1}.Cross(d) : Vec3{1, 0, 0}.Cross(d);
+                plane.frame = Frame{p, x.Normalized(), d};
+                plane.half = size;
+                plane.label = Tr(std::string(assembly::OriginElementTitle(g.element)));
+                DrawPlane(app, dl, vf, plane, strong);
+                break;
+            }
+            // A face: a small square on it and its normal.
+            const Vec3 u = (std::abs(d.z) < 0.9 ? Vec3{0, 0, 1}.Cross(d) : Vec3{1, 0, 0}.Cross(d)).Normalized() * (size * 0.25);
+            const Vec3 v = d.Cross(u);
+            const ImVec2 q[4] = {vf.Project(p + u + v), vf.Project(p - u + v), vf.Project(p - u - v), vf.Project(p + u - v)};
+            dl->AddQuadFilled(q[0], q[1], q[2], q[3], ui::ToU32(c.accent.WithAlpha(0.18f)));
+            dl->AddQuad(q[0], q[1], q[2], q[3], ink, width);
+            dl->AddLine(vf.Project(p), vf.Project(p + d * (size * 0.3)), ink, width);
+            break;
+        }
+        case assembly::GeometryKind::Axis:
+        case assembly::GeometryKind::Cylinder:
+        case assembly::GeometryKind::Circle: {
+            const ImVec2 a = vf.Project(p - d * size), b = vf.Project(p + d * size);
+            const ImVec2 step{(b.x - a.x) / 24.0f, (b.y - a.y) / 24.0f};
+            for (int i = 0; i < 24; i += 2)
+                dl->AddLine({a.x + step.x * static_cast<float>(i), a.y + step.y * static_cast<float>(i)},
+                            {a.x + step.x * static_cast<float>(i + 1), a.y + step.y * static_cast<float>(i + 1)}, ink, width);
+            if (g.kind == assembly::GeometryKind::Circle) dl->AddCircle(vf.Project(p), app.ui.S(5), ink, 0, width);
+            break;
+        }
+        case assembly::GeometryKind::Point:
+        case assembly::GeometryKind::Sphere:
+            dl->AddCircleFilled(vf.Project(p), app.ui.S(strong ? 5.5f : 4.0f), ink);
+            dl->AddCircle(vf.Project(p), app.ui.S(9), ink, 0, app.ui.S(1.2f));
+            break;
+    }
+}
+
 void Prompt(ui::Ui& ui, const ViewportFrame& vf, const char* text) {
     DrawViewPrompt(ui, ImGui::GetWindowDrawList(), vf, text, ui.C().textSecondary);
 }
@@ -286,46 +398,91 @@ void Prompt(ui::Ui& ui, const ViewportFrame& vf, const char* text) {
 bool ConstraintOptions(AppContext& app, assembly::Constraint& c, float width, const std::function<void()>& before) {
     ui::Ui& ui = app.ui;
     bool changed = false;
+    bool asked = false;
+    const auto change = [&] {
+        if (!asked) before();
+        asked = true;
+        changed = true;
+    };
+    static constexpr std::array<const char*, 2> labels{N_("Нет"), N_("Да")};
     const bool angle = c.type == assembly::ConstraintType::Angle;
-    const bool noValue = c.type == assembly::ConstraintType::AxisMate || c.type == assembly::ConstraintType::Slider ||
-                         c.type == assembly::ConstraintType::Cylindrical || c.type == assembly::ConstraintType::Ball;
-    if (!noValue) {
-        ui::FieldLabel(ui, angle ? Tr("Угол, °") : assembly::IsJoint(c.type) ? Tr("Смещение вдоль оси, мм") : Tr("Зазор, мм"));
-        const ImVec2 p = ImGui::GetCursorScreenPos();
-        ImGui::GetWindowDrawList()->AddRect(p, {p.x + width, p.y + ui.S(28)}, ui::ToU32(ui.C().fieldBorder), ui.S(5));
-        const std::string shown = FormatNumber(angle ? c.value * 180.0 / kPi : c.value, 3);
-        if (ui::CommitInput(ui, "##con-value", shown, app.shell.edit, width, true)) {
-            UnitSystem units;
-            units.angle = AngleUnit::Degree;
-            const Expected<double> v = EvaluateExpression(app.shell.edit.text, angle ? Quantity::Angle : Quantity::Length, units, {});
-            if (!v) {
-                app.notes.Error(Tr("Не число"));
-            } else {
-                before();
-                c.value = *v;
-                changed = true;
+    const bool transmission = assembly::IsTransmission(c.type);
+    // Mate and Angle: one value, or anywhere within a range (Inventor's limits).
+    if (assembly::HasRange(c.type)) {
+        ui::FieldLabel(ui, Tr("Пределы вместо одного значения"));
+        if (const int k = ui::Segmented(ui, "con-range", labels, c.limits.enabled ? 1 : 0, 2, width); k != (c.limits.enabled ? 1 : 0)) {
+            change();
+            c.limits.enabled = k == 1;
+            if (c.limits.enabled) {
+                const double span = angle ? kPi / 12 : 5.0;
+                c.limits.lower = std::max(angle ? 0.0 : -1e9, c.value - span);
+                c.limits.upper = c.value + span;
             }
         }
         ImGui::Dummy({0, ui.S(10)});
     }
+    const bool noValue = c.type == assembly::ConstraintType::AxisMate || c.type == assembly::ConstraintType::Slider ||
+                         c.type == assembly::ConstraintType::Cylindrical || c.type == assembly::ConstraintType::Ball ||
+                         c.type == assembly::ConstraintType::Symmetry || transmission ||
+                         (assembly::HasRange(c.type) && c.limits.enabled);
+    const auto number = [&](const char* id, const char* label, double shown, bool isAngle, double& into) {
+        ui::FieldLabel(ui, label);
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddRect(p, {p.x + width, p.y + ui.S(28)}, ui::ToU32(ui.C().fieldBorder), ui.S(5));
+        if (ui::CommitInput(ui, id, FormatNumber(isAngle ? shown * 180.0 / kPi : shown, 4), app.shell.edit, width, true)) {
+            UnitSystem units;
+            units.angle = AngleUnit::Degree;
+            const Expected<double> v =
+                EvaluateExpression(app.shell.edit.text, isAngle ? Quantity::Angle : Quantity::Length, units, {});
+            if (!v) {
+                app.notes.Error(Tr("Не число"));
+            } else {
+                change();
+                into = *v;
+            }
+        }
+        ImGui::Dummy({0, ui.S(10)});
+    };
+    if (!noValue)
+        number("##con-value", angle ? Tr("Угол, °") : assembly::IsJoint(c.type) ? Tr("Смещение вдоль оси, мм") : Tr("Зазор, мм"),
+               c.value, angle, c.value);
+    if (assembly::HasRange(c.type) && c.limits.enabled) {
+        number("##con-lo", angle ? Tr("От, °") : Tr("От, мм"), c.limits.lower, angle, c.limits.lower);
+        number("##con-hi", angle ? Tr("До, °") : Tr("До, мм"), c.limits.upper, angle, c.limits.upper);
+        if (c.limits.upper < c.limits.lower) LabelText(ui, Tr("«До» меньше «От» — пределы не действуют как задумано"), ui.C().danger);
+    }
+    if (transmission) {
+        // Gear: how many turns the driven makes per turn of the drive (z1/z2);
+        // screw: the lead, mm per turn.
+        double ratio = c.ratio;
+        number("##con-ratio",
+               c.type == assembly::ConstraintType::Gear ? Tr("Передаточное число: оборотов ведомого на оборот ведущего")
+                                                        : Tr("Ход: мм перемещения на оборот"),
+               c.ratio, false, ratio);
+        if (ratio != c.ratio) {
+            if (std::abs(ratio) < 1e-9) app.notes.Error(Tr("Ноль не годится: соединения перестанут двигаться вместе"));
+            else c.ratio = ratio;
+        }
+    }
     const char* option = nullptr;
     switch (c.type) {
-        case assembly::ConstraintType::Mate:    option = N_("Заподлицо (грани смотрят в одну сторону)"); break;
-        case assembly::ConstraintType::Insert:  option = N_("Соосно в одну сторону (не навстречу)"); break;
-        case assembly::ConstraintType::Tangent: option = N_("Внутреннее касание"); break;
-        case assembly::ConstraintType::Ball:    break;
+        case assembly::ConstraintType::Mate:     option = N_("Заподлицо (грани смотрят в одну сторону)"); break;
+        case assembly::ConstraintType::Insert:   option = N_("Соосно в одну сторону (не навстречу)"); break;
+        case assembly::ConstraintType::Tangent:  option = N_("Внутреннее касание"); break;
+        case assembly::ConstraintType::Symmetry: option = N_("Грани смотрят друг на друга"); break;
+        case assembly::ConstraintType::Gear:     option = N_("Вращаются в разные стороны (внешнее зацепление)"); break;
+        case assembly::ConstraintType::Screw:    option = N_("Обратное направление (левая резьба)"); break;
+        case assembly::ConstraintType::Ball:     break;
         default:
             if (assembly::IsJoint(c.type)) option = N_("Оси в одну сторону (не навстречу)");
             break;
     }
     if (option) {
-        static constexpr std::array<const char*, 2> labels{N_("Нет"), N_("Да")};
         ui::FieldLabel(ui, Tr(option));
         const int v = ui::Segmented(ui, "con-flip", labels, c.flipped ? 1 : 0, 2, width);
         if (v != (c.flipped ? 1 : 0)) {
-            before();
+            change();
             c.flipped = v == 1;
-            changed = true;
         }
         ImGui::Dummy({0, ui.S(10)});
     }
@@ -840,9 +997,155 @@ void StartConstraint(AppContext& app, assembly::ConstraintType type) {
     StopEditing(app);
     AssemblyState& st = *s->assembly;
     st.creating = {};
+    st.newPart = {};
     st.creating.active = true;
     st.creating.constraint.type = type;
     if (type == assembly::ConstraintType::Angle) st.creating.constraint.value = kPi / 2;
+    if (type == assembly::ConstraintType::Gear) st.creating.constraint.flipped = true;   // external gears: opposite ways
+    if (type == assembly::ConstraintType::Screw) st.creating.constraint.ratio = 2.0;     // a common lead, mm
+    st.drag = {};
+    app.shell.leftTab = LeftTab::Tree;
+}
+
+namespace {
+
+/// Makes (or, redefining, replaces) the constraint once all its picks are in.
+void FinishConstraint(AppContext& app, AssemblyState& st) {
+    auto& creating = st.creating;
+    assembly::Constraint made = creating.constraint;
+    if (assembly::IsJoint(made.type)) assembly::FitJoint(st.assembly, made);
+    if (assembly::IsTransmission(made.type)) assembly::FitTransmission(st.assembly, made);
+    if (creating.redefine) {
+        if (assembly::Constraint* old = st.assembly.FindConstraint(creating.redefine)) {
+            st.Checkpoint(N_("Переопределение зависимости"));
+            const ObjectId id = old->id;
+            const std::string name = old->type == made.type ? old->name : std::string{};
+            made.id = id;
+            made.name = !name.empty() ? name : old->name;
+            made.suppressed = old->suppressed;
+            *old = made;
+            if (name.empty()) {
+                // A new type: a name like the others of it ("Симметрия:2").
+                const std::string base = std::string(assembly::ConstraintTitle(made.type));
+                for (int n = 1;; ++n) {
+                    const std::string candidate = std::format("{}:{}", base, n);
+                    if (std::none_of(st.assembly.constraints.begin(), st.assembly.constraints.end(),
+                                     [&](const assembly::Constraint& o) { return o.name == candidate; })) {
+                        old->name = candidate;
+                        break;
+                    }
+                }
+            }
+            st.assembly.Touch();
+            st.selected = id;
+        }
+        creating = {};
+        return;
+    }
+    const auto fixed = [&](ObjectId c) { return st.assembly.IsFixed(c); };
+    if (!assembly::IsTransmission(made.type) && fixed(made.first.component) && fixed(made.second.component))
+        app.notes.Info(Tr("Оба компонента закреплены — зависимость их не сдвинет"));
+    st.Checkpoint(assembly::IsJoint(made.type) ? N_("Соединение") : N_("Зависимость"));
+    const ObjectId id = st.assembly.AddConstraint(made).id;
+    st.selected = id;
+    // Ready for the next one of the same kind, as in Inventor.
+    const assembly::Constraint keep = creating.constraint;
+    creating = {};
+    creating.active = true;
+    creating.constraint.type = keep.type;
+    creating.constraint.value = keep.value;
+    creating.constraint.flipped = keep.flipped;
+    creating.constraint.ratio = keep.ratio;
+    creating.constraint.limits = keep.limits;
+}
+
+} // namespace
+
+bool TakeConstraintPick(AppContext& app, Session& session, const assembly::GeometryRef& g) {
+    AssemblyState& st = *session.assembly;
+    auto& creating = st.creating;
+    if (!creating.active || assembly::IsTransmission(creating.constraint.type)) return false;
+    const assembly::ConstraintType type = creating.constraint.type;
+    const assembly::GeometryRef* first = creating.picked >= 1 ? &creating.constraint.first : nullptr;
+    if (const char* why = Unfit(type, g, first, creating.picked)) {
+        app.notes.Info(Tr(why));
+        return true;
+    }
+    if (creating.picked == 1 && first->component == g.component) {
+        app.notes.Info(Tr("Вторую выберите на другом компоненте"));
+        return true;
+    }
+    if (creating.picked == 0) {
+        creating.constraint.first = g;
+        creating.picked = 1;
+        return true;
+    }
+    if (creating.picked == 1) {
+        creating.constraint.second = g;
+        if (type == assembly::ConstraintType::Symmetry) {
+            creating.picked = 2;   // the plane of symmetry next
+            return true;
+        }
+    } else {
+        creating.constraint.third = g;
+    }
+    FinishConstraint(app, st);
+    return true;
+}
+
+bool TakeJointPick(AppContext& app, Session& session, ObjectId joint) {
+    AssemblyState& st = *session.assembly;
+    auto& creating = st.creating;
+    if (!creating.active || !assembly::IsTransmission(creating.constraint.type)) return false;
+    const assembly::Constraint* j = st.assembly.FindConstraint(joint);
+    if (!j) return true;
+    const bool wantSlider = creating.constraint.type == assembly::ConstraintType::Screw && creating.picked == 1;
+    const assembly::ConstraintType want = wantSlider ? assembly::ConstraintType::Slider : assembly::ConstraintType::Rotational;
+    if (j->type != want) {
+        app.notes.Info(wantSlider ? Tr("Здесь нужно соединение «Ползун»") : Tr("Здесь нужно соединение «Вращение»"));
+        return true;
+    }
+    if (creating.picked == 0) {
+        creating.constraint.drive = joint;
+        creating.picked = 1;
+        return true;
+    }
+    if (joint == creating.constraint.drive) {
+        app.notes.Info(Tr("Выберите другое соединение"));
+        return true;
+    }
+    creating.constraint.driven = joint;
+    FinishConstraint(app, st);
+    return true;
+}
+
+bool TakeElementPick(AppContext& app, Session& session, ObjectId component, ObjectId element) {
+    AssemblyState& st = *session.assembly;
+    if (st.newPart.active) return CreatePartPickElement(app, session, component, element);
+    if (!st.creating.active) return false;
+    const std::optional<assembly::GeometryRef> g = st.geometry.ElementGeometry(component, element);
+    if (!g) {
+        app.notes.Info(Tr("Этот элемент сейчас не построен"));
+        return true;
+    }
+    return TakeConstraintPick(app, session, *g);
+}
+
+void StartRedefine(AppContext& app, ObjectId constraint, std::optional<assembly::ConstraintType> type) {
+    Session* s = ActiveAssembly(app);
+    if (!s) return;
+    AssemblyState& st = *s->assembly;
+    const assembly::Constraint* c = st.assembly.FindConstraint(constraint);
+    if (!c) return;
+    StopEditing(app);
+    st.creating = {};
+    st.creating.active = true;
+    st.creating.redefine = constraint;
+    st.creating.constraint = *c;   // its options stay; the geometry is picked again
+    if (type) st.creating.constraint.type = *type;
+    st.creating.constraint.first = {};
+    st.creating.constraint.second = {};
+    st.creating.constraint.third = {};
     st.drag = {};
     app.shell.leftTab = LeftTab::Tree;
 }
@@ -864,14 +1167,29 @@ void DrawConstraintPanel(AppContext& app, Session& session, float width) {
     const float inner = width - ui.S(28);
     ImGui::SetCursorPos({ui.S(14), ImGui::GetCursorPosY() + ui.S(14)});
     ImGui::BeginGroup();
-    LabelText(ui, Tr(PickPrompt(creating.constraint.type, creating.picked)), ui.C().textSecondary);
-    if (creating.picked == 1)
-        if (const Component* c = st.assembly.FindComponent(creating.constraint.first.component))
-            LabelText(ui, Trf("Первый: {}", c->name), ui.C().text);
+    if (creating.redefine)
+        if (const assembly::Constraint* old = st.assembly.FindConstraint(creating.redefine))
+            LabelText(ui, Trf("Переопределение: {}", old->name), ui.C().accent);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inner);
+    ImGui::PushStyleColor(ImGuiCol_Text, ui::ToU32(ui.C().textSecondary));
+    ImGui::TextUnformatted(Tr(PickPrompt(creating.constraint.type, creating.picked)));
+    ImGui::PopStyleColor();
+    ImGui::PopTextWrapPos();
+    ImGui::Dummy({0, ui.S(4)});
+    // What is picked so far.
+    const auto slot = [&](const char* label, const std::string& value) { LabelText(ui, Trf("{}: {}", Tr(label), value), ui.C().text); };
+    if (assembly::IsTransmission(creating.constraint.type)) {
+        if (creating.picked >= 1)
+            if (const assembly::Constraint* j = st.assembly.FindConstraint(creating.constraint.drive)) slot(N_("Ведущее"), j->name);
+    } else {
+        if (creating.picked >= 1) slot(N_("Первое"), PickTitle(st, creating.constraint.first));
+        if (creating.picked >= 2) slot(N_("Второе"), PickTitle(st, creating.constraint.second));
+    }
     ImGui::Dummy({0, ui.S(10)});
     ConstraintOptions(app, creating.constraint, inner, [] {});
     if (ui::SecondaryButton(ui, "##con-cancel", Tr("Отмена"), "Esc", {inner, ui.S(32)})) creating = {};
     ImGui::EndGroup();
+    ImGui::Dummy({0, ui.S(12)});
 }
 
 void ToggleGrounded(AppContext& app) {
@@ -900,9 +1218,13 @@ bool AssemblyEscape(AppContext& app, Session& session) {
         st.dropping = {};
         return true;
     }
+    if (st.newPart.active) {
+        st.newPart = {};
+        return true;
+    }
     if (st.creating.active) {
-        // Back one step: the first pick, then the command.
-        if (st.creating.picked > 0) st.creating.picked = 0;
+        // Back one step: the last pick, then the command.
+        if (st.creating.picked > 0) --st.creating.picked;
         else st.creating = {};
         return true;
     }
@@ -971,12 +1293,45 @@ void DrawAssemblyProperties(AppContext& app, Session& session, float width) {
     } else if (const assembly::ComponentPattern* pat = st.assembly.FindPattern(st.selected)) {
         DrawPatternProperties(app, session, *pat, inner);
     } else if (assembly::Constraint* con = st.assembly.FindConstraint(st.selected)) {
-        const Component* a = st.assembly.FindComponent(con->first.component);
-        const Component* b = st.assembly.FindComponent(con->second.component);
-        LabelText(ui, Trf("{} — {}", a ? a->name : "?", b ? b->name : "?"), ui.C().textSecondary);
+        if (assembly::IsTransmission(con->type)) {
+            const assembly::Constraint* d = st.assembly.FindConstraint(con->drive);
+            const assembly::Constraint* n = st.assembly.FindConstraint(con->driven);
+            LabelText(ui, Trf("{} → {}", d ? d->name : "?", n ? n->name : "?"), ui.C().textSecondary);
+        } else {
+            LabelText(ui, Trf("{} — {}", Tr(st.assembly.NameOf(con->first.component)), Tr(st.assembly.NameOf(con->second.component))),
+                      ui.C().textSecondary);
+            LabelText(ui, Trf("{} · {}", PickTitle(st, con->first), PickTitle(st, con->second)), ui.C().textSecondary);
+            if (con->type == assembly::ConstraintType::Symmetry)
+                LabelText(ui, Trf("Плоскость: {}", PickTitle(st, con->third)), ui.C().textSecondary);
+        }
         ImGui::Dummy({0, ui.S(8)});
         if (ConstraintOptions(app, *con, inner, [&st] { st.Checkpoint(N_("Изменение зависимости")); })) st.assembly.Touch();
         JointMotionOptions(app, st, *con, inner);
+        // Inventor's "Переопределить": the same constraint, its geometry picked
+        // again — or another type (a mate that should have been an angle).
+        if (!assembly::IsTransmission(con->type)) {
+            const ObjectId cid = con->id;
+            if (!assembly::IsJoint(con->type)) {
+                static constexpr std::array<assembly::ConstraintType, 6> kTypes{
+                    assembly::ConstraintType::Mate,   assembly::ConstraintType::Angle,    assembly::ConstraintType::Tangent,
+                    assembly::ConstraintType::Insert, assembly::ConstraintType::AxisMate, assembly::ConstraintType::Symmetry};
+                static constexpr std::array<const char*, 6> kLabels{N_("Совмещ."), N_("Угол"), N_("Касание"),
+                                                                    N_("Вставка"), N_("Оси"),  N_("Симметр.")};
+                int current = 0;
+                for (std::size_t k = 0; k < kTypes.size(); ++k)
+                    if (kTypes[k] == con->type) current = static_cast<int>(k);
+                ui::FieldLabel(ui, Tr("Тип (другой — выбрать геометрию заново)"));
+                if (const int k = ui::Segmented(ui, "con-type", kLabels, current, 3, inner); k != current) {
+                    const assembly::ConstraintType type = kTypes[static_cast<std::size_t>(k)];
+                    app.Later([&app, cid, type] { StartRedefine(app, cid, type); });
+                }
+                ImGui::Dummy({0, ui.S(10)});
+            }
+            if (ui::SecondaryButton(ui, "##con-redefine", Tr("Переопределить"), nullptr, {inner, ui.S(32)}))
+                app.Later([&app, cid] { StartRedefine(app, cid); });
+            ui::ItemTooltip(ui, Tr("Выбрать грани (рёбра, вершины, плоскости) этой зависимости заново; её значение и настройки остаются"));
+            ImGui::Dummy({0, ui.S(10)});
+        }
         switch (con->state) {
             case assembly::ConstraintState::Failed:
                 LabelText(ui, Trf("Не выполняется (ошибка {} мм)", FormatNumber(con->error, 4)), ui.C().danger);
@@ -1023,6 +1378,28 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
     app.viewport.SetHoveredBody(drag.moving ? drag.component : hovered ? hovered : st.selected);
     DrawOffer(app, session, vf);
 
+    // An element pointed at in the tree, and what the constraint being made has picked so far.
+    if (const auto& e = app.shell.hoveredElement; e.element)
+        if (const auto g = st.geometry.ElementGeometry(e.component, e.element)) DrawGeometryMark(app, vf, st, *g, true);
+    if (st.creating.active && !assembly::IsTransmission(st.creating.constraint.type)) {
+        if (st.creating.picked >= 1) DrawGeometryMark(app, vf, st, st.creating.constraint.first, false);
+        if (st.creating.picked >= 2) DrawGeometryMark(app, vf, st, st.creating.constraint.second, false);
+    }
+    // The selected constraint: what it ties.
+    if (const assembly::Constraint* con = st.assembly.FindConstraint(st.selected); con && !st.creating.active &&
+                                                                                    !assembly::IsTransmission(con->type)) {
+        DrawGeometryMark(app, vf, st, con->first, true);
+        DrawGeometryMark(app, vf, st, con->second, true);
+        if (con->type == assembly::ConstraintType::Symmetry) DrawGeometryMark(app, vf, st, con->third, false);
+    }
+
+    // "Создать": a click on a flat face starts the new part there.
+    if (CreatePartInViewport(app, session, vf)) {
+        for (const std::string& p : st.problems) app.notes.Error(Tr(p));
+        st.problems.clear();
+        return;
+    }
+
     if (st.pickingAxis) {
         if (!st.assembly.FindPattern(st.pickingAxis)) {
             st.pickingAxis = {};
@@ -1057,42 +1434,45 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
         auto& creating = st.creating;
         Prompt(ui, vf, Tr(PickPrompt(creating.constraint.type, creating.picked)));
         if (vf.hovered && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-            const assembly::GeometryRef* first = creating.picked == 1 ? &creating.constraint.first : nullptr;
-            std::optional<assembly::GeometryRef> g =
-                st.geometry.GeometryAt(st.assembly, hovered, hit->point, PickFor(creating.constraint.type));
-            if (!g) {
+            if (assembly::IsTransmission(creating.constraint.type)) {
+                // A click on a part takes its joint of the kind wanted.
+                const bool slider = creating.constraint.type == assembly::ConstraintType::Screw && creating.picked == 1;
+                ObjectId found;
+                int count = 0;
+                for (const assembly::Constraint& j : st.assembly.constraints)
+                    if ((slider ? j.type == assembly::ConstraintType::Slider : j.type == assembly::ConstraintType::Rotational) &&
+                        (j.second.component == hovered || j.first.component == hovered)) {
+                        found = j.id;
+                        ++count;
+                    }
+                if (count == 1) TakeJointPick(app, session, found);
+                else if (count == 0)
+                    app.notes.Info(slider ? Tr("У этой детали нет соединения «Ползун»") : Tr("У этой детали нет соединения «Вращение»"));
+                else app.notes.Info(Tr("У этой детали несколько соединений — выберите нужное в дереве"));
+            } else if (std::optional<assembly::GeometryRef> g = st.geometry.GeometryAt(
+                           st.assembly, hovered, hit->point,
+                           creating.constraint.type == assembly::ConstraintType::Symmetry && creating.picked == 2
+                               ? kernel::AssemblyPick::Face
+                               : PickFor(creating.constraint.type),
+                           PickTolerance(vf))) {
+                TakeConstraintPick(app, session, *g);
+            } else {
                 app.notes.Info(Tr(creating.constraint.type == assembly::ConstraintType::Insert
                                       ? "Здесь нет круглой кромки"
                                       : creating.constraint.type == assembly::ConstraintType::AxisMate
-                                            ? "У этой грани нет оси — выберите цилиндр или конус"
+                                            ? "Здесь нет оси — выберите цилиндр, конус или прямое ребро"
                                             : "Эту грань нельзя использовать"));
-            } else if (const char* why = Unfit(creating.constraint.type, *g, first)) {
-                app.notes.Info(Tr(why));
-            } else if (first && first->component == g->component) {
-                app.notes.Info(Tr("Вторую грань выберите на другом компоненте"));
-            } else if (!first) {
-                creating.constraint.first = *g;
-                creating.picked = 1;
-            } else {
-                creating.constraint.second = *g;
-                const Component* a = st.assembly.FindComponent(creating.constraint.first.component);
-                const Component* b = st.assembly.FindComponent(g->component);
-                if (a && b && a->grounded && b->grounded) app.notes.Info(Tr("Оба компонента закреплены — зависимость их не сдвинет"));
-                st.Checkpoint(assembly::IsJoint(creating.constraint.type) ? N_("Соединение") : N_("Зависимость"));
-                if (assembly::IsJoint(creating.constraint.type)) assembly::FitJoint(st.assembly, creating.constraint);
-                const ObjectId id = st.assembly.AddConstraint(creating.constraint).id;
-                st.selected = id;
-                // Ready for the next one of the same kind, as in Inventor.
-                const assembly::Constraint keep = creating.constraint;
-                creating = {};
-                creating.active = true;
-                creating.constraint.type = keep.type;
-                creating.constraint.value = keep.value;
-                creating.constraint.flipped = keep.flipped;
             }
         }
         for (const std::string& p : st.problems) app.notes.Error(Tr(p));
         st.problems.clear();
+        return;
+    }
+    // Double click on a component: its part edited right here, in place.
+    if (vf.hovered && hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        drag = {};
+        const ObjectId id = hovered;
+        app.Later([&app, &session, id] { EditInPlace(app, session, id); });
         return;
     }
     if (vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {

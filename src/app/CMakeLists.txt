@@ -8,6 +8,7 @@ set(BZ_APP_SOURCES
     AssemblyState.cpp
     Autosave.cpp
     assembly/AssemblyUi.cpp
+    assembly/InPlace.cpp
     Backgrounds.cpp
     BetaTesting.cpp
     CrashGuard.cpp

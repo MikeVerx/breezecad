@@ -145,6 +145,14 @@ struct ShellState {
     ObjectId    hoveredTreeItem;       ///< for highlighting origin planes in the viewport
     std::string treeFilter;
     std::unordered_set<ObjectId> expanded;   ///< tree rows opened by the user
+    /// Assembly tree: the components (or kAssemblyOrigin) whose origin and
+    /// work geometry are shown.
+    std::unordered_set<ObjectId> elementsOpen;
+    /// An origin element or work geometry of a component (or of the assembly)
+    /// under the cursor in the tree: shown in the view.
+    struct PointedElement {
+        ObjectId component, element;
+    } hoveredElement;
     ui::EditState edit;                      ///< the text field being edited
     bool        treeSearch = false;
     bool        originExpanded = false;
