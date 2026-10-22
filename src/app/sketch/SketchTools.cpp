@@ -1,5 +1,6 @@
 // Drawing, dimension and constraint tools of the sketch editor.
 
+#include "app/Operations.h"
 #include "app/Format.h"
 #include "app/sketch/DimensionArrange.h"
 #include "app/sketch/DimensionLayout.h"
@@ -1263,8 +1264,7 @@ void SketchEditor::HandleMotion(AppContext& app, Session& session, const SketchV
     // point, a press on empty space while nothing is chosen (or with Ctrl / Shift) and a
     // drag take what the frame holds — left to right wholly inside, right to left touched.
     {
-        const ImGuiIO& io = ImGui::GetIO();
-        const bool adding = io.KeyCtrl || io.KeyShift;
+        const bool adding = MultiSelect(app);
         if (myClicks.empty() && view.vf.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !myHover && (mySelection.empty() || adding)) {
             myBoxStart = ImGui::GetMousePos();
             myBoxing = false;
@@ -1294,8 +1294,7 @@ void SketchEditor::HandleMotion(AppContext& app, Session& session, const SketchV
 
     if (!ImGui::IsMouseClicked(ImGuiMouseButton_Left) || !view.vf.hovered) return;
     // Ctrl / Shift + click, or any click while nothing is chosen, picks elements.
-    const ImGuiIO& io = ImGui::GetIO();
-    if (myClicks.empty() && myHover && myHover.kind != EntityKind::Constraint && (io.KeyCtrl || io.KeyShift || mySelection.empty())) {
+    if (myClicks.empty() && myHover && myHover.kind != EntityKind::Constraint && (MultiSelect(app) || mySelection.empty())) {
         if (!mySelection.erase(myHover.id)) mySelection.insert(myHover.id);
         return;
     }

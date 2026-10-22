@@ -164,6 +164,13 @@ void RegisterActions(AppContext& app) {
     a.Add({"edit.redo", N_("Повторить"), "ui-redo", Ctrl(ImGuiKey_Y), {}, [&app] { return CanRedo(app); }, [&app] { Redo(app); }});
     a.Add({"edit.redoAlt", "", "", CtrlShift(ImGuiKey_Z), {}, [&app] { return CanRedo(app); }, [&app] { Redo(app); }});
     a.Add({"edit.delete", N_("Удалить"), "ui-trash", ImGuiKey_Delete, {}, hasDoc, [&app] { DeletePressed(app); }});
+    // The sketch clipboard (as in KOMPAS: a base point, then copies where the cursor is).
+    a.Add({"edit.copy", N_("Копировать"), "ui-copy", Ctrl(ImGuiKey_C), {}, [&app, inSketch] { return inSketch() && app.sketch.HasSelection(); },
+           [&app] {
+               if (Session* s = app.Doc()) app.sketch.StartCopy(app, *s);
+           }});
+    a.Add({"edit.paste", N_("Вставить"), "ui-copy", Ctrl(ImGuiKey_V), {}, [&app, inSketch] { return inSketch() && app.sketch.HasClipboard(); },
+           [&app] { app.sketch.StartPaste(app); }});
     a.Add({"edit.escape", "", "", ImGuiKey_Escape, {}, {}, [&app] {
                // The phone's "Back" in an operation steps back as ✕ does (it cancelled it all).
                if (app.shell.mobile.phone && app.ops.Active()) CancelPressed(app);

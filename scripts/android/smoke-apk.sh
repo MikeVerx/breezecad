@@ -278,18 +278,20 @@ else
 fi
 check saveback
 
-# 14e. «Зажать», Shift, «Удалить» (22.10.2026). A line through the view's middle, the cursor's tip on it.
-# The palm on; ✓ presses at the tip and holds; the drop dragged — the line follows; ✓ lets go (one move).
-# ✕ clears the choice. Shift on; the tip to empty space; ✓ presses; the drop dragged across the line — a
-# box; ✓ lets go: the line chosen, added. The palm and Shift off; «Удалить» deletes the line.
+# 14e. «Зажать», Ctrl, «Копировать», «Удалить» (22.10.2026). A line through the view's middle, the
+# cursor's tip on it. The palm on; ✓ presses at the tip and holds; the drop dragged — the line follows; ✓
+# lets go. ✕ clears the choice. Ctrl on; the tip to empty space; ✓ presses; dragged across the line — a box;
+# ✓ lets go: the line chosen (added). The palm and Ctrl off. «Копировать», ✓ — the base point; the drop
+# dragged, ✓ — a copy put there (it becomes the choice); ✕ — the clipboard off; «Удалить» deletes the copy.
 adb logcat -c
 start new,sketch,holdtest 25
 sleep 2
-row2=$(blog | sed -n 's/.*Touch: row2 shift at \([0-9-]*\),\([0-9-]*\) delete at \([0-9-]*\),\([0-9-]*\) hold at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4 \5 \6 \7 \8/p' | tail -1)
+row2=$(blog | sed -n 's/.*Touch: row2 ctrl at \([0-9-]*\),\([0-9-]*\) delete at \([0-9-]*\),\([0-9-]*\) hold at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4 \5 \6 \7 \8/p' | tail -1)
 row1=$(blog | sed -n 's/.*Touch: row1 cancel at \([0-9-]*\),\([0-9-]*\) ok at \([0-9-]*\),\([0-9-]*\).*/\1 \2 \3 \4/p' | tail -1)
+read -r px py < <(blog | sed -n 's/.*Touch: copy at \([0-9-]*\),\([0-9-]*\).*/\1 \2/p' | tail -1)
 read -r fx fy < <(blog | sed -n 's/.*Touch: drop at \([0-9-]*\),\([0-9-]*\).*/\1 \2/p' | tail -1)
-if [ -n "$row2" ] && [ -n "$row1" ] && [ -n "${fy:-}" ]; then
-    read -r sx sy ex ey hx hy bw bh <<< "$row2"
+if [ -n "$row2" ] && [ -n "$row1" ] && [ -n "${fy:-}" ] && [ -n "${py:-}" ]; then
+    read -r kx ky ex ey hx hy bw bh <<< "$row2"
     read -r cx cy ox oy <<< "$row1"
     tapc() { adb shell input tap $(dp $(( $1 + bw / 2 ))) $(dp $(( $2 + bh / 2 ))); sleep 1.5; }
     drag() { adb shell input swipe $(dp $1) $(dp $2) $(dp $3) $(dp $4) 900; sleep 1.5; }
@@ -300,23 +302,30 @@ if [ -n "$row2" ] && [ -n "$row1" ] && [ -n "${fy:-}" ]; then
     tapc $ox $oy                                  # ✓: let go
     shot 14e-hold-moved 1
     tapc $cx $cy                                  # ✕: nothing chosen
-    tapc $sx $sy                                  # Shift on
+    tapc $kx $ky                                  # Ctrl on
     drag $(( fx + 40 )) $(( fy - 30 )) $(( fx + 120 )) $(( fy + 60 ))   # the tip to empty space
     tapc $ox $oy                                  # ✓: pressed there — a box starts
     drag $(( fx + 120 )) $(( fy + 60 )) $(( fx - 40 )) $(( fy - 50 ))   # across the line
     shot 14e-box 1
     tapc $ox $oy                                  # ✓: let go — the line chosen
     tapc $hx $hy                                  # the palm off
-    tapc $sx $sy                                  # Shift off
-    tapc $ex $ey                                  # «Удалить»
-    if bhas "Hold: armed" && bhas "Sketch: moved by" && bhas "Keys: Shift down" && bhas "Sketch: box chose, 1 chosen (added)" &&
-       bhas "Hold: off" && bhas "Sketch: 1 deleted"; then
-        echo "step hold: pressed on the line and it followed, a box with Shift chose it, deleted ($(blog | grep -o -E '(Hold|Sketch|Keys): .*' | tr '\n' ';'))"
+    tapc $kx $ky                                  # Ctrl off
+    tapc $px $py                                  # «Копировать»
+    tapc $ox $oy                                  # ✓: the base point (where the tip is)
+    drag $(( fx - 40 )) $(( fy - 50 )) $(( fx + 20 )) $(( fy + 30 ))    # elsewhere
+    shot 14e-paste-ghost 1
+    tapc $ox $oy                                  # ✓: a copy put there
+    tapc $cx $cy                                  # ✕ (red): the clipboard off
+    tapc $ex $ey                                  # «Удалить»: the copy just put (it is the choice)
+    if bhas "Hold: armed" && bhas "Sketch: moved by" && bhas "Keys: Ctrl on" && bhas "Sketch: box chose, 1 chosen (added)" &&
+       bhas "Hold: off" && bhas "Clipboard: copied 1 lines" && bhas "Sketch: pasted 1" && bhas "Clipboard: emptied" &&
+       bhas "Sketch: 1 deleted"; then
+        echo "step hold: pressed and dragged, a box with Ctrl, copied and pasted, the clipboard off, deleted ($(blog | grep -o -E '(Hold|Sketch|Keys|Clipboard): .*' | tr '\n' ';'))"
     else
-        echo "step hold: FAILED — $(blog | grep -o -E '(Hold|Sketch|Keys|Touch: finger).*' | tail -20 | tr '\n' ';')"; broken=1
+        echo "step hold: FAILED — $(blog | grep -o -E '(Hold|Sketch|Keys|Clipboard|Touch: finger).*' | tail -24 | tr '\n' ';')"; broken=1
     fi
 else
-    echo "step hold: FAILED — no rows or drop in the log"; broken=1
+    echo "step hold: FAILED — no rows, copy or drop in the log"; broken=1
 fi
 check hold
 

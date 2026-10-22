@@ -1,4 +1,5 @@
 #include "app/sketch/SketchEditor.h"
+#include "app/Operations.h"
 
 #include "app/Format.h"
 #include "app/sketch/DimensionArrange.h"
@@ -296,6 +297,15 @@ void SketchEditor::LeaveDocument(Session* old) {
 }
 
 void SketchEditor::Escape(AppContext& app, Session& session, bool mayFinish) {
+    if (myPickingBase) {
+        myPickingBase = false;
+        return;
+    }
+    if (Pasting()) {
+        if (app.shell.mobile.phone) ClearClipboard();   // the phone's ✕: the clipboard off (the author, 22.10.2026)
+        else myPasting = false;                         // a computer: Ctrl+V again takes it
+        return;
+    }
     if (myEditDimension) {
         myEditDimension = {};
     } else if (myEditedText) {
@@ -476,6 +486,12 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
     if (myEditDimension) HandleInlineEdit(app, session, view);
     if (myClickUsed || (!vf.hovered && !myDragging)) return;
 
+    // The clipboard takes the clicks while its base point is picked or a copy is placed.
+    if (myTool == SketchTool::Select && !myDragging && (myPickingBase || Pasting())) {
+        HandleClipboard(app, session, view);
+        return;
+    }
+
     // A short right click ends a chain of lines, like in KOMPAS.
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Right) && ImGui::GetMouseDragDelta(ImGuiMouseButton_Right).x == 0 &&
         !myClicks.empty()) {
@@ -521,7 +537,6 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
 
 void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchView& view) {
     doc::SketchFeature* f = Active(session);
-    const ImGuiIO& io = ImGui::GetIO();
     const std::optional<Vec2> cursor = myCursor;
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -612,9 +627,9 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
         dl->AddRectFilled(lo, hi, ui::ToU32(tone.WithAlpha(0.10f)));
         dl->AddRect(lo, hi, ui::ToU32(tone), 0, 0, app.ui.S(1.2f));
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-            if (!io.KeyShift && !io.KeyCtrl) mySelection.clear();
+            if (!MultiSelect(app)) mySelection.clear();
             for (const ObjectId id : EntitiesInBox(f->sketch, view, lo, hi, window)) mySelection.insert(id);
-            log::Info("Sketch: box chose, {} chosen{}", mySelection.size(), io.KeyShift || io.KeyCtrl ? " (added)" : "");
+            log::Info("Sketch: box chose, {} chosen{}", mySelection.size(), MultiSelect(app) ? " (added)" : "");
             myBoxStart.reset();
             myBoxing = false;
             myPressedOnEntity = false;
@@ -631,12 +646,15 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
         } else if (myHover) {
             // Click: select; Shift or Ctrl add to the selection. The phone has no Ctrl:
             // a tap adds or takes away, a tap on empty space clears (18.10.2026).
-            if (!io.KeyShift && !io.KeyCtrl && !app.shell.mobile.phone) mySelection.clear();
-            if (myHover) {
+            // As on a computer, the phone too (22.10.2026): a pick chooses only that;
+            // with Ctrl (the phone's button) it adds, a second pick takes it away.
+            if (MultiSelect(app)) {
                 if (mySelection.count(myHover.id)) mySelection.erase(myHover.id);
                 else mySelection.insert(myHover.id);
+            } else {
+                mySelection = {myHover.id};
             }
-        } else if (!io.KeyShift && !io.KeyCtrl) {
+        } else if (!MultiSelect(app)) {
             mySelection.clear();
         }
         myDragging = false;
@@ -840,9 +858,99 @@ std::optional<std::string> SketchEditor::DimensionNameAt(const Session& session,
     return best->parameter.name;
 }
 
+void SketchEditor::StartCopy(AppContext& app, Session& session) {
+    if (session.mode != EditMode::Sketch || !Active(session)) return;
+    if (mySelection.empty()) {
+        app.notes.Info(Tr("Выберите в эскизе, что копировать"));
+        return;
+    }
+    myTool = SketchTool::Select;
+    myPickingBase = true;
+    myPasting = false;
+    log::Info("Clipboard: pick the base point ({} chosen)", mySelection.size());
+}
+
+void SketchEditor::StartPaste(AppContext& app) {
+    if (!myClipboard) {
+        app.notes.Info(Tr("Буфер обмена пуст: сначала скопируйте"));
+        return;
+    }
+    myTool = SketchTool::Select;
+    myPickingBase = false;
+    myPasting = true;
+}
+
+void SketchEditor::ClearClipboard() {
+    myClipboard.reset();
+    myPickingBase = false;
+    myPasting = false;
+    log::Info("Clipboard: emptied");
+}
+
+void SketchEditor::HandleClipboard(AppContext& app, Session& session, const SketchView& view) {
+    doc::SketchFeature* f = Active(session);
+    SnapOptions options;
+    options.points = app.settings.pointSnap;
+    options.grid = app.settings.gridSnap;
+    options.gridStep = app.settings.gridStep > 0 ? app.settings.gridStep : AdaptiveGridStep(view.MmPerPixel()) / 2;
+    mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
+    const Vec2 at = mySnap.pos;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    DrawSnapMarker(app.ui, dl, view.ToScreen(at), mySnap);
+    const bool click = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+
+    if (myPickingBase) {
+        if (!click) return;
+        const std::vector<ObjectId> chosen(mySelection.begin(), mySelection.end());
+        sketch::Clipboard clip = sketch::CopyToClipboard(f->sketch, chosen, at);
+        myPickingBase = false;
+        if (clip.Empty()) {
+            app.notes.Info(Tr("Среди выбранного нечего копировать"));
+            return;
+        }
+        myClipboard = std::move(clip);
+        myPasting = app.shell.mobile.phone;   // the phone: ✓ puts a copy from now on
+        app.notes.Success(app.shell.mobile.phone ? Tr("Скопировано. ✓ — вставить у кончика, ✕ — выключить буфер")
+                                                 : Tr("Скопировано. Ctrl+V — вставить"));
+        log::Info("Clipboard: copied {} lines, {} circles, {} arcs, base {:.2f},{:.2f}", myClipboard->shapes.lines.size(),
+                  myClipboard->shapes.circles.size(), myClipboard->shapes.arcs.size(), at.x, at.y);
+        return;
+    }
+
+    // Pasting: the copy shown where it would go, a click puts it there.
+    const sketch::Sketch& s = myClipboard->shapes;
+    const Color ink = app.ui.C().success;
+    for (const sketch::Line& l : s.lines) DrawSketchSegment(app.ui, dl, view, s.PositionOf(l.start) + at, s.PositionOf(l.end) + at, ink, 1.6f, true);
+    for (const sketch::Circle& c : s.circles) DrawSketchArc(app.ui, dl, view, s.PositionOf(c.center) + at, c.radius, 0, 2 * kPi, ink, 1.6f, true);
+    for (const sketch::Arc& a : s.arcs) {
+        const Vec2 centre = s.PositionOf(a.center);
+        const Vec2 p = s.PositionOf(a.start) - centre, q = s.PositionOf(a.end) - centre;
+        double a0 = std::atan2(p.y, p.x), a1 = std::atan2(q.y, q.x);
+        if (a1 <= a0) a1 += 2 * kPi;
+        DrawSketchArc(app.ui, dl, view, centre + at, p.Length(), a0, a1, ink, 1.6f, true);
+    }
+    for (const sketch::Point& p : s.points) {
+        const ImVec2 sp = view.ToScreen(p.pos + at);
+        dl->AddCircleFilled(sp, app.ui.S(2.0f), ui::ToU32(ink));
+    }
+    dl->AddCircle(view.ToScreen(at), app.ui.S(5), ui::ToU32(ink), 16, app.ui.S(1.5f));   // the base point
+    if (!click) return;
+    auto before = f->Clone();
+    const std::vector<ObjectId> made = sketch::PasteFromClipboard(f->sketch, session.doc.Ids(), *myClipboard, at,
+                                                                  [&session] { return session.doc.NextParameterName(); });
+    session.doc.EvaluateParameters();
+    doc::SolveSketch(*f);
+    session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
+    session.CommitInPlaceEdit(std::move(before), Tr("Вставка"));
+    mySelection = std::unordered_set<ObjectId>(made.begin(), made.end());   // the copy just put is the choice (to delete, to move)
+    log::Info("Sketch: pasted {} at {:.2f},{:.2f}", made.size(), at.x, at.y);
+}
+
 std::string SketchEditor::Hint(const Session& session) const {
     (void)session;
     if (myEditDimension) return Tr("Введите значение или выражение, Enter — применить, Esc — отмена");
+    if (myPickingBase) return Tr("Копирование: укажите базовую точку — она встанет под курсор при вставке");
+    if (Pasting()) return Tr("Вставка: щелчок — поставить копию (базовой точкой в курсор), Esc — закончить");
     const std::size_t step = myClicks.size();
     switch (myTool) {
         case SketchTool::Line:

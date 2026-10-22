@@ -708,6 +708,7 @@ void Application::Frame() {
         else DrawRoot();
         DrawDialogs(app);
         mobile::DrawLastCrash(app);   // Android: the last run crashed or hung (never set on the desktop)
+        mobile::DrawSaveAsk(app);     // Android: the first save's name and folder (never opened on the desktop)
     }
     const ImVec2 corner = myShell.viewportMax.x > 0 && !myWorkspace.ShowsHome() ? myShell.viewportMax : ImGui::GetIO().DisplaySize;
     myBusy = myNotes.Draw(*myUi, corner, now) || myBusy || myShell.animateUi;

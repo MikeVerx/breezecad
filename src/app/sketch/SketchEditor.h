@@ -8,6 +8,7 @@
 #include "app/AppContext.h"
 #include "app/sketch/SketchPick.h"
 #include "document/SketchFeature.h"
+#include "sketch/Clipboard.h"
 #include "sketch/Move.h"
 #include "sketch/Solver.h"
 
@@ -127,6 +128,20 @@ public:
     /// Makes the selected lines осевые (or normal again).
     void ToggleCenterline(Session& session);
     bool HasSelection() const { return !mySelection.empty(); }
+
+    // --- The clipboard (22.10.2026, as in KOMPAS) ----------------------------
+    // «Копировать» (Ctrl+C): the chosen shapes, then a click — their base
+    // point. «Вставить» (Ctrl+V): a copy follows the cursor, a click puts it
+    // there with the base point under the cursor, again and again; Esc stops.
+    // The clipboard lives in the program, not in a sketch: any sketch of any
+    // open part takes it, tabs change, it stays. On the phone copying starts
+    // pasting at once (✓ puts a copy) and ✕ empties it.
+    void StartCopy(AppContext& app, Session& session);
+    void StartPaste(AppContext& app);
+    bool HasClipboard() const { return myClipboard.has_value(); }
+    void ClearClipboard();
+    bool PickingBase() const { return myPickingBase; }
+    bool Pasting() const { return myPasting && myClipboard; }
     /// The emulator's check of «Зажать» (Application::RunTestCommands "holdtest"):
     /// a free line through the middle, chosen.
     void MakeHoldTest(Session& session);
@@ -159,6 +174,7 @@ private:
 
     // Tool handlers, called from Frame().
     void HandleSelect(AppContext& app, Session& session, const SketchView& view);
+    void HandleClipboard(AppContext& app, Session& session, const SketchView& view);
     void HandleDrawing(AppContext& app, Session& session, const SketchView& view);
     /// "Проецировать": a click on a model edge adds its projection.
     void HandleProject(AppContext& app, Session& session, const SketchView& view);
@@ -288,6 +304,9 @@ private:
     std::vector<sketch::Drag>     myDragOrigins;   ///< initial positions
     bool                          myDragging = false;
     bool                          myPressedOnEntity = false;
+    std::optional<sketch::Clipboard> myClipboard;   ///< see StartCopy
+    bool                          myPickingBase = false;
+    bool                          myPasting = false;
 
     /// Camera before entering the sketch; Finish returns to its direction.
     std::optional<render::CameraState> myCameraBeforeSketch;

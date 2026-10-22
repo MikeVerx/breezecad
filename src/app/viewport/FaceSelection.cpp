@@ -1,4 +1,5 @@
 #include "app/viewport/FaceSelection.h"
+#include "app/Operations.h"
 
 #include "app/Session.h"
 #include "app/features/OperationEditors.h"
@@ -93,18 +94,18 @@ void UpdateFaceSelection(AppContext& app, Session& session, const ViewportFrame&
             const bool crossing = mouse.x < fs.from.x;
             const Faces found = app.viewport.FacesInRect(vf.ToLocal(fs.from), vf.ToLocal(mouse), crossing);
             if (io.KeyCtrl) Remove(app, chosen, found);
-            else if (io.KeyShift) Add(app, chosen, found);
+            else if (io.KeyShift || app.shell.mobile.ctrlOn) Add(app, chosen, found);   // the phone's Ctrl adds
             else chosen = found;
             mon::Action("select", crossing ? "рамка (касание)" : "рамка");
         } else if (const auto face = FaceAt(app, vf, mouse)) {
-            if (io.KeyShift || io.KeyCtrl) {
+            if (MultiSelect(app)) {
                 if (Contains(app, chosen, *face)) Remove(app, chosen, {*face});
                 else chosen.push_back(*face);
             } else {
                 chosen = {*face};
             }
             mon::Action("select", "грань");
-        } else if (!io.KeyShift && !io.KeyCtrl) {
+        } else if (!MultiSelect(app)) {
             chosen.clear();   // a click on an empty spot
         }
         fs = {};

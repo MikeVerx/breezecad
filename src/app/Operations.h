@@ -84,6 +84,9 @@ void EscapePressed(AppContext& app);
 void CancelPressed(AppContext& app);
 void EnterPressed(AppContext& app);
 void DeletePressed(AppContext& app);
+/// Whether a pick adds to the choice (a second pick of a chosen thing takes it
+/// away) rather than replacing it: Shift or Ctrl held, or the phone's Ctrl lit.
+bool MultiSelect(const AppContext& app);
 /// Whether DeletePressed has something to delete now (the phone's «Удалить» greys out otherwise).
 bool CanDelete(AppContext& app);
 

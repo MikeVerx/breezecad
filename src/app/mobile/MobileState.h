@@ -68,13 +68,23 @@ struct MobileState {
     // draws its fence. ✕ while held puts it back. The palm again: off.
     bool holdArmed = false;
     bool holding = false;
-    // Shift and Ctrl (22.10.2026): keys that stay down while lit, as on a keyboard.
-    bool shiftOn = false;
+    // Ctrl (22.10.2026): while lit, picks add to the choice and a second pick of
+    // a chosen thing takes it away (MultiSelect). Not a key for the interface:
+    // a held Ctrl stopped the menus scrolling.
     bool ctrlOn = false;
-    float holdBox[4] = {};         ///< the rows' «Зажать», ✓, ✕, Shift, Ctrl (x0 y0 x1 y1 each): a touch
-    float okBox[4] = {};           ///< on them while the button is held is taken before the panel
+    bool copyPressed = false;      ///< «Копировать» tapped (the sketch clipboard)
+
+    // --- The first save on the phone: the name and the folder (22.10.2026) ---
+    struct SaveAsk {
+        bool        open = false;
+        const void* session = nullptr;   ///< the document (it may close meanwhile: looked up again)
+        std::string name;                ///< without the extension
+        bool        closeAfter = false;  ///< asked by «Сохранить изменения?» on closing
+        bool        focus = false;       ///< the name field takes the keyboard on the first frame
+    } saveAsk;
+    float holdBox[4] = {};         ///< the rows' «Зажать», ✓, ✕, Ctrl (x0 y0 x1 y1 each): a touch on
+    float okBox[4] = {};           ///< them while the button is held is taken before the panel
     float cancelBox[4] = {};       ///< (the mouse must not jump to the button with the thing held)
-    float shiftBox[4] = {};
     float ctrlBox[4] = {};
 
     // --- This frame's gestures over the view (applied by the viewport) ---

@@ -1909,6 +1909,12 @@ void DrawDialogs(AppContext& app) {
             ImGui::Dummy({0, ui.S(8)});
             const float bw = (ImGui::GetContentRegionAvail().x - ui.S(16)) / 3;
             if (ui::PrimaryButton(ui, "##save", Tr("Сохранить"), nullptr, {bw, ui.S(36)})) {
+#if defined(__ANDROID__)
+                if (s->path.empty()) {   // the phone: its name first; the tab closes once saved
+                    mobile::AskSaveName(app, *s, true);
+                    finish(false);
+                } else
+#endif
                 if (app.workspace.Save(*s, false, app.notes, app.settings)) {
                     app.autosave.Discard(*s);
                     app.workspace.Close(index);

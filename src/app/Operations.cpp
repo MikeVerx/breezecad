@@ -2,6 +2,7 @@
 
 #include "app/Format.h"
 #include "app/features/OperationEditors.h"
+#include "app/mobile/MobileLayout.h"
 #include "app/mobile/PhoneHome.h"
 #include "app/sketch/SketchEditor.h"
 #include "core/I18n.h"
@@ -134,6 +135,13 @@ void SaveDocument(AppContext& app, bool saveAs) {
     Session* s = app.Doc();
     if (!s) return;
     app.ops.Commit(app, *s);
+#if defined(__ANDROID__)
+    // The phone: the first save (and «Сохранить как») asks the name and shows the folder.
+    if (s->path.empty() || saveAs) {
+        mobile::AskSaveName(app, *s, false);
+        return;
+    }
+#endif
     if (app.workspace.Save(*s, saveAs, app.notes, app.settings)) {
         app.autosave.Discard(*s);
         if (app.shell.mobile.phone) mobile::SaveThumbnail(app, *s);   // the card's picture on the phone's home page
@@ -440,6 +448,12 @@ void KeepInView(AppContext& app, const Box3& box) {
 }
 
 void CancelPressed(AppContext& app) {
+    // The phone: while the clipboard holds something ✕ glows red — it empties it, whatever is open.
+    if (app.shell.mobile.phone && app.sketch.HasClipboard()) {
+        app.sketch.ClearClipboard();
+        app.notes.Info(Tr("Буфер обмена выключен"));
+        return;
+    }
     Session* s = app.Doc();
     // An operation: ✕ takes back the last pick (Контур 2, then Контур 1); when nothing is
     // left to take back it closes the operation (the author, 18.10.2026).
@@ -495,6 +509,11 @@ void DeletePressed(AppContext& app) {
     } else if (s->selectedFeature && s->doc.Find(s->selectedFeature)) {
         DeleteFeature(app, *s, s->selectedFeature);
     }
+}
+
+bool MultiSelect(const AppContext& app) {
+    const ImGuiIO& io = ImGui::GetIO();
+    return io.KeyShift || io.KeyCtrl || app.shell.mobile.ctrlOn;
 }
 
 bool CanDelete(AppContext& app) {

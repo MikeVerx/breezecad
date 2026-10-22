@@ -237,15 +237,14 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
     myMouseInUse = false;
     if (e.action == PointerAction::Down && m.holding) {
         // Held: ✓ lets go where the tip is, ✕ puts it back, the palm lets go and
-        // turns off; Shift and Ctrl change as they are (they count when it is let
-        // go: a box adds to the choice). All taken here, before the panel: the
-        // mouse must not jump to the button with the thing still held.
+        // turns off; Ctrl changes as it is (it counts when it is let go: a box
+        // adds to the choice). All taken here, before the panel: the mouse must
+        // not jump to the button with the thing still held.
         const auto on = [&at](const float* b) { return at.x >= b[0] && at.y >= b[1] && at.x < b[2] && at.y < b[3]; };
-        if (on(m.shiftBox) || on(m.ctrlBox)) {
+        if (on(m.ctrlBox)) {
             myRoutes[e.id] = Route::Ignored;
-            bool& key = on(m.shiftBox) ? m.shiftOn : m.ctrlOn;
-            key = !key;
-            log::Info("Keys: {} {}", on(m.shiftBox) ? "Shift" : "Ctrl", key ? "down" : "up");
+            m.ctrlOn = !m.ctrlOn;
+            log::Info("Keys: Ctrl {}", m.ctrlOn ? "on" : "off");
             return;
         }
         if (on(m.holdBox) || on(m.okBox) || on(m.cancelBox)) {
@@ -585,20 +584,17 @@ void TouchInput::RunRowButtons(AppContext& app) {
     // The cursor went off or another document is shown: let go, the palm off.
     if (m.holding && (!(CursorActive(app) && m.cursorShown) || app.Doc() != myHoldSession)) EndHold(app, false);
     if (m.holdArmed && !(CursorActive(app) && m.cursorShown)) m.holdArmed = false;
-    // Shift and Ctrl lit: those keys down for ImGui (a box adds, a tap adds…), as on a keyboard.
-    if (m.shiftOn != myShiftSent || m.ctrlOn != myCtrlSent) {
-        ImGuiIO& io = ImGui::GetIO();
-        if (m.shiftOn != myShiftSent) {
-            io.AddKeyEvent(ImGuiKey_LeftShift, m.shiftOn);
-            io.AddKeyEvent(ImGuiMod_Shift, m.shiftOn);
-            myShiftSent = m.shiftOn;
+    if (m.copyPressed) {
+        // «Копировать»: the chosen sketch shapes, then their base point with ✓.
+        m.copyPressed = false;
+        mon::Action("touch", "копировать");
+        if (Session* s = app.Doc(); s && s->mode == EditMode::Sketch && app.sketch.HasSelection()) {
+            app.Later([&app] {
+                if (Session* d = app.Doc()) app.sketch.StartCopy(app, *d);
+            });
+        } else if (app.sketch.HasClipboard()) {
+            app.notes.Info(Tr("В буфере есть копия: ✓ — вставить её в эскиз, ✕ — выключить буфер"));
         }
-        if (m.ctrlOn != myCtrlSent) {
-            io.AddKeyEvent(ImGuiKey_LeftCtrl, m.ctrlOn);
-            io.AddKeyEvent(ImGuiMod_Ctrl, m.ctrlOn);
-            myCtrlSent = m.ctrlOn;
-        }
-        myQueued = std::max(myQueued, 2);
     }
     if (myPutBackIn > 0 && --myPutBackIn == 0) {
         if (Session* s = app.Doc(); s && s->ContentRevision() != myPutBackFrom) {
