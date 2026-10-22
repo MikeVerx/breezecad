@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <sstream>
@@ -104,9 +105,44 @@ void SaveLinks() {
     for (const auto& [local, uri] : Links()) out << local << '\t' << uri << '\n';
 }
 
+std::uintmax_t SizeOf(const fs::path& p) {
+    std::error_code ec;
+    const auto n = fs::file_size(p, ec);
+    return ec ? std::uintmax_t{0} : n;
+}
+
+/// The copies of the projects folder's documents, side by side as they are
+/// there: cache/projects/<the folder>/ (one per folder ever chosen, so two
+/// folders' documents of the same name do not meet).
+fs::path ProjectsMirror(const std::string& tree) {
+    char tag[24];
+    std::snprintf(tag, sizeof tag, "%016llx", static_cast<unsigned long long>(std::hash<std::string>{}(tree)));
+    return CacheDir() / "projects" / tag;
+}
+
+/// A document of the projects folder: its URI is built on the folder's tree URI.
+bool InProjectsTree(const std::string& uri, const std::string& tree) {
+    return !tree.empty() && uri.starts_with(tree + "/document/");
+}
+
 /// A local file for a document named `name`: cache/documents/<n>/<name>, so
-/// two documents of the same name from different folders do not meet.
+/// two documents of the same name from different folders do not meet; a
+/// projects-folder document's copy lies among the others of that folder.
 fs::path LocalFor(const std::string& uri, const std::string& name) {
+    if (const std::string tree = ProjectsFolder(); InProjectsTree(uri, tree)) {
+        const fs::path mirror = ProjectsMirror(tree) / fs::u8path(name);
+        std::error_code ec;
+        fs::create_directories(mirror.parent_path(), ec);
+        // A copy made by 0.2.3.x elsewhere in the cache: brought over when the
+        // mirror has nothing better (it may be the only copy with the work).
+        for (const auto& [local, linked] : Links())
+            if (linked == uri && fs::path(local) != mirror && SizeOf(local) > 0 && SizeOf(mirror) == 0) {
+                fs::copy_file(local, mirror, fs::copy_options::overwrite_existing, ec);
+                log::Info("Android: the copy of {} moved beside the other projects", name);
+                break;
+            }
+        return mirror;
+    }
     for (const auto& [local, linked] : Links())
         if (linked == uri) return local;
     std::error_code ec;
@@ -259,15 +295,46 @@ std::vector<FolderEntry> ListProjects() {
 
 fs::path Import(const std::string& uri, const std::string& name) {
     const fs::path local = LocalFor(uri, name.empty() ? std::string("document.bzc") : name);
+    // Into a file beside the copy first: the copy may be the only good one.
+    // Up to 0.2.3.1 a save never reached the projects folder (it kept an
+    // empty file), and opening that file copied the emptiness over the work.
+    fs::path incoming = local;
+    incoming += ".importing";
+    std::error_code made;
+    fs::create_directories(local.parent_path(), made);   // the system may have cleared the cache
     const bool copied = WithMethod("copyFromUri", "(Ljava/lang/String;Ljava/lang/String;)Z", [&](JNIEnv* env, jmethodID m) {
-        jstring a = Java(env, uri), b = Java(env, local.string());
+        jstring a = Java(env, uri), b = Java(env, incoming.string());
         const bool ok = env->CallBooleanMethod(Activity(), m, a, b);
         env->DeleteLocalRef(a);
         env->DeleteLocalRef(b);
         return ok;
     });
+    std::error_code ec;
     if (!copied) {
+        fs::remove(incoming, ec);
         log::Error("Android: cannot read {}", uri);
+        return {};
+    }
+    const auto size = [&ec](const fs::path& p) {
+        const auto n = fs::file_size(p, ec);
+        return ec ? std::uintmax_t{0} : n;
+    };
+    const std::uintmax_t had = size(local);
+    if (size(incoming) == 0 && had > 0) {
+        // The document is empty, its copy here is not: the copy is the work
+        // (a save of an older version that never got there). Kept, and given
+        // back to the document so the folder has it too.
+        fs::remove(incoming, ec);
+        log::Warn("Android: {} is empty; its local copy ({} bytes) kept and written back", uri, had);
+        Links()[local.string()] = uri;
+        SaveLinks();
+        WriteBack(local);
+        return local;
+    }
+    fs::rename(incoming, local, ec);
+    if (ec) {
+        fs::remove(incoming, ec);
+        log::Error("Android: cannot replace the copy of {}", uri);
         return {};
     }
     Links()[local.string()] = uri;
@@ -304,6 +371,39 @@ bool WriteBack(const fs::path& local) {
     });
     if (!ok) log::Error("Android: cannot write {} back to {}", local.string(), uri);
     return ok;
+}
+
+fs::path LocalCopyFor(const std::string& uri, const std::string& name) { return LocalFor(uri, name); }
+
+bool InProjects(const fs::path& local) {
+    const std::string tree = ProjectsFolder();
+    if (tree.empty()) return false;
+    const auto it = Links().find(local.string());
+    return it != Links().end() && InProjectsTree(it->second, tree) && local.parent_path() == ProjectsMirror(tree);
+}
+
+fs::path Settle(const fs::path& local) {
+    const auto it = Links().find(local.string());
+    if (it == Links().end() || InProjects(local)) return local;
+    const std::string uri = it->second;
+    if (!InProjectsTree(uri, ProjectsFolder())) return local;
+    const fs::path settled = LocalFor(uri, local.filename().string());
+    if (settled != local) {
+        Links()[settled.string()] = uri;
+        SaveLinks();
+        log::Info("Android: {} saved beside the other projects from now on", local.filename().string());
+    }
+    return settled;
+}
+
+void FetchAgain(const fs::path& local) {
+    if (!InProjects(local)) return;
+    const std::string name = local.filename().string();
+    for (const FolderEntry& e : ListProjects())
+        if (e.name == name) {
+            Import(e.uri, e.name);
+            return;
+        }
 }
 
 void Link(const fs::path& local, const std::string& uri) {

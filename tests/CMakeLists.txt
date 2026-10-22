@@ -13,6 +13,7 @@ add_executable(bz_tests
     ${PROJECT_SOURCE_DIR}/src/app/Settings.cpp
     ${PROJECT_SOURCE_DIR}/src/app/mobile/Gestures.cpp
     assembly/AssemblyFileTests.cpp
+    assembly/PartsBesideTests.cpp
     assembly/SolverTests.cpp
     core/CrashCodeTests.cpp
     core/ExpressionTests.cpp
@@ -25,6 +26,7 @@ add_executable(bz_tests
     document/AppearanceTests.cpp
     document/CorruptFileTests.cpp
     document/DocumentTests.cpp
+    document/SaveTests.cpp
     document/StandardPacksTests.cpp
     kernel/AssemblyModelTests.cpp
     kernel/AutoDropTests.cpp
@@ -55,6 +57,7 @@ add_executable(bz_tests
     modules/ModuleTests.cpp
     sketch/FilletTests.cpp
     sketch/MirrorTests.cpp
+    sketch/ClipboardTests.cpp
     sketch/MoveTests.cpp
     sketch/OffsetTests.cpp
     sketch/ShapesTests.cpp

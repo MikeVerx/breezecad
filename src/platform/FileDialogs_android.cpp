@@ -93,16 +93,39 @@ std::optional<fs::path> ShowSaveDialog(const std::string&, const fs::path& sugge
         if (fs::path local = android::CreateInProjects(FreeName(name)); !local.empty()) return local;
         log::Warn("Android: the projects folder refused a new file; asking where to save");
     }
-    const fs::path local = android::CacheDir() / "out" / name;
-    std::error_code ec;
-    fs::create_directories(local.parent_path(), ec);
-    android::PickToSave(name, MimeOf(fs::path(name).extension().string()), local);
+    android::PickToSave(name, MimeOf(fs::path(name).extension().string()), android::CacheDir() / "out" / name);
     const auto picked = Wait(android::PickResult::Kind::Save);
     if (!picked || picked->uri.empty()) return std::nullopt;
+    // A copy of its own for each document: one shared cache/out/<name> for two
+    // documents of the same name linked both to the last one picked, and the
+    // first one's next save went into the second's file.
+    const fs::path local = android::LocalCopyFor(picked->uri, picked->name.empty() ? name : picked->name);
     android::Link(local, picked->uri);
     return local;
 }
 
-void FileWritten(const fs::path& file) { android::WriteBack(file); }
+fs::path SettledDocument(const fs::path& file) { return android::Settle(file); }
+
+fs::path NewFileBeside(const fs::path& document, const std::string& name) {
+    // The projects folder is flat and the only place a new file reaches.
+    if (!android::InProjects(document)) return {};
+    return android::CreateInProjects(FreeName(name));
+}
+
+bool PartsInSubfolders() { return false; }
+
+std::string BesideProblem(const fs::path& document) {
+    if (android::InProjects(document)) return {};
+    return "Детали сборки сохраняются рядом с ней в папке проектов: выберите папку проектов "
+           "(меню → «Папка проектов…») и сохраните сборку в неё";
+}
+
+void RefreshDocument(const fs::path& file) { android::FetchAgain(file); }
+
+bool FileWritten(const fs::path& file) {
+    // A file of the app's own (the cache, a share) has no document elsewhere.
+    if (!android::IsImported(file)) return true;
+    return android::WriteBack(file);
+}
 
 } // namespace bz::platform

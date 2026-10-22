@@ -6,6 +6,7 @@
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <gp_Pnt2d.hxx>
+#include <Geom_ConicalSurface.hxx>
 #include <Geom_Surface.hxx>
 #include <Geom_RectangularTrimmedSurface.hxx>
 #include <BRep_Tool.hxx>
@@ -117,6 +118,21 @@ Expected<TopoDS_Shape> CutToFace(const TopoDS_Shape& prism, const TopoDS_Face& f
     };
     clamp(u1, u2);
     clamp(v1, v2);
+    // A cone carried on goes no further than its apex, as in Inventor: past
+    // it the surface is a second cone turned the other way, and the prism
+    // cut by both kept the part beyond the apex too — a long inverted cone
+    // hanging under the right one, joined to it at the apex (22.10.2026: a
+    // funnel filled down to its cone came out as a "hat" 450 mm deep).
+    if (const auto cone = Handle(Geom_ConicalSurface)::DownCast(surface)) {
+        const double sine = std::sin(cone->SemiAngle());
+        if (std::abs(sine) > 1e-12) {
+            const double apex = -cone->RefRadius() / sine;   // V where the radius is zero
+            double fu1, fu2, fv1, fv2;                         // the face's own side of the apex
+            BRepTools::UVBounds(face, fu1, fu2, fv1, fv2);
+            if ((fv1 + fv2) / 2 >= apex) v1 = std::max(v1, apex);
+            else v2 = std::min(v2, apex);
+        }
+    }
     BRepBuilderAPI_MakeFace grown(surface, u1, u2, v1, v2, 1e-7);
     if (grown.IsDone()) cutters.push_back(grown.Face());
 

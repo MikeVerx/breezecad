@@ -2,6 +2,7 @@
 
 #include "app/Format.h"
 #include "app/features/OperationEditors.h"
+#include "app/mobile/MobileLayout.h"
 #include "app/mobile/PhoneHome.h"
 #include "app/sketch/SketchEditor.h"
 #include "core/I18n.h"
@@ -12,6 +13,7 @@
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
 #include "app/assembly/AssemblyUi.h"
+#include "assembly/AssemblyFile.h"
 #include "document/DocumentTypes.h"
 #include "document/StandardPacks.h"
 #include "document/StandardParts.h"
@@ -133,6 +135,13 @@ void SaveDocument(AppContext& app, bool saveAs) {
     Session* s = app.Doc();
     if (!s) return;
     app.ops.Commit(app, *s);
+#if defined(__ANDROID__)
+    // The phone: the first save (and «Сохранить как») asks the name and shows the folder.
+    if (s->path.empty() || saveAs) {
+        mobile::AskSaveName(app, *s, false);
+        return;
+    }
+#endif
     if (app.workspace.Save(*s, saveAs, app.notes, app.settings)) {
         app.autosave.Discard(*s);
         if (app.shell.mobile.phone) mobile::SaveThumbnail(app, *s);   // the card's picture on the phone's home page
@@ -173,6 +182,9 @@ void RecoverDocument(AppContext& app, const RecoverableDocument& rec) {
     app.workspace.sessions.push_back(std::move(*loaded));
     app.workspace.Activate(static_cast<int>(app.workspace.sessions.size()) - 1);
     Session& s = *app.workspace.sessions.back();
+    // The copy's components refer to their parts from the autosave folder:
+    // from the original's place again (else none of them was found).
+    if (s.assembly) assembly::RebasePaths(s.assembly->assembly, rec.copy, rec.original);
     s.path = rec.original;
     s.untitledName = rec.title;
     // The recovered state is not in the original file.
@@ -436,6 +448,12 @@ void KeepInView(AppContext& app, const Box3& box) {
 }
 
 void CancelPressed(AppContext& app) {
+    // The phone: while the clipboard holds something ✕ glows red — it empties it, whatever is open.
+    if (app.shell.mobile.phone && app.sketch.HasClipboard()) {
+        app.sketch.ClearClipboard();
+        app.notes.Info(Tr("Буфер обмена выключен"));
+        return;
+    }
     Session* s = app.Doc();
     // An operation: ✕ takes back the last pick (Контур 2, then Контур 1); when nothing is
     // left to take back it closes the operation (the author, 18.10.2026).
@@ -491,6 +509,19 @@ void DeletePressed(AppContext& app) {
     } else if (s->selectedFeature && s->doc.Find(s->selectedFeature)) {
         DeleteFeature(app, *s, s->selectedFeature);
     }
+}
+
+bool MultiSelect(const AppContext& app) {
+    const ImGuiIO& io = ImGui::GetIO();
+    return io.KeyShift || io.KeyCtrl || app.shell.mobile.ctrlOn;
+}
+
+bool CanDelete(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s || app.ops.Active()) return false;
+    if (s->mode == EditMode::Sketch) return app.sketch.HasSelection();
+    if (s->assembly) return s->assembly->selected.IsValid();
+    return s->selectedFeature && s->doc.Find(s->selectedFeature);
 }
 
 void SetTheme(AppContext& app, ThemeChoice theme) {

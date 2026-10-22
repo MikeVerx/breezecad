@@ -119,10 +119,13 @@ private:
     bool AndroidBetweenFrames(double now);
     void CheckLastExit();
     void RunTestCommands();
+    /// Test command "saveback": a save reaches the document outside the app (smoke-apk.sh).
+    void TestSaveBack();
     mobile::TouchInput myTouch;
     int    myScreenRevision = -1;
     bool   myKeyboardUp = false;
     bool   myTestTouchKeys = false;   ///< test command "touchkeys": a keyboard plugged in is ignored (emulator)
+    bool   myTestPlaceCursor = false; ///< test command "holdtest": the cursor to be put in the view
     bool   myInBackground = false;
     double myStartedAt = 0.0;
 #endif

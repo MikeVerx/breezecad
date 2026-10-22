@@ -197,3 +197,42 @@ TEST_CASE("up to a curved face with a draft") {
     model.Rebuild(d);
     CHECK_MESSAGE(post.status.state == FeatureState::Ok, post.status.message);
 }
+
+TEST_CASE("up to the inside of a funnel: a cone, carried on to its apex and no further") {
+    // The author's part (22.10.2026): a hub filled down to the funnel under
+    // it. The cone face does not cover the hub, so its surface is carried
+    // on — past the apex it was a second cone turned the other way, and a
+    // long inverted cone hung under the right one (a "hat" 450 mm deep).
+    const auto funnel = [](doc::Document& d) {
+        auto& sk = AddSketch(d, doc::origin::kPlaneXZ);
+        // Radius along the sketch's x, height along its y: the inside a cone
+        // at 45° from r 15 (z 0) down to r 9 (z -6) — its apex at z -15 —, then a bore.
+        const std::vector<Vec2> points{{15, 0}, {30, 0}, {30, -30}, {9, -30}, {9, -6}};
+        std::vector<ObjectId> ids;
+        for (const Vec2 p : points) ids.push_back(sk.sketch.AddPoint(d.Ids(), p));
+        for (std::size_t i = 0; i < ids.size(); ++i) sk.sketch.AddLine(d.Ids(), ids[i], ids[(i + 1) % ids.size()]);
+        return &AddRevolve(d, sk.id, {doc::RevolveAxisKind::SketchY, {}});
+    };
+    doc::Document alone;
+    funnel(alone);
+    kernel::Model bare;
+    bare.Rebuild(alone);
+
+    doc::Document d;
+    const doc::RevolveFeature* rev = funnel(d);
+    auto& hub = AddSketch(d);
+    AddCircle(d, hub, {0, 0}, 14);
+    auto& ex = AddExtrude(d, hub.id, "1", BooleanOp::NewBody);
+    ex.extent = doc::ExtentType::ToPlane;
+    ex.toFace = {.normal = Vec3{-1, 0, 1}.Normalized(), .point = {12, 0, -3}, .curved = true};
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(rev->status.state == FeatureState::Ok);
+    REQUIRE_MESSAGE(ex.status.state == FeatureState::Ok, ex.status.message);
+    // From z = 0 down to the cone z = r - 15: the integral of 2πr(15 - r) over r 0..14.
+    const double cone = 2 * kPi * (15.0 * 14 * 14 / 2 - 14.0 * 14 * 14 / 3);
+    CHECK(model.Volume() - bare.Volume() == doctest::Approx(cone).epsilon(1e-3));
+    const auto box = model.BoundingBox();
+    REQUIRE(box);
+    CHECK(box->min.z == doctest::Approx(-30).epsilon(1e-6));   // the funnel's bottom, nothing below it
+}

@@ -169,7 +169,8 @@ bool HasToolPanel(AppContext& app, Session& session) {
 }
 
 void DrawRowButton(AppContext& app, const char* id, const char* icon, const char* tip, ImVec2 p, ImVec2 s, bool on, bool primary,
-                   bool enabled, bool* clicked, bool* held, bool ready = false) {
+                   bool enabled, bool* clicked, bool* held, bool ready = false, int tone = 0) {
+    // `tone`: 1 green (the clipboard holds something), 2 red (✕ while it does).
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -179,14 +180,19 @@ void DrawRowButton(AppContext& app, const char* id, const char* icon, const char
     if (held) *held = enabled && ImGui::IsItemClicked(ImGuiMouseButton_Right);   // a long press (touch) or a right click
     const bool pressed = ImGui::IsItemActive();
     const ImVec2 a{p.x + ui.S(3), p.y + ui.S(4)}, b{p.x + s.x - ui.S(3), p.y + s.y - ui.S(4)};
+    const Color toneInk = tone == 1 ? c.success : c.danger;
     // ✓ turns green when the open operation has everything it needs: a tap applies it.
-    const Color fill = primary ? (!enabled ? c.segmentTrack : ready ? c.success : c.accent) : on ? c.accentSoft : pressed ? c.pressed : c.segmentTrack;
+    const Color fill = primary ? (!enabled ? c.segmentTrack : ready ? c.success : c.accent)
+                     : tone != 0 ? toneInk.WithAlpha(0.16f)
+                     : on ? c.accentSoft : pressed ? c.pressed : c.segmentTrack;
     if (ready && primary) dl->AddRect({a.x - ui.S(2), a.y - ui.S(2)}, {b.x + ui.S(2), b.y + ui.S(2)}, ui::ToU32(c.success.WithAlpha(0.35f)), ui.S(12), 0, ui.S(3));
+    if (tone == 2) dl->AddRect({a.x - ui.S(2), a.y - ui.S(2)}, {b.x + ui.S(2), b.y + ui.S(2)}, ui::ToU32(toneInk.WithAlpha(0.35f)), ui.S(12), 0, ui.S(3));
     dl->AddRectFilled(a, b, ui::ToU32(fill), ui.S(10));
-    if (on && !primary) dl->AddRect(a, b, ui::ToU32(c.accentSoftBorder), ui.S(10));
+    if (tone != 0) dl->AddRect(a, b, ui::ToU32(toneInk), ui.S(10), 0, ui.S(1.5f));
+    else if (on && !primary) dl->AddRect(a, b, ui::ToU32(c.accentSoftBorder), ui.S(10));
     const float is = ui.S(22);
-    const Color ink = !enabled ? c.textDisabled : primary ? c.textOnAccent : on ? c.accent : c.textSecondary;
-    ui.icons.Draw(dl, icon, {p.x + (s.x - is) / 2, p.y + (s.y - is) / 2}, is, ink);
+    const Color ink = !enabled ? c.textDisabled : primary ? c.textOnAccent : tone != 0 ? toneInk : on ? c.accent : c.textSecondary;
+    if (icon) ui.icons.Draw(dl, icon, {p.x + (s.x - is) / 2, p.y + (s.y - is) / 2}, is, ink);   // none: the caller writes on it
     (void)tip;
 }
 
@@ -265,8 +271,11 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
     // Content, then the numpad when a value is typed, the row, the beard.
     const float bottom = pos.y + size.y - m.insets.bottom;   // the row is the block's bottom (no beard)
     const float rowTop = bottom - ui.S(kRow);
+    // Above it a second row: «Удалить» over ✕, «Зажать» over ✓ (22.10.2026);
+    // the places over the frame and the cursor are kept for buttons to come.
+    const float row2Top = rowTop - ui.S(kRow);
     const float padH = m.numpad ? NumpadHeight(ui) : 0.0f;
-    const float contentH = rowTop - padH - y;
+    const float contentH = row2Top - padH - y;
     // The numpad takes the block when there is no room for both (a low phone
     // screen). The content is drawn anyway, at full height, under it: the value
     // being typed lives in a field there, and a field ImGui does not see for a
@@ -276,7 +285,7 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
     const bool room = contentH >= ui.S(40);
     {
         const ImVec2 cp{pos.x + pad, y};
-        BeginArea("##block1-content", cp, {size.x - pad - 1, room ? contentH : rowTop - y}, c.panel, true);
+        BeginArea("##block1-content", cp, {size.x - pad - 1, room ? contentH : row2Top - y}, c.panel, true);
         const float width = size.x - pad - 1;
         switch (m.block1Tab) {
             case 0:
@@ -303,7 +312,7 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
         }
         EndArea();
     }
-    if (m.numpad) DrawNumpad(app, {pos.x + ui.S(4) + pad, rowTop - padH + ui.S(2)}, {size.x - ui.S(8) - pad, padH - ui.S(4)});
+    if (m.numpad) DrawNumpad(app, {pos.x + ui.S(4) + pad, row2Top - padH + ui.S(2)}, {size.x - ui.S(8) - pad, padH - ui.S(4)});
     else m.numpadKeys.clear();
 
     // The row: from the screen's edge to the model — frame · cursor · cancel · OK.
@@ -352,21 +361,86 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
                     }
                     break;
                 case 2:
-                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, false, false, true, &clicked, nullptr);
+                    m.cancelBox[0] = p.x, m.cancelBox[1] = p.y, m.cancelBox[2] = p.x + w, m.cancelBox[3] = p.y + h;
+                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, false, false, true, &clicked, nullptr, false,
+                                  app.sketch.HasClipboard() ? 2 : 0);
                     if (clicked) m.cancelPressed = true;
                     break;
                 default:
                 {
                     const OperationEditor* op = app.ops.Active();
+                    m.okBox[0] = p.x, m.okBox[1] = p.y, m.okBox[2] = p.x + w, m.okBox[3] = p.y + h;
                     // Green only when a tap applies: with the cursor on, ✓ is the cursor's click.
                     const bool ready = op && op->HasApply() && !m.boxMode && !(cursorOn && m.cursorShown) && op->Ready(session);
-                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, m.boxHeld, true, true, &clicked, &held, ready);
+                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, m.boxHeld || m.holding, true, true, &clicked, &held, ready);
                     m.okDown = ImGui::IsItemActive();
                 }
                     if (clicked) m.okPressed = true;
                     if (held) m.okLongPressed = true;   // a long press confirms the operation, cursor or not
                     break;
             }
+        }
+    }
+
+    // The second row: Ctrl · «Копировать» · «Удалить» · «Зажать» (over frame · cursor · ✕ · ✓), mirrored
+    // with the rest for the left hand.
+    {
+        const float w = (size.x - pad - ui.S(8)) / 4.0f;
+        const float h = ui.S(kRow);
+        const auto placeOf = [&](int i) {
+            const int place = onLeft ? i : 3 - i;
+            return ImVec2{pos.x + pad + ui.S(4) + static_cast<float>(place) * w, row2Top};
+        };
+        bool clicked = false;
+        // Ctrl: picks add to the choice while it is lit (the word on it: the author's choice, 22.10.2026).
+        {
+            const ImVec2 at = placeOf(0);
+            m.ctrlBox[0] = at.x, m.ctrlBox[1] = at.y, m.ctrlBox[2] = at.x + w, m.ctrlBox[3] = at.y + h;
+            bool tapped = false;
+            DrawRowButton(app, "##row-ctrl", nullptr, "Ctrl", at, {w, h}, m.ctrlOn, false, true, &tapped, nullptr);
+            ImDrawList* kd = ImGui::GetWindowDrawList();
+            const float fs = std::min(ui.S(13.5f), (w - ui.S(10)) / 2.4f);
+            const ImVec2 ts = ui.fonts.strong->CalcTextSizeA(fs, FLT_MAX, 0, "Ctrl");
+            kd->AddText(ui.fonts.strong, fs, {at.x + (w - ts.x) / 2, at.y + (h - ts.y) / 2}, ui::ToU32(m.ctrlOn ? c.accent : c.textSecondary), "Ctrl");
+            if (tapped) {
+                m.ctrlOn = !m.ctrlOn;
+                log::Info("Keys: Ctrl {}", m.ctrlOn ? "on" : "off");
+            }
+        }
+        // «Копировать»: green while the clipboard holds something (a copy then goes in with ✓).
+        {
+            const ImVec2 at = placeOf(1);
+            const bool inSketch = session.mode == EditMode::Sketch;
+            bool tapped = false;
+            DrawRowButton(app, "##row-copy", "ui-copy", Tr("Копировать"), at, {w, h}, false, false,
+                          (inSketch && app.sketch.HasSelection()) || app.sketch.HasClipboard(), &tapped, nullptr, false,
+                          app.sketch.HasClipboard() ? 1 : 0);
+            if (tapped) m.copyPressed = true;
+            static std::string loggedCopy;   // for the emulator's check
+            if (const std::string place = std::format("{:.0f},{:.0f}", at.x, at.y); place != loggedCopy) {
+                loggedCopy = place;
+                log::Info("Touch: copy at {:.0f},{:.0f}", at.x, at.y);
+            }
+        }
+        const ImVec2 del = placeOf(2);
+        DrawRowButton(app, "##row-delete", "ui-trash", Tr("Удалить"), del, {w, h}, false, false, CanDelete(app), &clicked, nullptr);
+        if (clicked) m.deletePressed = true;
+        // An open palm; a fist while it holds.
+        const ImVec2 hold = placeOf(3);
+        m.holdBox[0] = hold.x, m.holdBox[1] = hold.y, m.holdBox[2] = hold.x + w, m.holdBox[3] = hold.y + h;
+        clicked = false;
+        DrawRowButton(app, "##row-hold", m.holding ? "ui-hand-grab" : "ui-hand-open", Tr("Зажать"), hold, {w, h}, m.holdArmed, false, true,
+                      &clicked, nullptr);
+        if (clicked) m.holdPressed = true;
+        // For the emulator's check (smoke-apk.sh): where the two are, written when they move.
+        static std::string logged;
+        if (const std::string place = std::format("{:.0f},{:.0f} {:.0f},{:.0f} {:.0f}x{:.0f} {:.0f},{:.0f}", del.x, del.y, hold.x, hold.y, w, h,
+                                                  m.okBox[0], m.okBox[1]);
+            place != logged) {
+            logged = place;
+            log::Info("Touch: row2 ctrl at {:.0f},{:.0f} delete at {:.0f},{:.0f} hold at {:.0f},{:.0f} size {:.0f}x{:.0f}", m.ctrlBox[0],
+                      m.ctrlBox[1], del.x, del.y, hold.x, hold.y, w, h);
+            log::Info("Touch: row1 cancel at {:.0f},{:.0f} ok at {:.0f},{:.0f}", m.cancelBox[0], m.cancelBox[1], m.okBox[0], m.okBox[1]);
         }
     }
 
@@ -392,6 +466,30 @@ StatusText Status(AppContext& app, Session& session) {
               : session.mode == EditMode::Sketch ? Tr("Эскиз")
               : session.mode == EditMode::PickPlane ? Tr("Выбор плоскости")
               : app.shell.ribbonTab == RibbonTab::View ? Tr("Вид") : Tr("3D-модель");
+    if (m.holding) {
+        st.icon = "ui-hand-grab";
+        st.main = Tr("Зажато: ведёт кончик курсора — ✓ отпустить, ✕ вернуть");
+        st.mode.clear();
+        return st;
+    }
+    if (app.sketch.PickingBase()) {
+        st.icon = "ui-copy";
+        st.main = Tr("Копирование: наведите кончик на базовую точку — ✓");
+        st.mode.clear();
+        return st;
+    }
+    if (app.sketch.HasClipboard() && session.mode == EditMode::Sketch) {
+        st.icon = "ui-copy";
+        st.main = Tr("Буфер: ✓ — вставить у кончика · ✕ — выключить буфер");
+        st.mode.clear();
+        return st;
+    }
+    if (m.holdArmed) {
+        st.icon = "ui-hand-open";
+        st.main = Tr("Зажать: ✓ — нажать и держать в кончике курсора");
+        st.mode.clear();
+        return st;
+    }
     if (CursorActive(app) && m.cursorShown && m.boxMode) {
         st.icon = "ui-frame";
         st.main = m.boxHeld ? Tr("Рамка: второй угол — ОК") : Tr("Рамка: первый угол — ОК");
@@ -1139,6 +1237,140 @@ void DrawLastCrash(AppContext& app) {
 #endif
     if (ui::PrimaryButton(ui, "##close-crash", Tr("Понятно"), nullptr, ui.S(120, 38))) {
         c.open = false;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+void AskSaveName(AppContext& app, Session& session, bool closeAfter) {
+    MobileState::SaveAsk& a = app.shell.mobile.saveAsk;
+    a.open = true;
+    a.session = &session;
+    a.name = session.path.empty() ? session.Title() : ToUtf8(session.path.stem());
+    a.closeAfter = closeAfter;
+    a.focus = true;
+    log::Info("Save: asking for the name");
+}
+
+void DrawSaveAsk(AppContext& app) {
+    MobileState& m = app.shell.mobile;
+    MobileState::SaveAsk& a = m.saveAsk;
+    if (!a.open) return;
+    Session* session = nullptr;
+    int index = -1;
+    for (std::size_t i = 0; i < app.workspace.sessions.size(); ++i)
+        if (app.workspace.sessions[i].get() == a.session) {
+            session = app.workspace.sessions[i].get();
+            index = static_cast<int>(i);
+        }
+    if (!session) {   // the document closed meanwhile
+        a.open = false;
+        return;
+    }
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    const ImGuiIO& io = ImGui::GetIO();
+    m.fullKeyboard = true;   // a name: the system's keyboard, not the numpad
+    ImGui::OpenPopup("##save-ask");
+    // In the upper half: the keyboard takes the lower one.
+    const float w = std::min(io.DisplaySize.x - ui.S(40), ui.S(460));
+    ImGui::SetNextWindowPos({io.DisplaySize.x / 2, m.insets.top + ui.S(8)}, ImGuiCond_Always, {0.5f, 0.0f});
+    ImGui::SetNextWindowSize({w, 0});
+    ui::FontScope font(ui.fonts.body);
+    if (!ImGui::BeginPopupModal("##save-ask", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize)) return;
+    const char* ext = session->assembly ? ".bza" : ".bzc";
+    ImGui::PushFont(ui.fonts.strong);
+    ImGui::TextUnformatted(session->assembly ? Tr("Сохранить сборку") : Tr("Сохранить деталь"));
+    ImGui::PopFont();
+    ImGui::Spacing();
+    ImGui::TextDisabled("%s", Tr("Имя файла"));
+    // No characters a file name cannot have.
+    std::erase_if(a.name, [](char ch) { return std::strchr("/\\:*?\"<>|", ch) != nullptr; });
+    const float extW = ImGui::CalcTextSize(ext).x + ui.S(10);
+    ImGui::SetNextItemWidth(w - ui.S(24) - extW);
+    if (a.focus) {
+        ImGui::SetKeyboardFocusHere();
+        a.focus = false;
+    }
+    const bool entered = ImGui::InputText("##save-name", &a.name, ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::SameLine();
+    ImGui::TextDisabled("%s", ext);
+    ImGui::Spacing();
+    ImGui::TextDisabled("%s", Tr("Папка"));
+    std::string folder;
+    bool exists = false;
+    const std::string file = a.name + ext;
+#if defined(__ANDROID__)
+    const bool haveFolder = !platform::android::ProjectsFolder().empty();
+    folder = haveFolder ? (app.settings.mobile.projectsFolderName.empty() ? Tr("папка проектов") : app.settings.mobile.projectsFolderName)
+                        : Tr("не выбрана");
+    // The same name in the folder (it is read again now and then, not every frame).
+    static std::vector<platform::android::FolderEntry> entries;
+    static double readAt = -100;
+    if (haveFolder && app.now - readAt > 2.0) {
+        entries = platform::android::ListProjects();
+        readAt = app.now;
+    }
+    for (const auto& e : entries)
+        if (haveFolder && e.name == file) exists = true;
+#else
+    const bool haveFolder = false;
+#endif
+    // The folder's row: a tap opens the system's folder picker.
+    {
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float rh = ui.S(40), rw = w - ui.S(24);
+        const bool tapped = ImGui::InvisibleButton("##save-folder", {rw, rh});
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(p, {p.x + rw, p.y + rh}, ui::ToU32(ImGui::IsItemActive() ? c.pressed : c.field), ui.S(10));
+        dl->AddRect(p, {p.x + rw, p.y + rh}, ui::ToU32(c.fieldBorder), ui.S(10));
+        ui.icons.Draw(dl, "ui-folder", {p.x + ui.S(10), p.y + (rh - ui.S(18)) / 2}, ui.S(18), c.textSecondary);
+        const std::string line = haveFolder ? folder + "  ·  " + Tr("папка проектов") : folder;
+        dl->AddText({p.x + ui.S(36), p.y + (rh - ImGui::GetTextLineHeight()) / 2}, ui::ToU32(haveFolder ? c.text : c.warning), line.c_str());
+        const char* change = Tr("изменить ›");
+        const float cw = ImGui::CalcTextSize(change).x;
+        dl->AddText({p.x + rw - cw - ui.S(12), p.y + (rh - ImGui::GetTextLineHeight()) / 2}, ui::ToU32(c.accent), change);
+#if defined(__ANDROID__)
+        if (tapped) platform::android::ChooseProjectsFolder();   // the answer comes as the projects folder
+#else
+        (void)tapped;
+#endif
+    }
+    if (exists) {
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.warning));
+        ImGui::TextWrapped("%s", Trf("«{}» уже есть в папке — сохранение заменит его", file).c_str());
+        ImGui::PopStyleColor();
+    }
+    ImGui::Spacing();
+    const float bw = (w - ui.S(24) - ui.S(8)) / 2;
+    bool cancel = ui::SecondaryButton(ui, "##save-cancel", Tr("Отмена"), nullptr, {bw, ui.S(40)});
+    ImGui::SameLine(0, ui.S(8));
+    const bool canSave = haveFolder && !a.name.empty();
+    ImGui::BeginDisabled(!canSave);
+    const bool save = ui::PrimaryButton(ui, "##save-ok", exists ? Tr("Заменить") : Tr("Сохранить"), nullptr, {bw, ui.S(40)}) ||
+                      (entered && canSave);
+    ImGui::EndDisabled();
+    if (save) {
+#if defined(__ANDROID__)
+        const std::filesystem::path local = platform::android::CreateInProjects(file);
+        bool taken = false;
+        for (const auto& other : app.workspace.sessions)
+            if (other.get() != session && !other->path.empty() && other->path == local) taken = true;
+        if (local.empty()) {
+            app.notes.Error(Tr("Не удалось создать файл в папке проектов"));
+        } else if (taken) {
+            app.notes.Error(Trf("«{}» открыт в другой вкладке: закройте её или выберите другое имя", file));
+        } else if (app.workspace.SaveTo(*session, local, app.notes, app.settings)) {
+            app.autosave.Discard(*session);
+            SaveThumbnail(app, *session);
+            log::Info("Save: {} into the projects folder", file);
+            if (a.closeAfter) app.Later([&app, index] { app.workspace.Close(index); });
+            cancel = true;
+        }
+#endif
+    }
+    if (cancel) {
+        a.open = false;
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
