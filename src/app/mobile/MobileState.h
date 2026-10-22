@@ -57,6 +57,35 @@ struct MobileState {
     bool okPressed = false;       ///< a click at the cursor's tip (cursor on) or "confirm" (off)
     bool okLongPressed = false;   ///< confirm the operation, cursor or not
     bool cancelPressed = false;
+    bool deletePressed = false;   ///< «Удалить» (the Delete key)
+    bool holdPressed = false;     ///< «Зажать» tapped (taken on or off next frame)
+
+    // --- «Зажать»: ✓ becomes the left mouse button held down (22.10.2026) ---
+    // The palm on (`holdArmed`): ✓ presses the button at the cursor's tip and
+    // keeps it down (`holding`), ✓ again lets it go there — what a held mouse
+    // button does on a computer: on a thing, it follows the tip; on empty
+    // space, a selection box (Shift / Ctrl add to the choice); the trim tool
+    // draws its fence. ✕ while held puts it back. The palm again: off.
+    bool holdArmed = false;
+    bool holding = false;
+    // Ctrl (22.10.2026): while lit, picks add to the choice and a second pick of
+    // a chosen thing takes it away (MultiSelect). Not a key for the interface:
+    // a held Ctrl stopped the menus scrolling.
+    bool ctrlOn = false;
+    bool copyPressed = false;      ///< «Копировать» tapped (the sketch clipboard)
+
+    // --- The first save on the phone: the name and the folder (22.10.2026) ---
+    struct SaveAsk {
+        bool        open = false;
+        const void* session = nullptr;   ///< the document (it may close meanwhile: looked up again)
+        std::string name;                ///< without the extension
+        bool        closeAfter = false;  ///< asked by «Сохранить изменения?» on closing
+        bool        focus = false;       ///< the name field takes the keyboard on the first frame
+    } saveAsk;
+    float holdBox[4] = {};         ///< the rows' «Зажать», ✓, ✕, Ctrl (x0 y0 x1 y1 each): a touch on
+    float okBox[4] = {};           ///< them while the button is held is taken before the panel
+    float cancelBox[4] = {};       ///< (the mouse must not jump to the button with the thing held)
+    float ctrlBox[4] = {};
 
     // --- This frame's gestures over the view (applied by the viewport) ---
     GestureStep gestures;

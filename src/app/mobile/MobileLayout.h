@@ -42,6 +42,13 @@ void DrawPhoneRoot(AppContext& app);
 /// The error screen after a crash or a hang last time (Android, layer 3).
 void DrawLastCrash(AppContext& app);
 
+/// The phone's first save (and «Сохранить как»): a window with the file's
+/// name and its folder — the projects folder; a tap on it opens the system's
+/// folder picker and the folder chosen becomes the projects folder (the
+/// author, 22.10.2026). `closeAfter`: the tab closes once it is saved.
+void AskSaveName(AppContext& app, Session& session, bool closeAfter);
+void DrawSaveAsk(AppContext& app);
+
 /// Block 2's commands (MobileRibbon.cpp): compact (four buttons a group) or the long list.
 void DrawToolList(AppContext& app, Session& session, float width, bool iconsOnly, bool compact, bool viewOnLeft);
 /// Compact block 2: the open group's strip over the view.

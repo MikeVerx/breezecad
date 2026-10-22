@@ -1,6 +1,7 @@
 add_library(bz_sketch STATIC
     EquationSystem.cpp
     Mirror.cpp
+    Clipboard.cpp
     Move.cpp
     Shapes.cpp
     Sketch.cpp

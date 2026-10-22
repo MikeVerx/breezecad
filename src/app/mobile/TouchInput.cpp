@@ -4,6 +4,7 @@
 #include "app/features/OperationEditors.h"
 #include "app/mobile/MobileLayout.h"
 #include "app/sketch/SketchEditor.h"
+#include "core/I18n.h"
 #include "core/Log.h"
 #include "core/Monitor.h"
 
@@ -234,6 +235,27 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
     }
     // A finger.
     myMouseInUse = false;
+    if (e.action == PointerAction::Down && m.holding) {
+        // Held: ✓ lets go where the tip is, ✕ puts it back, the palm lets go and
+        // turns off; Ctrl changes as it is (it counts when it is let go: a box
+        // adds to the choice). All taken here, before the panel: the mouse must
+        // not jump to the button with the thing still held.
+        const auto on = [&at](const float* b) { return at.x >= b[0] && at.y >= b[1] && at.x < b[2] && at.y < b[3]; };
+        if (on(m.ctrlBox)) {
+            myRoutes[e.id] = Route::Ignored;
+            m.ctrlOn = !m.ctrlOn;
+            log::Info("Keys: Ctrl {}", m.ctrlOn ? "on" : "off");
+            return;
+        }
+        if (on(m.holdBox) || on(m.okBox) || on(m.cancelBox)) {
+            myRoutes[e.id] = Route::Ignored;
+            if (on(m.holdBox)) m.holdArmed = false;
+            EndHold(app, on(m.cancelBox));
+            return;
+        }
+        // Any other panel: let go first, then the touch goes on as usual.
+        if (UiAt(at) || !Inside(at, m.viewMin, m.viewMax)) EndHold(app, false);
+    }
     if (e.action == PointerAction::Down && m.numpad && myNumpadId < 0) {
         for (std::size_t i = 0; i < m.numpadKeys.size(); ++i) {
             if (!Inside(at, m.numpadKeys[i].min, m.numpadKeys[i].max)) continue;
@@ -490,11 +512,13 @@ void TouchInput::ApplyGestures(AppContext& app) {
         myRelative = false;
     }
 
-    if (step.tap && !TypeDimensionName(app, ToIm(*step.tap))) {
+    if (step.tap && m.holding) {
+        // Held: a tap on the view is not a click somewhere else (the held thing would jump there).
+    } else if (step.tap && !TypeDimensionName(app, ToIm(*step.tap))) {
         Click(ToIm(*step.tap), ImGuiMouseButton_Left);
         mon::Action("touch", "касание");
     }
-    if (step.longPress) {
+    if (step.longPress && !m.holding) {
         const ImVec2 at = CursorActive(app) ? m.cursorTip : ToIm(*step.longPress);
         Click(at, ImGuiMouseButton_Right);   // the context menu
         mon::Action("touch", "зажатие");
@@ -520,9 +544,90 @@ void TouchInput::ApplyGestures(AppContext& app) {
     m.gestures = step;
 }
 
+void TouchInput::StartHold(AppContext& app) {
+    MobileState& m = app.shell.mobile;
+    Session* s = app.Doc();
+    if (!s || m.holding) return;
+    if (m.boxMode) {   // a frame half made: dropped, the hold takes the button
+        if (m.boxHeld) Button(ImGuiMouseButton_Left, false);
+        m.boxMode = m.boxHeld = false;
+    }
+    myHoldRevision = s->ContentRevision();
+    myHoldSession = s;
+    Pos(m.cursorTip);
+    Button(ImGuiMouseButton_Left, true);
+    m.holding = true;
+    log::Info("Hold: on at {:.0f},{:.0f}", m.cursorTip.x, m.cursorTip.y);
+    mon::Action("touch", "зажать");
+}
+
+void TouchInput::EndHold(AppContext& app, bool putBack) {
+    MobileState& m = app.shell.mobile;
+    if (!m.holding) return;
+    m.holding = false;
+    Pos(m.cursorTip);
+    Button(ImGuiMouseButton_Left, false);
+    if (putBack) {
+        // The release is taken first (it commits the move, the fence…): undone
+        // once it is, if the content changed during the hold.
+        myPutBackFrom = myHoldRevision;
+        myPutBackIn = 4;
+        myQueued = std::max(myQueued, 6);
+    }
+    myHoldSession = nullptr;
+    log::Info("Hold: let go at {:.0f},{:.0f}{}", m.cursorTip.x, m.cursorTip.y, putBack ? ", put back" : "");
+    mon::Action("touch", putBack ? "отпустить с отменой" : "отпустить");
+}
+
 void TouchInput::RunRowButtons(AppContext& app) {
     MobileState& m = app.shell.mobile;
+    // The cursor went off or another document is shown: let go, the palm off.
+    if (m.holding && (!(CursorActive(app) && m.cursorShown) || app.Doc() != myHoldSession)) EndHold(app, false);
+    if (m.holdArmed && !(CursorActive(app) && m.cursorShown)) m.holdArmed = false;
+    if (m.copyPressed) {
+        // «Копировать»: the chosen sketch shapes, then their base point with ✓.
+        m.copyPressed = false;
+        mon::Action("touch", "копировать");
+        if (Session* s = app.Doc(); s && s->mode == EditMode::Sketch && app.sketch.HasSelection()) {
+            app.Later([&app] {
+                if (Session* d = app.Doc()) app.sketch.StartCopy(app, *d);
+            });
+        } else if (app.sketch.HasClipboard()) {
+            app.notes.Info(Tr("В буфере есть копия: ✓ — вставить её в эскиз, ✕ — выключить буфер"));
+        }
+    }
+    if (myPutBackIn > 0 && --myPutBackIn == 0) {
+        if (Session* s = app.Doc(); s && s->ContentRevision() != myPutBackFrom) {
+            log::Info("Hold: put back (undo)");
+            app.Later([&app] { app.actions.Run("edit.undo"); });
+        }
+    }
+    if (m.deletePressed) {
+        m.deletePressed = false;
+        mon::Action("touch", "удалить");
+        app.Later([&app] { DeletePressed(app); });
+    }
+    if (m.holdPressed) {
+        // The palm: on — ✓ then presses and holds at the tip; off again (letting go if held).
+        m.holdPressed = false;
+        if (m.holdArmed) {
+            EndHold(app, false);
+            m.holdArmed = false;
+            log::Info("Hold: off");
+        } else if (!(CursorActive(app) && m.cursorShown)) {
+            app.notes.Info(Tr("«Зажать» нажимает в кончике курсора: включите курсор"));
+        } else {
+            m.holdArmed = true;
+            log::Info("Hold: armed");
+        }
+    }
     const bool cursor = CursorActive(app) && m.cursorShown;
+    if (m.okPressed && m.holdArmed && cursor) {
+        // The palm on: ✓ is the left button going down at the tip and staying
+        // there (it comes up on the next ✓, taken in Route1 before the panel).
+        m.okPressed = false;
+        StartHold(app);
+    }
     if (m.okPressed) {
         m.okPressed = false;
         if (ImGui::GetIO().WantTextInput && cursor && m.tipAimed && TypeDimensionName(app, m.cursorTip)) {
@@ -552,10 +657,11 @@ void TouchInput::RunRowButtons(AppContext& app) {
             Click(m.cursorTip, ImGuiMouseButton_Left);
         } else if (OperationEditor* op = app.ops.Active(); op && app.Doc() && op->HasApply() && op->Ready(*app.Doc())) {
             // Everything needed is chosen (✓ is green): it makes the feature and the
-            // operation stays open for the next one (the author, 18.10.2026). A long
-            // press is «Готово» (commit and close).
+            // operation closes (the author, 22.10.2026 — it stayed open for the next
+            // one since 18.10, but nothing is left to extrude or turn from the sketch
+            // it took; patterns and the rest the same).
             app.Later([&app, op] {
-                if (app.ops.Active() == op && app.Doc()) op->Apply(app, *app.Doc());
+                if (app.ops.Active() == op && app.Doc()) op->Done(app, *app.Doc());
             });
         } else {
             app.Later([&app] { EnterPressed(app); });

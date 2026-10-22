@@ -57,6 +57,7 @@ add_executable(bz_tests
     modules/ModuleTests.cpp
     sketch/FilletTests.cpp
     sketch/MirrorTests.cpp
+    sketch/ClipboardTests.cpp
     sketch/MoveTests.cpp
     sketch/OffsetTests.cpp
     sketch/ShapesTests.cpp

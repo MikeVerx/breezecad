@@ -97,6 +97,16 @@ bool Application::AndroidBetweenFrames(double now) {
     if (!background && myInBackground) myFramesToDraw = std::max(myFramesToDraw, 3);
     myInBackground = background;
 
+    // The test "holdtest": the cursor's tip on the line (the view's middle), once the view is laid out.
+    if (myTestPlaceCursor && myShell.mobile.viewMax.x > myShell.mobile.viewMin.x + 50) {
+        myTestPlaceCursor = false;
+        mobile::MobileState& m = myShell.mobile;
+        m.cursorShown = true;
+        m.cursorTip = {(m.viewMin.x + m.viewMax.x) / 2, (m.viewMin.y + m.viewMax.y) / 2};
+        m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + mobile::CursorReach(*myContext)};
+        log::Info("Touch: drop at {:.0f},{:.0f}", m.cursorFinger.x, m.cursorFinger.y);
+        myFramesToDraw = std::max(myFramesToDraw, 3);
+    }
     // The screen around the window: cut-out, bars, corners, keyboard.
     const droid::Screen screen = droid::CurrentScreen();
     if (screen.revision != myScreenRevision) {
@@ -322,6 +332,15 @@ void Application::RunTestCommands() {
             mobile::OpenLayoutEditor(*myContext);
         } else if (c == "home") {
             // Nothing: the home page as it opens, but a test run (no first-start setup over it).
+        } else if (c == "holdtest") {
+            // «Зажать» (smoke-apk.sh): a line through the view's middle, chosen; the
+            // cursor's tip put on it.
+            if (Session* s = myWorkspace.Active(); s && s->mode == EditMode::Sketch) {
+                myContext->sketch.MakeHoldTest(*s);
+                myActions.Run("view.fit");
+                myShell.mobile.cursorInSketch = true;
+                myTestPlaceCursor = true;   // once the view's place is known (AndroidBetweenFrames)
+            }
         } else if (c == "setup") {
             mobile::StartSetup(*myContext);
         } else if (c == "saveback") {
