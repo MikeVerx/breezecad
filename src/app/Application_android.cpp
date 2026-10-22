@@ -97,12 +97,12 @@ bool Application::AndroidBetweenFrames(double now) {
     if (!background && myInBackground) myFramesToDraw = std::max(myFramesToDraw, 3);
     myInBackground = background;
 
-    // The test "holdtest": the cursor below the view's middle, off the line, once the view is laid out.
+    // The test "holdtest": the cursor's tip on the line (the view's middle), once the view is laid out.
     if (myTestPlaceCursor && myShell.mobile.viewMax.x > myShell.mobile.viewMin.x + 50) {
         myTestPlaceCursor = false;
         mobile::MobileState& m = myShell.mobile;
         m.cursorShown = true;
-        m.cursorTip = {(m.viewMin.x + m.viewMax.x) / 2, (m.viewMin.y + m.viewMax.y) / 2 - 30};
+        m.cursorTip = {(m.viewMin.x + m.viewMax.x) / 2, (m.viewMin.y + m.viewMax.y) / 2};
         m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + mobile::CursorReach(*myContext)};
         log::Info("Touch: drop at {:.0f},{:.0f}", m.cursorFinger.x, m.cursorFinger.y);
         myFramesToDraw = std::max(myFramesToDraw, 3);
@@ -333,8 +333,8 @@ void Application::RunTestCommands() {
         } else if (c == "home") {
             // Nothing: the home page as it opens, but a test run (no first-start setup over it).
         } else if (c == "holdtest") {
-            // «Зажать» (smoke-apk.sh): a line chosen in the sketch, the cursor on and
-            // off the line — the hold takes the chosen line and it follows the tip.
+            // «Зажать» (smoke-apk.sh): a line through the view's middle, chosen; the
+            // cursor's tip put on it.
             if (Session* s = myWorkspace.Active(); s && s->mode == EditMode::Sketch) {
                 myContext->sketch.MakeHoldTest(*s);
                 myActions.Run("view.fit");

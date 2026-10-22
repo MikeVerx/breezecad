@@ -533,23 +533,6 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
             myPressedOnEntity = false;
         myDragEntity = myHover.id;
         if (cursor) myDragStart = *cursor;
-        myGrabbed = false;
-        if (!myHover && myGrabSelection) {
-            for (const ObjectId id : mySelection) {
-                const sketch::EntityKind kind = f->sketch.KindOf(id);
-                const sketch::Constraint* c = f->sketch.FindConstraint(id);
-                const bool draggable = kind == sketch::EntityKind::Point || kind == sketch::EntityKind::Line ||
-                                       kind == sketch::EntityKind::Circle || kind == sketch::EntityKind::Arc ||
-                                       (c && sketch::IsDimensional(c->type));
-                if (!draggable) continue;
-                myPressedOnEntity = true;
-                myDragEntity = id;
-                myBoxStart.reset();
-                myGrabbed = true;
-                break;
-            }
-        }
-        myGrabSelection = false;
     }
 
     // Double click on a text: its panel, to change the words and the format.
@@ -631,6 +614,7 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
             if (!io.KeyShift && !io.KeyCtrl) mySelection.clear();
             for (const ObjectId id : EntitiesInBox(f->sketch, view, lo, hi, window)) mySelection.insert(id);
+            log::Info("Sketch: box chose, {} chosen{}", mySelection.size(), io.KeyShift || io.KeyCtrl ? " (added)" : "");
             myBoxStart.reset();
             myBoxing = false;
             myPressedOnEntity = false;
@@ -642,7 +626,7 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
         myBoxStart.reset();
         if (myDragging) {
             const bool label = f->sketch.FindConstraint(myDragEntity) != nullptr;
-            if (cursor) log::Info("Sketch: moved by {:.1f},{:.1f}{}", (*cursor - myDragStart).x, (*cursor - myDragStart).y, myGrabbed ? " (the selection, grabbed)" : "");
+            if (cursor) log::Info("Sketch: moved by {:.1f},{:.1f}", (*cursor - myDragStart).x, (*cursor - myDragStart).y);
             session.CommitInPlaceEdit(std::move(myDragBefore), label ? Tr("Перемещение размера") : Tr("Перемещение в эскизе"));
         } else if (myHover) {
             // Click: select; Shift or Ctrl add to the selection. The phone has no Ctrl:
@@ -652,12 +636,11 @@ void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchV
                 if (mySelection.count(myHover.id)) mySelection.erase(myHover.id);
                 else mySelection.insert(myHover.id);
             }
-        } else if (!io.KeyShift && !io.KeyCtrl && !myGrabbed) {   // a grab let go unmoved keeps the choice
+        } else if (!io.KeyShift && !io.KeyCtrl) {
             mySelection.clear();
         }
         myDragging = false;
         myPressedOnEntity = false;
-        myGrabbed = false;
         myDragOrigins.clear();
     }
     (void)app;

@@ -60,14 +60,22 @@ struct MobileState {
     bool deletePressed = false;   ///< «Удалить» (the Delete key)
     bool holdPressed = false;     ///< «Зажать» tapped (taken on or off next frame)
 
-    // --- «Зажать»: the left button held down at the cursor's tip (22.10.2026) ---
-    // What a held mouse button does on a computer, with the cursor: what is
-    // under the tip (or the selection) follows it, the trim tool draws its
-    // fence. «Зажать» again or ✓ lets go where the tip is; ✕ puts it back.
+    // --- «Зажать»: ✓ becomes the left mouse button held down (22.10.2026) ---
+    // The palm on (`holdArmed`): ✓ presses the button at the cursor's tip and
+    // keeps it down (`holding`), ✓ again lets it go there — what a held mouse
+    // button does on a computer: on a thing, it follows the tip; on empty
+    // space, a selection box (Shift / Ctrl add to the choice); the trim tool
+    // draws its fence. ✕ while held puts it back. The palm again: off.
+    bool holdArmed = false;
     bool holding = false;
-    float holdBox[4] = {};         ///< the row's «Зажать», ✓ and ✕ (x0 y0 x1 y1 each): a touch on
-    float okBox[4] = {};           ///< them while holding is taken before the panel (the mouse
-    float cancelBox[4] = {};       ///< must not jump to the button with the thing held)
+    // Shift and Ctrl (22.10.2026): keys that stay down while lit, as on a keyboard.
+    bool shiftOn = false;
+    bool ctrlOn = false;
+    float holdBox[4] = {};         ///< the rows' «Зажать», ✓, ✕, Shift, Ctrl (x0 y0 x1 y1 each): a touch
+    float okBox[4] = {};           ///< on them while the button is held is taken before the panel
+    float cancelBox[4] = {};       ///< (the mouse must not jump to the button with the thing held)
+    float shiftBox[4] = {};
+    float ctrlBox[4] = {};
 
     // --- This frame's gestures over the view (applied by the viewport) ---
     GestureStep gestures;

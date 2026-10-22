@@ -107,6 +107,8 @@ private:
     const void*    myHoldSession = nullptr;   ///< the document held in (another one shown: let go)
     std::uint64_t  myPutBackFrom = 0;         ///< ✕ while holding: undo when the content moved from this…
     int            myPutBackIn = 0;           ///< …this many frames later (the release is taken first)
+    bool           myShiftSent = false;       ///< the Shift and Ctrl states last given to ImGui
+    bool           myCtrlSent = false;
     float  mySlop = 10.0f;        ///< the user's tap slop (dp)
     float  myScrollSpeed = 1.0f;
     // The numpad (its keys are not ImGui items: see mobile/Numpad.cpp)

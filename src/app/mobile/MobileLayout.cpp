@@ -186,7 +186,7 @@ void DrawRowButton(AppContext& app, const char* id, const char* icon, const char
     if (on && !primary) dl->AddRect(a, b, ui::ToU32(c.accentSoftBorder), ui.S(10));
     const float is = ui.S(22);
     const Color ink = !enabled ? c.textDisabled : primary ? c.textOnAccent : on ? c.accent : c.textSecondary;
-    ui.icons.Draw(dl, icon, {p.x + (s.x - is) / 2, p.y + (s.y - is) / 2}, is, ink);
+    if (icon) ui.icons.Draw(dl, icon, {p.x + (s.x - is) / 2, p.y + (s.y - is) / 2}, is, ink);   // none: the caller writes on it
     (void)tip;
 }
 
@@ -365,7 +365,7 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
                     m.okBox[0] = p.x, m.okBox[1] = p.y, m.okBox[2] = p.x + w, m.okBox[3] = p.y + h;
                     // Green only when a tap applies: with the cursor on, ✓ is the cursor's click.
                     const bool ready = op && op->HasApply() && !m.boxMode && !(cursorOn && m.cursorShown) && op->Ready(session);
-                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, m.boxHeld, true, true, &clicked, &held, ready);
+                    DrawRowButton(app, slots[i].id, slots[i].icon, slots[i].tip, p, {w, h}, m.boxHeld || m.holding, true, true, &clicked, &held, ready);
                     m.okDown = ImGui::IsItemActive();
                 }
                     if (clicked) m.okPressed = true;
@@ -375,7 +375,8 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
         }
     }
 
-    // The second row: «Удалить» over ✕, «Зажать» over ✓ — mirrored with the rest for the left hand.
+    // The second row: Shift · Ctrl · «Удалить» · «Зажать» (over frame · cursor · ✕ · ✓), mirrored
+    // with the rest for the left hand.
     {
         const float w = (size.x - pad - ui.S(8)) / 4.0f;
         const float h = ui.S(kRow);
@@ -384,6 +385,24 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
             return ImVec2{pos.x + pad + ui.S(4) + static_cast<float>(place) * w, row2Top};
         };
         bool clicked = false;
+        // Shift and Ctrl: lettered keys that stay down while lit (the author chose the words, 22.10.2026).
+        const auto key = [&](int i, const char* id, const char* label, bool& on, float* box) {
+            const ImVec2 at = placeOf(i);
+            box[0] = at.x, box[1] = at.y, box[2] = at.x + w, box[3] = at.y + h;
+            bool tapped = false;
+            DrawRowButton(app, id, nullptr, label, at, {w, h}, on, false, true, &tapped, nullptr);
+            ImDrawList* kd = ImGui::GetWindowDrawList();
+            const float fs = std::min(ui.S(13.5f), (w - ui.S(10)) / 3.0f);
+            const ImVec2 ts = ui.fonts.strong->CalcTextSizeA(fs, FLT_MAX, 0, label);
+            kd->AddText(ui.fonts.strong, fs, {at.x + (w - ts.x) / 2, at.y + (h - ts.y) / 2},
+                        ui::ToU32(on ? c.accent : c.textSecondary), label);
+            if (tapped) {
+                on = !on;
+                log::Info("Keys: {} {}", label, on ? "down" : "up");
+            }
+        };
+        key(0, "##row-shift", "Shift", m.shiftOn, m.shiftBox);
+        key(1, "##row-ctrl", "Ctrl", m.ctrlOn, m.ctrlBox);
         const ImVec2 del = placeOf(2);
         DrawRowButton(app, "##row-delete", "ui-trash", Tr("Удалить"), del, {w, h}, false, false, CanDelete(app), &clicked, nullptr);
         if (clicked) m.deletePressed = true;
@@ -391,15 +410,18 @@ void DrawBlock1(AppContext& app, Session& session, ImVec2 pos, ImVec2 size, bool
         const ImVec2 hold = placeOf(3);
         m.holdBox[0] = hold.x, m.holdBox[1] = hold.y, m.holdBox[2] = hold.x + w, m.holdBox[3] = hold.y + h;
         clicked = false;
-        DrawRowButton(app, "##row-hold", m.holding ? "ui-hand-grab" : "ui-hand-open", Tr("Зажать"), hold, {w, h}, m.holding, false, true,
+        DrawRowButton(app, "##row-hold", m.holding ? "ui-hand-grab" : "ui-hand-open", Tr("Зажать"), hold, {w, h}, m.holdArmed, false, true,
                       &clicked, nullptr);
         if (clicked) m.holdPressed = true;
         // For the emulator's check (smoke-apk.sh): where the two are, written when they move.
         static std::string logged;
-        if (const std::string place = std::format("{:.0f},{:.0f} {:.0f},{:.0f} {:.0f}x{:.0f}", del.x, del.y, hold.x, hold.y, w, h);
+        if (const std::string place = std::format("{:.0f},{:.0f} {:.0f},{:.0f} {:.0f}x{:.0f} {:.0f},{:.0f}", del.x, del.y, hold.x, hold.y, w, h,
+                                                  m.okBox[0], m.okBox[1]);
             place != logged) {
             logged = place;
-            log::Info("Touch: row2 delete at {:.0f},{:.0f} hold at {:.0f},{:.0f} size {:.0f}x{:.0f}", del.x, del.y, hold.x, hold.y, w, h);
+            log::Info("Touch: row2 shift at {:.0f},{:.0f} delete at {:.0f},{:.0f} hold at {:.0f},{:.0f} size {:.0f}x{:.0f}", m.shiftBox[0],
+                      m.shiftBox[1], del.x, del.y, hold.x, hold.y, w, h);
+            log::Info("Touch: row1 cancel at {:.0f},{:.0f} ok at {:.0f},{:.0f}", m.cancelBox[0], m.cancelBox[1], m.okBox[0], m.okBox[1]);
         }
     }
 
@@ -427,7 +449,13 @@ StatusText Status(AppContext& app, Session& session) {
               : app.shell.ribbonTab == RibbonTab::View ? Tr("Вид") : Tr("3D-модель");
     if (m.holding) {
         st.icon = "ui-hand-grab";
-        st.main = Tr("Зажато: ведёт кончик курсора — «Зажать» или ✓ отпустить, ✕ вернуть");
+        st.main = Tr("Зажато: ведёт кончик курсора — ✓ отпустить, ✕ вернуть");
+        st.mode.clear();
+        return st;
+    }
+    if (m.holdArmed) {
+        st.icon = "ui-hand-open";
+        st.main = Tr("Зажать: ✓ — нажать и держать в кончике курсора");
         st.mode.clear();
         return st;
     }

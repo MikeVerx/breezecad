@@ -236,12 +236,21 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
     // A finger.
     myMouseInUse = false;
     if (e.action == PointerAction::Down && m.holding) {
-        // Held: «Зажать» or ✓ lets go where the tip is, ✕ puts it back. They are
-        // taken here, before the panel: the mouse must not jump to the button
-        // with the thing still held (it would follow it there).
+        // Held: ✓ lets go where the tip is, ✕ puts it back, the palm lets go and
+        // turns off; Shift and Ctrl change as they are (they count when it is let
+        // go: a box adds to the choice). All taken here, before the panel: the
+        // mouse must not jump to the button with the thing still held.
         const auto on = [&at](const float* b) { return at.x >= b[0] && at.y >= b[1] && at.x < b[2] && at.y < b[3]; };
+        if (on(m.shiftBox) || on(m.ctrlBox)) {
+            myRoutes[e.id] = Route::Ignored;
+            bool& key = on(m.shiftBox) ? m.shiftOn : m.ctrlOn;
+            key = !key;
+            log::Info("Keys: {} {}", on(m.shiftBox) ? "Shift" : "Ctrl", key ? "down" : "up");
+            return;
+        }
         if (on(m.holdBox) || on(m.okBox) || on(m.cancelBox)) {
             myRoutes[e.id] = Route::Ignored;
+            if (on(m.holdBox)) m.holdArmed = false;
             EndHold(app, on(m.cancelBox));
             return;
         }
@@ -540,19 +549,12 @@ void TouchInput::StartHold(AppContext& app) {
     MobileState& m = app.shell.mobile;
     Session* s = app.Doc();
     if (!s || m.holding) return;
-    if (!(CursorActive(app) && m.cursorShown)) {
-        app.notes.Info(Tr("«Зажать» держит то, что под кончиком курсора: включите курсор"));
-        return;
-    }
     if (m.boxMode) {   // a frame half made: dropped, the hold takes the button
         if (m.boxHeld) Button(ImGuiMouseButton_Left, false);
         m.boxMode = m.boxHeld = false;
     }
     myHoldRevision = s->ContentRevision();
     myHoldSession = s;
-    // Nothing under the tip but something chosen: that is what follows (the
-    // author's case: a line chosen with ✓, the tip moved off it, «Зажать»).
-    app.sketch.GrabSelection(true);
     Pos(m.cursorTip);
     Button(ImGuiMouseButton_Left, true);
     m.holding = true;
@@ -566,7 +568,6 @@ void TouchInput::EndHold(AppContext& app, bool putBack) {
     m.holding = false;
     Pos(m.cursorTip);
     Button(ImGuiMouseButton_Left, false);
-    app.sketch.GrabSelection(false);
     if (putBack) {
         // The release is taken first (it commits the move, the fence…): undone
         // once it is, if the content changed during the hold.
@@ -581,8 +582,24 @@ void TouchInput::EndHold(AppContext& app, bool putBack) {
 
 void TouchInput::RunRowButtons(AppContext& app) {
     MobileState& m = app.shell.mobile;
-    // Held, and the cursor went off or another document is shown: let go.
+    // The cursor went off or another document is shown: let go, the palm off.
     if (m.holding && (!(CursorActive(app) && m.cursorShown) || app.Doc() != myHoldSession)) EndHold(app, false);
+    if (m.holdArmed && !(CursorActive(app) && m.cursorShown)) m.holdArmed = false;
+    // Shift and Ctrl lit: those keys down for ImGui (a box adds, a tap adds…), as on a keyboard.
+    if (m.shiftOn != myShiftSent || m.ctrlOn != myCtrlSent) {
+        ImGuiIO& io = ImGui::GetIO();
+        if (m.shiftOn != myShiftSent) {
+            io.AddKeyEvent(ImGuiKey_LeftShift, m.shiftOn);
+            io.AddKeyEvent(ImGuiMod_Shift, m.shiftOn);
+            myShiftSent = m.shiftOn;
+        }
+        if (m.ctrlOn != myCtrlSent) {
+            io.AddKeyEvent(ImGuiKey_LeftCtrl, m.ctrlOn);
+            io.AddKeyEvent(ImGuiMod_Ctrl, m.ctrlOn);
+            myCtrlSent = m.ctrlOn;
+        }
+        myQueued = std::max(myQueued, 2);
+    }
     if (myPutBackIn > 0 && --myPutBackIn == 0) {
         if (Session* s = app.Doc(); s && s->ContentRevision() != myPutBackFrom) {
             log::Info("Hold: put back (undo)");
@@ -595,11 +612,26 @@ void TouchInput::RunRowButtons(AppContext& app) {
         app.Later([&app] { DeletePressed(app); });
     }
     if (m.holdPressed) {
+        // The palm: on — ✓ then presses and holds at the tip; off again (letting go if held).
         m.holdPressed = false;
-        if (m.holding) EndHold(app, false);
-        else StartHold(app);
+        if (m.holdArmed) {
+            EndHold(app, false);
+            m.holdArmed = false;
+            log::Info("Hold: off");
+        } else if (!(CursorActive(app) && m.cursorShown)) {
+            app.notes.Info(Tr("«Зажать» нажимает в кончике курсора: включите курсор"));
+        } else {
+            m.holdArmed = true;
+            log::Info("Hold: armed");
+        }
     }
     const bool cursor = CursorActive(app) && m.cursorShown;
+    if (m.okPressed && m.holdArmed && cursor) {
+        // The palm on: ✓ is the left button going down at the tip and staying
+        // there (it comes up on the next ✓, taken in Route1 before the panel).
+        m.okPressed = false;
+        StartHold(app);
+    }
     if (m.okPressed) {
         m.okPressed = false;
         if (ImGui::GetIO().WantTextInput && cursor && m.tipAimed && TypeDimensionName(app, m.cursorTip)) {
@@ -629,10 +661,11 @@ void TouchInput::RunRowButtons(AppContext& app) {
             Click(m.cursorTip, ImGuiMouseButton_Left);
         } else if (OperationEditor* op = app.ops.Active(); op && app.Doc() && op->HasApply() && op->Ready(*app.Doc())) {
             // Everything needed is chosen (✓ is green): it makes the feature and the
-            // operation stays open for the next one (the author, 18.10.2026). A long
-            // press is «Готово» (commit and close).
+            // operation closes (the author, 22.10.2026 — it stayed open for the next
+            // one since 18.10, but nothing is left to extrude or turn from the sketch
+            // it took; patterns and the rest the same).
             app.Later([&app, op] {
-                if (app.ops.Active() == op && app.Doc()) op->Apply(app, *app.Doc());
+                if (app.ops.Active() == op && app.Doc()) op->Done(app, *app.Doc());
             });
         } else {
             app.Later([&app] { EnterPressed(app); });

@@ -278,33 +278,45 @@ else
 fi
 check saveback
 
-# 14e. «Зажать» and «Удалить» (22.10.2026): a line chosen, the cursor's tip off it; «Зажать» takes
-# the chosen line, the drop dragged — the line follows; «Зажать» again lets go (one move); «Удалить»
-# deletes the line.
+# 14e. «Зажать», Shift, «Удалить» (22.10.2026). A line through the view's middle, the cursor's tip on it.
+# The palm on; ✓ presses at the tip and holds; the drop dragged — the line follows; ✓ lets go (one move).
+# ✕ clears the choice. Shift on; the tip to empty space; ✓ presses; the drop dragged across the line — a
+# box; ✓ lets go: the line chosen, added. The palm and Shift off; «Удалить» deletes the line.
 adb logcat -c
 start new,sketch,holdtest 25
 sleep 2
-read -r hx hy hw hh < <(blog | sed -n 's/.*Touch: row2 delete at [0-9-]*,[0-9-]* hold at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4/p' | tail -1)
-read -r ex ey < <(blog | sed -n 's/.*Touch: row2 delete at \([0-9-]*\),\([0-9-]*\) hold.*/\1 \2/p' | tail -1)
+row2=$(blog | sed -n 's/.*Touch: row2 shift at \([0-9-]*\),\([0-9-]*\) delete at \([0-9-]*\),\([0-9-]*\) hold at \([0-9-]*\),\([0-9-]*\) size \([0-9]*\)x\([0-9]*\).*/\1 \2 \3 \4 \5 \6 \7 \8/p' | tail -1)
+row1=$(blog | sed -n 's/.*Touch: row1 cancel at \([0-9-]*\),\([0-9-]*\) ok at \([0-9-]*\),\([0-9-]*\).*/\1 \2 \3 \4/p' | tail -1)
 read -r fx fy < <(blog | sed -n 's/.*Touch: drop at \([0-9-]*\),\([0-9-]*\).*/\1 \2/p' | tail -1)
-if [ -n "${hh:-}" ] && [ -n "${fy:-}" ]; then
-    adb shell input tap $(dp $(( hx + hw / 2 ))) $(dp $(( hy + hh / 2 )))
-    sleep 2
+if [ -n "$row2" ] && [ -n "$row1" ] && [ -n "${fy:-}" ]; then
+    read -r sx sy ex ey hx hy bw bh <<< "$row2"
+    read -r cx cy ox oy <<< "$row1"
+    tapc() { adb shell input tap $(dp $(( $1 + bw / 2 ))) $(dp $(( $2 + bh / 2 ))); sleep 1.5; }
+    drag() { adb shell input swipe $(dp $1) $(dp $2) $(dp $3) $(dp $4) 900; sleep 1.5; }
+    tapc $hx $hy                                  # the palm on
+    tapc $ox $oy                                  # ✓: pressed on the line
     shot 14e-hold-on 1
-    adb shell input swipe $(dp $fx) $(dp $fy) $(dp $(( fx + 40 ))) $(dp $(( fy - 30 ))) 900
-    sleep 2
-    adb shell input tap $(dp $(( hx + hw / 2 ))) $(dp $(( hy + hh / 2 )))
-    sleep 2
+    drag $fx $fy $(( fx + 40 )) $(( fy - 30 ))    # the line follows the tip
+    tapc $ox $oy                                  # ✓: let go
     shot 14e-hold-moved 1
-    adb shell input tap $(dp $(( ex + hw / 2 ))) $(dp $(( ey + hh / 2 )))
-    sleep 2
-    if bhas "Hold: on" && bhas "Hold: let go" && bhas "Sketch: moved by .*grabbed" && bhas "Sketch: 1 deleted"; then
-        echo "step hold: held, the chosen line followed the tip, let go, deleted ($(blog | grep -o -E '(Hold|Sketch): .*' | tr '\n' ';'))"
+    tapc $cx $cy                                  # ✕: nothing chosen
+    tapc $sx $sy                                  # Shift on
+    drag $(( fx + 40 )) $(( fy - 30 )) $(( fx + 120 )) $(( fy + 60 ))   # the tip to empty space
+    tapc $ox $oy                                  # ✓: pressed there — a box starts
+    drag $(( fx + 120 )) $(( fy + 60 )) $(( fx - 40 )) $(( fy - 50 ))   # across the line
+    shot 14e-box 1
+    tapc $ox $oy                                  # ✓: let go — the line chosen
+    tapc $hx $hy                                  # the palm off
+    tapc $sx $sy                                  # Shift off
+    tapc $ex $ey                                  # «Удалить»
+    if bhas "Hold: armed" && bhas "Sketch: moved by" && bhas "Keys: Shift down" && bhas "Sketch: box chose, 1 chosen (added)" &&
+       bhas "Hold: off" && bhas "Sketch: 1 deleted"; then
+        echo "step hold: pressed on the line and it followed, a box with Shift chose it, deleted ($(blog | grep -o -E '(Hold|Sketch|Keys): .*' | tr '\n' ';'))"
     else
-        echo "step hold: FAILED — $(blog | grep -o -E '(Hold|Sketch|Touch: finger).*' | tail -12 | tr '\n' ';')"; broken=1
+        echo "step hold: FAILED — $(blog | grep -o -E '(Hold|Sketch|Keys|Touch: finger).*' | tail -20 | tr '\n' ';')"; broken=1
     fi
 else
-    echo "step hold: FAILED — no row or drop in the log"; broken=1
+    echo "step hold: FAILED — no rows or drop in the log"; broken=1
 fi
 check hold
 

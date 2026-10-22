@@ -127,9 +127,6 @@ public:
     /// Makes the selected lines осевые (or normal again).
     void ToggleCenterline(Session& session);
     bool HasSelection() const { return !mySelection.empty(); }
-    /// The phone's «Зажать»: the next press, on nothing, takes the selection
-    /// (its first draggable thing) as if pressed on it. Off after that press.
-    void GrabSelection(bool on) { myGrabSelection = on; }
     /// The emulator's check of «Зажать» (Application::RunTestCommands "holdtest"):
     /// a free line through the middle, chosen.
     void MakeHoldTest(Session& session);
@@ -291,8 +288,6 @@ private:
     std::vector<sketch::Drag>     myDragOrigins;   ///< initial positions
     bool                          myDragging = false;
     bool                          myPressedOnEntity = false;
-    bool                          myGrabSelection = false;   ///< see GrabSelection
-    bool                          myGrabbed = false;         ///< this press took the selection
 
     /// Camera before entering the sketch; Finish returns to its direction.
     std::optional<render::CameraState> myCameraBeforeSketch;

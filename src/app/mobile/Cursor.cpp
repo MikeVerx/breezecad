@@ -69,11 +69,14 @@ void DrawDropCursor(AppContext& app, ImDrawList* dl) {
     dl->PathStroke(ui::ToU32(ink), ImDrawFlags_Closed, 1.8f * k);
 
     // «Зажать»: an amber ring round the tip — "I hold it" — and a soft disc inside.
+    // The palm on and ✓ not pressed yet: the ring thin and faint — "ready to hold".
     if (m.holding) {
         const Color hold = c.warning;
         dl->AddCircleFilled(tip, 13.0f * k, ui::ToU32(hold.WithAlpha(0.16f)), 32);
         dl->AddCircle(tip, 13.0f * k, ui::ToU32(Color{0, 0, 0, 0.35f}), 32, 3.6f * k);
         dl->AddCircle(tip, 13.0f * k, ui::ToU32(hold), 32, 2.2f * k);
+    } else if (m.holdArmed) {
+        dl->AddCircle(tip, 13.0f * k, ui::ToU32(c.warning.WithAlpha(0.55f)), 32, 1.2f * k);
     }
     // The needle on to the tip, a halo round it, the tip itself.
     const ImVec2 needleEnd = at(0, 4.0f * k);
