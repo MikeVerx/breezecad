@@ -842,9 +842,20 @@ void Viewport::Sync(const kernel::Model& model) {
         m.context->Remove(m.spare.front().shape, false);
         m.spare.erase(m.spare.begin());
     }
-    for (const auto& d : m.decorations) m.context->Remove(d, false);
+    // Decorations (cosmetic threads) that did not change keep theirs.
+    std::vector<Handle(AIS_Shape)> oldDecorations = std::move(m.decorations);
     m.decorations.clear();
     for (const auto& [id, shape] : model.GetImpl().decorations) {
+        const auto kept = std::find_if(oldDecorations.begin(), oldDecorations.end(),
+                                       [&](const Handle(AIS_Shape)& d) { return !d.IsNull() && d->Shape().IsEqual(shape); });
+        if (kept != oldDecorations.end()) {
+            Quantity_Color colour;
+            (*kept)->Color(colour);
+            if (!colour.IsEqual(ToQuantity(m.colors.edges))) (*kept)->SetColor(ToQuantity(m.colors.edges));   // the theme changed
+            m.decorations.push_back(*kept);
+            kept->Nullify();
+            continue;
+        }
         Handle(AIS_Shape) ais = new AIS_Shape(shape);
         ais->SetColor(ToQuantity(m.colors.edges));
         ais->SetWidth(1.4);
@@ -852,6 +863,8 @@ void Viewport::Sync(const kernel::Model& model) {
         m.context->Display(ais, AIS_WireFrame, -1, false);
         m.decorations.push_back(ais);
     }
+    for (const auto& d : oldDecorations)
+        if (!d.IsNull()) m.context->Remove(d, false);
     m.ActivateShown();
     // Picked entities belonged to the old shapes.
     if (!m.measuring.picked[0].IsNull() || !m.measuring.picked[1].IsNull()) ClearMeasure();

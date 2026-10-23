@@ -396,13 +396,45 @@ void AssemblyModel::Update(assembly::Assembly& a, const std::filesystem::path& a
     m.builtGeneration = m.partsGeneration;
 
     Model::Impl& shown = m.shown->EditImpl();
+    // A component that neither moved nor changed keeps the very shape it
+    // was shown with: the view then keeps its presentation (Viewport::Sync
+    // matches shapes exactly, location included). Made anew, every body of
+    // the assembly was presented again — meshes, selection — at every
+    // change anywhere (a constraint added, a drag step): O(all parts).
+    struct Shown {
+        TopoDS_Shape body, decorations, source;
+    };
+    std::unordered_map<ObjectId, Shown> before;
+    for (const Body& b : shown.bodies) before[b.id].body = b.shape;
+    for (const auto& [id, d] : shown.decorations) before[id].decorations = d;
+    for (auto& [id, was] : before)
+        if (const auto it = m.sourceShown.find(id); it != m.sourceShown.end()) was.source = it->second;
+    const std::unordered_map<ObjectId, assembly::Placement> placedBefore = std::move(m.placed);
     shown.bodies.clear();
     shown.decorations.clear();
     m.placed.clear();
+    m.sourceShown.clear();
+    const auto same = [](const assembly::Placement& p, const assembly::Placement& q) {
+        return p.translation.x == q.translation.x && p.translation.y == q.translation.y && p.translation.z == q.translation.z &&
+               p.rotation.col[0].x == q.rotation.col[0].x && p.rotation.col[0].y == q.rotation.col[0].y &&
+               p.rotation.col[0].z == q.rotation.col[0].z && p.rotation.col[1].x == q.rotation.col[1].x &&
+               p.rotation.col[1].y == q.rotation.col[1].y && p.rotation.col[1].z == q.rotation.col[1].z &&
+               p.rotation.col[2].x == q.rotation.col[2].x && p.rotation.col[2].y == q.rotation.col[2].y &&
+               p.rotation.col[2].z == q.rotation.col[2].z;
+    };
     for (const assembly::Component& c : a.components) {
         const Impl::Part* part = m.PartFor(c.id);
         m.placed[c.id] = c.placement;
         if (!c.visible || !part || part->shape.IsNull()) continue;
+        m.sourceShown[c.id] = part->shape;
+        const auto was = before.find(c.id);
+        const auto wasAt = placedBefore.find(c.id);
+        if (was != before.end() && !was->second.body.IsNull() && wasAt != placedBefore.end() && same(wasAt->second, c.placement) &&
+            was->second.source.IsEqual(part->shape)) {
+            shown.bodies.push_back({c.id, c.name, was->second.body});
+            if (!was->second.decorations.IsNull()) shown.decorations[c.id] = was->second.decorations;
+            continue;
+        }
         const TopLoc_Location where(ToTrsf(c.placement));
         shown.bodies.push_back({c.id, c.name, part->shape.Moved(where)});
         if (!part->decorations.IsNull()) shown.decorations[c.id] = part->decorations.Moved(where);

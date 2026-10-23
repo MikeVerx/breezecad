@@ -81,6 +81,7 @@ struct AssemblyModel::Impl {
     std::chrono::steady_clock::time_point lastDiskCheck{};
     std::unordered_map<ObjectId, std::string> partOf;   ///< component -> key in `parts`
     std::unordered_map<ObjectId, assembly::Placement> placed;   ///< where each was shown
+    std::unordered_map<ObjectId, TopoDS_Shape>        sourceShown;   ///< the part shape each was shown from
 
     Model         own;
     Model*        shown = &own;

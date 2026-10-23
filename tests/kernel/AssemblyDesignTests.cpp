@@ -10,6 +10,7 @@
 #include "kernel/AssemblyModel.h"
 #include "kernel/ContextProjection.h"
 #include "kernel/Model.h"
+#include "kernel/occt/ModelImpl.h"
 #include "kernel/Projection.h"
 
 #include <doctest.h>
@@ -17,6 +18,7 @@
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <map>
 
 using namespace bz;
 using namespace bz::assembly;
@@ -135,6 +137,31 @@ TEST_CASE("a part edited in memory is shown from memory, then from its file agai
     b.m.Update(b.a, b.file);
     CHECK_FALSE(b.m.IsPartInMemory(plateFile));
     CHECK(b.m.Shown().Volume() == Approx(before).epsilon(1e-6));
+}
+
+TEST_CASE("components that did not move keep the very shape they are shown with") {
+    // The view keeps a body's presentation only for exactly the same shape:
+    // a change elsewhere must not make every body of the assembly new.
+    Bench b;
+    std::vector<ObjectId> ids;
+    for (int i = 0; i < 5; ++i) ids.push_back(b.a.AddComponent("plate.bzc", "Плита", {Rotation{}, {i * 100.0, 0, 0}}).id);
+    b.m.Update(b.a, b.file);
+    const auto shapes = [&] {
+        std::map<std::uint64_t, TopoDS_Shape> out;
+        for (const kernel::Body& body : b.m.Shown().GetImpl().bodies) out[body.id.value] = body.shape;
+        return out;
+    };
+    const auto before = shapes();
+    REQUIRE(before.size() == 6);
+    b.a.FindComponent(ids[2])->placement.translation.z += 5;   // one moves
+    b.a.Touch();
+    b.m.Update(b.a, b.file);
+    const auto after = shapes();
+    for (const auto& [id, shape] : after) {
+        CAPTURE(id);
+        if (id == ids[2].value) CHECK_FALSE(shape.IsEqual(before.at(id)));
+        else CHECK(shape.IsEqual(before.at(id)));
+    }
 }
 
 TEST_CASE("constraint geometry: vertices and edges near the cursor, origin and work planes of a part") {

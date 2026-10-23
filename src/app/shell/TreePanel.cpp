@@ -70,6 +70,9 @@ RowResult Row(AppContext& app, const char* id, const std::string& name, const Ro
     r.hovered = ImGui::IsItemHovered();
     r.doubleClicked = r.hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
     ImGui::PopID();
+    // Scrolled out of sight: the row is there (for scrolling and menus) but
+    // not drawn — a tree of hundreds of components costs only what shows.
+    if (!ImGui::IsItemVisible()) return r;
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     if (style.selected) {
@@ -543,7 +546,6 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
         style.icon = "tree-component";
         style.selected = st.selected == id;
         style.muted = !comp.visible;
-        const auto constraints = a.ConstraintsOf(id);
         style.caret = true;   // its origin and work geometry, its constraints
         style.open = app.shell.expanded.contains(id);
         if (const std::string problem = st.geometry.ProblemOf(id); !problem.empty()) {
@@ -593,6 +595,7 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
         }
         ImGui::PopID();
         if (!style.open) continue;
+        const auto constraints = a.ConstraintsOf(id);   // only when shown: a scan of all constraints
         {
             RowStyle os;
             os.depth = 2;
