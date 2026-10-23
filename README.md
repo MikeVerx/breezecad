@@ -20,7 +20,7 @@
 
 **BreezeCAD** is a free, offline parametric CAD for parts you print, mill or
 order. Sketch, constrain, extrude, drill and thread — in a familiar
-Inventor-like ribbon that starts in a second and runs on a 4 GB laptop with
+Inventor-like ribbon that starts in a second and runs on an 8 GB laptop with
 integrated graphics.
 
 <p align="center"><img src="docs/images/model-light.png" alt="A flange with a counterbored hole pattern and an M30 thread" width="100%"></p>
