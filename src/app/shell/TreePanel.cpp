@@ -716,6 +716,9 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
                                 st.assembly.Touch();
                             }
                         });
+                    // Inventor's "Переопределить": its geometry picked again.
+                    if (!assembly::IsTransmission(con.type) && ui::MenuItem(ui, Tr("Переопределить"), nullptr, "ui-edit"))
+                        app.Later([&app, cid] { StartRedefine(app, cid); });
                     ImGui::Separator();
                     if (ui::MenuItem(ui, Tr("Удалить"), "Del", "ui-trash")) app.Later([&app, &session] { AssemblyDelete(app, session); });
                     ImGui::EndPopup();
