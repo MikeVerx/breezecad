@@ -138,13 +138,20 @@ const Json& Required(const Json& args, const char* key) {
     return *it;
 }
 
+double Sane(double v, const char* what) {
+    // Beyond 10 km (mm) — or not a number at all — a value only overflows the
+    // solver and the geometry kernel: refused here, before it gets in.
+    if (!std::isfinite(v) || std::abs(v) > 1e7) Fail(std::format("«{}» — число вне разумного (больше 10 км или не число)", what));
+    return v;
+}
+
 bool Has(const Json& args, const char* key) { return args.contains(key) && !args[key].is_null(); }
 
 double Number(const Json& args, const char* key, std::optional<double> fallback) {
     if (!Has(args, key) && fallback) return *fallback;
     const Json& v = Required(args, key);
     if (!v.is_number()) Fail(std::format("«{}» — не число", key));
-    return v.get<double>();
+    return Sane(v.get<double>(), key);
 }
 
 int Integer(const Json& args, const char* key, std::optional<int> fallback) {
@@ -177,7 +184,7 @@ ObjectId Id(const Json& args, const char* key) {
 Vec2 Point(const Json& v, const char* what) {
     if (!v.is_array() || v.size() != 2 || !v[0].is_number() || !v[1].is_number())
         Fail(std::format("«{}» — не точка [x, y]", what));
-    return {v[0].get<double>(), v[1].get<double>()};
+    return {Sane(v[0].get<double>(), what), Sane(v[1].get<double>(), what)};
 }
 
 Vec2 Point(const Json& args, const char* key, std::optional<Vec2> fallback) {
@@ -272,7 +279,7 @@ std::vector<doc::FaceReference> FaceRefs(Session& part, const Json& args, const 
 Vec3 Point3(const Json& v, const char* what) {
     if (!v.is_array() || v.size() != 3 || !v[0].is_number() || !v[1].is_number() || !v[2].is_number())
         Fail(std::format("«{}» — не точка [x, y, z]", what));
-    return {v[0].get<double>(), v[1].get<double>(), v[2].get<double>()};
+    return {Sane(v[0].get<double>(), what), Sane(v[1].get<double>(), what), Sane(v[2].get<double>(), what)};
 }
 
 Json ToJson3(Vec3 v) {

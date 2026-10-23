@@ -146,7 +146,7 @@ Vec3 Point3(const Json& args, const char* key, std::optional<Vec3> fallback) {
     const Json& v = Required(args, key);
     if (!v.is_array() || v.size() != 3 || !v[0].is_number() || !v[1].is_number() || !v[2].is_number())
         Fail(std::format("«{}» — не точка [x, y, z]", key));
-    return {v[0].get<double>(), v[1].get<double>(), v[2].get<double>()};
+    return {Sane(v[0].get<double>(), key), Sane(v[1].get<double>(), key), Sane(v[2].get<double>(), key)};
 }
 
 /// A thread on the cylinder (shaft or hole) whose axis passes through

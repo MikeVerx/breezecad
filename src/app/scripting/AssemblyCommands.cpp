@@ -350,7 +350,7 @@ Json Constrain(AppContext& app, const Json& args) {
             const Json& r = args["range"];
             if (!r.is_array() || r.size() != 2 || !r[0].is_number() || !r[1].is_number()) Fail("range — [от, до]");
             const double k = IsAngle(c.type) ? kPi / 180.0 : 1.0;
-            c.limits = {true, r[0].get<double>() * k, r[1].get<double>() * k};
+            c.limits = {true, Sane(r[0].get<double>(), "range") * k, Sane(r[1].get<double>(), "range") * k};
         }
     }
     st.Checkpoint(assembly::IsJoint(c.type) ? N_("Соединение") : N_("Зависимость"));

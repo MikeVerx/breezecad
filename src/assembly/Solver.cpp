@@ -1,5 +1,7 @@
 #include "assembly/Solver.h"
 
+#include <limits>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -970,6 +972,17 @@ SolveResult Solve(Assembly& a, const SolveOptions& options) {
             for (std::size_t i = 0; i < s.free.size(); ++i) s.start[i] = a.FindComponent(s.free[i])->placement;
         }
         err = SolveSystem(s, options, result.iterations);
+        // Never leave a part where numbers stop meaning anything (constraints
+        // that ask the impossible can drive a solve towards infinity): they
+        // stay where they were, the constraints show as not holding.
+        const auto finite = [](const Placement& p) {
+            const auto ok = [](Vec3 v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z) && v.Length() < 1e8; };
+            return ok(p.translation) && ok(p.rotation.col[0]) && ok(p.rotation.col[1]) && ok(p.rotation.col[2]);
+        };
+        if (!std::ranges::all_of(s.free, [&](ObjectId id) { return finite(a.FindComponent(id)->placement); })) {
+            for (std::size_t i = 0; i < s.free.size(); ++i) a.FindComponent(s.free[i])->placement = before[i];
+            err = std::numeric_limits<double>::infinity();
+        }
         total += err * err;
         for (std::size_t i = 0; i < s.free.size(); ++i) {
             const Placement& now = a.FindComponent(s.free[i])->placement;
