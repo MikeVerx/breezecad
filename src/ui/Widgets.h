@@ -20,8 +20,10 @@ bool RibbonLargeButton(Ui& ui, const char* id, std::string_view icon, const char
                        const char* tooltip, bool enabled = true, bool active = false);
 
 /// Small ribbon button: 20 px icon and a caption on one 24 px row.
+/// `captionShown` 1 is the full caption, 0 the icon alone (28 px wide);
+/// between them the caption narrows and fades (a ribbon group folding).
 bool RibbonSmallButton(Ui& ui, const char* id, std::string_view icon, const char* caption,
-                       const char* tooltip, bool enabled = true, bool active = false);
+                       const char* tooltip, bool enabled = true, bool active = false, float captionShown = 1.0f);
 
 /// Segmented control `width` wide, laid out in `columns` columns. Returns
 /// the chosen index (unchanged when nothing was clicked). Bit i of

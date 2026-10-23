@@ -18,6 +18,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -40,6 +41,13 @@ struct ShellState {
     bool      handleHot = false;      ///< a drag handle in the view is under the cursor or held (no radial menu)
     float     ribbonScroll = 0.0f;   ///< sideways scroll of a ribbon wider than the window
     float     ribbonContent = 0.0f;  ///< the ribbon's laid-out width in the last frame
+    /// Ribbon groups folding to icons: 0 with captions … 1 icons only, moving
+    /// towards Settings::ribbonIconsOnly over half a second (Ribbon.cpp).
+    std::unordered_map<std::string, float> ribbonFold;
+    std::vector<std::string> ribbonFoldable;   ///< the current tab's folding groups (last frame), for the ribbon's menu
+    float     ribbonEdgeX = 0.0f;      ///< where the drag of a group's edge last changed the group
+    bool      ribbonEdgeMoved = false; ///< the edge was dragged (not just clicked)
+    bool      finishDrag = false;      ///< "Принять эскиз" is being carried to the other end
 
     bool        paletteOpen = false;   ///< command search (Ctrl+K)
     std::string paletteQuery;
