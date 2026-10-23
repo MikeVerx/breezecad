@@ -248,6 +248,9 @@ void HitInInterface() {
     gInterface = nullptr;
     work();
 }
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((no_sanitize("undefined")))   // a real crash on purpose: not a report of the sanitizer
+#endif
 void Crash() {
     volatile int* nowhere = nullptr;
     *nowhere = 1;
