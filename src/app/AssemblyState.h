@@ -63,6 +63,8 @@ public:
         Vec3                grab;             ///< the point pressed, in the assembly
         assembly::Placement start;            ///< where the component was at the press
         Vec3                pivot;            ///< rotating: centre of its box
+        Vec3                local;            ///< the point pressed, in the component's coordinates
+        std::optional<Vec3> target;           ///< moving: where the cursor pulls that point
     } drag;
 
     /// A constraint being made: its type, options and what is picked so far.

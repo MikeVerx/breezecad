@@ -459,6 +459,12 @@ struct System {
     std::vector<double>            weight;        ///< how readily each moves (1; less for the kept one)
     std::unordered_map<ObjectId, std::size_t> index;
     bool                           limits = true;   ///< with the joint-limit rows
+    /// A pulled point (SolveOptions::pull) of the component `free[pullAt]`:
+    /// three more rows after the constraints', weighed lightly, so the
+    /// constraints win and the point only goes where they let it.
+    std::optional<std::size_t>     pullAt;
+    Vec3                           pullLocal, pullTarget;
+    static constexpr double        kPullWeight = 0.03;
 
     explicit System(Assembly& a) : assembly(a) {}
 
@@ -509,7 +515,15 @@ struct System {
             Rows(*c, y, out);
         }
         if (rows) rows->push_back(out.size());
+        if (pullAt) PullRows(y, out);
         return out;
+    }
+
+    void PullRows(const std::vector<double>& y, std::vector<double>& out) const {
+        const Vec3 at = (y.empty() ? start[*pullAt] : PoseOf(*pullAt, y)).Point(pullLocal) - pullTarget;
+        out.push_back(at.x * kPullWeight);
+        out.push_back(at.y * kPullWeight);
+        out.push_back(at.z * kPullWeight);
     }
 
     /// The Jacobian at `y`, row by row: each constraint is differentiated
@@ -536,6 +550,19 @@ struct System {
                         if (d != 0.0) j[r].emplace_back(v, d);
                     }
                 }
+        }
+        if (pullAt) {
+            const std::size_t r0 = rows.back();
+            for (std::size_t v = 6 * *pullAt; v < 6 * *pullAt + 6; ++v) {
+                yh[v] = y[v] + h;
+                f1.clear();
+                PullRows(yh, f1);
+                yh[v] = y[v];
+                for (std::size_t r = 0; r < 3; ++r) {
+                    const double d = (f1[r] - f0[r0 + r]) / h;
+                    if (d != 0.0) j[r0 + r].emplace_back(v, d);
+                }
+            }
         }
         return j;
     }
@@ -928,7 +955,21 @@ SolveResult Solve(Assembly& a, const SolveOptions& options) {
         if (s.free.empty()) continue;
         std::vector<Placement> before;
         for (ObjectId id : s.free) before.push_back(a.FindComponent(id)->placement);
-        const double err = SolveSystem(s, options, result.iterations);
+        double err = 0.0;
+        const auto pulled = options.pull ? s.index.find(options.pull->component) : s.index.end();
+        if (pulled != s.index.end()) {
+            // First towards the pulled point (the constraints nearly hold),
+            // then the constraints exactly, by the smallest change from there.
+            s.pullAt = pulled->second;
+            s.pullLocal = options.pull->local;
+            s.pullTarget = options.pull->target;
+            SolveOptions towards = options;
+            towards.maxIterations = std::min(options.maxIterations, 25);
+            SolveSystem(s, towards, result.iterations);
+            s.pullAt.reset();
+            for (std::size_t i = 0; i < s.free.size(); ++i) s.start[i] = a.FindComponent(s.free[i])->placement;
+        }
+        err = SolveSystem(s, options, result.iterations);
         total += err * err;
         for (std::size_t i = 0; i < s.free.size(); ++i) {
             const Placement& now = a.FindComponent(s.free[i])->placement;
@@ -974,11 +1015,14 @@ std::unordered_map<ObjectId, Freedom> AnalyzeFreedom(const Assembly& a) {
         const std::vector<double> f = s.F(y, &rows);
         const std::vector<SparseRow> j = s.J(y, f, rows);
         // Freedom of each one with the others held where they are: only the
-        // rows of the constraints that tie it count.
+        // rows of the constraints that tie it count. Transmissions (gear,
+        // screw) take no freedom away, as Inventor's motion constraints: a
+        // gear turns, only it takes the other one with it — with the other
+        // held, it would read "fixed" though it turns.
         for (std::size_t i = 0; i < s.free.size(); ++i) {
             std::vector<SparseRow> mine;
             for (std::size_t k = 0; k < s.active.size(); ++k)
-                if (std::find(s.vars[k].begin(), s.vars[k].end(), i) != s.vars[k].end())
+                if (!IsTransmission(s.active[k]->type) && std::find(s.vars[k].begin(), s.vars[k].end(), i) != s.vars[k].end())
                     for (std::size_t r = rows[k]; r < rows[k + 1]; ++r) mine.push_back(j[r]);
             const std::vector<std::size_t> shift{6 * i, 6 * i + 1, 6 * i + 2};
             const std::vector<std::size_t> all{6 * i, 6 * i + 1, 6 * i + 2, 6 * i + 3, 6 * i + 4, 6 * i + 5};

@@ -220,6 +220,7 @@ bool AssemblyState::Update(const std::filesystem::path& file, std::string_view c
         // the drag stays smooth in a large assembly.
         assembly::SolveOptions options;
         if (drag.moving) options.keep = drag.component;
+        if (drag.moving && drag.target) options.pull = assembly::Pull{drag.component, drag.local, *drag.target};
         options.analyze = !drag.moving;
         if (assembly::Solve(assembly, options).moved) assembly.Touch();
         if (!drag.moving) {

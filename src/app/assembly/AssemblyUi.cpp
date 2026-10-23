@@ -1485,6 +1485,7 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
                 drag.pressAt = pixel;
                 drag.grab = hit->point;
                 drag.start = c->placement;
+                drag.local = c->placement.Inverse().Point(hit->point);
                 drag.pivot = c->placement.translation;
                 if (const auto box = st.geometry.ComponentBounds(hovered)) drag.pivot = (box->min + box->max) * 0.5;
             }
@@ -1516,7 +1517,11 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
                     if (std::abs(denom) > 1e-12) {
                         const double t = (drag.grab - origin).Dot(vp.direction) / denom;
                         const Vec3 at = origin + dir * t;
+                        // Shifted there first (a part held by nothing just
+                        // follows), then pulled there by the solver as far
+                        // as its constraints let it: on an axle it turns.
                         c->placement.translation = drag.start.translation + (at - drag.grab);
+                        drag.target = at;
                     }
                 }
                 st.assembly.Touch();

@@ -16,6 +16,15 @@
 
 namespace bz::assembly {
 
+/// A point of a component pulled towards a place (the point grabbed while
+/// dragging, towards the cursor): the component goes as near as its
+/// constraints let it — a part on an axle turns, a slider slides.
+struct Pull {
+    ObjectId component;
+    Vec3     local;    ///< the point, in the component's own coordinates
+    Vec3     target;   ///< where it is pulled, in the assembly
+};
+
 struct SolveOptions {
     /// A component that should move as little as possible (the one being
     /// dragged): the others give way first.
@@ -26,6 +35,9 @@ struct SolveOptions {
     /// as Analyze does. Off while a part is dragged: the states follow on
     /// release, the drag stays smooth.
     bool     analyze = true;
+    /// Dragging: the grabbed point follows the cursor as far as the
+    /// constraints allow (they still hold exactly afterwards).
+    std::optional<Pull> pull;   // last: brace-initialised options keep their order
 };
 
 struct SolveResult {

@@ -218,18 +218,108 @@ TEST_CASE("gear: the driven joint turns ratio times the drive, the other way") {
     const double expected = std::remainder(w0 - 0.5 * total, 2 * kPi);
     CHECK(std::abs(std::remainder(*JointCoordinate(a, j2) - expected, 2 * kPi)) < 1e-4);
 
-    // Freedom is counted per component with the others held: held wheel,
-    // held pinion — each alone cannot turn (the pair turns together).
+    // A transmission takes no freedom away (as Inventor's motion
+    // constraints): each still turns, taking the other with it — the tree
+    // must not call a gear the user is about to turn "fixed".
     const auto f = AnalyzeFreedom(a);
-    CHECK(f.at(pinion).Total() == 0);
-    CHECK(f.at(wheel).Total() == 0);
-    a.FindConstraint(g)->suppressed = true;
-    CHECK(AnalyzeFreedom(a).at(wheel).rotations == 1);
-    a.FindConstraint(g)->suppressed = false;
+    CHECK(f.at(pinion).rotations == 1);
+    CHECK(f.at(pinion).translations == 0);
+    CHECK(f.at(wheel).rotations == 1);
 
     // Removing a joint removes the transmission with it.
     a.RemoveConstraint(j1);
     CHECK_FALSE(a.FindConstraint(g));
+}
+
+TEST_CASE("dragging pulls the grabbed point: a gear on an axle turns and drives the other; a slider slides") {
+    Assembly a;
+    const ObjectId housing = a.AddComponent("h.bzc", "Корпус").id;   // grounded
+    const ObjectId pinion = a.AddComponent("p.bzc", "Шестерня", {Rotation{}, {0, 0, 0}}).id;
+    const ObjectId wheel = a.AddComponent("w.bzc", "Колесо", {Rotation{}, {30, 0, 0}}).id;
+    const ObjectId j1 = AddJoint(a, ConstraintType::Rotational, Circle(housing, {0, 0, 0}, {0, 0, 1}, 5),
+                                 Circle(pinion, {0, 0, 0}, {0, 0, -1}, 5));
+    const ObjectId j2 = AddJoint(a, ConstraintType::Rotational, Circle(housing, {30, 0, 0}, {0, 0, 1}, 5),
+                                 Circle(wheel, {0, 0, 0}, {0, 0, -1}, 5));
+    REQUIRE(Solve(a).converged);
+    Constraint gear;
+    gear.type = ConstraintType::Gear;
+    gear.drive = j1;
+    gear.driven = j2;
+    gear.ratio = 0.5;
+    gear.flipped = true;
+    FitTransmission(a, gear);
+    a.AddConstraint(gear);
+    const double p0 = *JointCoordinate(a, j1), w0 = *JointCoordinate(a, j2);
+
+    // The rim point (10, 0, 0) of the pinion is dragged a little at a time
+    // round to (0, 10, 0), as frames of a drag would: a quarter turn.
+    SolveOptions o;
+    o.keep = pinion;
+    o.analyze = false;
+    for (int step = 1; step <= 9; ++step) {
+        const double t = kPi / 2 * step / 9;
+        // Where the app shifts it first: the grab point onto the cursor.
+        Placement& p = a.FindComponent(pinion)->placement;
+        const Vec3 cursor{10 * std::cos(t), 10 * std::sin(t), 0};
+        p.translation = p.translation + (cursor - p.Point({10, 0, 0}));
+        o.pull = Pull{pinion, {10, 0, 0}, cursor};
+        Solve(a, o);
+    }
+    Analyze(a);
+    CHECK(std::remainder(*JointCoordinate(a, j1) - p0 - kPi / 2, 2 * kPi) == Approx(0).epsilon(1e-3).scale(1));
+    CHECK(std::remainder(*JointCoordinate(a, j2) - w0 + kPi / 4, 2 * kPi) == Approx(0).epsilon(1e-3).scale(1));
+    for (const Constraint& c : a.constraints) CHECK(c.state == ConstraintState::Satisfied);
+    CHECK(a.FindComponent(pinion)->placement.translation.Length() < 1e-6);   // still on its axle
+
+    // A slider: the grabbed point follows the cursor along the rail only.
+    Assembly b;
+    const ObjectId rail = b.AddComponent("r.bzc", "Направляющая").id;
+    const ObjectId carriage = b.AddComponent("c.bzc", "Каретка", {Rotation{}, {0, 0, 0}}).id;
+    AddJoint(b, ConstraintType::Slider, Line(rail, {0, 0, 0}, {1, 0, 0}), Line(carriage, {0, 0, 0}, {1, 0, 0}));
+    REQUIRE(Solve(b).converged);
+    SolveOptions so;
+    so.keep = carriage;
+    b.FindComponent(carriage)->placement.translation = {40, 15, 5};   // the app's shift
+    so.pull = Pull{carriage, {0, 0, 0}, {40, 15, 5}};
+    REQUIRE(Solve(b, so).converged);
+    const Vec3 at = b.FindComponent(carriage)->placement.translation;
+    CHECK(at.x == Approx(40).epsilon(1e-3));
+    CHECK(std::abs(at.y) < 1e-6);
+    CHECK(std::abs(at.z) < 1e-6);
+}
+
+TEST_CASE("dragging the end of a long chain of hinged links stays quick") {
+    // 120 links, 10 mm each, hinged end to end about Z, the first to the
+    // grounded base: one group of 720 unknowns (the sparse solver).
+    Assembly a;
+    const ObjectId base = a.AddComponent("base.bzc", "Основание").id;
+    std::vector<ObjectId> links;
+    for (int i = 0; i < 120; ++i) links.push_back(a.AddComponent("l.bzc", "Звено", {Rotation{}, {i * 10.0, 0, 0}}).id);
+    AddJoint(a, ConstraintType::Rotational, Circle(base, {0, 0, 0}, {0, 0, 1}, 1), Circle(links[0], {0, 0, 0}, {0, 0, -1}, 1));
+    for (int i = 1; i < 120; ++i)
+        AddJoint(a, ConstraintType::Rotational, Circle(links[i - 1], {10, 0, 0}, {0, 0, 1}, 1), Circle(links[i], {0, 0, 0}, {0, 0, -1}, 1));
+    REQUIRE(Solve(a).converged);
+    SolveOptions o;
+    o.keep = links.back();
+    o.analyze = false;
+    double worst = 0.0;
+    for (int step = 1; step <= 5; ++step) {
+        Placement& p = a.FindComponent(links.back())->placement;
+        const Vec3 cursor{1200.0 - 8.0 * step, 6.0 * step, 0};
+        p.translation = p.translation + (cursor - p.Point({10, 0, 0}));
+        o.pull = Pull{links.back(), {10, 0, 0}, cursor};
+        const auto t0 = std::chrono::steady_clock::now();
+        const SolveResult r = Solve(a, o);
+        worst = std::max(worst, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
+        CHECK(r.converged);
+    }
+    MESSAGE("drag frame of a 120-link chain: worst ", worst, " ms");
+    CHECK(worst < 1500);   // debug build: generous
+    // The tip went towards the cursor, every hinge still holds.
+    const Vec3 tip = a.FindComponent(links.back())->placement.Point({10, 0, 0});
+    CHECK(tip.y > 5.0);
+    Analyze(a);
+    for (const Constraint& c : a.constraints) CHECK(c.state != ConstraintState::Failed);
 }
 
 TEST_CASE("screw: a slider moves ratio mm per turn of a rotational joint") {
