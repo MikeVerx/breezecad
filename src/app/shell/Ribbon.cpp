@@ -631,9 +631,9 @@ float DrawRibbon(AppContext& app, Session& session, ImVec2 pos, float width) {
         const auto zone = [&](bool right) {
             const ImVec2 z0{right ? pos.x + width - slot + ui.S(2) : pos.x + ui.S(4), pos.y + ui.S(4)};
             const ImVec2 z1{z0.x + slot - ui.S(6), pos.y + h - ui.S(4)};
-            const bool near = right == toRight;
-            dl->AddRectFilled(z0, z1, ui::ToU32(c.accent.WithAlpha(near ? 0.12f : 0.04f)), ui.S(8));
-            dl->AddRect(z0, z1, ui::ToU32(c.accent.WithAlpha(near ? 0.9f : 0.35f)), ui.S(8), 0, ui.S(near ? 2.0f : 1.0f));
+            const bool closer = right == toRight;
+            dl->AddRectFilled(z0, z1, ui::ToU32(c.accent.WithAlpha(closer ? 0.12f : 0.04f)), ui.S(8));
+            dl->AddRect(z0, z1, ui::ToU32(c.accent.WithAlpha(closer ? 0.9f : 0.35f)), ui.S(8), 0, ui.S(closer ? 2.0f : 1.0f));
         };
         zone(false);
         zone(true);
