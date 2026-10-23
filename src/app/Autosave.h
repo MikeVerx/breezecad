@@ -21,6 +21,14 @@ struct RecoverableDocument {
     std::filesystem::path original;   ///< the file it belongs to (empty if never saved)
     std::string           title;
     std::string           savedAt;    ///< "08.10 21:40"
+    /// An assembly: its parts edited in it (in place, made in it, followed
+    /// adaptively) as they stood — kept in memory there, not in their files.
+    struct Part {
+        std::filesystem::path file;      ///< where it is written on save
+        std::filesystem::path copy;      ///< its copy in the autosave folder
+        bool                  created = false;
+    };
+    std::vector<Part> parts;
 };
 
 class Autosave {

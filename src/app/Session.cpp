@@ -138,7 +138,12 @@ AssemblyState& Session::MakeAssembly() {
 std::string_view Session::DocumentType() const { return assembly ? doc::kAssemblyType : doc::kPartType; }
 
 std::uint64_t Session::ContentRevision() const {
-    return assembly ? assembly->assembly.Revision() + assembly->assembly.LookRevision() : doc.Revision();
+    if (!assembly) return doc.Revision();
+    // Its parts edited in it count too (they are saved with it).
+    std::uint64_t parts = assembly->parts.size();
+    for (const AssemblyState::PartEdit& e : assembly->parts)
+        if (e.session) parts += e.session->doc.Revision();
+    return assembly->assembly.Revision() + assembly->assembly.LookRevision() + parts;
 }
 
 Status Session::WriteFile(const std::filesystem::path& target, std::string_view generator) const {
