@@ -3,6 +3,7 @@
 #include <imgui.h>
 
 #include "assembly/AssemblyFile.h"
+#include "core/FaultGuard.h"
 #include "core/Log.h"
 #include "core/Monitor.h"
 #include "document/BzcFile.h"
@@ -56,22 +57,30 @@ void Session::StartBackground(std::size_t limit) {
     Background* b = job.get();
     b->thread = std::thread([b, limit, shown, quality = myMeshQuality] {
         // RebuildSlice keeps every OCCT error inside the operation that
-        // caused it; anything else must not leave this thread.
-        try {
-            while (!b->model.RebuildSlice(b->doc, limit, shown, 0.0)) {
-                const kernel::Model::Progress p = b->model.RebuildProgress();
-                b->total = p.total;
-                b->done = p.done;
-            }
-            const auto rebuilt = std::chrono::steady_clock::now();
-            b->rebuildMs = std::chrono::duration<double, std::milli>(rebuilt - b->began).count();
-            render::Viewport::PrepareMeshes(b->model, quality);
-            b->meshMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - rebuilt).count();
-        } catch (const std::exception& e) {
-            log::Error("Background rebuild failed: {}", e.what());
-        } catch (...) {   // an OCCT failure outside an operation (meshing)
-            log::Error("Background rebuild failed");
-        }
+        // caused it; anything else must not leave this thread — not even a
+        // crash (meshing a degenerate shape): this thread is guarded too
+        // (core/FaultGuard.h), the window's thread never sees it.
+        std::string fault;
+        const bool survived = guard::RunGuarded(
+            [b, limit, shown, quality] {
+                try {
+                    while (!b->model.RebuildSlice(b->doc, limit, shown, 0.0)) {
+                        const kernel::Model::Progress p = b->model.RebuildProgress();
+                        b->total = p.total;
+                        b->done = p.done;
+                    }
+                    const auto rebuilt = std::chrono::steady_clock::now();
+                    b->rebuildMs = std::chrono::duration<double, std::milli>(rebuilt - b->began).count();
+                    render::Viewport::PrepareMeshes(b->model, quality);
+                    b->meshMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - rebuilt).count();
+                } catch (const std::exception& e) {
+                    log::Error("Background rebuild failed: {}", e.what());
+                } catch (...) {   // an OCCT failure outside an operation (meshing)
+                    log::Error("Background rebuild failed");
+                }
+            },
+            &fault);
+        if (!survived) log::Error("Background rebuild stopped by a crash ({}): what it built so far is shown", fault);
         b->finished = true;
     });
     myBackground = std::move(job);
@@ -108,6 +117,12 @@ std::string Session::Title() const {
     return {stem.begin(), stem.end()};
 }
 
+std::string Session::ContextName() const {
+    if (path.empty()) return untitledName;
+    const std::u8string stem = path.stem().u8string();
+    return {stem.begin(), stem.end()};
+}
+
 void Session::Execute(std::unique_ptr<doc::Command> command) {
     mon::Action("command", command->Label());
     history.Execute(doc, std::move(command));
@@ -132,7 +147,12 @@ AssemblyState& Session::MakeAssembly() {
 std::string_view Session::DocumentType() const { return assembly ? doc::kAssemblyType : doc::kPartType; }
 
 std::uint64_t Session::ContentRevision() const {
-    return assembly ? assembly->assembly.Revision() + assembly->assembly.LookRevision() : doc.Revision();
+    if (!assembly) return doc.Revision();
+    // Its parts edited in it count too (they are saved with it).
+    std::uint64_t parts = assembly->parts.size();
+    for (const AssemblyState::PartEdit& e : assembly->parts)
+        if (e.session) parts += e.session->doc.Revision();
+    return assembly->assembly.Revision() + assembly->assembly.LookRevision() + parts;
 }
 
 Status Session::WriteFile(const std::filesystem::path& target, std::string_view generator) const {
@@ -143,6 +163,11 @@ Status Session::WriteFile(const std::filesystem::path& target, std::string_view 
     copy->look.pictures = assembly->assembly.look.pictures;   // not in the JSON
     assembly::RebasePaths(*copy, path, target);
     return assembly::SaveAssembly(*copy, target, generator);
+}
+
+bool Session::IsModified() const {
+    if (!assembly) return history.IsModified();
+    return assembly->IsModified() || assembly->PartsModified();
 }
 
 void Session::MarkSaved() {
@@ -167,7 +192,7 @@ bool Session::Rebuild(double budgetMs) {
     if (assembly) {
         // Parts are rebuilt as they load; what is left is cheap (placing).
         prof::Scope scope("assembly");
-        const bool changed = assembly->Update(path);
+        const bool changed = assembly->Update(path, ContextName());
         myRebuilding = false;
         return changed;
     }

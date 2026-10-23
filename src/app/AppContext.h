@@ -18,6 +18,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -26,6 +27,8 @@ class ModuleManager;
 }
 
 namespace bz::app {
+
+class Recovery;
 
 class SketchEditor;
 struct OperationEditors;
@@ -40,6 +43,13 @@ struct ShellState {
     bool      handleHot = false;      ///< a drag handle in the view is under the cursor or held (no radial menu)
     float     ribbonScroll = 0.0f;   ///< sideways scroll of a ribbon wider than the window
     float     ribbonContent = 0.0f;  ///< the ribbon's laid-out width in the last frame
+    /// Ribbon groups folding to icons: 0 with captions … 1 icons only, moving
+    /// towards Settings::ribbonIconsOnly over half a second (Ribbon.cpp).
+    std::unordered_map<std::string, float> ribbonFold;
+    std::vector<std::string> ribbonFoldable;   ///< the current tab's folding groups (last frame), for the ribbon's menu
+    float     ribbonEdgeX = 0.0f;      ///< where the drag of a group's edge last changed the group
+    bool      ribbonEdgeMoved = false; ///< the edge was dragged (not just clicked)
+    bool      finishDrag = false;      ///< "Принять эскиз" is being carried to the other end
 
     bool        paletteOpen = false;   ///< command search (Ctrl+K)
     std::string paletteQuery;
@@ -145,6 +155,14 @@ struct ShellState {
     ObjectId    hoveredTreeItem;       ///< for highlighting origin planes in the viewport
     std::string treeFilter;
     std::unordered_set<ObjectId> expanded;   ///< tree rows opened by the user
+    /// Assembly tree: the components (or kAssemblyOrigin) whose origin and
+    /// work geometry are shown.
+    std::unordered_set<ObjectId> elementsOpen;
+    /// An origin element or work geometry of a component (or of the assembly)
+    /// under the cursor in the tree: shown in the view.
+    struct PointedElement {
+        ObjectId component, element;
+    } hoveredElement;
     ui::EditState edit;                      ///< the text field being edited
     bool        treeSearch = false;
     bool        originExpanded = false;
@@ -222,6 +240,8 @@ struct AppContext {
     std::vector<ImGuiKeyChord> pressedChords;    ///< key chords pressed this frame (for shortcut capture)
     std::vector<platform::TouchEvent> touch;     ///< touchpad gestures of this frame
     modules::ModuleManager*    modules = nullptr; ///< set once the modules are loaded
+    /// Puts the documents back when a piece of work fails (app/Recovery.h); null in tests.
+    Recovery*                  recovery = nullptr;
 
     Session* Doc() { return workspace.Active(); }
 

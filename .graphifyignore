@@ -1,0 +1,22 @@
+# Что Graphify НЕ кладёт в граф кода (синтаксис как у .gitignore).
+# Граф строится только по нашему коду: src/, modules/, tests/, tools/, scripts/.
+# Подробности: docs/dev/AI-TOOLS.md
+
+# Чужие библиотеки — их связи агенту не нужны, только раздувают граф
+third_party/
+
+# Ресурсы, картинки, переводы, примеры моделей
+assets/
+resources/
+translations/
+examples/
+
+# Документация читается агентом напрямую (ARCHITECTURE, RULES, ADR)
+docs/
+
+# Сборки и служебное
+build/
+out/
+.android-deps/
+graphify-out/
+scripts/__pycache__/

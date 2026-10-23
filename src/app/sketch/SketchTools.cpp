@@ -9,6 +9,7 @@
 #include "core/Expression.h"
 #include "core/I18n.h"
 #include "app/sketch/SketchText.h"
+#include "kernel/ContextProjection.h"
 #include "kernel/TextGeometry.h"
 #include "sketch/Fillet.h"
 #include "sketch/Mirror.h"
@@ -341,15 +342,43 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
         if (r) revolved = std::move(*r);
         else revolvedProblem = r.GetError().message;
     };
+    // A part edited in place: an edge of another part of the assembly (the
+    // faded ones around it). Linked, it follows that part — adaptivity.
+    std::optional<kernel::ProjectedCurve> fromContext;
+    std::optional<doc::ContextProjection> contextLink;
+    if (!pickedEdge && session.host && session.host->assembly) {
+        if (const std::optional<render::Viewport::ContextEdge> ce = app.viewport.PickContextEdge(pixel)) {
+            AssemblyState& st = *session.host->assembly;
+            const ObjectId target = session.inPlaceOf;
+            const std::string name = session.host->ContextName();
+            if (kernel::WouldCycle(st.geometry, st.assembly, ce->body, target, name)) {
+                app.notes.Info(Tr("Эта деталь сама следует за той, что правится: проекция замкнула бы их друг на друга"));
+                return;
+            }
+            const std::optional<doc::EdgeReference> source = st.geometry.SourceEdge(st.assembly, target, ce->body, ce->edge);
+            if (!source) {
+                app.notes.Info(Tr("Ребро другой детали не найдено"));
+                return;
+            }
+            doc::ContextProjection link{name, ce->body, *source, {}, true};
+            const Expected<kernel::ProjectedCurve> pc = st.geometry.ProjectSourceEdge(st.assembly, target, link, f->placement.frame);
+            if (!pc) {
+                app.notes.Info(Tr(pc.GetError().message));
+                return;
+            }
+            fromContext = *pc;
+            contextLink = std::move(link);
+        }
+    }
     // An edge that does not project on its own (a circle of a turned part
     // seen from the side) is taken as a click on the body of revolution.
     if (pickedEdge && !session.model.ProjectEdge(*pickedEdge, f->placement.frame, static_cast<std::size_t>(index))) tryRevolved();
-    if (!pickedEdge) {
+    if (!pickedEdge && !fromContext) {
         tryRevolved();
         if (!revolved) edges = app.viewport.PickFaceEdges(pixel);
     }
     if (revolved) edges.clear();
-    if (edges.empty() && !revolved) {
+    if (edges.empty() && !revolved && !fromContext) {
         // A body of revolution that could not be projected says why (it
         // used to end here in silence: "the click did nothing").
         if (!revolvedProblem.empty()) app.notes.Info(Tr(revolvedProblem));
@@ -403,6 +432,7 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
     };
     // Puts one projected curve into the sketch; `link` makes it follow the
     // model edge. Returns false when there is nothing to draw.
+    ObjectId lastCurve;   // the curve the last call put
     const auto place = [&](const kernel::ProjectedCurve& projected, const doc::EdgeReference* link, bool axis) {
         if (!link && present(projected)) {
             ++already;
@@ -431,6 +461,7 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
                 curve = sk.AddEllipse(ids, point(projected.centre), point(projected.start), point(projected.end));
                 break;
         }
+        lastCurve = curve;
         if (myOptions.style != LineStyle::Normal && !axis) {   // "Вспомогат." chosen before picking
             if (sketch::Line* l = sk.FindLine(curve)) l->construction = true;
             if (sketch::Circle* c = sk.FindCircle(curve)) c->construction = true;
@@ -479,6 +510,17 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
         return true;
     };
     std::string problem;
+    if (fromContext) {
+        if (place(*fromContext, nullptr, false)) {
+            ++added;
+            // Linked: it follows the other part (fixed for the solver, moved
+            // by the assembly); independent: ordinary geometry held in place.
+            if (myOptions.projectLinked && contextLink) {
+                contextLink->curve = lastCurve;
+                f->contextProjections.push_back(*contextLink);
+            }
+        }
+    }
     for (const doc::EdgeReference& edge : edges) {
         bool known = false;
         for (const doc::Projection& p : f->projections)
@@ -517,7 +559,8 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
     }
     if (!problem.empty()) app.notes.Info(Trf("Часть рёбер не спроецирована: {}", Tr(problem)));
     session.doc.MarkChanged(static_cast<std::size_t>(index));
-    session.CommitInPlaceEdit(std::move(before), revolved         ? Tr("Проецирование тела вращения")
+    session.CommitInPlaceEdit(std::move(before), fromContext       ? Tr("Проецирование из другой детали")
+                                                 : revolved         ? Tr("Проецирование тела вращения")
                                                  : edges.size() > 1 ? Tr("Проецирование грани")
                                                                     : Tr("Проецирование геометрии"));
 }

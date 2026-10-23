@@ -85,6 +85,10 @@ struct Settings {
     int         textureQuality = 0;   ///< pictures on faces: 0 high, 1 medium, 2 low (TextureLimit)
     bool        backgroundRebuild = true;   ///< long rebuilds on another thread (the window stays responsive)
     bool        showAllConstraints = false;   ///< sketch: every constraint glyph, or only those of the selection (F8 / F9)
+    /// Ribbon groups shown as icons without captions ("sketch:Изменить": the
+    /// tab and the group's Russian caption). The rest show the captions.
+    std::vector<std::string> ribbonIconsOnly{"sketch:Зависимости"};
+    bool        finishOnRight = false;    ///< "Принять эскиз" pinned at the ribbon's right end (else the left)
     double      gridStep       = 0.0;     ///< mm; 0 = adaptive to zoom
     double      uiScale        = 0.0;     ///< interface scale; 0 = automatic (screen density and size)
     std::string language;                 ///< interface language code ("ru", "en"); empty = as the system

@@ -5,21 +5,41 @@
 #include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
 #include "core/I18n.h"
+#include "ui/Menus.h"
 #include "ui/Widgets.h"
 
 #include <algorithm>
+#include <cmath>
 #include <span>
+#include <string>
+#include <vector>
 
 namespace bz::app {
 namespace {
 
 constexpr const char* kLater = N_("Появится в следующих версиях");
 
-/// Lays ribbon groups out left to right.
+constexpr float kFoldSeconds = 0.5f;   ///< a group folding to icons or back
+
+bool IconsOnly(const Settings& s, const std::string& key) {
+    return std::find(s.ribbonIconsOnly.begin(), s.ribbonIconsOnly.end(), key) != s.ribbonIconsOnly.end();
+}
+
+void SetIconsOnly(Settings& s, const std::string& key, bool on) {
+    std::erase(s.ribbonIconsOnly, key);
+    if (on) s.ribbonIconsOnly.push_back(key);
+}
+
+/// Lays ribbon groups out left to right. A group with small buttons folds:
+/// its captions go and only the icons stay (a drag of its right edge, or a
+/// click on its name), so the ribbon takes less room for who knows the icons.
+/// Large buttons keep their captions always.
 class RibbonBuilder final : public RibbonSink {
 public:
-    RibbonBuilder(AppContext& app, ImVec2 origin, float height) : myApp(app), myUi(app.ui), myTop(origin.y), myHeight(height) {
+    RibbonBuilder(AppContext& app, ImVec2 origin, float height, std::string tabKey)
+        : myApp(app), myUi(app.ui), myTop(origin.y), myHeight(height), myTabKey(std::move(tabKey)) {
         myX = origin.x + myUi.S(8);
+        myApp.shell.ribbonFoldable.clear();
     }
 
     AppContext& App() const override { return myApp; }
@@ -28,6 +48,9 @@ public:
 
     void BeginGroup(const char* caption) override {
         myCaption = caption;
+        myKey = myTabKey + ":" + caption;
+        myFoldable = false;
+        myShown = 1.0f - Eased(FoldProgress());
         myGroupStart = myX + myUi.S(8);
         myX = myGroupStart;
     }
@@ -35,13 +58,27 @@ public:
     void EndGroup() override {
         ImFont* font = myUi.fonts.caption;
         const float fs = myUi.S(11);
-        const float captionWidth = font->CalcTextSizeA(fs, FLT_MAX, 0, myCaption).x;
+        const char* caption = Tr(myCaption);
+        const float captionWidth = font->CalcTextSizeA(fs, FLT_MAX, 0, caption).x;
         const float content = std::max(myX - myGroupStart - myUi.S(2), captionWidth);
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        dl->AddText(font, fs, {myGroupStart + (content - captionWidth) / 2, myTop + myHeight - myUi.S(18)},
-                    ui::ToU32(myUi.C().textMuted), myCaption);
+        const ImVec2 captionAt{myGroupStart + (content - captionWidth) / 2, myTop + myHeight - myUi.S(18)};
         const float divider = myGroupStart + content + myUi.S(8);
-        dl->AddLine({divider, myTop + myUi.S(6)}, {divider, myTop + myHeight - myUi.S(6)}, ui::ToU32(myUi.C().divider));
+        bool hot = false;
+        if (myFoldable) {
+            myApp.shell.ribbonFoldable.push_back(myKey);
+            hot = FoldControls(content, divider);
+        }
+        const ui::ThemeColors& c = myUi.C();
+        dl->AddText(font, fs, captionAt, ui::ToU32(hot ? c.accent : c.textMuted), caption);
+        if (hot) {   // which way a click goes: a small arrow after the name
+            const float s = myUi.S(3), ax = captionAt.x + captionWidth + myUi.S(6), ay = captionAt.y + fs / 2 + myUi.S(1);
+            const bool folded = IconsOnly(myApp.settings, myKey);
+            if (folded) dl->AddTriangleFilled({ax - s / 2, ay - s}, {ax - s / 2, ay + s}, {ax + s / 2, ay}, ui::ToU32(c.accent));
+            else dl->AddTriangleFilled({ax + s / 2, ay - s}, {ax + s / 2, ay + s}, {ax - s / 2, ay}, ui::ToU32(c.accent));
+        }
+        dl->AddLine({divider, myTop + myUi.S(6)}, {divider, myTop + myHeight - myUi.S(6)},
+                    ui::ToU32(hot ? c.accent : c.divider), hot ? myUi.S(2) : 1.0f);
         myX = divider + myUi.S(1);
     }
 
@@ -72,42 +109,100 @@ public:
         const Action* a = myApp.actions.Find(actionId);
         ImGui::SetCursorScreenPos({myColumnX, myColumnY});
         const std::string tip = Tooltip(*a);
-        if (ui::RibbonSmallButton(myUi, actionId, a->icon, label ? label : a->Label(), tip.c_str(), a->IsEnabled(), active))
+        if (ui::RibbonSmallButton(myUi, actionId, a->icon, label ? label : a->Label(), tip.c_str(), a->IsEnabled(), active, myShown))
             Run(actionId);
+        myFoldable = true;
         NextRow();
     }
 
     void SmallLater(const char* icon, const char* label) override {
         ImGui::SetCursorScreenPos({myColumnX, myColumnY});
         ImGui::PushID(label);
-        ui::RibbonSmallButton(myUi, "##later", icon, label, kLater, false);
+        const std::string tip = std::string(label) + "\n" + Tr(kLater);
+        ui::RibbonSmallButton(myUi, "##later", icon, label, tip.c_str(), false, false, myShown);
         ImGui::PopID();
+        myFoldable = true;
         NextRow();
     }
 
     void EndColumn() override { myX = myColumnX + myColumnWidth + myUi.S(2); }
 
-    /// Icon-only buttons in rows of `columns`, as Inventor's constraint grid.
-    void BeginGrid(int columns) override {
-        myGridColumns = columns;
+    /// The constraints: small buttons three to a column, like the rest, so
+    /// they fold the same way (folded, they are Inventor's icon grid).
+    void BeginGrid(int /*columns*/) override {
         myGridIndex = 0;
-        myColumnX = myX;
-        myColumnY = myTop + myUi.S(8);
+        BeginColumn();
     }
 
     void Icon(const char* actionId, bool active = false) override {
-        const Action* a = myApp.actions.Find(actionId);
-        const float cell = myUi.S(26);
-        const int col = myGridIndex % myGridColumns, row = myGridIndex / myGridColumns;
-        ImGui::SetCursorScreenPos({myColumnX + static_cast<float>(col) * cell, myColumnY + static_cast<float>(row) * myUi.S(24)});
-        const std::string tip = Tooltip(*a);
-        if (ui::IconButton(myUi, actionId, a->icon, 24, 18, tip.c_str(), a->IsEnabled(), active)) Run(actionId);
+        if (myGridIndex > 0 && myGridIndex % kGridRows == 0) {
+            EndColumn();
+            BeginColumn();
+        }
+        Small(actionId, nullptr, active);
         ++myGridIndex;
     }
 
-    void EndGrid() override { myX = myColumnX + myUi.S(26) * static_cast<float>(myGridColumns) + myUi.S(2); }
+    void EndGrid() override { EndColumn(); }
 
 private:
+    static constexpr int kGridRows = 3;
+
+    static float Eased(float t) { return t * t * (3.0f - 2.0f * t); }
+
+    /// This group's fold, 0 … 1, a step nearer to what the settings say.
+    float FoldProgress() {
+        const float goal = IconsOnly(myApp.settings, myKey) ? 1.0f : 0.0f;
+        float& p = myApp.shell.ribbonFold.try_emplace(myKey, goal).first->second;
+        if (p != goal) {
+            // After a long wait for input the first frame's time is long: no jump.
+            const float dt = std::min(ImGui::GetIO().DeltaTime, 1.0f / 30.0f);
+            const float step = myApp.settings.animations ? dt / kFoldSeconds : 1.0f;
+            p = goal > p ? std::min(goal, p + step) : std::max(goal, p - step);
+            myApp.shell.animateUi = true;   // keep drawing frames until it is there
+        }
+        return p;
+    }
+
+    /// The group's name (a click folds or unfolds) and its right edge (a drag
+    /// left folds, right unfolds). True while either is under the mouse.
+    bool FoldControls(float content, float divider) {
+        ShellState& shell = myApp.shell;
+        const bool folded = IconsOnly(myApp.settings, myKey);
+        const float mouseX = ImGui::GetIO().MousePos.x;
+        ImGui::PushID(myKey.c_str());
+
+        ImGui::SetCursorScreenPos({myGroupStart, myTop + myHeight - myUi.S(20)});
+        const bool captionClicked = ImGui::InvisibleButton("##fold-caption", {content, myUi.S(18)});
+        bool hot = ImGui::IsItemHovered();
+        if (hot) ui::ItemTooltip(myUi, folded ? Tr("Показать подписи") : Tr("Только иконки"));
+        if (captionClicked) SetIconsOnly(myApp.settings, myKey, !folded);
+
+        ImGui::SetCursorScreenPos({divider - myUi.S(4), myTop + myUi.S(6)});
+        ImGui::InvisibleButton("##fold-edge", {myUi.S(8), myHeight - myUi.S(12)});
+        if (ImGui::IsItemActivated()) {
+            shell.ribbonEdgeX = mouseX;
+            shell.ribbonEdgeMoved = false;
+        }
+        if (ImGui::IsItemActive()) {
+            const float dx = mouseX - shell.ribbonEdgeX;
+            if (std::abs(dx) > myUi.S(4)) shell.ribbonEdgeMoved = true;
+            const bool now = IconsOnly(myApp.settings, myKey);
+            if ((dx < -myUi.S(24) && !now) || (dx > myUi.S(24) && now)) {
+                SetIconsOnly(myApp.settings, myKey, !now);
+                shell.ribbonEdgeX = mouseX;
+            }
+        }
+        if (ImGui::IsItemDeactivated() && !shell.ribbonEdgeMoved) SetIconsOnly(myApp.settings, myKey, !folded);
+        const bool edgeHot = ImGui::IsItemHovered() || ImGui::IsItemActive();
+        if (edgeHot) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+            if (!ImGui::IsItemActive()) ui::ItemTooltip(myUi, Tr("Тяните влево — только иконки, вправо — с подписями"));
+        }
+        ImGui::PopID();
+        return hot || edgeHot;
+    }
+
     void NextRow() {
         myColumnWidth = std::max(myColumnWidth, ImGui::GetItemRectSize().x);
         myColumnY += myUi.S(24);
@@ -132,18 +227,21 @@ private:
     float       myHeight;
     float       myX = 0;
     float       myGroupStart = 0;
-    int         myGridColumns = 1;
+    std::string myTabKey;
+    std::string myKey;              ///< "sketch:Изменить": the group in the settings
+    bool        myFoldable = false; ///< the group has small buttons
+    float       myShown = 1.0f;     ///< how much of the small buttons' captions shows
     int         myGridIndex = 0;
     const char* myCaption = "";
     float       myColumnX = 0, myColumnY = 0, myColumnWidth = 0;
 };
 
 void ModelRibbonImpl(RibbonSink& r) {
-    r.BeginGroup(Tr("Эскиз"));
+    r.BeginGroup(N_("Эскиз"));
     r.Large("sketch.start", Tr("Начать\nэскиз"));
     r.EndGroup();
 
-    r.BeginGroup(Tr("Создать"));
+    r.BeginGroup(N_("Создать"));
     r.Large("feature.extrude", Tr("Выдав-\nливание"));
     r.Large("feature.revolve", Tr("Вращение"));
     r.BeginColumn();
@@ -153,7 +251,7 @@ void ModelRibbonImpl(RibbonSink& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Изменить"));
+    r.BeginGroup(N_("Изменить"));
     r.Large("feature.hole", Tr("Отверстие"));
     r.Large("feature.fillet", Tr("Сопря-\nжение"));
     r.Large("feature.thread", Tr("Резьба"));
@@ -166,7 +264,7 @@ void ModelRibbonImpl(RibbonSink& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Массив"));
+    r.BeginGroup(N_("Массив"));
     r.BeginColumn();
     r.Small("feature.patternRect");
     r.Small("feature.patternCircular");
@@ -174,7 +272,7 @@ void ModelRibbonImpl(RibbonSink& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Раб. элементы"));
+    r.BeginGroup(N_("Раб. элементы"));
     r.BeginColumn();
     r.Small("feature.workPlane");
     r.Small("feature.workAxis");
@@ -182,11 +280,11 @@ void ModelRibbonImpl(RibbonSink& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Ст. изделия"));
+    r.BeginGroup(N_("Ст. изделия"));
     r.Large("parts.library", Tr("Библиотека"));
     r.EndGroup();
 
-    r.BeginGroup(Tr("Экспорт"));
+    r.BeginGroup(N_("Экспорт"));
     r.BeginColumn();
     r.Small("file.exportStep", "STEP");
     r.Small("file.exportStl", "STL");
@@ -194,7 +292,7 @@ void ModelRibbonImpl(RibbonSink& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Диагностика"));
+    r.BeginGroup(N_("Диагностика"));
     r.BeginColumn();
     r.Small("tools.measure", nullptr, r.App().shell.measuring);
     r.Small("view.section", nullptr, r.App().shell.section.on);
@@ -208,13 +306,17 @@ void ModelRibbonImpl(RibbonSink& r) {
 
 void AssemblyRibbonImpl(AppContext& app, RibbonSink& r) {
     const AssemblyState::Tool tool = app.Doc() && app.Doc()->assembly ? app.Doc()->assembly->tool : AssemblyState::Tool::Move;
-    r.BeginGroup(Tr("Компонент"));
+    r.BeginGroup(N_("Компонент"));
     r.Large("assembly.place", Tr("Вставить"));
+    r.Large("assembly.create", Tr("Создать"));
     r.Large("assembly.placeStandard", Tr("Стандартное\nизделие"));
-    r.Large("assembly.pattern", Tr("Массив"));
+    r.BeginColumn();
+    r.Small("assembly.pattern");
+    r.Small("assembly.editInPlace");
+    r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Зависимости"));
+    r.BeginGroup(N_("Зависимости"));
     r.Large("assembly.mate", Tr("Совме-\nщение"));
     r.Large("assembly.insert", Tr("Вставка"));
     r.BeginColumn();
@@ -222,9 +324,12 @@ void AssemblyRibbonImpl(AppContext& app, RibbonSink& r) {
     r.Small("assembly.tangent");
     r.Small("assembly.axisMate");
     r.EndColumn();
+    r.BeginColumn();
+    r.Small("assembly.symmetry");
+    r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Соединения"));
+    r.BeginGroup(N_("Соединения"));
     r.Large("assembly.jointRotational", Tr("Враще-\nние"));
     r.BeginColumn();
     r.Small("assembly.jointSlider");
@@ -235,9 +340,13 @@ void AssemblyRibbonImpl(AppContext& app, RibbonSink& r) {
     r.Small("assembly.jointBall");
     r.Small("assembly.jointRigid");
     r.EndColumn();
+    r.BeginColumn();
+    r.Small("assembly.gear");
+    r.Small("assembly.screw");
+    r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Положение"));
+    r.BeginGroup(N_("Положение"));
     r.BeginColumn();
     r.Small("assembly.move", nullptr, tool == AssemblyState::Tool::Move);
     r.Small("assembly.rotate", nullptr, tool == AssemblyState::Tool::Rotate);
@@ -245,7 +354,7 @@ void AssemblyRibbonImpl(AppContext& app, RibbonSink& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Экспорт"));
+    r.BeginGroup(N_("Экспорт"));
     r.BeginColumn();
     r.Small("file.exportStep", "STEP");
     r.Small("file.exportStl", "STL");
@@ -253,7 +362,7 @@ void AssemblyRibbonImpl(AppContext& app, RibbonSink& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Диагностика"));
+    r.BeginGroup(N_("Диагностика"));
     r.BeginColumn();
     r.Small("tools.measure", nullptr, app.shell.measuring);
     r.Small("view.section", nullptr, app.shell.section.on);
@@ -268,11 +377,11 @@ void SketchRibbonImpl(AppContext& app, RibbonSink& r, bool withFinish) {
     const auto active = [&](SketchTool t) { return sketching && tool == t; };
 
     if (!sketching) {
-        r.BeginGroup(Tr("Эскиз"));
+        r.BeginGroup(N_("Эскиз"));
         r.Large("sketch.start", Tr("Начать\nэскиз"));
         r.EndGroup();
     }
-    r.BeginGroup(Tr("Создать"));
+    r.BeginGroup(N_("Создать"));
     r.Large("sketch.line", Tr("Отрезок"), active(SketchTool::Line));
     r.Large("sketch.circle", Tr("Окруж-\nность"), active(SketchTool::Circle));
     r.Large("sketch.arc", Tr("Дуга"), active(SketchTool::Arc));
@@ -284,13 +393,13 @@ void SketchRibbonImpl(AppContext& app, RibbonSink& r, bool withFinish) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Модель"));
+    r.BeginGroup(N_("Модель"));
     const bool projecting = active(SketchTool::Project);
     r.Large("sketch.project", Tr("Проеци-\nровать"), projecting && app.sketch.ProjectsLinked());
     r.Large("sketch.projectFixed", Tr("Незави-\nсимая"), projecting && !app.sketch.ProjectsLinked());
     r.EndGroup();
 
-    r.BeginGroup(Tr("Массив"));
+    r.BeginGroup(N_("Массив"));
     r.BeginColumn();
     r.Small("sketch.patternRect", nullptr, active(SketchTool::PatternRect));
     r.Small("sketch.patternCircular", nullptr, active(SketchTool::PatternCircular));
@@ -298,7 +407,7 @@ void SketchRibbonImpl(AppContext& app, RibbonSink& r, bool withFinish) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Изменить"));
+    r.BeginGroup(N_("Изменить"));
     r.BeginColumn();
     r.Small("sketch.move", nullptr, active(SketchTool::Move));
     r.Small("sketch.rotate", nullptr, active(SketchTool::Rotate));
@@ -321,7 +430,7 @@ void SketchRibbonImpl(AppContext& app, RibbonSink& r, bool withFinish) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Зависимости"));
+    r.BeginGroup(N_("Зависимости"));
     r.BeginGrid(5);
     r.Icon("sketch.coincident", active(SketchTool::Coincident));
     r.Icon("sketch.horizontal", active(SketchTool::Horizontal));
@@ -339,14 +448,14 @@ void SketchRibbonImpl(AppContext& app, RibbonSink& r, bool withFinish) {
     r.EndGrid();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Размеры"));
+    r.BeginGroup(N_("Размеры"));
     r.Large("sketch.dimension", Tr("Размер"), active(SketchTool::Dimension));
     r.BeginColumn();
     r.Small("sketch.arrangeDimensions");
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Формат"));
+    r.BeginGroup(N_("Формат"));
     r.BeginColumn();
     r.Small("sketch.construction");
     r.Small("sketch.centerline");
@@ -354,22 +463,27 @@ void SketchRibbonImpl(AppContext& app, RibbonSink& r, bool withFinish) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Выход"));
-    if (withFinish) r.Large("sketch.finish", Tr("Принять\nэскиз"));
-    r.BeginColumn();
-    r.Small("sketch.lookAt", Tr("На эскиз"));
-    r.EndColumn();
+    // "На эскиз" closes the tools, large; "Принять эскиз" is pinned at an end
+    // of the ribbon while sketching (DrawRibbon), here only otherwise.
+    r.BeginGroup(N_("Вид"));
+    r.Large("sketch.lookAt", Tr("На эскиз"));
     r.EndGroup();
+
+    if (withFinish) {
+        r.BeginGroup(N_("Выход"));
+        r.Large("sketch.finish", Tr("Принять\nэскиз"));
+        r.EndGroup();
+    }
 }
 
 void ViewRibbonImpl(AppContext& app, RibbonSink& r) {
     const render::DisplayStyle style = app.shell.displayStyle;
-    r.BeginGroup(Tr("Цвета"));
+    r.BeginGroup(N_("Цвета"));
     r.Large("view.appearance", Tr("Внешний\nвид"), app.ops.appearance.IsOpen());
     r.Large("view.background", Tr("Фон"));
     r.EndGroup();
 
-    r.BeginGroup(Tr("Стиль отображения"));
+    r.BeginGroup(N_("Стиль отображения"));
     r.BeginColumn();
     r.Small("view.shaded", nullptr, style == render::DisplayStyle::Shaded);
     r.Small("view.edges", nullptr, style == render::DisplayStyle::ShadedWithEdges);
@@ -381,7 +495,7 @@ void ViewRibbonImpl(AppContext& app, RibbonSink& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Ориентация"));
+    r.BeginGroup(N_("Ориентация"));
     r.Large("view.home", Tr("Домой"));
     r.Large("view.fit", Tr("Показать\nвсё"));
     r.BeginColumn();
@@ -391,7 +505,7 @@ void ViewRibbonImpl(AppContext& app, RibbonSink& r) {
     r.EndColumn();
     r.EndGroup();
 
-    r.BeginGroup(Tr("Оформление"));
+    r.BeginGroup(N_("Оформление"));
     r.BeginColumn();
     r.Small("view.themeSystem", Tr("Как в системе"), app.settings.theme == ThemeChoice::System);
     r.Small("view.themeLight", Tr("Светлая"), app.settings.theme == ThemeChoice::Light);
@@ -405,8 +519,17 @@ void ViewRibbonImpl(AppContext& app, RibbonSink& r) {
 void FillRibbon(AppContext& app, Session& session, RibbonSink& sink, bool withFinish) {
     switch (app.shell.ribbonTab) {
         case RibbonTab::Model:
-            if (session.assembly) AssemblyRibbonImpl(app, sink);
-            else ModelRibbonImpl(sink);
+            if (session.assembly) {
+                AssemblyRibbonImpl(app, sink);
+            } else {
+                // A part edited in place: the way back to its assembly comes first.
+                if (session.host) {
+                    sink.BeginGroup(N_("Сборка"));
+                    sink.Large("assembly.return", Tr("Вернуться"));
+                    sink.EndGroup();
+                }
+                ModelRibbonImpl(sink);
+            }
             break;
         case RibbonTab::Sketch: SketchRibbonImpl(app, sink, withFinish); break;
         case RibbonTab::View:   ViewRibbonImpl(app, sink); break;
@@ -457,20 +580,31 @@ float DrawRibbon(AppContext& app, Session& session, ImVec2 pos, float width) {
     dl->AddLine(pos, {pos.x + width, pos.y}, ui::ToU32(c.dividerSoft));
     dl->AddLine({pos.x, pos.y + h - 1}, {pos.x + width, pos.y + h - 1}, ui::ToU32(c.divider));
 
-    // "Принять эскиз" is pinned at the start in a sketch, whatever the
-    // ribbon's scroll (ADR-0004: in every version), in the soft accent.
-    float pinned = 0;
-    if (session.mode == EditMode::Sketch && app.shell.ribbonTab == RibbonTab::Sketch) {
+    // "Принять эскиз" is pinned at an end of the ribbon in a sketch, whatever
+    // the ribbon's scroll (ADR-0004: in every version), in the soft accent.
+    // Which end is the user's: drag the button to the other one (or the
+    // ribbon's menu); only the two ends, nothing between.
+    const bool  pinFinish = session.mode == EditMode::Sketch && app.shell.ribbonTab == RibbonTab::Sketch;
+    const bool  onRight = app.settings.finishOnRight;
+    const float slot = ui.S(8 + 74 + 4);
+    const float pinLeft = pinFinish && !onRight ? slot : 0.0f, pinRight = pinFinish && onRight ? slot : 0.0f;
+    if (!pinFinish) app.shell.finishDrag = false;
+    if (pinFinish) {
         const Action* finish = app.actions.Find("sketch.finish");
-        ImGui::SetCursorScreenPos({pos.x + ui.S(8), pos.y + ui.S(6)});
+        const float bx = onRight ? pos.x + width - pinRight + ui.S(6) : pos.x + ui.S(8);
+        ImGui::SetCursorScreenPos({bx, pos.y + ui.S(6)});
         std::string tip = finish->Label();
         if (const std::string sc = ActionRegistry::ChordText(finish->chord); !sc.empty()) tip += " (" + sc + ")";
-        if (ui::RibbonLargeButton(ui, "##pinned-finish", finish->icon, Tr("Принять\nэскиз"), tip.c_str(), finish->IsEnabled(), true))
-            app.Later([&app] { app.actions.Run("sketch.finish"); });
-        pinned = ui.S(8 + 74 + 4);
-        dl->AddLine({pos.x + pinned, pos.y + ui.S(6)}, {pos.x + pinned, pos.y + h - ui.S(6)}, ui::ToU32(c.divider));
+        if (!app.shell.finishDrag) tip += std::string("\n") + Tr("Можно перетащить к другому краю ленты");
+        const bool wasDragging = app.shell.finishDrag;
+        const bool clicked =
+            ui::RibbonLargeButton(ui, "##pinned-finish", finish->icon, Tr("Принять\nэскиз"), tip.c_str(), finish->IsEnabled(), true);
+        if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, ui.S(6))) app.shell.finishDrag = true;
+        if (clicked && !wasDragging) app.Later([&app] { app.actions.Run("sketch.finish"); });   // a drop is not a click
+        const float divider = onRight ? pos.x + width - pinRight : pos.x + pinLeft;
+        dl->AddLine({divider, pos.y + ui.S(6)}, {divider, pos.y + h - ui.S(6)}, ui::ToU32(c.divider));
     }
-    const float start = pos.x + pinned, span = width - pinned;
+    const float start = pos.x + pinLeft, end = pos.x + width - pinRight, span = end - start;
 
     // On a narrow window (a 1366-pixel laptop) the ribbon scrolls sideways:
     // mouse wheel over it, or the arrows at its edges. The arrows go first
@@ -482,7 +616,7 @@ float DrawRibbon(AppContext& app, Session& session, ImVec2 pos, float width) {
     const float aw = ui.S(22);
     const bool leftArrow = overflow > 0 && scroll > 0, rightArrow = overflow > 0 && scroll < overflow;
     const auto arrow = [&](bool right) {
-        const ImVec2 a0{right ? pos.x + width - aw : start, pos.y + 1}, a1{right ? pos.x + width : start + aw, pos.y + h - 1};
+        const ImVec2 a0{right ? end - aw : start, pos.y + 1}, a1{right ? end : start + aw, pos.y + h - 1};
         ImGui::SetCursorScreenPos(a0);
         ImGui::PushID(right ? "##ribbon-right" : "##ribbon-left");
         if (ImGui::InvisibleButton("##arrow", {aw, h - 2})) scroll += right ? span * 0.5f : -span * 0.5f;
@@ -498,13 +632,77 @@ float DrawRibbon(AppContext& app, Session& session, ImVec2 pos, float width) {
     if (leftArrow) arrow(false);
     if (rightArrow) arrow(true);
 
-    RibbonBuilder builder(app, {start - scroll, pos.y}, h);
-    ImGui::PushClipRect({start + (leftArrow ? aw : 0), pos.y}, {pos.x + width - (rightArrow ? aw : 0), pos.y + h}, true);
-    FillRibbon(app, session, builder, pinned == 0);
+    const char* tabKey = session.assembly ? "asm" : app.shell.ribbonTab == RibbonTab::Sketch ? "sketch"
+                       : app.shell.ribbonTab == RibbonTab::View ? "view" : "model";
+    RibbonBuilder builder(app, {start - scroll, pos.y}, h, tabKey);
+    ImGui::PushClipRect({start + (leftArrow ? aw : 0), pos.y}, {end - (rightArrow ? aw : 0), pos.y + h}, true);
+    FillRibbon(app, session, builder, !pinFinish);
     ImGui::PopClipRect();
     app.shell.ribbonContent = builder.End() + scroll - start + ui.S(8);
-    if (overflow > 0 && ImGui::IsMouseHoveringRect(pos, {pos.x + width, pos.y + h}))
+    const bool overRibbon = ImGui::IsMouseHoveringRect(pos, {pos.x + width, pos.y + h});
+    if (overflow > 0 && overRibbon)
         scroll -= (ImGui::GetIO().MouseWheel + ImGui::GetIO().MouseWheelH) * ui.S(60);
+
+    // Carrying "Принять эскиз": both ends show where it can go, the nearer
+    // one stronger; it lands there when the button is let go.
+    if (app.shell.finishDrag) {
+        const float mx = ImGui::GetIO().MousePos.x;
+        const bool toRight = mx > pos.x + width / 2;
+        const auto zone = [&](bool right) {
+            const ImVec2 z0{right ? pos.x + width - slot + ui.S(2) : pos.x + ui.S(4), pos.y + ui.S(4)};
+            const ImVec2 z1{z0.x + slot - ui.S(6), pos.y + h - ui.S(4)};
+            const bool closer = right == toRight;
+            dl->AddRectFilled(z0, z1, ui::ToU32(c.accent.WithAlpha(closer ? 0.12f : 0.04f)), ui.S(8));
+            dl->AddRect(z0, z1, ui::ToU32(c.accent.WithAlpha(closer ? 0.9f : 0.35f)), ui.S(8), 0, ui.S(closer ? 2.0f : 1.0f));
+        };
+        zone(false);
+        zone(true);
+        // The button follows the mouse, over everything.
+        ImDrawList* fg = ImGui::GetForegroundDrawList();
+        const float gw = ui.S(76), gh = ui.S(76);
+        const ImVec2 g0{mx - gw / 2, pos.y + ui.S(8)}, g1{g0.x + gw, g0.y + gh};
+        fg->AddRectFilled({g0.x, g0.y + ui.S(3)}, {g1.x, g1.y + ui.S(3)}, ui::ToU32(Color{0, 0, 0, ui.theme.dark ? 0.35f : 0.12f}), ui.S(8));
+        fg->AddRectFilled(g0, g1, ui::ToU32(c.ribbon), ui.S(8));
+        fg->AddRect(g0, g1, ui::ToU32(c.accent), ui.S(8), 0, ui.S(1.5f));
+        const float is = ui.S(32);
+        ui.icons.Draw(fg, app.actions.Find("sketch.finish")->icon, {g0.x + (gw - is) / 2, g0.y + ui.S(8)}, is, c.textSecondary);
+        const char* label = Tr("Принять эскиз");
+        const float fs = ui.S(11.5f);
+        const float tw = ui.fonts.medium->CalcTextSizeA(fs, FLT_MAX, 0, label).x;
+        fg->AddText(ui.fonts.medium, fs, {g0.x + (gw - tw) / 2, g0.y + ui.S(48)}, ui::ToU32(c.text), label);
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            app.settings.finishOnRight = toRight;
+            app.shell.finishDrag = false;
+        }
+    }
+
+    // The ribbon's own menu (right click on it): captions for all its groups
+    // or none, and where "Принять эскиз" stays.
+    if (overRibbon && ImGui::IsMouseClicked(ImGuiMouseButton_Right) && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
+        ImGui::OpenPopup("##ribbon-menu");
+    {
+        ui::MenuStyle style(ui);   // before Begin: must outlive the End call
+        if (ImGui::BeginPopup("##ribbon-menu")) {
+            std::vector<std::string>& folded = app.settings.ribbonIconsOnly;
+            const std::vector<std::string>& here = app.shell.ribbonFoldable;
+            const bool anyFolded = std::any_of(here.begin(), here.end(), [&](const std::string& k) { return IconsOnly(app.settings, k); });
+            const bool anyOpen = std::any_of(here.begin(), here.end(), [&](const std::string& k) { return !IconsOnly(app.settings, k); });
+            if (ui::MenuItem(ui, Tr("Показать все подписи"), nullptr, {}, false, anyFolded))
+                for (const std::string& k : here) SetIconsOnly(app.settings, k, false);
+            if (ui::MenuItem(ui, Tr("Только иконки"), nullptr, {}, false, anyOpen))
+                for (const std::string& k : here) SetIconsOnly(app.settings, k, true);
+            ImGui::Separator();
+            if (ui::MenuItem(ui, Tr("«Принять эскиз» слева"), nullptr, {}, !app.settings.finishOnRight)) app.settings.finishOnRight = false;
+            if (ui::MenuItem(ui, Tr("«Принять эскиз» справа"), nullptr, {}, app.settings.finishOnRight)) app.settings.finishOnRight = true;
+            ImGui::Separator();
+            if (ui::MenuItem(ui, Tr("Лента как по умолчанию"))) {
+                folded = Settings{}.ribbonIconsOnly;
+                app.settings.finishOnRight = Settings{}.finishOnRight;
+            }
+            ImGui::EndPopup();
+        }
+    }
     EndArea();
     return h;
 }

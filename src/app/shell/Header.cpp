@@ -327,7 +327,10 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
     // Title in the middle of what is left.
     {
         Session* s = app.Doc();
-        const std::string name = s && !app.workspace.ShowsHome() ? s->Title() : Tr("Главная");
+        // A part edited in place: "Узел › Крышка".
+        const std::string name = !s || app.workspace.ShowsHome() ? std::string(Tr("Главная"))
+                               : s->host                         ? s->host->Title() + " \xE2\x80\xBA " + s->Title()
+                                                                 : s->Title();
         const char* suffix = " \xE2\x80\x94 BreezeCAD";
         ImFont* f1 = ui.fonts.medium;
         ImFont* f2 = ui.fonts.body;

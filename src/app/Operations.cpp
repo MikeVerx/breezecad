@@ -13,6 +13,7 @@
 #include "document/Origin.h"
 #include "document/SketchFeature.h"
 #include "app/assembly/AssemblyUi.h"
+#include "app/assembly/InPlace.h"
 #include "assembly/AssemblyFile.h"
 #include "document/DocumentTypes.h"
 #include "document/StandardPacks.h"
@@ -135,6 +136,8 @@ void SaveDocument(AppContext& app, bool saveAs) {
     Session* s = app.Doc();
     if (!s) return;
     app.ops.Commit(app, *s);
+    // A part edited in place is saved with its assembly (into its file beside it).
+    if (s->host) s = s->host;
 #if defined(__ANDROID__)
     // The phone: the first save (and «Сохранить как») asks the name and shows the folder.
     if (s->path.empty() || saveAs) {
@@ -186,6 +189,24 @@ void RecoverDocument(AppContext& app, const RecoverableDocument& rec) {
     // from the original's place again (else none of them was found).
     if (s.assembly) assembly::RebasePaths(s.assembly->assembly, rec.copy, rec.original);
     s.path = rec.original;
+    // Its parts edited in it, as they stood: in memory again, to be saved with it.
+    int lostParts = 0;
+    if (s.assembly)
+        for (const RecoverableDocument::Part& p : rec.parts) {
+            Expected<std::unique_ptr<Session>> part = Workspace::LoadSession(p.copy, nullptr);
+            if (!part) {
+                ++lostParts;
+                continue;
+            }
+            (*part)->path = p.file;
+            (*part)->history.MarkUnsaved();
+            AssemblyState& st = *s.assembly;
+            st.parts.push_back({p.file, std::move(*part), p.created});
+            AssemblyState::PartEdit& edit = st.parts.back();
+            edit.session->RebuildNow();
+            st.geometry.UsePartInMemory(p.file, &edit.session->doc, &edit.session->model);
+        }
+    if (lostParts > 0) app.notes.Error(Trf("Не восстановлено деталей сборки: {}", lostParts));
     s.untitledName = rec.title;
     // The recovered state is not in the original file.
     if (s.assembly) s.assembly->MarkUnsaved();
@@ -488,8 +509,10 @@ void EscapePressed(AppContext& app) {
     } else if (s->assembly && AssemblyEscape(app, *s)) {
     } else if (!s->selectedFaces.empty()) {
         s->selectedFaces.clear();   // first the faces chosen in the view, then the tree
-    } else {
+    } else if (s->selectedFeature) {
         s->selectedFeature = {};
+    } else if (s->host) {
+        ReturnToAssembly(app);   // a part edited in place with nothing left to drop: back to its assembly
     }
 }
 

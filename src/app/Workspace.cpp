@@ -2,6 +2,7 @@
 
 #include "app/Notifications.h"
 #include "app/Settings.h"
+#include "app/assembly/InPlace.h"
 #include "core/I18n.h"
 #include "core/Log.h"
 #include "core/Monitor.h"
@@ -35,9 +36,26 @@ std::string NothingToExport(const Session& session) {
 
 } // namespace
 
-Session* Workspace::Active() {
+Session* Workspace::ActiveTab() {
     if (myActive < 0 || myActive >= static_cast<int>(sessions.size())) return nullptr;
     return sessions[static_cast<std::size_t>(myActive)].get();
+}
+
+Session* Workspace::Active() {
+    Session* tab = ActiveTab();
+    if (tab && tab->assembly)
+        if (Session* part = tab->assembly->InPlaceSession()) return part;
+    return tab;
+}
+
+bool Workspace::IsOpen(const Session* s) const {
+    for (const auto& tab : sessions) {
+        if (tab.get() == s) return true;
+        if (tab->assembly)
+            for (const AssemblyState::PartEdit& e : tab->assembly->parts)
+                if (e.session.get() == s) return true;
+    }
+    return false;
 }
 
 void Workspace::Activate(int index) {
@@ -101,13 +119,20 @@ bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Se
             return true;
         }
     }
+    // A part some assembly holds edited in memory: two copies must not go on apart.
+    if (!PartFreeToOpen(*this, notes, file)) {
+        lastOpenError = Tr("деталь правится в открытой сборке: сохраните сборку или закончите правку");
+        return false;
+    }
     std::vector<std::string> warnings;
     mon::Action("open", ToUtf8(file.filename()));
     const auto loadStart = std::chrono::steady_clock::now();
     Expected<std::unique_ptr<Session>> loaded = LoadSession(file, &warnings);
     mon::Timed("open", "чтение файла (геометрия — потом, в перестроении)",
                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - loadStart).count());
+    lastOpenError.clear();
     if (!loaded) {
+        lastOpenError = Tr(loaded.GetError().message);
         log::Warn("Could not open {}: {}", ToUtf8(file), loaded.GetError().message);
         notes.Error(Trf("Не удалось открыть «{}»: {}", ToUtf8(file.filename()), Tr(loaded.GetError().message)));
         settings.RemoveRecent(file);
@@ -128,6 +153,8 @@ bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Se
 }
 
 bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settings& settings) {
+    // A part edited in an assembly is saved with it (into its copy beside it).
+    if (session.host) return Save(*session.host, saveAs, notes, settings);
     std::filesystem::path target = session.path;
     if (target.empty() || saveAs) {
         if (const std::string problem = platform::FileDialogProblem(); !problem.empty()) {
@@ -176,6 +203,8 @@ bool Workspace::GatherParts(Session& session, const std::filesystem::path& from,
 
 bool Workspace::SaveTo(Session& session, const std::filesystem::path& requested, Notifications& notes, Settings& settings,
                        std::string* error) {
+    // A part edited in an assembly: the assembly is saved, the part with it.
+    if (session.host) return SaveTo(*session.host, session.host->path.empty() ? requested : session.host->path, notes, settings, error);
     // Android: a projects-folder document whose copy lies apart from the
     // others (made by 0.2.3.x) is saved beside them from now on.
     const std::filesystem::path target = platform::SettledDocument(requested);
@@ -191,8 +220,30 @@ bool Workspace::SaveTo(Session& session, const std::filesystem::path& requested,
     // from elsewhere is copied there), so the folder carried to another
     // computer or phone opens whole. The paths are then relative to `target`.
     const std::filesystem::path from = session.path;
+    // Projections the parts took from each other name the assembly: a new
+    // name (the first save, «Сохранить как») goes into them before they are written.
+    const std::string oldName = session.ContextName();
+    const std::string newName = ToUtf8(target.stem());
+    const auto renameBack = [&] {
+        if (session.assembly && oldName != newName) RenameContext(session, newName, oldName);
+    };
+    if (session.assembly && oldName != newName) RenameContext(session, oldName, newName);
     if (session.assembly) {
+        // Parts edited or made in this assembly go with it: the new ones are
+        // written first (their copies beside it are made from them), the
+        // edited ones into those copies once every part lies beside it — never
+        // into an original elsewhere (the rule for parts of assemblies).
+        const std::vector<std::vector<ObjectId>> users = PartUsers(session, from);
+        std::string partError;
+        if (!WriteCreatedParts(session, users, partError)) {
+            renameBack();
+            const std::string message = Trf("Сборка НЕ сохранена: {}", Tr(partError));
+            if (error) *error = message;
+            notes.Error(message);
+            return false;
+        }
         if (!GatherParts(session, from, target, notes)) {
+            renameBack();
             assembly::RebasePaths(session.assembly->assembly, target, from);
             const std::string message = Tr("Сборка НЕ сохранена: не все её детали удалось положить рядом с ней");
             if (error) *error = message;
@@ -200,6 +251,15 @@ bool Workspace::SaveTo(Session& session, const std::filesystem::path& requested,
             return false;
         }
         session.path = target;   // the paths are relative to it already: written as they are
+        if (!WriteEditedParts(session, users, target, partError)) {
+            assembly::RebasePaths(session.assembly->assembly, target, from);
+            session.path = from;
+            renameBack();
+            const std::string message = Trf("Сборка НЕ сохранена: {}", Tr(partError));
+            if (error) *error = message;
+            notes.Error(message);
+            return false;
+        }
     }
     const Status status = session.WriteFile(target, kGenerator);
     if (!status) {

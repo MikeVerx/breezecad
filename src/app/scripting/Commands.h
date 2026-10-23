@@ -112,6 +112,8 @@ std::vector<doc::EdgeReference> EdgeRefs(Session& part, const Json& args, const 
 std::vector<doc::FaceReference> FaceRefs(Session& part, const Json& args, const char* key);
 /// [x, y, z] in model mm.
 Vec3 Point3(const Json& value, const char* what);
+/// `v` if it is finite and within 10 km; otherwise the command fails.
+double Sane(double v, const char* what);
 Json ToJson3(Vec3 v);
 Json Point3Arg(std::string description);
 Json IndexListArg(std::string description);

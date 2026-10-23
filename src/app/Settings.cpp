@@ -67,6 +67,12 @@ Settings FromJson(const nlohmann::json& j) {
     s.graphics        = std::clamp(j.value("graphics", s.graphics), 0, 2);
     s.textureQuality  = std::clamp(j.value("textureQuality", s.textureQuality), 0, 2);
     s.showAllConstraints = j.value("showAllConstraints", s.showAllConstraints);
+    if (const auto r = j.find("ribbonIconsOnly"); r != j.end() && r->is_array()) {
+        s.ribbonIconsOnly.clear();
+        for (const auto& id : *r)
+            if (id.is_string()) s.ribbonIconsOnly.push_back(id.get<std::string>());
+    }
+    s.finishOnRight   = j.value("finishOnRight", s.finishOnRight);
     s.gridStep        = std::max(0.0, j.value("gridStep", s.gridStep));
     s.uiScale         = j.value("uiScale", s.uiScale);
     s.language        = j.value("language", s.language);
@@ -222,6 +228,8 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"textureQuality", textureQuality},
         {"backgroundRebuild", backgroundRebuild},
         {"showAllConstraints", showAllConstraints},
+        {"ribbonIconsOnly", ribbonIconsOnly},
+        {"finishOnRight", finishOnRight},
         {"gridStep", gridStep},
         {"uiScale", uiScale},
         {"showTriad", showTriad},

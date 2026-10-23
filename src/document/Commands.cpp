@@ -40,6 +40,34 @@ void History::Redo(Document& doc) {
     ++myPosition;
 }
 
+History::Mark History::GetMark() const {
+    Mark m;
+    m.position = myPosition;
+    m.size = myCommands.size();
+    m.saved = mySavedPosition;
+    m.first = myCommands.empty() ? nullptr : myCommands.front().get();
+    m.last = myPosition > 0 ? myCommands[myPosition - 1].get() : nullptr;
+    m.next = myPosition < myCommands.size() ? myCommands[myPosition].get() : nullptr;
+    return m;
+}
+
+void History::RollBack(const Mark& mark) {
+    if (GetMark() == mark) return;
+    const bool prefixKept = myCommands.size() >= mark.position &&
+                            (mark.position == 0 || myCommands[mark.position - 1].get() == mark.last) &&
+                            (mark.first == nullptr || (!myCommands.empty() && myCommands.front().get() == mark.first));
+    if (!prefixKept) {
+        Clear();
+        MarkUnsaved();
+        return;
+    }
+    // A step made since stands where redo would have gone: drop it (and
+    // whatever followed).
+    if (myCommands.size() > mark.position && myCommands[mark.position].get() != mark.next) myCommands.resize(mark.position);
+    myPosition = mark.position;
+    mySavedPosition = mark.saved;
+}
+
 void History::Clear() {
     myCommands.clear();
     myPosition = 0;
