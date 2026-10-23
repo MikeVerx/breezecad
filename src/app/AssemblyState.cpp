@@ -168,23 +168,33 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
         const std::uint64_t now = kernel::ContextKey(geometry, assembly, c.id, *part, name);
         if (const auto known = myAdaptKeys.find(key); known != myAdaptKeys.end() && known->second == now) continue;
 
-        // It follows: edited in memory from now on (it is saved with the assembly).
         PartEdit* edit = EditOf(partFile);
         if (edit && edit->session && edit->session->mode != EditMode::Model) continue;   // its sketch is open: after
-        if (!edit) {
-            Expected<std::unique_ptr<Session>> loaded = Workspace::LoadSession(partFile, nullptr);
-            if (!loaded) continue;
-            parts.push_back({partFile, std::move(*loaded), false});
-            edit = &parts.back();
-            edit->session->host = nullptr;
-            geometry.UsePartInMemory(partFile, &edit->session->doc, &edit->session->model);
+        kernel::AdaptResult r;
+        if (edit) {
+            r = kernel::AdaptContextProjections(geometry, assembly, c.id, edit->session->doc, name);
+        } else {
+            // Read from its file: tried on a copy first. Only when something
+            // really moves does the part become an edit in memory (saved with
+            // the assembly) — opening an assembly that is up to date changes nothing.
+            doc::Document copy = part->Clone();
+            r = kernel::AdaptContextProjections(geometry, assembly, c.id, copy, name);
+            if (r.changed()) {
+                auto session = std::make_unique<Session>();
+                session->doc = std::move(copy);
+                session->path = partFile;
+                parts.push_back({partFile, std::move(session), false});
+                edit = &parts.back();
+                geometry.UsePartInMemory(partFile, &edit->session->doc, &edit->session->model);
+            }
         }
-        const kernel::AdaptResult r = kernel::AdaptContextProjections(geometry, assembly, c.id, edit->session->doc, name);
         myAdaptKeys[key] = now;
         if (r.lost > 0)
             problems.push_back(std::format("{}: {} рёбер других деталей не найдено — их проекции остались на месте",
                                            c.name, r.lost));
-        if (r.changed()) {
+        if (r.changed() && edit) {
+            // The part changed: it is written with the assembly at the next save.
+            edit->session->history.MarkUnsaved();
             edit->session->RebuildNow();
             changed = true;
             mon::Action("assembly", std::format("адаптивность: {} ({} кривых)", c.name, r.moved));

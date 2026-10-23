@@ -83,7 +83,7 @@ const std::string kGenerator = std::string("BreezeCAD ") + Version();
 
 bool EditingInPlace(AppContext& app) { return Current(app).part != nullptr; }
 
-bool EditInPlace(AppContext& app, Session& as, ObjectId id) {
+bool EditInPlace(AppContext& app, Session& as, ObjectId id, std::string* why) {
     if (!as.assembly) return false;
     AssemblyState& st = *as.assembly;
     const Component* c = st.assembly.FindComponent(id);
@@ -106,17 +106,22 @@ bool EditInPlace(AppContext& app, Session& as, ObjectId id) {
         // whichever is saved last would replace the other's work.
         for (const auto& tab : app.workspace.sessions)
             if (!tab->path.empty() && SameFile(tab->path, file)) {
-                app.notes.Info(Trf("Деталь «{}» открыта во вкладке — закройте её, чтобы править её в сборке",
-                                   ToUtf8(file.filename())));
+                const std::string message = Trf("Деталь «{}» открыта во вкладке — закройте её, чтобы править её в сборке",
+                                                ToUtf8(file.filename()));
+                app.notes.Info(message);
+                if (why) *why = message;
                 return false;
             }
         std::vector<std::string> warnings;
         Expected<std::unique_ptr<Session>> loaded = Workspace::LoadSession(file, &warnings);
         if (!loaded) {
-            app.notes.Error(Trf("Деталь «{}» не открылась: {}", ToUtf8(file.filename()), Tr(loaded.GetError().message)));
+            const std::string message = Trf("Деталь «{}» не открылась: {}", ToUtf8(file.filename()), Tr(loaded.GetError().message));
+            app.notes.Error(message);
+            if (why) *why = message;
             return false;
         }
         for (const std::string& w : warnings) app.notes.Info(Tr(w));
+        (*loaded)->path = file;   // its name in the tree and the title; it is written with the assembly
         st.parts.push_back({file, std::move(*loaded), false});
         edit = &st.parts.back();
         st.geometry.UsePartInMemory(file, &edit->session->doc, &edit->session->model);
@@ -218,7 +223,8 @@ bool CreatingPart(AppContext& app) {
     return s && s->assembly && s->assembly->newPart.active;
 }
 
-ObjectId CreatePartAt(AppContext& app, Session& session, const std::string& typed, const assembly::GeometryRef& plane) {
+ObjectId CreatePartAt(AppContext& app, Session& session, const std::string& typed, const assembly::GeometryRef& plane,
+                      bool startSketch) {
     if (!session.assembly) return {};
     AssemblyState& st = *session.assembly;
     std::string name = typed;
@@ -239,12 +245,17 @@ ObjectId CreatePartAt(AppContext& app, Session& session, const std::string& type
     part->untitledName = name;
 
     // Its XY plane lies on the picked plane, its Z out of it (the sketch looks
-    // at the face, an extrusion grows out of it): what Inventor does.
+    // at the face, an extrusion grows out of it): what Inventor does. Its
+    // origin and X line up with the part it is made on (the foot of that
+    // part's origin on the plane, its X laid into the plane): the new
+    // sketch's coordinates read as the neighbour's do.
     const Placement at = st.assembly.PlacementOf(plane.component);
-    const Vec3 origin = at.Point(plane.origin);
     const Vec3 z = at.Direction(plane.direction).Normalized();
-    Vec3 x = Vec3{1, 0, 0} - z * z.x;
-    if (x.Length() < 1e-6) x = Vec3{0, 1, 0} - z * z.y;
+    const Vec3 base = at.translation;
+    const Vec3 origin = base + z * (at.Point(plane.origin) - base).Dot(z);
+    Vec3 x = at.Direction({1, 0, 0});
+    x = x - z * x.Dot(z);
+    if (x.Length() < 1e-6) x = at.Direction({0, 1, 0}) - z * at.Direction({0, 1, 0}).Dot(z);
     const Placement placed{assembly::Rotation::FromXZ(x.Normalized(), z), origin};
 
     st.Checkpoint(N_("Создание детали"));
@@ -269,7 +280,7 @@ ObjectId CreatePartAt(AppContext& app, Session& session, const std::string& type
     log::Info("Created part {} in {}", ToUtf8(file.filename()), session.Title());
 
     // Straight into it, with a sketch on its XY plane: draw the first shape.
-    if (!EditInPlace(app, session, id)) return id;
+    if (!EditInPlace(app, session, id) || !startSketch) return id;
     Session* edited = st.InPlaceSession();
     if (!edited) return id;
     const doc::SketchPlacement sketchOn{doc::origin::kPlaneXY, *doc::origin::PlaneFrame(doc::origin::kPlaneXY), false, {}};
@@ -471,8 +482,10 @@ void RenameContext(Session& as, const std::string& from, const std::string& to) 
         if (!edit) {
             Expected<std::unique_ptr<Session>> loaded = Workspace::LoadSession(file, nullptr);
             if (!loaded) continue;
+            (*loaded)->path = file;
             st.parts.push_back({file, std::move(*loaded), false});
             edit = &st.parts.back();
+            edit->session->RebuildNow();   // shown from memory from now on: built first
             st.geometry.UsePartInMemory(file, &edit->session->doc, &edit->session->model);
         }
         for (const auto& f : edit->session->doc.Features())

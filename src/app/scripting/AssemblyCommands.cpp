@@ -15,7 +15,9 @@
 #include "core/PathText.h"
 #include "document/BzcFile.h"
 #include "document/DocumentTypes.h"
+#include "document/SketchFeature.h"
 #include "kernel/AssemblyReadApi.h"
+#include "kernel/ContextProjection.h"
 #include "kernel/Topology.h"
 
 #include <cmath>
@@ -455,7 +457,8 @@ Json GeomSchema(const char* what) {
 Json EditInPlaceCommand(AppContext& app, const Json& args) {
     Session& s = ActiveAssembly(app);
     const assembly::Component& c = ComponentOf(s, args, "component");
-    if (!EditInPlace(app, s, c.id)) Fail("Деталь не открылась для правки на месте (см. сообщения программы)");
+    std::string why;
+    if (!EditInPlace(app, s, c.id, &why)) Fail(why.empty() ? std::string("Деталь не открылась для правки на месте") : why);
     Session* part = app.Doc();
     return {{"editing", c.name}, {"part", part ? part->Title() : std::string{}},
             {"note", "Теперь команды деталей (sketch.*, feature.*) работают с этой деталью; вернуться — assembly.return_to_assembly."}};
@@ -467,15 +470,71 @@ Json ReturnCommand(AppContext& app, const Json&) {
     return {{"ok", true}};
 }
 
+Json ProjectEdgeCommand(AppContext& app, const Json& args) {
+    Session* part = app.Doc();
+    if (!part || !part->host || !part->host->assembly) Fail("Сначала откройте деталь на месте: assembly.edit_in_place или assembly.create_part");
+    auto* f = part->doc.FindAs<doc::SketchFeature>(Id(args, "sketch"));
+    if (!f) Fail("«sketch» — id эскиза детали, открытой на месте");
+    AssemblyState& st = *part->host->assembly;
+    const ObjectId target = part->inPlaceOf;
+    const ObjectId source = Id(args, "component");
+    if (source == target || !st.assembly.FindComponent(source)) Fail("«component» — id другого компонента сборки");
+    const std::string name = part->host->ContextName();
+    if (kernel::WouldCycle(st.geometry, st.assembly, source, target, name))
+        Fail("Тот компонент сам следует за этой деталью: проекция замкнула бы их друг на друга");
+    const std::optional<doc::EdgeReference> edge =
+        st.geometry.EdgeNear(st.assembly, source, Point3(Required(args, "point"), "point"), Number(args, "tolerance", 1.0));
+    if (!edge) Fail("Около этой точки нет ребра компонента (точка — в координатах сборки)");
+    doc::ContextProjection link{name, source, *edge, {}, Flag(args, "adaptive", true)};
+    const Expected<kernel::ProjectedCurve> pc = st.geometry.ProjectSourceEdge(st.assembly, target, link, f->placement.frame);
+    if (!pc) Fail(Tr(pc.GetError().message));
+    std::unique_ptr<doc::Feature> before = f->Clone();
+    sketch::Sketch& sk = f->sketch;
+    IdGenerator& ids = part->doc.Ids();
+    const auto point = [&](Vec2 at) {
+        const ObjectId id = sk.AddPoint(ids, at);
+        sk.FindPoint(id)->projected = true;
+        return id;
+    };
+    ObjectId curve;
+    switch (pc->kind) {
+        case kernel::ProjectedCurve::Kind::Line:
+            if ((pc->end - pc->start).Length() < 1e-6) Fail("Ребро видно с торца — проецируется в точку");
+            curve = sk.AddLine(ids, point(pc->start), point(pc->end));
+            sk.FindLine(curve)->projected = true;
+            break;
+        case kernel::ProjectedCurve::Kind::Circle:
+            curve = sk.AddCircle(ids, point(pc->centre), pc->radius);
+            sk.FindCircle(curve)->projected = true;
+            break;
+        case kernel::ProjectedCurve::Kind::Arc:
+            curve = sk.AddArc(ids, point(pc->centre), point(pc->start), point(pc->end));
+            for (auto& a : sk.arcs)
+                if (a.id == curve) a.projected = true;
+            break;
+        case kernel::ProjectedCurve::Kind::Ellipse:
+            curve = sk.AddEllipse(ids, point(pc->centre), point(pc->start), point(pc->end));
+            break;
+    }
+    link.curve = curve;
+    f->contextProjections.push_back(link);
+    part->doc.MarkChanged(static_cast<std::size_t>(std::max(0, part->doc.IndexOf(f->id))));
+    part->CommitInPlaceEdit(std::move(before), Tr("Проецирование из другой детали"));
+    static const char* kKinds[] = {"line", "circle", "arc", "ellipse"};
+    return {{"curve", curve.value}, {"kind", kKinds[static_cast<int>(pc->kind)]}, {"adaptive", link.adaptive},
+            {"note", "Кривая следует за ребром компонента-источника, пока деталь в этой сборке."}};
+}
+
 Json CreatePartCommand(AppContext& app, const Json& args) {
     Session& s = ActiveAssembly(app);
     const assembly::GeometryRef plane = GeometryArg(s, Required(args, "plane"), "plane", ConstraintType::Mate);
     if (plane.kind != assembly::GeometryKind::Plane) Fail("plane — плоская грань или плоскость начала координат");
-    const ObjectId id = CreatePartAt(app, s, Has(args, "name") ? Text(args, "name") : std::string{}, plane);
+    const ObjectId id = CreatePartAt(app, s, Has(args, "name") ? Text(args, "name") : std::string{}, plane, false);
     if (!id) Fail("Деталь не создана (см. сообщения программы)");
     const assembly::Component* c = s.assembly->assembly.FindComponent(id);
     return {{"component", id.value}, {"name", c ? c->name : std::string{}},
-            {"note", "Деталь открыта на месте, эскиз на её XY начнётся в следующем кадре; вернуться — assembly.return_to_assembly."}};
+            {"note", "Деталь открыта на месте (пустая; её XY лежит на plane): sketch.create plane XY; вернуться — "
+                     "assembly.return_to_assembly."}};
 }
 
 } // namespace
@@ -562,6 +621,17 @@ void AddAssemblyCommands(Commands& out) {
                    "остальные компоненты видны вокруг. Изменения сохраняются вместе со сборкой.",
                    Schema({{"component", IdArg("id компонента.")}}, {"component"}), true, &EditInPlaceCommand});
     out.push_back({"assembly.return_to_assembly", "Закончить правку детали на месте и вернуться в сборку.", Schema(), true, &ReturnCommand});
+    out.push_back({"assembly.project_edge",
+                   "В эскиз детали, открытой на месте, проецирует ребро другого компонента (ближайшее к point — в "
+                   "координатах сборки). Связанная проекция следует за тем компонентом (адаптивность), пока деталь в "
+                   "этой сборке; adaptive: false — останется на месте.",
+                   Schema({{"sketch", IdArg("id эскиза детали.")},
+                           {"component", IdArg("id компонента-источника.")},
+                           {"point", Point3Arg("Точка у ребра, мм (координаты сборки).")},
+                           {"tolerance", NumberArg("Насколько близко к ребру, мм (по умолчанию 1).")},
+                           {"adaptive", BoolArg("Следовать за источником (по умолчанию да).")}},
+                          {"sketch", "component", "point"}),
+                   true, &ProjectEdgeCommand});
     out.push_back({"assembly.create_part",
                    "Новая деталь прямо в сборке: её плоскость XY — на plane (грань компонента или {\"origin\": \"xy\"}), с "
                    "совмещением заподлицо; файл «<имя> - <сборка>.bzc» рядом со сборкой (при сохранении). Деталь сразу "

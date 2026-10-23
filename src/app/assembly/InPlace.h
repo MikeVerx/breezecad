@@ -14,9 +14,9 @@
 namespace bz::app {
 
 /// The part of `component` edited in place in the assembly `assembly`.
-/// False (with a notification) when it cannot be: the part's file is open
-/// in a tab, or cannot be read.
-bool EditInPlace(AppContext& app, Session& assembly, ObjectId component);
+/// False (with a notification, and the reason in `why`) when it cannot be:
+/// the part's file is open in a tab, or cannot be read.
+bool EditInPlace(AppContext& app, Session& assembly, ObjectId component, std::string* why = nullptr);
 /// The document in front is a part edited in place.
 bool EditingInPlace(AppContext& app);
 /// Back to the assembly: an open sketch is finished first (an open operation
@@ -39,9 +39,11 @@ bool CreatePartInViewport(AppContext& app, Session& session, const ViewportFrame
 /// (`component` kAssemblyOrigin for the assembly's own). True when taken.
 bool CreatePartPickElement(AppContext& app, Session& session, ObjectId component, ObjectId element);
 /// Makes the part at once (name, plane, flush constraint) and opens it in
-/// place with a sketch on its XY plane — what the panel does on its last
-/// pick; for commands too. Returns the new component, none on failure.
-ObjectId CreatePartAt(AppContext& app, Session& session, const std::string& name, const assembly::GeometryRef& plane);
+/// place — with a sketch on its XY plane when `startSketch` (what the panel
+/// does on its last pick; commands make their own sketches). Returns the new
+/// component, none on failure.
+ObjectId CreatePartAt(AppContext& app, Session& session, const std::string& name, const assembly::GeometryRef& plane,
+                      bool startSketch = true);
 
 /// The file a new part named `name` gets in the assembly `session`: beside a
 /// saved assembly "<name> - <assembly>.bzc" (the rule for parts of

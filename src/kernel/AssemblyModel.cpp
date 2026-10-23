@@ -371,17 +371,25 @@ void AssemblyModel::Update(assembly::Assembly& a, const std::filesystem::path& a
             part.reported = true;
         }
 
-    // A part changed on disk: its faces may have moved; find the constraint
-    // geometry again by where it was picked.
+    // A part changed (on disk, or rebuilt in memory): its faces may have
+    // moved; find the constraint geometry again by where it was picked. The
+    // assembly changes (its constraints are solved again, it needs saving)
+    // only when some of it really moved — a part merely taken into memory
+    // for editing, or rebuilt the same, leaves it as it was.
+    bool moved = false;
     if (!reloaded.empty())
         for (assembly::Constraint& c : a.constraints)
             for (GeometryRef* g : {&c.first, &c.second, &c.third}) {
                 if (g == &c.third && c.type != assembly::ConstraintType::Symmetry) continue;
                 const auto k = m.partOf.find(g->component);
-                if (k != m.partOf.end() && std::find(reloaded.begin(), reloaded.end(), k->second) != reloaded.end())
-                    Refresh(a, *g);
+                if (k == m.partOf.end() || std::find(reloaded.begin(), reloaded.end(), k->second) == reloaded.end()) continue;
+                const GeometryRef was = *g;
+                if (!Refresh(a, *g)) continue;
+                const auto differs = [](Vec3 p, Vec3 q) { return (p - q).Length() > 1e-9; };
+                if (differs(was.origin, g->origin) || differs(was.direction, g->direction) || std::abs(was.radius - g->radius) > 1e-9)
+                    moved = true;
             }
-    if (!reloaded.empty()) a.Touch();   // constraints are to be solved again
+    if (moved) a.Touch();   // constraints are to be solved again
 
     if (a.Revision() == m.builtRevision && m.partsGeneration == m.builtGeneration) return;
     m.builtRevision = a.Revision();

@@ -74,6 +74,7 @@
 #if OCC_VERSION_HEX >= 0x070700
 #include <Select3D_SensitiveCylinder.hxx>
 #include <Select3D_SensitiveSphere.hxx>
+#include <Select3D_SensitiveCircle.hxx>
 #endif
 
 #include <algorithm>
@@ -217,15 +218,19 @@ std::optional<doc::FaceReference> FaceReferenceOf(const TopoDS_Face& face) {
 /// extrusions OCCT 7.8 places the cylinder wrongly (z -25..0 for a boss
 /// standing at z 5..30): the face is drawn but the cursor passes through it,
 /// to whatever is behind — a boss could not be measured, extruded up to or
-/// projected. Those faces are picked by their triangles instead (the shaded
-/// display has meshed them already), as every other curved face is.
+/// projected. A flat face bounded by one circle (the cap of a boss) gets a
+/// Select3D_SensitiveCircle that picks only along its rim: a click on the
+/// cap went through to the wall behind, so "Начать эскиз" on it did nothing.
+/// Those faces are picked by their triangles instead (the shaded display
+/// has meshed them already), as every other face is.
 void PickCurvedFacesByMesh(const Handle(SelectMgr_Selection)& selection) {
 #if OCC_VERSION_HEX >= 0x070700
     std::vector<Handle(Select3D_SensitiveEntity)> entities;
     bool replaced = false;
     for (const Handle(SelectMgr_SensitiveEntity)& entity : selection->Entities()) {
         Handle(Select3D_SensitiveEntity) sensitive = entity->BaseSensitive();
-        if (sensitive->IsKind(STANDARD_TYPE(Select3D_SensitiveCylinder)) || sensitive->IsKind(STANDARD_TYPE(Select3D_SensitiveSphere))) {
+        if (sensitive->IsKind(STANDARD_TYPE(Select3D_SensitiveCylinder)) || sensitive->IsKind(STANDARD_TYPE(Select3D_SensitiveSphere)) ||
+            sensitive->IsKind(STANDARD_TYPE(Select3D_SensitiveCircle))) {
             const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(sensitive->OwnerId());
             if (!owner.IsNull() && owner->Shape().ShapeType() == TopAbs_FACE) {
                 TopLoc_Location location;
@@ -1403,8 +1408,12 @@ void Viewport::SetContext(const kernel::Model* model) {
         drawer->SetFaceBoundaryUpperContinuity(GeomAbs_C1);
         drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(m.colors.edges), Aspect_TOL_SOLID, 0.8));
         ais->SetTransparency(0.7);
-        m.context->Display(ais, AIS_Shaded, -1, false);   // -1: no selection
-        if (c.picking) m.context->Activate(ais, AIS_Shape::SelectionMode(TopAbs_EDGE));
+        // Displayed with its edges selectable, then switched off unless an
+        // edge of it is being picked: shown with no selection mode (-1), it
+        // is never loaded into the selector, and a later Activate is ignored
+        // (the faded parts' edges could not be clicked to project them).
+        m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_EDGE), false);
+        if (!c.picking) m.context->Deactivate(ais);
         c.shapes.push_back(ais);
         c.ids.push_back(b.id);
         c.bodies.push_back(b.shape);

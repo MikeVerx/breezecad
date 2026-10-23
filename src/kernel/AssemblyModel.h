@@ -146,9 +146,11 @@ public:
     std::optional<doc::EdgeReference> EdgeNear(const assembly::Assembly& assembly, ObjectId component, Vec3 worldPoint,
                                                double tolerance) const;
     /// Where the source edge of `link` projects onto `plane` of the part of
-    /// `target` with the components where they stand now.
+    /// `target` with the components where they stand now. `now`: the edge as
+    /// it is now, described again (so it is followed from there next time).
     Expected<ProjectedCurve> ProjectSourceEdge(const assembly::Assembly& assembly, ObjectId target,
-                                               const doc::ContextProjection& link, const Frame& plane) const;
+                                               const doc::ContextProjection& link, const Frame& plane,
+                                               doc::EdgeReference* now = nullptr) const;
 
     /// Box of a component in the assembly; nullopt without geometry.
     std::optional<Bounds> ComponentBounds(ObjectId component) const;

@@ -103,13 +103,15 @@ std::optional<doc::EdgeReference> AssemblyModel::EdgeNear(const assembly::Assemb
 }
 
 Expected<ProjectedCurve> AssemblyModel::ProjectSourceEdge(const assembly::Assembly& a, ObjectId target,
-                                                          const doc::ContextProjection& link, const Frame& plane) const {
+                                                          const doc::ContextProjection& link, const Frame& plane,
+                                                          doc::EdgeReference* now) const {
     const Impl::Part* part = myImpl->PartFor(link.component);
     if (!a.FindComponent(link.component)) return Error{"Компонент-источник удалён из сборки"};
     if (!part || part->shape.IsNull()) return Error{"У компонента-источника нет тела"};
     try {
         const std::optional<TopoDS_Edge> edge = occt::ResolveEdges({link.edge}, part->shape).front();
         if (!edge) return Error{"Ребро детали-источника не найдено"};
+        if (now) *now = occt::DescribeEdge(*edge, part->shape);
         const TopLoc_Location where(ToTrsf(Relative(a, target, link.component)));
         return occt::ProjectEdge(TopoDS::Edge(edge->Moved(where)), plane);
     } catch (const Standard_Failure& f) {
@@ -169,15 +171,17 @@ AdaptResult AdaptContextProjections(const AssemblyModel& geometry, const assembl
         auto* sk = dynamic_cast<doc::SketchFeature*>(doc.Features()[i].get());
         if (!sk) continue;
         bool moved = false;
-        for (const doc::ContextProjection& p : sk->contextProjections) {
+        for (doc::ContextProjection& p : sk->contextProjections) {
             if (!Matches(p, assembly)) continue;
-            const Expected<ProjectedCurve> now = geometry.ProjectSourceEdge(a, target, p, sk->placement.frame);
+            doc::EdgeReference found = p.edge;
+            const Expected<ProjectedCurve> now = geometry.ProjectSourceEdge(a, target, p, sk->placement.frame, &found);
             if (!now) {
                 ++result.lost;   // the curve stays where it was
                 continue;
             }
             if (CurveMatches(sk->sketch, p.curve, *now, 1e-7)) continue;
             if (PlaceProjectedCurve(sk->sketch, p.curve, *now)) {
+                p.edge = found;   // followed from where it is now
                 moved = true;
                 ++result.moved;
             } else {

@@ -148,6 +148,8 @@ bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Se
 }
 
 bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settings& settings) {
+    // A part edited in an assembly is saved with it (into its copy beside it).
+    if (session.host) return Save(*session.host, saveAs, notes, settings);
     std::filesystem::path target = session.path;
     if (target.empty() || saveAs) {
         if (const std::string problem = platform::FileDialogProblem(); !problem.empty()) {
@@ -196,6 +198,8 @@ bool Workspace::GatherParts(Session& session, const std::filesystem::path& from,
 
 bool Workspace::SaveTo(Session& session, const std::filesystem::path& requested, Notifications& notes, Settings& settings,
                        std::string* error) {
+    // A part edited in an assembly: the assembly is saved, the part with it.
+    if (session.host) return SaveTo(*session.host, session.host->path.empty() ? requested : session.host->path, notes, settings, error);
     // Android: a projects-folder document whose copy lies apart from the
     // others (made by 0.2.3.x) is saved beside them from now on.
     const std::filesystem::path target = platform::SettledDocument(requested);
