@@ -93,12 +93,13 @@ bool RibbonLargeButton(Ui& ui, const char* id, std::string_view icon, const char
 }
 
 bool RibbonSmallButton(Ui& ui, const char* id, std::string_view icon, const char* caption, const char* tooltip,
-                       bool enabled, bool active) {
+                       bool enabled, bool active, float captionShown) {
     ImFont* font = ui.fonts.body;
     const float fontSize = ui.S(12);
     const ImVec2 ts = font->CalcTextSizeA(fontSize, FLT_MAX, 0, caption);
     const float height = ui.S(24);
-    const float width = ui.S(4 + 20 + 8 + 8) + ts.x;
+    const float shown = std::clamp(captionShown, 0.0f, 1.0f);
+    const float width = ui.S(4 + 20 + 4) + (ui.S(8 + 4) + ts.x) * shown;
 
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const bool clicked = ImGui::InvisibleButton(id, {width, height}) && enabled;
@@ -111,8 +112,14 @@ bool RibbonSmallButton(Ui& ui, const char* id, std::string_view icon, const char
     // Colour icons keep their own colours; monochrome ones take the text colour.
     const Color alpha = ui.C().textSecondary.WithAlpha(enabled ? 1.0f : 0.38f);
     ui.icons.Draw(dl, icon, Add(pos, {ui.S(4), ui.S(2)}), ui.S(20), alpha);
-    dl->AddText(font, fontSize, {pos.x + ui.S(32), pos.y + (height - ts.y) / 2},
-                ToU32(enabled ? ui.C().text : ui.C().textDisabled), caption);
+    if (shown > 0.01f) {
+        // The caption fades out before it is cut, and back in once there is room.
+        Color tc = enabled ? ui.C().text : ui.C().textDisabled;
+        tc.a *= std::clamp((shown - 0.3f) / 0.7f, 0.0f, 1.0f);
+        dl->PushClipRect(pos, Add(pos, {width, height}), true);
+        dl->AddText(font, fontSize, {pos.x + ui.S(32), pos.y + (height - ts.y) / 2}, ToU32(tc), caption);
+        dl->PopClipRect();
+    }
     if (tooltip) ItemTooltip(ui, tooltip);
     return clicked;
 }

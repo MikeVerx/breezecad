@@ -104,7 +104,7 @@ public:
 
     void BeginGroup(const char* caption) override {
         Flush();
-        myCaption = caption;
+        myCaption = Tr(caption);   // FillRibbon passes the Russian (N_), the key of the group
         myHeaderDrawn = false;
     }
 
