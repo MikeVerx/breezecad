@@ -41,6 +41,22 @@ public:
     void MarkUnsaved() { mySavedPosition = kNever; }
     void Clear();
 
+    /// Where the history stands: a tool that failed half-way is taken back
+    /// to it (app/Recovery.h) together with the document.
+    struct Mark {
+        std::size_t    position = 0, size = 0, saved = 0;
+        const Command* first = nullptr;   ///< the oldest step (the limit drops old ones)
+        const Command* last = nullptr;    ///< the step undo would take back
+        const Command* next = nullptr;    ///< the step redo would do
+        bool operator==(const Mark&) const = default;
+    };
+    Mark GetMark() const;
+    /// Back to `mark`, the document having been put back as it was then:
+    /// steps made since are dropped, undo and redo since taken back. When
+    /// the steps before the mark changed too, the history is cleared (an
+    /// undo would no longer fit the document).
+    void RollBack(const Mark& mark);
+
 private:
     static constexpr std::size_t kLimit = 500;   // oldest steps are forgotten
     static constexpr std::size_t kNever = static_cast<std::size_t>(-1);

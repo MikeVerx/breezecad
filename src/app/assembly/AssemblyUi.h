@@ -8,6 +8,7 @@
 #include "kernel/AssemblyModel.h"
 
 #include <filesystem>
+#include <optional>
 
 namespace bz::app {
 
@@ -49,8 +50,22 @@ void StartConstraint(AppContext& app, assembly::ConstraintType type);
 void StartPattern(AppContext& app);
 bool CanPattern(AppContext& app);
 
-/// The panel of the constraint being made (replaces the tree meanwhile).
+/// The panel of the constraint being made (over the tree meanwhile: the
+/// tree stays below it to pick origin planes and work geometry from).
 void DrawConstraintPanel(AppContext& app, Session& session, float width);
+
+/// A pick for the constraint being made (from the view or the tree): the
+/// first, second or (symmetry) third geometry; the last one makes it.
+/// False when no constraint is being made.
+bool TakeConstraintPick(AppContext& app, Session& session, const assembly::GeometryRef& g);
+/// A joint picked for a transmission being made (Передача, Винт-рейка).
+bool TakeJointPick(AppContext& app, Session& session, ObjectId joint);
+/// An origin element or work geometry picked in the tree (of a component,
+/// or kAssemblyOrigin): for the constraint or the new part being made.
+bool TakeElementPick(AppContext& app, Session& session, ObjectId component, ObjectId element);
+/// "Переопределить": the constraint's geometry picked again (and its type
+/// changed to `type`, when given); its options are kept.
+void StartRedefine(AppContext& app, ObjectId constraint, std::optional<assembly::ConstraintType> type = std::nullopt);
 
 /// "Закрепить" / "Освободить" the selected component.
 void ToggleGrounded(AppContext& app);

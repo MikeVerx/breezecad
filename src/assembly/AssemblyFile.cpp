@@ -6,6 +6,7 @@
 #include "document/JsonIO.h"
 
 #include <array>
+#include <cmath>
 #include <format>
 #include <fstream>
 #include <iterator>
@@ -29,7 +30,14 @@ constexpr std::array<std::pair<GeometryKind, std::string_view>, 6> kKinds{{
     {GeometryKind::Circle, "circle"},
 }};
 
-constexpr std::array<std::pair<ConstraintType, std::string_view>, 11> kTypes{{
+constexpr std::array<std::pair<PickSource, std::string_view>, 4> kSources{{
+    {PickSource::Face, "face"},
+    {PickSource::Edge, "edge"},
+    {PickSource::Vertex, "vertex"},
+    {PickSource::Element, "element"},
+}};
+
+constexpr std::array<std::pair<ConstraintType, std::string_view>, 14> kTypes{{
     {ConstraintType::Mate, "mate"},
     {ConstraintType::Insert, "insert"},
     {ConstraintType::Angle, "angle"},
@@ -41,6 +49,9 @@ constexpr std::array<std::pair<ConstraintType, std::string_view>, 11> kTypes{{
     {ConstraintType::Planar, "jointPlanar"},
     {ConstraintType::Ball, "jointBall"},
     {ConstraintType::Rigid, "jointRigid"},
+    {ConstraintType::Symmetry, "symmetry"},
+    {ConstraintType::Gear, "gear"},
+    {ConstraintType::Screw, "screw"},
 }};
 
 Json ToJson(const Placement& p) {
@@ -51,11 +62,22 @@ Json ToJson(const Placement& p) {
                 {"zAxis", jio::ToJson(p.rotation.col[2])}};
 }
 
+/// A number a file may hold: finite and within 10 km (mm) — anything else
+/// is damage (or a hand-edited file) that would only overflow the solver
+/// and the geometry kernel later.
+constexpr double kLargest = 1e7;
+/// Ids a file may hold: below the ones the program keeps for itself (the
+/// assembly origin is 2^64-1) and far from overflowing when counted on.
+bool SaneId(ObjectId id) { return id && id.value < (std::uint64_t{1} << 62); }
+bool Sane(double v) { return std::isfinite(v) && std::abs(v) <= kLargest; }
+bool Sane(Vec3 v) { return Sane(v.x) && Sane(v.y) && Sane(v.z); }
+
 bool Read(const Json& j, Placement& out) {
     if (!j.is_object()) return false;
     Vec3 origin, x{1, 0, 0}, z{0, 0, 1};
     if (!ReadMember(j, "origin", origin) || !ReadMember(j, "xAxis", x) || !ReadMember(j, "zAxis", z)) return false;
-    if (x.Length() < 1e-9 || z.Length() < 1e-9) return false;
+    if (!Sane(origin) || !Sane(x) || !Sane(z)) return false;
+    if (x.Length() < 1e-9 || z.Length() < 1e-9 || x.Cross(z).Length() < 1e-9 * x.Length() * z.Length()) return false;
     out.translation = origin;
     out.rotation    = Rotation::FromXZ(x, z);
     return true;
@@ -69,6 +91,8 @@ Json ToJson(const GeometryRef& g) {
     if (g.direction.Length() > 0) j["direction"] = jio::ToJson(g.direction);
     if (g.radius > 0) j["radius"] = g.radius;
     if (g.reference.Length() > 0) j["reference"] = jio::ToJson(g.reference);
+    if (g.source != PickSource::Face) j["from"] = jio::IdOf(kSources, g.source);
+    if (g.element) j["element"] = g.element.value;
     return j;
 }
 
@@ -96,12 +120,17 @@ bool ReadIds(const Json& j, std::vector<ObjectId>& out) {
 bool Read(const Json& j, GeometryRef& out) {
     if (!j.is_object()) return false;
     GeometryRef g;
-    const std::string kind = j.value("kind", "");
-    if (!jio::FromId(kKinds, kind, g.kind)) return false;
+    const auto kindIt = j.find("kind");
+    if (kindIt == j.end() || !kindIt->is_string() || !jio::FromId(kKinds, kindIt->get<std::string>(), g.kind)) return false;
     if (!ReadMember(j, "component", g.component) || !ReadMember(j, "origin", g.origin) ||
         !ReadMember(j, "direction", g.direction) || !ReadMember(j, "radius", g.radius) ||
-        !ReadMember(j, "pick", g.pick) || !ReadMember(j, "reference", g.reference))
+        !ReadMember(j, "pick", g.pick) || !ReadMember(j, "reference", g.reference) ||
+        !ReadMember(j, "element", g.element))
         return false;
+    if (const auto from = j.find("from"); from != j.end() &&
+        (!from->is_string() || !jio::FromId(kSources, from->get<std::string>(), g.source)))
+        return false;
+    if (!Sane(g.origin) || !Sane(g.direction) || !Sane(g.pick) || !Sane(g.reference) || !Sane(g.radius) || g.radius < 0) return false;
     out = g;
     return true;
 }
@@ -126,12 +155,17 @@ std::string AssemblyToJson(const Assembly& a) {
     }
     Json constraints = Json::array();
     for (const Constraint& c : a.constraints) {
-        Json j{{"id", c.id.value},
-               {"name", c.name},
-               {"type", jio::IdOf(kTypes, c.type)},
-               {"first", ToJson(c.first)},
-               {"second", ToJson(c.second)},
-               {"value", c.value}};
+        Json j{{"id", c.id.value}, {"name", c.name}, {"type", jio::IdOf(kTypes, c.type)}, {"value", c.value}};
+        if (IsTransmission(c.type)) {
+            j["drive"] = c.drive.value;
+            j["driven"] = c.driven.value;
+            j["ratio"] = c.ratio;
+            j["at"] = Json::array({c.driveAt, c.drivenAt});
+        } else {
+            j["first"] = ToJson(c.first);
+            j["second"] = ToJson(c.second);
+            if (c.type == ConstraintType::Symmetry) j["third"] = ToJson(c.third);
+        }
         if (c.flipped) j["flipped"] = true;
         if (c.suppressed) j["suppressed"] = true;
         if (c.locked) j["locked"] = true;
@@ -187,80 +221,148 @@ Expected<Assembly> AssemblyFromJsonUnguarded(std::string_view text, std::vector<
 
     Assembly a;
     if (const auto info = root.find("assembly"); info != root.end() && info->is_object()) {
-        a.info.name        = info->value("name", "");
-        a.info.designation = info->value("designation", "");
+        if (!ReadMember(*info, "name", a.info.name)) a.info.name.clear();
+        if (!ReadMember(*info, "designation", a.info.designation)) a.info.designation.clear();
     }
+    // A list that is not a list (damage) reads as an empty one.
+    const auto list = [&](const char* key) {
+        const auto it = root.find(key);
+        return it != root.end() && it->is_array() ? *it : Json::array();
+    };
     auto reserve = [&](ObjectId id) { a.Ids().Reserve(id); };
 
-    for (const Json& j : root.value("components", Json::array())) {
+    // A damaged entry costs that entry, not the assembly (better than
+    // refusing the whole file): skipped or given defaults, with a warning.
+    const auto warn = [&](std::string text) {
+        if (warnings) warnings->push_back(std::move(text));
+    };
+    for (const Json& j : list("components")) {
         Component c;
-        if (!j.is_object() || !ReadMember(j, "id", c.id) || !c.id || !ReadMember(j, "name", c.name) ||
-            !ReadMember(j, "path", c.path) || !ReadMember(j, "grounded", c.grounded) ||
-            !ReadMember(j, "visible", c.visible))
-            return Error{"Повреждён компонент сборки"};
-        if (const auto p = j.find("placement"); p != j.end() && !Read(*p, c.placement))
-            return Error{std::format("Повреждено положение компонента «{}»", c.name)};
+        if (!j.is_object() || !ReadMember(j, "id", c.id) || !SaneId(c.id) || !ReadMember(j, "name", c.name) || !ReadMember(j, "path", c.path) ||
+            c.path.empty() || a.FindComponent(c.id)) {
+            warn("Повреждённый компонент сборки пропущен");
+            continue;
+        }
+        if (!ReadMember(j, "grounded", c.grounded) || !ReadMember(j, "visible", c.visible)) {
+            c.grounded = false;
+            c.visible = true;
+        }
+        if (const auto p = j.find("placement"); p != j.end() && !Read(*p, c.placement)) {
+            c.placement = {};
+            warn(std::format("Положение компонента «{}» повреждено: он поставлен в начало координат", c.name));
+        }
         if (const auto p = j.find("properties"); p != j.end() && p->is_object()) {
             if (!ReadMember(*p, "designation", c.properties.designation) || !ReadMember(*p, "name", c.properties.name) ||
-                !ReadMember(*p, "material", c.properties.material) || !ReadMember(*p, "quantity", c.properties.quantity))
-                return Error{std::format("Повреждены свойства компонента «{}»", c.name)};
+                !ReadMember(*p, "material", c.properties.material) || !ReadMember(*p, "quantity", c.properties.quantity)) {
+                c.properties = {};
+                warn(std::format("Свойства компонента «{}» повреждены и сброшены", c.name));
+            }
         }
-        if (c.path.empty()) return Error{std::format("У компонента «{}» нет файла детали", c.name)};
         reserve(c.id);
         a.components.push_back(std::move(c));
     }
 
-    for (const Json& j : root.value("constraints", Json::array())) {
+    for (const Json& j : list("constraints")) {
         Constraint c;
-        if (!j.is_object()) return Error{"Повреждена зависимость сборки"};
+        if (!j.is_object() || !j.value("type", Json()).is_string()) {
+            warn("Повреждённая зависимость сборки пропущена");
+            continue;
+        }
         const std::string type = j.value("type", "");
         if (!jio::FromId(kTypes, type, c.type)) {
             if (warnings) warnings->push_back(std::format("Зависимость типа «{}» не поддерживается и пропущена", type));
             continue;
         }
-        const auto first = j.find("first"), second = j.find("second");
-        if (!ReadMember(j, "id", c.id) || !c.id || !ReadMember(j, "name", c.name) ||
-            !ReadMember(j, "value", c.value) || !ReadMember(j, "flipped", c.flipped) ||
-            !ReadMember(j, "suppressed", c.suppressed) || first == j.end() || second == j.end() ||
-            !Read(*first, c.first) || !Read(*second, c.second) || !ReadMember(j, "locked", c.locked) ||
-            !ReadMember(j, "position", c.position))
-            return Error{"Повреждена зависимость сборки"};
-        if (const auto lim = j.find("limits"); lim != j.end()) {
-            if (!lim->is_object() || !ReadMember(*lim, "lower", c.limits.lower) || !ReadMember(*lim, "upper", c.limits.upper))
-                return Error{"Повреждена зависимость сборки"};
-            c.limits.enabled = true;
+        const auto first = j.find("first"), second = j.find("second"), third = j.find("third");
+        const bool transmission = IsTransmission(c.type);
+        // Whatever is wrong with it, the constraint alone is dropped.
+        const auto damaged = [&] {
+            if (!ReadMember(j, "id", c.id) || !SaneId(c.id) || a.FindConstraint(c.id) || a.FindComponent(c.id) || !ReadMember(j, "name", c.name) ||
+                !ReadMember(j, "value", c.value) || !ReadMember(j, "flipped", c.flipped) || !ReadMember(j, "suppressed", c.suppressed) ||
+                !ReadMember(j, "locked", c.locked) || !ReadMember(j, "position", c.position) || !ReadMember(j, "drive", c.drive) ||
+                !ReadMember(j, "driven", c.driven) || !ReadMember(j, "ratio", c.ratio))
+                return true;
+            if (!Sane(c.value) || !Sane(c.position) || !Sane(c.ratio)) return true;
+            if (!transmission && (first == j.end() || second == j.end() || !Read(*first, c.first) || !Read(*second, c.second)))
+                return true;
+            if (c.type == ConstraintType::Symmetry && (third == j.end() || !Read(*third, c.third))) return true;
+            if (const auto at = j.find("at"); at != j.end()) {
+                if (!at->is_array() || at->size() != 2 || !(*at)[0].is_number() || !(*at)[1].is_number()) return true;
+                c.driveAt = (*at)[0].get<double>();
+                c.drivenAt = (*at)[1].get<double>();
+                if (!Sane(c.driveAt) || !Sane(c.drivenAt)) return true;
+            }
+            if (const auto lim = j.find("limits"); lim != j.end()) {
+                if (!lim->is_object() || !ReadMember(*lim, "lower", c.limits.lower) || !ReadMember(*lim, "upper", c.limits.upper) ||
+                    !Sane(c.limits.lower) || !Sane(c.limits.upper))
+                    return true;
+                c.limits.enabled = true;
+            }
+            return false;
+        };
+        if (damaged()) {
+            warn(std::format("Повреждённая зависимость «{}» пропущена", c.name.empty() ? type : c.name));
+            continue;
         }
-        if (!a.FindComponent(c.first.component) || !a.FindComponent(c.second.component)) {
+        const bool gone = transmission ? false
+                                       : !a.Exists(c.first.component) || !a.Exists(c.second.component) ||
+                                             (c.type == ConstraintType::Symmetry && !a.Exists(c.third.component));
+        if (gone) {
             if (warnings) warnings->push_back(std::format("Зависимость «{}» ссылается на удалённый компонент и пропущена", c.name));
             continue;
         }
         reserve(c.id);
         a.constraints.push_back(std::move(c));
     }
+    // Transmissions: both joints must be there (they may come later in the file).
+    std::erase_if(a.constraints, [&](const Constraint& c) {
+        if (!IsTransmission(c.type)) return false;
+        const Constraint* d = a.FindConstraint(c.drive);
+        const Constraint* n = a.FindConstraint(c.driven);
+        const bool ok = d && n && IsJoint(d->type) && IsJoint(n->type);
+        if (!ok && warnings) warnings->push_back(std::format("Передача «{}» ссылается на удалённое соединение и пропущена", c.name));
+        return !ok;
+    });
 
-    for (const Json& j : root.value("patterns", Json::array())) {
+    for (const Json& j : list("patterns")) {
         ComponentPattern p;
-        if (!j.is_object()) return Error{"Повреждён массив компонентов"};
+        if (!j.is_object() || !j.value("kind", Json()).is_string()) {
+            warn("Повреждённый массив компонентов пропущен");
+            continue;
+        }
         const std::string kind = j.value("kind", "");
         if (!jio::FromId(kPatternKinds, kind, p.kind)) {
             if (warnings) warnings->push_back(std::format("Массив вида «{}» не поддерживается и пропущен", kind));
             continue;
         }
         const auto seed = j.find("seed");
-        if (!ReadMember(j, "id", p.id) || !p.id || !ReadMember(j, "name", p.name) || seed == j.end() ||
+        if (!ReadMember(j, "id", p.id) || !SaneId(p.id) || !ReadMember(j, "name", p.name) || seed == j.end() ||
             !ReadIds(*seed, p.seed) || !ReadMember(j, "direction1", p.direction1) || !ReadMember(j, "count1", p.count1) ||
             !ReadMember(j, "spacing1", p.spacing1) || !ReadMember(j, "direction2", p.direction2) ||
             !ReadMember(j, "count2", p.count2) || !ReadMember(j, "spacing2", p.spacing2) ||
             !ReadMember(j, "axisOrigin", p.axisOrigin) || !ReadMember(j, "axisDirection", p.axisDirection) ||
-            !ReadMember(j, "count", p.count) || !ReadMember(j, "angle", p.angle))
-            return Error{"Повреждён массив компонентов"};
-        if (const auto r = j.find("rim"); r != j.end() && !Read(*r, p.rim)) return Error{std::format("Повреждён массив «{}»", p.name)};
-        if (const auto r = j.find("axis"); r != j.end() && !Read(*r, p.axis)) return Error{std::format("Повреждён массив «{}»", p.name)};
+            !ReadMember(j, "count", p.count) || !ReadMember(j, "angle", p.angle) || a.FindPattern(p.id) ||
+            !Sane(p.direction1) || !Sane(p.direction2) || !Sane(p.spacing1) || !Sane(p.spacing2) || !Sane(p.axisOrigin) ||
+            !Sane(p.axisDirection) || !Sane(p.angle) || p.count1 < 0 || p.count2 < 0 || p.count < 0 || p.count1 > 10000 ||
+            p.count2 > 10000 || p.count > 10000) {
+            warn(std::format("Повреждённый массив «{}» пропущен", p.name));
+            continue;
+        }
+        bool bad = false;
+        if (const auto r = j.find("rim"); r != j.end() && !Read(*r, p.rim)) bad = true;
+        if (const auto r = j.find("axis"); r != j.end() && !Read(*r, p.axis)) bad = true;
         for (const Json& instance : j.value("instances", Json::array())) {
             std::vector<ObjectId> ids;
-            if (!ReadIds(instance, ids)) return Error{std::format("Повреждён массив «{}»", p.name)};
+            if (!ReadIds(instance, ids)) {
+                bad = true;
+                break;
+            }
             std::erase_if(ids, [&](ObjectId id) { return !a.FindComponent(id); });
             if (!ids.empty()) p.instances.push_back(std::move(ids));
+        }
+        if (bad) {
+            warn(std::format("Повреждённый массив «{}» пропущен", p.name));
+            continue;
         }
         std::erase_if(p.seed, [&](ObjectId id) { return !a.FindComponent(id); });
         if (p.seed.empty()) {
@@ -273,8 +375,9 @@ Expected<Assembly> AssemblyFromJsonUnguarded(std::string_view text, std::vector<
 
     if (const auto look = root.find("look"); look != root.end()) a.look = doc::LookFromJson(*look);   // absent in older files
 
-    if (std::uint64_t next = root.value("nextId", std::uint64_t{0}); next > 0) a.Ids().Reserve(ObjectId{next - 1});
-    if (root.value("formatVersion", 0) > kAssemblyFormatVersion && warnings)
+    if (std::uint64_t next = 0; ReadMember(root, "nextId", next) && next > 0 && next < (std::uint64_t{1} << 62))
+        a.Ids().Reserve(ObjectId{next - 1});
+    if (int version = 0; ReadMember(root, "formatVersion", version) && version > kAssemblyFormatVersion && warnings)
         warnings->push_back("Сборка создана более новой версией BreezeCAD. Новые возможности могут не открыться.");
     return a;
 }

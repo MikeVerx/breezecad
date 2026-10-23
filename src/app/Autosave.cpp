@@ -1,5 +1,6 @@
 #include "app/Autosave.h"
 
+#include "app/AssemblyState.h"
 #include "app/Settings.h"
 #include "core/I18n.h"
 #include "core/Folders.h"
@@ -67,8 +68,27 @@ bool Autosave::Write(Session& session, double now) {
         session.unsavedSince = now;   // try again after another interval
         return false;
     }
+    // An assembly: the parts edited in it live only in memory until it is
+    // saved — each goes into the copy too, or a crash would lose them.
+    nlohmann::json parts = nlohmann::json::array();
+    if (session.assembly) {
+        const std::filesystem::path partsFolder = folder / std::format("parts{}", slot);
+        std::filesystem::remove_all(partsFolder, ec);
+        int n = 0;
+        for (const AssemblyState::PartEdit& e : session.assembly->parts) {
+            if (!e.session || !(e.created || e.session->IsModified())) continue;
+            std::filesystem::create_directories(partsFolder, ec);
+            const std::string name = std::format("part{}.bzc", ++n);
+            if (const Status written = doc::SaveBzc(e.session->doc, partsFolder / name, "BreezeCAD autosave"); !written) {
+                log::Warn("Autosave of {} failed: {}", ToUtf8(e.file.filename()), written.GetError().message);
+                session.unsavedSince = now;
+                return false;
+            }
+            parts.push_back({{"file", ToUtf8(e.file)}, {"copy", std::format("parts{}/{}", slot, name)}, {"created", e.created}});
+        }
+    }
     const nlohmann::json info{{"title", session.Title()}, {"original", ToUtf8(session.path)},
-                              {"slot", slot}, {"savedAt", NowText()}};
+                              {"slot", slot}, {"savedAt", NowText()}, {"parts", parts}};
     std::ofstream(folder / "info.json", std::ios::trunc) << info.dump(1);
 
     session.autosavedRevision = session.ContentRevision();
@@ -104,6 +124,14 @@ std::vector<RecoverableDocument> Autosave::FindRecoverable() const {
         doc.original = PathFromUtf8(original);
         doc.title = title;
         doc.savedAt = savedAt;
+        if (const auto parts = info.find("parts"); parts != info.end() && parts->is_array())
+            for (const nlohmann::json& p : *parts) {
+                std::string file, copy;
+                bool created = false;
+                if (!p.is_object() || !ReadMember(p, "file", file) || !ReadMember(p, "copy", copy)) continue;
+                ReadMember(p, "created", created);
+                doc.parts.push_back({PathFromUtf8(file), entry.path() / PathFromUtf8(copy), created});
+            }
         if (std::filesystem::exists(doc.copy, ec)) found.push_back(std::move(doc));
     }
     return found;

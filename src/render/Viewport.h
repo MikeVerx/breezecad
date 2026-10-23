@@ -94,6 +94,9 @@ public:
 
     /// Re-creates displayed bodies if the model (or which model) changed.
     void Sync(const kernel::Model& model);
+    /// The next Sync shows the model again from scratch (after a failure
+    /// that may have left the view half-way through a change).
+    void ForgetSynced();
     /// Meshes the model's bodies as Sync would at this quality level. Safe
     /// on another thread for a model no viewport shows yet: Sync then finds
     /// the triangles ready.
@@ -181,6 +184,21 @@ public:
     /// Shows where the bodies of `model` overlap (Model::Interferences),
     /// over everything else; nullptr hides it. Cheap when unchanged.
     void ShowInterferences(const kernel::Model* model);
+
+    /// Bodies shown faded around the model and never hovered or picked —
+    /// the rest of the assembly while one of its parts is edited in place —
+    /// until SetContext(nullptr). Cheap when unchanged (same model, same revision).
+    void SetContext(const kernel::Model* context);
+    /// Makes the edges of the context pickable (projecting them into a
+    /// sketch); off by default. Cheap to call every frame.
+    void SetContextPicking(bool on);
+    /// The context edge under `pixel` (SetContextPicking on): which body
+    /// (its id: the component) and the edge, in the context's coordinates.
+    struct ContextEdge {
+        ObjectId           body;
+        doc::EdgeReference edge;
+    };
+    std::optional<ContextEdge> PickContextEdge(Vec2 pixel);
 
     /// Outlines of a pattern's or mirror's sources (selection colour) and
     /// copies (hover colour) over the model while its panel is open;

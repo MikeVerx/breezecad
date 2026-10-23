@@ -406,6 +406,10 @@ Expected<double> EvaluateExpression(std::string_view text, Quantity expected,
         }
     }
     if (!std::isfinite(v.v)) return Error{"Результат не является конечным числом"};
+    // Sizes beyond 10 km only overflow the geometry kernel (a crash or a
+    // part that takes minutes): refused where they are typed.
+    if (expected == Quantity::Length && std::abs(v.v) > 1e7) return Error{"Слишком большая длина (больше 10 км)"};
+    if (expected == Quantity::Scalar && std::abs(v.v) > 1e9) return Error{"Слишком большое число"};
     return v.v;
 }
 

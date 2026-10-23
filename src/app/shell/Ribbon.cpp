@@ -308,8 +308,12 @@ void AssemblyRibbonImpl(AppContext& app, RibbonSink& r) {
     const AssemblyState::Tool tool = app.Doc() && app.Doc()->assembly ? app.Doc()->assembly->tool : AssemblyState::Tool::Move;
     r.BeginGroup(N_("Компонент"));
     r.Large("assembly.place", Tr("Вставить"));
+    r.Large("assembly.create", Tr("Создать"));
     r.Large("assembly.placeStandard", Tr("Стандартное\nизделие"));
-    r.Large("assembly.pattern", Tr("Массив"));
+    r.BeginColumn();
+    r.Small("assembly.pattern");
+    r.Small("assembly.editInPlace");
+    r.EndColumn();
     r.EndGroup();
 
     r.BeginGroup(N_("Зависимости"));
@@ -319,6 +323,9 @@ void AssemblyRibbonImpl(AppContext& app, RibbonSink& r) {
     r.Small("assembly.angle");
     r.Small("assembly.tangent");
     r.Small("assembly.axisMate");
+    r.EndColumn();
+    r.BeginColumn();
+    r.Small("assembly.symmetry");
     r.EndColumn();
     r.EndGroup();
 
@@ -332,6 +339,10 @@ void AssemblyRibbonImpl(AppContext& app, RibbonSink& r) {
     r.BeginColumn();
     r.Small("assembly.jointBall");
     r.Small("assembly.jointRigid");
+    r.EndColumn();
+    r.BeginColumn();
+    r.Small("assembly.gear");
+    r.Small("assembly.screw");
     r.EndColumn();
     r.EndGroup();
 
@@ -508,8 +519,17 @@ void ViewRibbonImpl(AppContext& app, RibbonSink& r) {
 void FillRibbon(AppContext& app, Session& session, RibbonSink& sink, bool withFinish) {
     switch (app.shell.ribbonTab) {
         case RibbonTab::Model:
-            if (session.assembly) AssemblyRibbonImpl(app, sink);
-            else ModelRibbonImpl(sink);
+            if (session.assembly) {
+                AssemblyRibbonImpl(app, sink);
+            } else {
+                // A part edited in place: the way back to its assembly comes first.
+                if (session.host) {
+                    sink.BeginGroup(N_("Сборка"));
+                    sink.Large("assembly.return", Tr("Вернуться"));
+                    sink.EndGroup();
+                }
+                ModelRibbonImpl(sink);
+            }
             break;
         case RibbonTab::Sketch: SketchRibbonImpl(app, sink, withFinish); break;
         case RibbonTab::View:   ViewRibbonImpl(app, sink); break;

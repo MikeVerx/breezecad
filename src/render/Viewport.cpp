@@ -74,6 +74,7 @@
 #if OCC_VERSION_HEX >= 0x070700
 #include <Select3D_SensitiveCylinder.hxx>
 #include <Select3D_SensitiveSphere.hxx>
+#include <Select3D_SensitiveCircle.hxx>
 #endif
 
 #include <algorithm>
@@ -217,15 +218,19 @@ std::optional<doc::FaceReference> FaceReferenceOf(const TopoDS_Face& face) {
 /// extrusions OCCT 7.8 places the cylinder wrongly (z -25..0 for a boss
 /// standing at z 5..30): the face is drawn but the cursor passes through it,
 /// to whatever is behind — a boss could not be measured, extruded up to or
-/// projected. Those faces are picked by their triangles instead (the shaded
-/// display has meshed them already), as every other curved face is.
+/// projected. A flat face bounded by one circle (the cap of a boss) gets a
+/// Select3D_SensitiveCircle that picks only along its rim: a click on the
+/// cap went through to the wall behind, so "Начать эскиз" on it did nothing.
+/// Those faces are picked by their triangles instead (the shaded display
+/// has meshed them already), as every other face is.
 void PickCurvedFacesByMesh(const Handle(SelectMgr_Selection)& selection) {
 #if OCC_VERSION_HEX >= 0x070700
     std::vector<Handle(Select3D_SensitiveEntity)> entities;
     bool replaced = false;
     for (const Handle(SelectMgr_SensitiveEntity)& entity : selection->Entities()) {
         Handle(Select3D_SensitiveEntity) sensitive = entity->BaseSensitive();
-        if (sensitive->IsKind(STANDARD_TYPE(Select3D_SensitiveCylinder)) || sensitive->IsKind(STANDARD_TYPE(Select3D_SensitiveSphere))) {
+        if (sensitive->IsKind(STANDARD_TYPE(Select3D_SensitiveCylinder)) || sensitive->IsKind(STANDARD_TYPE(Select3D_SensitiveSphere)) ||
+            sensitive->IsKind(STANDARD_TYPE(Select3D_SensitiveCircle))) {
             const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(sensitive->OwnerId());
             if (!owner.IsNull() && owner->Shape().ShapeType() == TopAbs_FACE) {
                 TopLoc_Location location;
@@ -401,6 +406,15 @@ struct Viewport::Impl {
     std::vector<Handle(AIS_Shape)> planeShapes;   ///< their presentations
     std::vector<Handle(AIS_Shape)> overlapShapes;           ///< interferences shown
     std::uint64_t                  overlapRevision = 0;     ///< of the model they were taken from
+    /// The faded surroundings (Viewport::SetContext).
+    struct Context {
+        const kernel::Model*           model = nullptr;
+        std::uint64_t                  revision = 0;
+        std::vector<Handle(AIS_Shape)> shapes;
+        std::vector<ObjectId>          ids;
+        std::vector<TopoDS_Shape>      bodies;
+        bool                           picking = false;
+    } surroundings;
     std::vector<Handle(AIS_Shape)> copyShapes;              ///< pattern/mirror preview shown
     std::uint64_t                  copyRevision = 0;
     ObjectId                       copyFeature;
@@ -828,9 +842,20 @@ void Viewport::Sync(const kernel::Model& model) {
         m.context->Remove(m.spare.front().shape, false);
         m.spare.erase(m.spare.begin());
     }
-    for (const auto& d : m.decorations) m.context->Remove(d, false);
+    // Decorations (cosmetic threads) that did not change keep theirs.
+    std::vector<Handle(AIS_Shape)> oldDecorations = std::move(m.decorations);
     m.decorations.clear();
     for (const auto& [id, shape] : model.GetImpl().decorations) {
+        const auto kept = std::find_if(oldDecorations.begin(), oldDecorations.end(),
+                                       [&](const Handle(AIS_Shape)& d) { return !d.IsNull() && d->Shape().IsEqual(shape); });
+        if (kept != oldDecorations.end()) {
+            Quantity_Color colour;
+            (*kept)->Color(colour);
+            if (!colour.IsEqual(ToQuantity(m.colors.edges))) (*kept)->SetColor(ToQuantity(m.colors.edges));   // the theme changed
+            m.decorations.push_back(*kept);
+            kept->Nullify();
+            continue;
+        }
         Handle(AIS_Shape) ais = new AIS_Shape(shape);
         ais->SetColor(ToQuantity(m.colors.edges));
         ais->SetWidth(1.4);
@@ -838,11 +863,22 @@ void Viewport::Sync(const kernel::Model& model) {
         m.context->Display(ais, AIS_WireFrame, -1, false);
         m.decorations.push_back(ais);
     }
+    for (const auto& d : oldDecorations)
+        if (!d.IsNull()) m.context->Remove(d, false);
     m.ActivateShown();
     // Picked entities belonged to the old shapes.
     if (!m.measuring.picked[0].IsNull() || !m.measuring.picked[1].IsNull()) ClearMeasure();
     m.bounds = model.BoundingBox();
     m.view->SetComputedMode(m.style == DisplayStyle::HiddenLines);
+    m.dirty = true;
+}
+
+void Viewport::ForgetSynced() {
+    Impl& m = *myImpl;
+    m.syncedModel = nullptr;
+    m.syncedRevision = static_cast<std::uint64_t>(-1);
+    m.surroundings.model = nullptr;
+    m.surroundings.revision = 0;
     m.dirty = true;
 }
 
@@ -1365,6 +1401,75 @@ void Viewport::ShowInterferences(const kernel::Model* model) {
         m.context->Display(ais, AIS_Shaded, -1, false);
         m.overlapShapes.push_back(ais);
     }
+}
+
+void Viewport::SetContext(const kernel::Model* model) {
+    Impl& m = *myImpl;
+    Impl::Context& c = m.surroundings;
+    const std::uint64_t revision = model ? model->Revision() + 1 : 0;
+    if (model == c.model && revision == c.revision) return;
+    c.model = model;
+    c.revision = revision;
+    for (const auto& s : c.shapes) m.context->Remove(s, false);
+    c.shapes.clear();
+    c.ids.clear();
+    c.bodies.clear();
+    m.dirty = true;
+    if (!model) return;
+    // Faded and a little lighter than the part itself, outlined: enough to
+    // see where things are without hiding the part being edited.
+    const Color body = m.colors.body;
+    const Color faded{body.r * 0.6f + 0.4f, body.g * 0.6f + 0.4f, body.b * 0.6f + 0.4f, 1.0f};
+    for (const kernel::Body& b : model->GetImpl().bodies) {
+        Handle(AIS_Shape) ais = new AIS_Shape(b.shape);
+        ais->SetColor(ToQuantity(faded));
+        ais->SetMaterial(Graphic3d_MaterialAspect(Graphic3d_NameOfMaterial_UserDefined));
+        Handle(Prs3d_Drawer) drawer = ais->Attributes();
+        SetMeshPrecision(drawer, m.quality);
+        drawer->SetFaceBoundaryDraw(true);
+        drawer->SetFaceBoundaryUpperContinuity(GeomAbs_C1);
+        drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(m.colors.edges), Aspect_TOL_SOLID, 0.8));
+        ais->SetTransparency(0.7);
+        // Displayed with its edges selectable, then switched off unless an
+        // edge of it is being picked: shown with no selection mode (-1), it
+        // is never loaded into the selector, and a later Activate is ignored
+        // (the faded parts' edges could not be clicked to project them).
+        m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_EDGE), false);
+        if (!c.picking) m.context->Deactivate(ais);
+        c.shapes.push_back(ais);
+        c.ids.push_back(b.id);
+        c.bodies.push_back(b.shape);
+    }
+}
+
+void Viewport::SetContextPicking(bool on) {
+    Impl& m = *myImpl;
+    Impl::Context& c = m.surroundings;
+    if (c.picking == on) return;
+    c.picking = on;
+    for (const auto& s : c.shapes) {
+        if (on) m.context->Activate(s, AIS_Shape::SelectionMode(TopAbs_EDGE));
+        else m.context->Deactivate(s);
+    }
+    m.dirty = true;
+}
+
+std::optional<Viewport::ContextEdge> Viewport::PickContextEdge(Vec2 pixel) {
+    Impl& m = *myImpl;
+    const Impl::Context& c = m.surroundings;
+    if (!c.picking || c.shapes.empty()) return std::nullopt;
+    const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
+    const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->Pick(px, py, m.view);
+    for (int i = 1; i <= selector->NbPicked(); ++i) {
+        const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
+        if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_EDGE) continue;
+        for (std::size_t b = 0; b < c.shapes.size(); ++b)
+            if (owner->Selectable() == c.shapes[b])
+                return ContextEdge{c.ids[b], kernel::occt::DescribeEdge(TopoDS::Edge(owner->Shape()), c.bodies[b])};
+    }
+    return std::nullopt;
 }
 
 void Viewport::ShowCopyPreview(const kernel::Model* model, ObjectId feature) {

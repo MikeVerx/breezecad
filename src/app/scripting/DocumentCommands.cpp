@@ -51,7 +51,9 @@ Json Open(AppContext& app, const Json& args) {
     std::error_code ec;
     if (!std::filesystem::is_regular_file(file, ec)) Fail(std::format("Нет файла «{}»", ToUtf8(file)));
     if (!app.workspace.Open(file, app.notes, app.settings))
-        Fail(std::format("Не удалось открыть «{}» (подробности — в уведомлении BreezeCAD)", ToUtf8(file)));
+        Fail(app.workspace.lastOpenError.empty()
+                 ? std::format("Не удалось открыть «{}» (подробности — в уведомлении BreezeCAD)", ToUtf8(file))
+                 : std::format("Не удалось открыть «{}»: {}", ToUtf8(file), app.workspace.lastOpenError));
     app.workspace.ShowHome(false);
     return DescribeSession(*app.Doc(), app.workspace.ActiveIndex(), true);
 }

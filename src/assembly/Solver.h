@@ -16,12 +16,28 @@
 
 namespace bz::assembly {
 
+/// A point of a component pulled towards a place (the point grabbed while
+/// dragging, towards the cursor): the component goes as near as its
+/// constraints let it — a part on an axle turns, a slider slides.
+struct Pull {
+    ObjectId component;
+    Vec3     local;    ///< the point, in the component's own coordinates
+    Vec3     target;   ///< where it is pulled, in the assembly
+};
+
 struct SolveOptions {
     /// A component that should move as little as possible (the one being
     /// dragged): the others give way first.
     ObjectId keep;
     int      maxIterations = 60;
     double   tolerance = 1e-7;   ///< mm (rad × 100 mm for angles)
+    /// Also tell which constraints do not hold or repeat others (states),
+    /// as Analyze does. Off while a part is dragged: the states follow on
+    /// release, the drag stays smooth.
+    bool     analyze = true;
+    /// Dragging: the grabbed point follows the cursor as far as the
+    /// constraints allow (they still hold exactly afterwards).
+    std::optional<Pull> pull;   // last: brace-initialised options keep their order
 };
 
 struct SolveResult {
@@ -31,8 +47,25 @@ struct SolveResult {
     double error = 0.0;         ///< what is left, mm
 };
 
-/// Moves free components; sets each constraint's `state` and `error`.
+/// Moves free components; sets each constraint's `state` and `error`
+/// (unless `options.analyze` is off).
+///
+/// Components fall into independent groups (tied to each other by
+/// constraints through free components); each group is solved by itself,
+/// so a change in one corner of a large assembly costs only that corner.
 SolveResult Solve(Assembly& assembly, const SolveOptions& options = {});
+
+/// States of the constraints at the components' current places: which do
+/// not hold (Failed) and which say again what others already say (Redundant).
+void Analyze(Assembly& assembly);
+
+/// The coordinate of a joint with one (Rotational: rad in (-π, π], Slider:
+/// mm) at the components' current places; nullopt otherwise.
+std::optional<double> JointCoordinate(const Assembly& assembly, ObjectId joint);
+
+/// For a transmission just made (Gear, Screw): takes the joints' current
+/// coordinates as the start (`driveAt`, `drivenAt`), so nothing moves.
+void FitTransmission(const Assembly& assembly, Constraint& transmission);
 
 /// Remaining freedom of every component (grounded ones: none), from the
 /// constraints at the components' current places.

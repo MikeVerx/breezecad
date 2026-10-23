@@ -23,10 +23,14 @@ class IdGenerator {
 public:
     ObjectId Next() { return ObjectId{++myLast}; }
 
-    /// Ensures future ids are greater than an id loaded from a file.
+    /// Ensures future ids are greater than an id loaded from a file. Ids
+    /// beyond kLargest (damage, or ids the program keeps for itself such as
+    /// the assembly origin's 2^64-1) are not counted on: they would make the
+    /// next id overflow to 0, the "no id".
     void Reserve(ObjectId used) {
-        if (used.value > myLast) myLast = used.value;
+        if (used.value > myLast && used.value <= kLargest) myLast = used.value;
     }
+    static constexpr std::uint64_t kLargest = std::uint64_t{1} << 62;
 
     std::uint64_t Last() const { return myLast; }
 

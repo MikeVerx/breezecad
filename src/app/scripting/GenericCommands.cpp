@@ -8,6 +8,8 @@
 
 #include "app/AppContext.h"
 #include "app/Operations.h"
+#include "app/AssemblyState.h"
+#include "app/Recovery.h"
 #include "app/Session.h"
 #include "app/Workspace.h"
 #include "app/scripting/Commands.h"
@@ -15,7 +17,9 @@
 #include "document/Commands.h"
 #include "document/FeatureRegistry.h"
 
+#include <cstdlib>
 #include <format>
+#include <stdexcept>
 
 namespace bz::app::scripting {
 
@@ -152,7 +156,44 @@ Json Close(AppContext& app, const Json& args) {
 
 } // namespace
 
+/// debug.fault (BZ_FAULT_INJECTION only): makes a change, then fails, to
+/// try the recovery (app/Recovery.h) end to end.
+Json Fault(AppContext& app, const Json& args) {
+    const std::string kind = args.value("kind", "crash");
+    const std::string where = args.value("where", "here");
+    const bool change = args.value("change", true);
+    // The change and the failure in the same piece of work: recovery must
+    // take the change back.
+    const auto fail = [&app, kind, change] {
+        Session* s = app.Doc();
+        if (change && s) {
+            if (s->assembly) {
+                AssemblyState& st = *s->assembly;
+                if (!st.assembly.components.empty()) {
+                    st.Checkpoint("test");
+                    st.assembly.components.back().placement.translation.x += 1000;
+                    st.assembly.Touch();
+                }
+            } else if (s->doc.FeatureCount() > 0) {
+                const doc::Feature& f = *s->doc.Features().front();
+                s->Execute(doc::SetHidden(f.id, !f.hidden, "test"));
+            }
+        }
+        if (kind == "throw") throw std::runtime_error("test: an exception in a tool");
+        fault_test::Crash();
+    };
+    if (where == "later") app.Later(fail);
+    else if (where == "interface") fault_test::RequestInInterface(fail);
+    else fail();
+    return {{"requested", kind}, {"where", where}};
+}
+
 void AddGenericCommands(Commands& out) {
+    if (std::getenv("BZ_FAULT_INJECTION"))
+        out.push_back({"debug.fault", "Тест восстановления: меняет документ и падает (kind: crash|throw; where: here|later|interface).",
+                       Schema({{"kind", StringArg("crash | throw")}, {"where", StringArg("here | later | interface")},
+                               {"change", BoolArg("Сначала изменить документ (по умолчанию да).")}}),
+                       false, &Fault});
     out.push_back({"part.feature_types",
                    "Все типы операций программы и их поля со значениями по умолчанию — в том виде, в каком их принимают "
                    "part.create_feature и part.edit_feature (и хранит файл .bzc). Посмотрите здесь, прежде чем создавать "
