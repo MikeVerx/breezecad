@@ -141,6 +141,46 @@ TEST_CASE("commands undo and redo, history tracks saved state") {
     CHECK_FALSE(history.IsModified());
 }
 
+TEST_CASE("history rolls back to a mark: a tool that failed half-way leaves no step behind") {
+    Plate plate;
+    History history;
+    const auto edit = [&](const char* value) {
+        auto edited = plate.doc.Find(plate.extrudeId)->Clone();
+        static_cast<ExtrudeFeature&>(*edited).distance.expression = value;
+        history.Execute(plate.doc, ReplaceFeature(std::move(edited), "Выдавливание1"));
+    };
+    edit("20");
+    edit("30");
+    history.Undo(plate.doc);   // "30" waits for redo
+    const History::Mark mark = history.GetMark();
+
+    // A new step after the mark (the redo tail goes): taken back, the
+    // history as at the mark except the redo it lost.
+    edit("40");
+    history.RollBack(mark);
+    CHECK(history.CanUndo());
+    CHECK(history.UndoLabel() == "Выдавливание1");
+    CHECK_FALSE(history.CanRedo());
+
+    // Undo and redo since the mark: the position goes back, steps stay.
+    edit("50");
+    const History::Mark second = history.GetMark();
+    history.Undo(plate.doc);
+    history.Undo(plate.doc);
+    history.RollBack(second);
+    CHECK(history.GetMark() == second);
+
+    // Steps before the mark replaced (undo, then a new step): the history no
+    // longer fits the document put back, so it is cleared.
+    history.Undo(plate.doc);
+    history.Undo(plate.doc);
+    edit("60");
+    history.RollBack(second);
+    CHECK_FALSE(history.CanUndo());
+    CHECK_FALSE(history.CanRedo());
+    CHECK(history.IsModified());
+}
+
 TEST_CASE("end marker follows inserts and moves") {
     Plate plate;
     CHECK(plate.doc.EndMarker() == 2);

@@ -89,6 +89,70 @@ void AssemblyState::Restore(const std::string& json) {
         selected = {};
 }
 
+AssemblyState::Mark AssemblyState::GetMark(const Mark* previous) const {
+    Mark m;
+    m.revision = assembly.Revision();
+    m.lookRevision = assembly.LookRevision();
+    // The contents as JSON only when they changed since `previous`.
+    if (previous && previous->revision == m.revision && previous->lookRevision == m.lookRevision) m.json = previous->json;
+    else m.json = assembly::AssemblyToJson(assembly);
+    m.undo = myUndo.size();
+    for (const Step& r : myRedo) {
+        m.redoJson.push_back(r.json);
+        m.redoLabels.push_back(r.label);
+    }
+    m.saved = mySaved;
+    m.savedLook = mySavedLook;
+    m.unsaved = myUnsaved;
+    m.inPlace = inPlace;
+    m.selected = selected;
+    m.parts = parts.size();
+    return m;
+}
+
+void AssemblyState::RollBack(const Mark& mark) {
+    // Whatever was being picked, dragged or made is dropped.
+    creating = {};
+    dropping = {};
+    drag = {};
+    offer = {};
+    pickingAxis = {};
+    newPart = {};
+    if (assembly.Revision() != mark.revision || assembly.LookRevision() != mark.lookRevision) {
+        Restore(mark.json);
+        // Restore counted up the revisions: the saved marker follows when
+        // the state put back was the saved one.
+        const bool wasSaved = !mark.unsaved && mark.saved == mark.revision && mark.savedLook == mark.lookRevision;
+        if (wasSaved) MarkSaved();
+        else myUnsaved = true;
+    } else {
+        mySaved = mark.saved;
+        mySavedLook = mark.savedLook;
+        myUnsaved = mark.unsaved;
+    }
+    if (myUndo.size() > mark.undo) myUndo.resize(mark.undo);
+    myRedo.clear();
+    for (std::size_t i = 0; i < mark.redoJson.size(); ++i) myRedo.push_back({mark.redoJson[i], mark.redoLabels[i]});
+    // Parts taken into memory since: let go (the assembly reads their files again).
+    while (parts.size() > mark.parts) {
+        geometry.ForgetPartInMemory(parts.back().file);
+        parts.pop_back();
+    }
+    // The part edited in place then, if it still is one.
+    inPlace = {};
+    for (PartEdit& e : parts)
+        if (e.session && e.session->inPlaceOf && e.session->inPlaceOf != mark.inPlace) e.session->inPlaceOf = {};
+    if (mark.inPlace && assembly.FindComponent(mark.inPlace))
+        for (PartEdit& e : parts)
+            if (e.session && e.session->inPlaceOf == mark.inPlace) inPlace = mark.inPlace;
+    selected = assembly.FindComponent(mark.selected) || assembly.FindConstraint(mark.selected) ? mark.selected : ObjectId{};
+    myContext.reset();
+    myContextKey = {~std::uint64_t{0}, 0, 0};
+    mySolvedRevision = ~std::uint64_t{0};
+    myAnalyzedRevision = ~std::uint64_t{0};
+    ForgetAdaptState();
+}
+
 bool AssemblyState::Undo() {
     if (myUndo.empty()) return false;
     myRedo.push_back({assembly::AssemblyToJson(assembly), myUndo.back().label});

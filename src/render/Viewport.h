@@ -94,6 +94,9 @@ public:
 
     /// Re-creates displayed bodies if the model (or which model) changed.
     void Sync(const kernel::Model& model);
+    /// The next Sync shows the model again from scratch (after a failure
+    /// that may have left the view half-way through a change).
+    void ForgetSynced();
     /// Meshes the model's bodies as Sync would at this quality level. Safe
     /// on another thread for a model no viewport shows yet: Sync then finds
     /// the triangles ready.

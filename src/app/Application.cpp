@@ -250,6 +250,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
 
     myContext = std::make_unique<AppContext>(AppContext{*myUi, mySettings, myWorkspace, myActions, myNotes, *myAutosave,
                                                         myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}, {}});
+    myContext->recovery = &myRecovery;
     RegisterActions(*myContext);
     LoadStandardPacks(*myContext);
     StartModules();
@@ -383,7 +384,12 @@ int Application::Run() {
             myInput.dropped.clear();
             for (const std::filesystem::path& f : files) OpenDropped(*myContext, f);
         }
-        if (myModules && myModules->Tick()) myFramesToDraw = std::max(myFramesToDraw, 3);   // show what they changed
+        if (myModules) {
+            bool changed = false;
+            myRecovery.Remember(*myContext);
+            myRecovery.Run(*myContext, "модули", [&] { changed = myModules->Tick(); });
+            if (changed) myFramesToDraw = std::max(myFramesToDraw, 3);   // show what they changed
+        }
         HandleCloseRequests();
         if (myShell.quitRequested && myWorkspace.sessions.empty()) {
             log::Info("Quit: no documents left to ask about");
@@ -652,62 +658,14 @@ void Application::Frame() {
     app.stats = myStats;
 
     app.pressedChords = myInput.chords;
-    if (myShell.captureShortcut.empty()) myActions.HandleShortcuts(myInput.chords);
+    // Every piece of work below is guarded (app/Recovery.h): a failing tool
+    // is closed and the documents put back, the program goes on.
+    myRecovery.Remember(app);
+    if (myShell.captureShortcut.empty())
+        myRecovery.Run(app, "сочетание клавиш", [&] { myActions.HandleShortcuts(myInput.chords); });
     myInput.chords.clear();
-    LeaveSwitchedDocument(app);
-    if (Session* s = myWorkspace.Active()) {
-        // Editing a sketch or an operation waits only for the part up to it;
-        // what comes after is rebuilt once editing ends.
-        if (s->mode == EditMode::Sketch && s->doc.IndexOf(s->activeSketch) >= 0) {
-            s->LimitRebuild(static_cast<std::size_t>(s->doc.IndexOf(s->activeSketch)), false);
-        } else if (const OperationEditor* op = myOps.Active(); op && s->doc.IndexOf(op->EditedFeature()) >= 0) {
-            s->LimitRebuild(static_cast<std::size_t>(s->doc.IndexOf(op->EditedFeature())), true);
-        } else {
-            s->LimitRebuild(std::nullopt, false);
-        }
-        bool rebuilt = false;
-        s->SetMeshQuality(mySettings.graphics);
-        s->AllowBackground(mySettings.backgroundRebuild);
-        {
-            prof::Scope scope("rebuild");
-            rebuilt = s->RebuildIfNeeded();
-        }
-        if (rebuilt) {
-            myFramesToDraw = std::max(myFramesToDraw, 2);
-            // A changed variable, undo or redo may push the body off screen.
-            if (s->mode == EditMode::Model && !myOps.Active()) myShell.keepModelInView = true;
-        }
-        {
-            prof::Scope scope("sync");
-            std::vector<ObjectId> hidden;   // operations hidden in the tree: their bodies too
-            for (const auto& f : s->doc.Features())
-                if (f->hidden) hidden.push_back(f->id);
-            myViewport.SetHiddenBodies(std::move(hidden));
-            myViewport.Sync(s->model);
-        }
-        // A part edited in place: the assembly around it follows its changes
-        // (shown from memory), and the other components stand faded around it.
-        if (s->host && s->host->assembly) {
-            prof::Scope scope("in-place");
-            s->host->assembly->Update(s->host->path, s->host->ContextName());
-            myViewport.SetContext(s->host->assembly->InPlaceContext());
-        } else {
-            myViewport.SetContext(nullptr);
-        }
-        if (s->assembly) {
-            const doc::Look& look = s->assembly->ShownLook();
-            myViewport.SetLook(look, s, s->assembly->ShownLookRevision());
-        } else {
-            myViewport.SetLook(s->doc.look, s, s->doc.LookRevision());
-        }
-        myViewport.SetDisplayStyle(myShell.displayStyle);
-        myViewport.SetQuality(mySettings.graphics);
-        myViewport.SetTextureLimit(Settings::TextureLimit(mySettings.textureQuality));
-        if (myShell.keepModelInView) {   // the model was rebuilt and synced above
-            myShell.keepModelInView = false;
-            KeepInView(app, myViewport.ModelBounds());
-        }
-    }
+    myRecovery.Remember(app);
+    myRecovery.Run(app, "обновление документа", [&] { UpdateDocument(app); });
     myBusy = myViewport.StepAnimation(now);
 
     const auto smooth = [](double& into, double ms) { into = into * 0.9 + ms * 0.1; };
@@ -716,11 +674,15 @@ void Application::Frame() {
     {
         prof::Scope scope("interface");
         myShell.animateUi = false;
-        if (myShell.mobile.phone) mobile::DrawPhoneRoot(app);
-        else DrawRoot();
-        DrawDialogs(app);
-        mobile::DrawLastCrash(app);   // Android: the last run crashed or hung (never set on the desktop)
-        mobile::DrawSaveAsk(app);     // Android: the first save's name and folder (never opened on the desktop)
+        myRecovery.Remember(app);
+        myRecovery.RunInterface(app, [&] {
+            if (myShell.mobile.phone) mobile::DrawPhoneRoot(app);
+            else DrawRoot();
+            fault_test::HitInInterface();   // a test hook (debug.fault); nothing otherwise
+            DrawDialogs(app);
+            mobile::DrawLastCrash(app);   // Android: the last run crashed or hung (never set on the desktop)
+            mobile::DrawSaveAsk(app);     // Android: the first save's name and folder (never opened on the desktop)
+        });
     }
     const ImVec2 corner = myShell.viewportMax.x > 0 && !myWorkspace.ShowsHome() ? myShell.viewportMax : ImGui::GetIO().DisplaySize;
     myBusy = myNotes.Draw(*myUi, corner, now) || myBusy || myShell.animateUi;
@@ -731,7 +693,7 @@ void Application::Frame() {
         const double sceneStart = platform::Window::Time();
         {
             prof::Scope scope("scene");
-            myViewport.Render();
+            myRecovery.Run(app, "отрисовка вида", [&] { myViewport.Render(); });
         }
         // Logged when it changes: the first 3D render and anything unusual
         // after it (20 lines at most: an error every other frame must not flood the log).
@@ -791,7 +753,10 @@ void Application::Frame() {
     work.swap(myDeferred);
     {
         prof::Scope scope("commands");
-        for (auto& w : work) w();
+        for (auto& w : work) {
+            myRecovery.Remember(app);
+            myRecovery.Run(app, "действие", w);
+        }
     }
     if (!work.empty()) myFramesToDraw = std::max(myFramesToDraw, 2);
 
@@ -803,6 +768,65 @@ void Application::Frame() {
     mon::Beat();
 
     UpdateTitle();
+}
+
+/// The document in front: rebuilt if it changed, synced to the view (with
+/// the assembly around a part edited in place).
+void Application::UpdateDocument(AppContext& app) {
+    LeaveSwitchedDocument(app);
+    Session* s = myWorkspace.Active();
+    if (!s) return;
+    // Editing a sketch or an operation waits only for the part up to it;
+    // what comes after is rebuilt once editing ends.
+    if (s->mode == EditMode::Sketch && s->doc.IndexOf(s->activeSketch) >= 0) {
+        s->LimitRebuild(static_cast<std::size_t>(s->doc.IndexOf(s->activeSketch)), false);
+    } else if (const OperationEditor* op = myOps.Active(); op && s->doc.IndexOf(op->EditedFeature()) >= 0) {
+        s->LimitRebuild(static_cast<std::size_t>(s->doc.IndexOf(op->EditedFeature())), true);
+    } else {
+        s->LimitRebuild(std::nullopt, false);
+    }
+    bool rebuilt = false;
+    s->SetMeshQuality(mySettings.graphics);
+    s->AllowBackground(mySettings.backgroundRebuild);
+    {
+        prof::Scope scope("rebuild");
+        rebuilt = s->RebuildIfNeeded();
+    }
+    if (rebuilt) {
+        myFramesToDraw = std::max(myFramesToDraw, 2);
+        // A changed variable, undo or redo may push the body off screen.
+        if (s->mode == EditMode::Model && !myOps.Active()) myShell.keepModelInView = true;
+    }
+    {
+        prof::Scope scope("sync");
+        std::vector<ObjectId> hidden;   // operations hidden in the tree: their bodies too
+        for (const auto& f : s->doc.Features())
+            if (f->hidden) hidden.push_back(f->id);
+        myViewport.SetHiddenBodies(std::move(hidden));
+        myViewport.Sync(s->model);
+    }
+    // A part edited in place: the assembly around it follows its changes
+    // (shown from memory), and the other components stand faded around it.
+    if (s->host && s->host->assembly) {
+        prof::Scope scope("in-place");
+        s->host->assembly->Update(s->host->path, s->host->ContextName());
+        myViewport.SetContext(s->host->assembly->InPlaceContext());
+    } else {
+        myViewport.SetContext(nullptr);
+    }
+    if (s->assembly) {
+        const doc::Look& look = s->assembly->ShownLook();
+        myViewport.SetLook(look, s, s->assembly->ShownLookRevision());
+    } else {
+        myViewport.SetLook(s->doc.look, s, s->doc.LookRevision());
+    }
+    myViewport.SetDisplayStyle(myShell.displayStyle);
+    myViewport.SetQuality(mySettings.graphics);
+    myViewport.SetTextureLimit(Settings::TextureLimit(mySettings.textureQuality));
+    if (myShell.keepModelInView) {   // the model was rebuilt and synced above
+        myShell.keepModelInView = false;
+        KeepInView(app, myViewport.ModelBounds());
+    }
 }
 
 void Application::DrawRoot() {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/AppContext.h"
+#include "app/Recovery.h"
 #include "app/Settings.h"
 #include "app/features/OperationEditors.h"
 #include "app/mobile/Cursor.h"
@@ -59,6 +60,7 @@ private:
     void Frame();
     /// The active document changed since the last frame: its open operation and sketch picks are dropped.
     void LeaveSwitchedDocument(AppContext& app);
+    void UpdateDocument(AppContext& app);
     /// The interface scale: the setting, or one from the screen's density and size.
     float ChooseScale() const;
     /// Rebuilds fonts and sizes when the scale setting changed.
@@ -100,6 +102,7 @@ private:
     render::Viewport myViewport;
     SketchEditor     mySketch;
     OperationEditors myOps;
+    Recovery         myRecovery;   ///< a failing tool costs that tool (app/Recovery.h)
     ShellState       myShell;
     std::vector<std::function<void()>> myDeferred;
 

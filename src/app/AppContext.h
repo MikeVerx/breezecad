@@ -27,6 +27,8 @@ class ModuleManager;
 
 namespace bz::app {
 
+class Recovery;
+
 class SketchEditor;
 struct OperationEditors;
 
@@ -230,6 +232,8 @@ struct AppContext {
     std::vector<ImGuiKeyChord> pressedChords;    ///< key chords pressed this frame (for shortcut capture)
     std::vector<platform::TouchEvent> touch;     ///< touchpad gestures of this frame
     modules::ModuleManager*    modules = nullptr; ///< set once the modules are loaded
+    /// Puts the documents back when a piece of work fails (app/Recovery.h); null in tests.
+    Recovery*                  recovery = nullptr;
 
     Session* Doc() { return workspace.Active(); }
 

@@ -134,24 +134,49 @@ Expected<Document> DocumentFromJsonUnguarded(std::string_view text, LoadReport* 
     if (root.is_discarded() || !root.is_object()) return Error{"Содержимое документа повреждено (не JSON)"};
 
     Document doc;
+    // Damage in the file costs the damaged entry, not the part: it is
+    // skipped (or given defaults) with a warning, the rest opens.
+    const auto warn = [&](std::string text) {
+        if (report) report->warnings.push_back(std::move(text));
+    };
     if (const auto part = root.find("part"); part != root.end() && part->is_object()) {
-        doc.info.name        = part->value("name", "");
-        doc.info.designation = part->value("designation", "");
-        doc.info.material    = part->value("material", "");
+        if (!ReadMember(*part, "name", doc.info.name)) doc.info.name.clear();
+        if (!ReadMember(*part, "designation", doc.info.designation)) doc.info.designation.clear();
+        if (!ReadMember(*part, "material", doc.info.material)) doc.info.material.clear();
     }
-    if (const auto units = root.find("units"); units != root.end()) {
-        if (auto l = LengthUnitFromId(units->value("length", "mm"))) doc.units.length = *l;
-        if (auto a = AngleUnitFromId(units->value("angle", "deg"))) doc.units.angle = *a;
+    if (const auto units = root.find("units"); units != root.end() && units->is_object()) {
+        std::string length = "mm", angle = "deg";
+        if (ReadMember(*units, "length", length))
+            if (auto l = LengthUnitFromId(length)) doc.units.length = *l;
+        if (ReadMember(*units, "angle", angle))
+            if (auto a = AngleUnitFromId(angle)) doc.units.angle = *a;
     }
-    for (const Json& v : root.value("variables", Json::array())) {
+    const auto list = [&](const char* key) {
+        const auto it = root.find(key);
+        return it != root.end() && it->is_array() ? *it : Json::array();
+    };
+    for (const Json& v : list("variables")) {
         Parameter p;
-        if (!json_io::Read(v, p)) return Error{"Таблица переменных повреждена"};
+        bool read = false;
+        try {
+            read = json_io::Read(v, p);
+        } catch (const Json::exception&) {
+        }
+        if (!read) {
+            warn("Повреждённая переменная пропущена");
+            continue;
+        }
         doc.variables.push_back(std::move(p));
     }
 
     const FeatureRegistry& registry = FeatureRegistry::Default();
-    for (const Json& j : root.value("features", Json::array())) {
-        const std::string type = j.value("type", "");
+    for (const Json& j : list("features")) {
+        const auto typeIt = j.is_object() ? j.find("type") : j.end();
+        if (!j.is_object() || typeIt == j.end() || !typeIt->is_string()) {
+            warn("Повреждённая операция в дереве пропущена");
+            continue;
+        }
+        const std::string type = typeIt->get<std::string>();
         std::unique_ptr<Feature> feature = registry.Create(type);
         if (!feature) {
             auto unknown = std::make_unique<UnknownFeature>();
@@ -160,9 +185,12 @@ Expected<Document> DocumentFromJsonUnguarded(std::string_view text, LoadReport* 
             if (report) report->warnings.push_back(std::format("Операция типа «{}» сохранена, но не будет построена", type));
             feature = std::move(unknown);
         }
-        if (!ReadMember(j, "id", feature->id) || !feature->id || !ReadMember(j, "name", feature->name) ||
-            !ReadMember(j, "suppressed", feature->suppressed) || !ReadMember(j, "hidden", feature->hidden))
-            return Error{"Повреждена операция в дереве"};
+        if (!ReadMember(j, "id", feature->id) || !feature->id || feature->id.value >= (std::uint64_t{1} << 62) ||
+            doc.Find(feature->id) || !ReadMember(j, "name", feature->name) || !ReadMember(j, "suppressed", feature->suppressed) ||
+            !ReadMember(j, "hidden", feature->hidden)) {
+            warn(std::format("Повреждённая операция «{}» пропущена", type));
+            continue;
+        }
         // Damage inside one operation costs that operation, not the part: it
         // is kept as it was in the file (saved back unchanged, not built) and
         // the rest of the tree opens. Losing the whole project to one bad
@@ -189,7 +217,8 @@ Expected<Document> DocumentFromJsonUnguarded(std::string_view text, LoadReport* 
         doc.Insert(std::move(feature), doc.FeatureCount());
     }
 
-    if (std::uint64_t next = root.value("nextId", std::uint64_t{0}); next > 0) doc.Ids().Reserve(ObjectId{next - 1});
+    if (std::uint64_t next = 0; ReadMember(root, "nextId", next) && next > 0 && next < (std::uint64_t{1} << 62))
+        doc.Ids().Reserve(ObjectId{next - 1});
     // Files written by other programs may lack "nextId": make sure new ids
     // never collide with ids inside features (sketch points, constraints).
     for (const auto& f : doc.Features()) f->ReserveIds(doc.Ids());

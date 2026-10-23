@@ -18,6 +18,7 @@ set(BZ_APP_SOURCES
     Materials.cpp
     Notifications.cpp
     Operations.cpp
+    Recovery.cpp
     Session.cpp
     Settings.cpp
     TouchNavigation.cpp

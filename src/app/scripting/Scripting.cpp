@@ -1,5 +1,7 @@
 #include "app/scripting/Scripting.h"
 
+#include "app/Recovery.h"
+
 #include "app/AppContext.h"
 #include "app/Session.h"
 #include "app/features/OperationEditors.h"
@@ -76,17 +78,31 @@ Json Reply(const Json& request, AppContext& app) {
 
 std::string Run(AppContext& app, std::string_view request) {
     Json reply;
-    try {
-        const Json parsed = Json::parse(request);
-        reply = {{"ok", true}, {"result", Reply(parsed, app)}};
-    } catch (const Failure& f) {
-        reply = {{"ok", false}, {"error", f.message}};
-    } catch (const Json::exception& e) {
-        reply = {{"ok", false}, {"error", std::format("Неправильный JSON: {}", e.what())}};
-    } catch (const std::exception& e) {
-        log::Warn("Command failed: {}", e.what());
-        reply = {{"ok", false}, {"error", std::format("Ошибка программы: {}", e.what())}};
+    const auto run = [&] {
+        try {
+            const Json parsed = Json::parse(request);
+            reply = {{"ok", true}, {"result", Reply(parsed, app)}};
+        } catch (const Failure& f) {   // refused as asked: nothing was changed
+            reply = {{"ok", false}, {"error", f.message}};
+        } catch (const Json::exception& e) {
+            reply = {{"ok", false}, {"error", std::format("Неправильный JSON: {}", e.what())}};
+        }
+    };
+    // Anything else (an error of the program, a crash inside it) stops the
+    // command; the documents are put back as they were before it.
+    bool ok = true;
+    if (app.recovery) {
+        app.recovery->Remember(app);
+        ok = app.recovery->Run(app, "команда модуля", run);
+    } else {
+        try {
+            run();
+        } catch (const std::exception& e) {
+            log::Warn("Command failed: {}", e.what());
+            ok = false;
+        }
     }
+    if (!ok) reply = {{"ok", false}, {"error", "Ошибка программы при выполнении команды: она отменена, документ возвращён к состоянию до неё"}};
     return reply.dump(-1, ' ', false, Json::error_handler_t::replace);
 }
 

@@ -3,6 +3,7 @@
 #include <imgui.h>
 
 #include "assembly/AssemblyFile.h"
+#include "core/FaultGuard.h"
 #include "core/Log.h"
 #include "core/Monitor.h"
 #include "document/BzcFile.h"
@@ -56,22 +57,30 @@ void Session::StartBackground(std::size_t limit) {
     Background* b = job.get();
     b->thread = std::thread([b, limit, shown, quality = myMeshQuality] {
         // RebuildSlice keeps every OCCT error inside the operation that
-        // caused it; anything else must not leave this thread.
-        try {
-            while (!b->model.RebuildSlice(b->doc, limit, shown, 0.0)) {
-                const kernel::Model::Progress p = b->model.RebuildProgress();
-                b->total = p.total;
-                b->done = p.done;
-            }
-            const auto rebuilt = std::chrono::steady_clock::now();
-            b->rebuildMs = std::chrono::duration<double, std::milli>(rebuilt - b->began).count();
-            render::Viewport::PrepareMeshes(b->model, quality);
-            b->meshMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - rebuilt).count();
-        } catch (const std::exception& e) {
-            log::Error("Background rebuild failed: {}", e.what());
-        } catch (...) {   // an OCCT failure outside an operation (meshing)
-            log::Error("Background rebuild failed");
-        }
+        // caused it; anything else must not leave this thread — not even a
+        // crash (meshing a degenerate shape): this thread is guarded too
+        // (core/FaultGuard.h), the window's thread never sees it.
+        std::string fault;
+        const bool survived = guard::RunGuarded(
+            [b, limit, shown, quality] {
+                try {
+                    while (!b->model.RebuildSlice(b->doc, limit, shown, 0.0)) {
+                        const kernel::Model::Progress p = b->model.RebuildProgress();
+                        b->total = p.total;
+                        b->done = p.done;
+                    }
+                    const auto rebuilt = std::chrono::steady_clock::now();
+                    b->rebuildMs = std::chrono::duration<double, std::milli>(rebuilt - b->began).count();
+                    render::Viewport::PrepareMeshes(b->model, quality);
+                    b->meshMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - rebuilt).count();
+                } catch (const std::exception& e) {
+                    log::Error("Background rebuild failed: {}", e.what());
+                } catch (...) {   // an OCCT failure outside an operation (meshing)
+                    log::Error("Background rebuild failed");
+                }
+            },
+            &fault);
+        if (!survived) log::Error("Background rebuild stopped by a crash ({}): what it built so far is shown", fault);
         b->finished = true;
     });
     myBackground = std::move(job);

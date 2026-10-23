@@ -120,14 +120,19 @@ bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Se
         }
     }
     // A part some assembly holds edited in memory: two copies must not go on apart.
-    if (!PartFreeToOpen(*this, notes, file)) return false;
+    if (!PartFreeToOpen(*this, notes, file)) {
+        lastOpenError = Tr("деталь правится в открытой сборке: сохраните сборку или закончите правку");
+        return false;
+    }
     std::vector<std::string> warnings;
     mon::Action("open", ToUtf8(file.filename()));
     const auto loadStart = std::chrono::steady_clock::now();
     Expected<std::unique_ptr<Session>> loaded = LoadSession(file, &warnings);
     mon::Timed("open", "чтение файла (геометрия — потом, в перестроении)",
                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - loadStart).count());
+    lastOpenError.clear();
     if (!loaded) {
+        lastOpenError = Tr(loaded.GetError().message);
         log::Warn("Could not open {}: {}", ToUtf8(file), loaded.GetError().message);
         notes.Error(Trf("Не удалось открыть «{}»: {}", ToUtf8(file.filename()), Tr(loaded.GetError().message)));
         settings.RemoveRecent(file);

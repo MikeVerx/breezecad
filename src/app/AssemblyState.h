@@ -129,6 +129,31 @@ public:
     /// the shown geometry changed.
     bool Update(const std::filesystem::path& file, std::string_view contextName = {});
 
+    /// The assembly as it stands, to come back to when a tool fails half-way
+    /// (app/Recovery.h): its contents, undo/redo, saved state, the part edited
+    /// in place and how many parts are edited in it.
+    struct Mark {
+        std::string       json;
+        std::uint64_t     revision = 0, lookRevision = 0;
+        std::size_t       undo = 0;
+        std::vector<std::string> redoJson, redoLabels;
+        std::uint64_t     saved = 0, savedLook = 0;
+        bool              unsaved = false;
+        ObjectId          inPlace, selected;
+        std::size_t       parts = 0;
+    };
+    /// Cheap when `previous` is still current (only the contents are compared by revision).
+    Mark GetMark(const Mark* previous = nullptr) const;
+    /// Nothing changed since `mark` was taken (cheap: revisions and counts).
+    bool Matches(const Mark& mark) const {
+        return mark.revision == assembly.Revision() && mark.lookRevision == assembly.LookRevision() && mark.undo == myUndo.size() &&
+               mark.redoJson.size() == myRedo.size() && mark.saved == mySaved && mark.savedLook == mySavedLook &&
+               mark.unsaved == myUnsaved && mark.inPlace == inPlace && mark.selected == selected && mark.parts == parts.size();
+    }
+    /// Back to `mark`: contents, history and saved state; parts taken into
+    /// memory since are let go; whatever was being picked or dragged is dropped.
+    void RollBack(const Mark& mark);
+
     /// Adaptivity starts afresh (the assembly's name for its parts changed).
     void ForgetAdaptState() {
         myAdaptKeys.clear();

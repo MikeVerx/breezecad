@@ -21,6 +21,8 @@ enum class ExportFormat : unsigned char { Step, Stl, ThreeMf };
 class Workspace {
 public:
     std::vector<std::unique_ptr<Session>> sessions;
+    /// Why the last Open failed (empty: it did not), for callers that report it themselves.
+    std::string lastOpenError;
 
     /// The document in front: a part edited in place in the assembly in
     /// front is that part (every part tool then works on it as is).

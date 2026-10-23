@@ -860,6 +860,15 @@ void Viewport::Sync(const kernel::Model& model) {
     m.dirty = true;
 }
 
+void Viewport::ForgetSynced() {
+    Impl& m = *myImpl;
+    m.syncedModel = nullptr;
+    m.syncedRevision = static_cast<std::uint64_t>(-1);
+    m.surroundings.model = nullptr;
+    m.surroundings.revision = 0;
+    m.dirty = true;
+}
+
 void Viewport::Hover(std::optional<Vec2> pixel) {
     prof::Scope profile("hover");
     Impl& m = *myImpl;
