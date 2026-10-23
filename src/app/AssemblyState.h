@@ -35,6 +35,9 @@ public:
         std::filesystem::path    file;      ///< absolute; where it is written (a new part: not there yet)
         std::unique_ptr<Session> session;
         bool                     created = false;   ///< made in this assembly, never written yet
+        /// No component used it at the last save (its creation undone): kept
+        /// for a redo, not a change waiting to be saved.
+        bool                     unused = false;
     };
     std::vector<PartEdit> parts;
     /// The component whose part is edited in place right now; none: the

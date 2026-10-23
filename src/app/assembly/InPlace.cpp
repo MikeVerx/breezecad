@@ -377,10 +377,14 @@ bool CreatePartPickElement(AppContext& app, Session& session, ObjectId component
 
 // --- saving with the assembly -------------------------------------------------------
 
-bool WriteCreatedParts(Session& as, std::string& error) {
+bool WriteCreatedParts(Session& as, const std::vector<std::vector<ObjectId>>& users, std::string& error) {
     if (!as.assembly) return true;
-    for (AssemblyState::PartEdit& e : as.assembly->parts) {
+    for (std::size_t i = 0; i < as.assembly->parts.size(); ++i) {
+        AssemblyState::PartEdit& e = as.assembly->parts[i];
         if (!e.created || !e.session) continue;
+        // Its component undone (or deleted): no file for it; it stays in
+        // memory in case a redo brings the component back.
+        if (i >= users.size() || users[i].empty()) continue;
         std::error_code ec;
         std::filesystem::create_directories(e.file.parent_path(), ec);
         e.session->RebuildNow();
@@ -425,10 +429,14 @@ bool WriteEditedParts(Session& as, const std::vector<std::vector<ObjectId>>& use
                 break;
             }
         if (!now) {
-            // No component uses it any more (deleted): nothing to write.
-            if (e.session.get() != st.InPlaceSession()) unused.push_back(i);
+            // No component uses it any more (deleted): nothing to write. A
+            // part made here stays in memory (a redo may bring it back);
+            // one read from its file is let go (the file still has it).
+            if (!e.created && e.session.get() != st.InPlaceSession()) unused.push_back(i);
+            e.unused = true;
             continue;
         }
+        e.unused = false;
         const bool moved = !(*now == e.file);
         if (e.created || moved || e.session->IsModified()) {
             e.session->RebuildNow();

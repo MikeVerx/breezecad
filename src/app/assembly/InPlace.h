@@ -54,7 +54,9 @@ std::filesystem::path NewPartFile(const Session& session, const std::string& nam
 /// Saving an assembly with parts edited in it (Workspace::SaveTo calls these):
 /// the parts made in it written into their own files first (so their copies
 /// beside the assembly can be made)…
-bool WriteCreatedParts(Session& assembly, std::string& error);
+/// Only those some component still uses (`users`, from PartUsers): one whose
+/// creation was undone gets no file.
+bool WriteCreatedParts(Session& assembly, const std::vector<std::vector<ObjectId>>& users, std::string& error);
 /// Which components use each part edited in the assembly (parallel to
 /// AssemblyState::parts) while the assembly is at `file` — taken before the
 /// parts are gathered beside it, which changes their paths…

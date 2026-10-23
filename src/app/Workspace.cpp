@@ -235,7 +235,7 @@ bool Workspace::SaveTo(Session& session, const std::filesystem::path& requested,
         // into an original elsewhere (the rule for parts of assemblies).
         const std::vector<std::vector<ObjectId>> users = PartUsers(session, from);
         std::string partError;
-        if (!WriteCreatedParts(session, partError)) {
+        if (!WriteCreatedParts(session, users, partError)) {
             renameBack();
             const std::string message = Trf("Сборка НЕ сохранена: {}", Tr(partError));
             if (error) *error = message;

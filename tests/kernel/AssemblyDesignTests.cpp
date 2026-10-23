@@ -298,6 +298,18 @@ TEST_CASE("a part projected from its neighbour follows it: the plate changes, th
     CHECK(kernel::AdaptContextProjections(b.m, b.a, coverId, cover.doc, name).moved == 1);
     CHECK(sk->sketch.PositionOf(c->center).y == Approx(25).epsilon(1e-6));
 
+    // An undo in the cover brings its circle back from before it followed
+    // (the cover's history knows nothing of adaptivity): the cover itself
+    // changed, so it is looked at again and follows once more.
+    const std::uint64_t key3 = kernel::ContextKey(b.m, b.a, coverId, cover.doc, name);
+    sk->sketch.FindPoint(c->center)->pos.y = 20;
+    cover.doc.MarkChanged(0);
+    cover.Rebuild();
+    b.m.Update(b.a, b.file);
+    CHECK(kernel::ContextKey(b.m, b.a, coverId, cover.doc, name) != key3);
+    CHECK(kernel::AdaptContextProjections(b.m, b.a, coverId, cover.doc, name).moved == 1);
+    CHECK(sk->sketch.PositionOf(c->center).y == Approx(25).epsilon(1e-6));
+
     // Not adaptive any more: it stays where it is.
     sk->contextProjections[0].adaptive = false;
     b.a.FindComponent(b.plate)->placement.translation.y = 0;

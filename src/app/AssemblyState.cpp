@@ -44,7 +44,7 @@ AssemblyState::PartEdit* AssemblyState::EditOf(const std::filesystem::path& file
 
 bool AssemblyState::PartsModified() const {
     for (const PartEdit& e : parts)
-        if (e.created || (e.session && e.session->IsModified())) return true;
+        if ((e.created && !e.unused) || (e.session && !e.unused && e.session->IsModified())) return true;
     return false;
 }
 

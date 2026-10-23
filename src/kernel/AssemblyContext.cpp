@@ -132,6 +132,10 @@ bool HasContextProjections(const doc::Document& doc, std::string_view assembly) 
 std::uint64_t ContextKey(const AssemblyModel& geometry, const assembly::Assembly& a, ObjectId target, const doc::Document& doc,
                          std::string_view assembly) {
     std::uint64_t h = 1469598103934665603ull;
+    // The part itself too: an undo in it may bring back a curve from before
+    // it last followed (its own history knows nothing of adaptivity) — it is
+    // looked at again then (cheap: nothing moves when the curves still match).
+    Mix(h, geometry.PartGenerationOf(target));
     std::unordered_set<ObjectId> sources;
     for (const auto& f : doc.Features()) {
         const auto* sk = dynamic_cast<const doc::SketchFeature*>(f.get());
