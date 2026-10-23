@@ -5,6 +5,7 @@
 #include "app/BetaTesting.h"
 #include "app/Operations.h"
 #include "app/assembly/AssemblyUi.h"
+#include "app/assembly/InPlace.h"
 #include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
 #include "core/I18n.h"
@@ -39,6 +40,16 @@ void RegisterActions(AppContext& app) {
            [&app] { NewAssembly(app); }});
     a.Add({"assembly.place", N_("Вставить"), "place-component", ImGuiKey_P, N_("Вставить деталь из файла как компонент (P)"),
            asmDoc, [&app] { PlaceComponent(app); }});
+    a.Add({"assembly.create", N_("Создать"), "create-component", 0,
+           N_("Новая деталь прямо в сборке: её эскиз начинается на выбранной грани или плоскости"), asmDoc,
+           [&app] { StartCreatePart(app); }});
+    a.Add({"assembly.editInPlace", N_("Править"), "edit-in-place", 0,
+           N_("Править деталь выбранного компонента на месте, в сборке (двойной щелчок по компоненту)"),
+           [&app] { return InAssembly(app) && app.Doc()->assembly->assembly.FindComponent(app.Doc()->assembly->selected); },
+           [&app] { EditInPlace(app, *app.Doc(), app.Doc()->assembly->selected); }});
+    a.Add({"assembly.return", N_("Вернуться"), "return-assembly", 0,
+           N_("Закончить правку детали и вернуться в сборку. Изменения детали сохраняются вместе со сборкой"),
+           [&app] { return EditingInPlace(app); }, [&app] { ReturnToAssembly(app); }});
     a.Add({"assembly.placeStandard", N_("Стандартное"), "library", 0,
            N_("Вставить стандартное изделие из библиотеки: болт, гайку, шайбу, подшипник…"), asmDoc,
            [&app] { app.shell.showLibrary = true; }});
@@ -55,7 +66,7 @@ void RegisterActions(AppContext& app) {
            N_("Повторить выбранный компонент (с шайбами и гайками) во все такие же отверстия, рядами или по кругу"),
            [&app] { return CanPattern(app); }, [&app] { StartPattern(app); }});
     a.Add({"assembly.mate", N_("Совмещение"), "a-mate", ImGuiKey_C,
-           N_("Грань к грани (или заподлицо) с зазором; также две оси на одной линии (C)"), asmDoc,
+           N_("Грань, ребро, вершина или плоскость начала координат — к такой же: с зазором, заподлицо или в пределах (C)"), asmDoc,
            [&app] { StartConstraint(app, assembly::ConstraintType::Mate); }});
     a.Add({"assembly.insert", N_("Вставка"), "a-insert", ImGuiKey_I,
            N_("Болт в отверстие: оси совпадают, торцы прилегают — по двум круглым кромкам (I)"), asmDoc,
@@ -64,8 +75,17 @@ void RegisterActions(AppContext& app) {
            [&app] { StartConstraint(app, assembly::ConstraintType::Angle); }});
     a.Add({"assembly.tangent", N_("Касание"), "a-tangent", 0, N_("Цилиндр или сфера касается плоскости, цилиндра или сферы"),
            asmDoc, [&app] { StartConstraint(app, assembly::ConstraintType::Tangent); }});
-    a.Add({"assembly.axisMate", N_("Совпадение осей"), "a-axis", 0, N_("Оси двух цилиндрических граней на одной линии"),
+    a.Add({"assembly.axisMate", N_("Совпадение осей"), "a-axis", 0, N_("Оси двух цилиндрических граней (или прямые рёбра) на одной линии"),
            asmDoc, [&app] { StartConstraint(app, assembly::ConstraintType::AxisMate); }});
+    a.Add({"assembly.symmetry", N_("Симметрия"), "a-symmetry", 0,
+           N_("Две грани, оси или точки симметричны относительно плоскости: выберите обе, затем плоскость"), asmDoc,
+           [&app] { StartConstraint(app, assembly::ConstraintType::Symmetry); }});
+    a.Add({"assembly.gear", N_("Передача"), "a-gear", 0,
+           N_("Одно вращение ведёт другое с передаточным числом: шестерни, ремень, цепь. Выберите два соединения «Вращение»"),
+           asmDoc, [&app] { StartConstraint(app, assembly::ConstraintType::Gear); }});
+    a.Add({"assembly.screw", N_("Винт-рейка"), "a-screw", 0,
+           N_("Вращение ведёт перемещение: винт и гайка, шестерня и рейка (мм на оборот). Выберите «Вращение», затем «Ползун»"),
+           asmDoc, [&app] { StartConstraint(app, assembly::ConstraintType::Screw); }});
     struct JointCommand { const char* id; const char* title; const char* icon; const char* tip; assembly::ConstraintType type; };
     static constexpr std::array<JointCommand, 6> kJoints{{
         {"assembly.jointRotational", N_("Вращение"), "j-rotational",

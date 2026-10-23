@@ -37,7 +37,7 @@ std::filesystem::path WriteZip(const std::string& name, const std::string& manif
 
 } // namespace
 
-TEST_CASE("B-01: a part with fields of the wrong type is rejected, not thrown") {
+TEST_CASE("B-01: a part with fields of the wrong type opens without them, never throws") {
     const char* samples[] = {
         R"({"part":{"name":5}})",
         R"({"units":"mm"})",
@@ -46,9 +46,24 @@ TEST_CASE("B-01: a part with fields of the wrong type is rejected, not thrown") 
         R"({"nextId":"9"})",
     };
     for (const char* json : samples) {
+        CAPTURE(json);
         LoadsWithoutThrowing(json);
-        CHECK_FALSE(doc::DocumentFromJson(json));
+        doc::LoadReport report;
+        const auto d = doc::DocumentFromJson(json, &report);
+        REQUIRE(d);   // the damaged entry is dropped, the part opens
+        CHECK(d->FeatureCount() == 0);
     }
+    // Duplicate and out-of-range ids: the second of a pair is dropped; ids
+    // handed out later never overflow.
+    doc::LoadReport report;
+    auto d = doc::DocumentFromJson(R"({"features":[{"type":"workplane","id":3,"name":"A"},{"type":"workplane","id":3,"name":"B"},
+        {"type":"workplane","id":18446744073709551615,"name":"C"}]})", &report);
+    REQUIRE(d);
+    CHECK(d->FeatureCount() == 1);
+    CHECK(report.warnings.size() == 2);
+    const std::uint64_t next = d->Ids().Next().value;
+    CHECK(next > 3);
+    CHECK(next < 1000);
     // Harmless damage still loads as before.
     LoadsWithoutThrowing(R"({"variables":{"a":1}})");
     LoadsWithoutThrowing(R"({"features":[{"type":"sketch","id":1,"name":"s","points":5}]})");
@@ -77,7 +92,7 @@ TEST_CASE("damage inside one operation keeps it as it was and opens the rest of 
     CHECK(reloaded->FeatureCount() == 2);
 }
 
-TEST_CASE("B-01: an assembly with fields of the wrong type is rejected, not thrown") {
+TEST_CASE("B-01: an assembly with fields of the wrong type opens without them, never throws") {
     const char* samples[] = {
         R"({"assembly":{"name":5}})",
         R"({"components":5})",
@@ -85,7 +100,10 @@ TEST_CASE("B-01: an assembly with fields of the wrong type is rejected, not thro
     for (const char* json : samples) {
         CAPTURE(json);
         CHECK_NOTHROW((void)assembly::AssemblyFromJson(json));
-        CHECK_FALSE(assembly::AssemblyFromJson(json));
+        const auto a = assembly::AssemblyFromJson(json);
+        REQUIRE(a);
+        CHECK(a->components.empty());
+        CHECK(a->info.name.empty());
     }
 }
 

@@ -1,4 +1,5 @@
 add_library(bz_kernel STATIC
+    AssemblyContext.cpp
     AssemblyModel.cpp
     AssemblyReadApi.cpp
     AutoDrop.cpp

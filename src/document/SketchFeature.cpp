@@ -82,6 +82,8 @@ void SketchFeature::ReserveIds(IdGenerator& ids) const {
 
 void SketchFeature::PruneProjections() {
     std::erase_if(projections, [&](const Projection& p) { return sketch.KindOf(p.curve) == sketch::EntityKind::None; });
+    std::erase_if(contextProjections,
+                  [&](const ContextProjection& p) { return sketch.KindOf(p.curve) == sketch::EntityKind::None; });
 }
 
 void SketchFeature::SaveFields(Json& out) const {
@@ -93,6 +95,16 @@ void SketchFeature::SaveFields(Json& out) const {
         Json list = Json::array();
         for (const Projection& p : projections) list.push_back({{"edge", json_io::ToJson(p.edge)}, {"curve", ToJson(p.curve)}});
         out["projections"] = std::move(list);
+    }
+    if (!contextProjections.empty()) {
+        Json list = Json::array();
+        for (const ContextProjection& p : contextProjections) {
+            Json j{{"assembly", p.assembly}, {"component", ToJson(p.component)}, {"edge", json_io::ToJson(p.edge)},
+                   {"curve", ToJson(p.curve)}};
+            if (!p.adaptive) j["adaptive"] = false;
+            list.push_back(std::move(j));
+        }
+        out["contextProjections"] = std::move(list);
     }
 
     Json points = Json::array();
@@ -239,8 +251,21 @@ Status SketchFeature::LoadFields(const Json& in) {
         projected.push_back(p);
     }
 
+    // Edges of other parts of an assembly (absent in older files).
+    std::vector<ContextProjection> fromAssembly;
+    for (const Json& j : in.value("contextProjections", Json::array())) {
+        ContextProjection p;
+        const auto edge = j.find("edge");
+        if (!j.is_object() || edge == j.end() || !json_io::Read(*edge, p.edge) || !ReadMember(j, "curve", p.curve) ||
+            !ReadMember(j, "assembly", p.assembly) || !ReadMember(j, "component", p.component) ||
+            !ReadMember(j, "adaptive", p.adaptive))
+            return Bad("contextProjections");
+        fromAssembly.push_back(std::move(p));
+    }
+
     placement = pl;
     projections = std::move(projected);
+    contextProjections = std::move(fromAssembly);
     sketch    = std::move(sk);
     return Status::Ok();
 }

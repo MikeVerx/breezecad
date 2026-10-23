@@ -31,6 +31,19 @@ struct Projection {
     ObjectId      curve;
 };
 
+/// An edge of another part of an assembly, projected into this part's
+/// sketch while the part was edited in that assembly ("в контексте сборки").
+/// The curve keeps where it was last put: the part opened on its own shows it
+/// there. In the assembly it follows its source — another part changed or
+/// moved — when `adaptive` (Inventor's adaptivity).
+struct ContextProjection {
+    std::string   assembly;          ///< the assembly it came from: its file name without extension
+    ObjectId      component;         ///< the source component in that assembly
+    EdgeReference edge;              ///< in the source part's own coordinates
+    ObjectId      curve;
+    bool          adaptive = true;   ///< follows the source; off: stays where it is
+};
+
 class SketchFeature final : public FeatureBase<SketchFeature> {
 public:
     static constexpr std::string_view kType = "sketch";
@@ -38,8 +51,10 @@ public:
     SketchPlacement         placement;
     sketch::Sketch          sketch;
     std::vector<Projection> projections;
+    std::vector<ContextProjection> contextProjections;
 
-    /// Drops projections whose curve was deleted from the sketch.
+    /// Drops projections (of the part and from an assembly) whose curve was
+    /// deleted from the sketch.
     void PruneProjections();
 
     /// Runtime analysis from the last solve, never saved.

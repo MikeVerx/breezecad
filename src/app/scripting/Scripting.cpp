@@ -1,5 +1,7 @@
 #include "app/scripting/Scripting.h"
 
+#include "app/Recovery.h"
+
 #include "app/AppContext.h"
 #include "app/Session.h"
 #include "app/features/OperationEditors.h"
@@ -76,17 +78,31 @@ Json Reply(const Json& request, AppContext& app) {
 
 std::string Run(AppContext& app, std::string_view request) {
     Json reply;
-    try {
-        const Json parsed = Json::parse(request);
-        reply = {{"ok", true}, {"result", Reply(parsed, app)}};
-    } catch (const Failure& f) {
-        reply = {{"ok", false}, {"error", f.message}};
-    } catch (const Json::exception& e) {
-        reply = {{"ok", false}, {"error", std::format("Неправильный JSON: {}", e.what())}};
-    } catch (const std::exception& e) {
-        log::Warn("Command failed: {}", e.what());
-        reply = {{"ok", false}, {"error", std::format("Ошибка программы: {}", e.what())}};
+    const auto run = [&] {
+        try {
+            const Json parsed = Json::parse(request);
+            reply = {{"ok", true}, {"result", Reply(parsed, app)}};
+        } catch (const Failure& f) {   // refused as asked: nothing was changed
+            reply = {{"ok", false}, {"error", f.message}};
+        } catch (const Json::exception& e) {
+            reply = {{"ok", false}, {"error", std::format("Неправильный JSON: {}", e.what())}};
+        }
+    };
+    // Anything else (an error of the program, a crash inside it) stops the
+    // command; the documents are put back as they were before it.
+    bool ok = true;
+    if (app.recovery) {
+        app.recovery->Remember(app);
+        ok = app.recovery->Run(app, "команда модуля", run);
+    } else {
+        try {
+            run();
+        } catch (const std::exception& e) {
+            log::Warn("Command failed: {}", e.what());
+            ok = false;
+        }
     }
+    if (!ok) reply = {{"ok", false}, {"error", "Ошибка программы при выполнении команды: она отменена, документ возвращён к состоянию до неё"}};
     return reply.dump(-1, ' ', false, Json::error_handler_t::replace);
 }
 
@@ -122,13 +138,20 @@ const Json& Required(const Json& args, const char* key) {
     return *it;
 }
 
+double Sane(double v, const char* what) {
+    // Beyond 10 km (mm) — or not a number at all — a value only overflows the
+    // solver and the geometry kernel: refused here, before it gets in.
+    if (!std::isfinite(v) || std::abs(v) > 1e7) Fail(std::format("«{}» — число вне разумного (больше 10 км или не число)", what));
+    return v;
+}
+
 bool Has(const Json& args, const char* key) { return args.contains(key) && !args[key].is_null(); }
 
 double Number(const Json& args, const char* key, std::optional<double> fallback) {
     if (!Has(args, key) && fallback) return *fallback;
     const Json& v = Required(args, key);
     if (!v.is_number()) Fail(std::format("«{}» — не число", key));
-    return v.get<double>();
+    return Sane(v.get<double>(), key);
 }
 
 int Integer(const Json& args, const char* key, std::optional<int> fallback) {
@@ -161,7 +184,7 @@ ObjectId Id(const Json& args, const char* key) {
 Vec2 Point(const Json& v, const char* what) {
     if (!v.is_array() || v.size() != 2 || !v[0].is_number() || !v[1].is_number())
         Fail(std::format("«{}» — не точка [x, y]", what));
-    return {v[0].get<double>(), v[1].get<double>()};
+    return {Sane(v[0].get<double>(), what), Sane(v[1].get<double>(), what)};
 }
 
 Vec2 Point(const Json& args, const char* key, std::optional<Vec2> fallback) {
@@ -256,7 +279,7 @@ std::vector<doc::FaceReference> FaceRefs(Session& part, const Json& args, const 
 Vec3 Point3(const Json& v, const char* what) {
     if (!v.is_array() || v.size() != 3 || !v[0].is_number() || !v[1].is_number() || !v[2].is_number())
         Fail(std::format("«{}» — не точка [x, y, z]", what));
-    return {v[0].get<double>(), v[1].get<double>(), v[2].get<double>()};
+    return {Sane(v[0].get<double>(), what), Sane(v[1].get<double>(), what), Sane(v[2].get<double>(), what)};
 }
 
 Json ToJson3(Vec3 v) {

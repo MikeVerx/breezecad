@@ -1410,4 +1410,30 @@ double Model::Volume() const {
 
 std::string GeometryKernelVersion() { return std::string("OpenCASCADE ") + OCC_VERSION_COMPLETE; }
 
+bool PlaceProjectedCurve(sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& projected) {
+    return PlaceProjected(sk, curve, projected);
+}
+
+bool CurveMatches(const sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& pc, double tolerance) {
+    const auto at = [&](ObjectId point, Vec2 want) {
+        const sketch::Point* p = sk.FindPoint(point);
+        return p && (p->pos - want).Length() <= tolerance;
+    };
+    switch (pc.kind) {
+        case ProjectedCurve::Kind::Line:
+            if (const sketch::Line* l = sk.FindLine(curve)) return at(l->start, pc.start) && at(l->end, pc.end);
+            return false;
+        case ProjectedCurve::Kind::Circle:
+            if (const sketch::Circle* c = sk.FindCircle(curve)) return at(c->center, pc.centre) && std::abs(c->radius - pc.radius) <= tolerance;
+            return false;
+        case ProjectedCurve::Kind::Arc:
+            if (const sketch::Arc* a = sk.FindArc(curve)) return at(a->center, pc.centre) && at(a->start, pc.start) && at(a->end, pc.end);
+            return false;
+        case ProjectedCurve::Kind::Ellipse:
+            if (const sketch::Ellipse* e = sk.FindEllipse(curve)) return at(e->center, pc.centre) && at(e->major, pc.start) && at(e->minor, pc.end);
+            return false;
+    }
+    return false;
+}
+
 } // namespace bz::kernel

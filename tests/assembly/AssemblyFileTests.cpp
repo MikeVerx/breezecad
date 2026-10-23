@@ -93,8 +93,45 @@ TEST_CASE("assembly file skips what it cannot read, rejects what is broken") {
     CHECK(a->constraints.empty());
     CHECK(warnings.size() == 1);
 
-    CHECK_FALSE(AssemblyFromJson(R"({"components":[{"id":1,"name":"A:1"}]})"));   // no part file
+    // A component without its part file: that component is dropped, the
+    // assembly opens (one damaged entry must not cost the whole file).
+    warnings.clear();
+    auto rest = AssemblyFromJson(R"({"components":[{"id":1,"name":"A:1"},{"id":2,"name":"B:1","path":"b.bzc"}]})", &warnings);
+    REQUIRE(rest);
+    CHECK(rest->components.size() == 1);
+    CHECK(warnings.size() == 1);
     CHECK_FALSE(AssemblyFromJson("not json"));
+}
+
+TEST_CASE("a damaged assembly file opens with what is sound in it") {
+    std::vector<std::string> warnings;
+    auto a = AssemblyFromJson(R"({
+        "assembly": {"name": 5},
+        "nextId": "x",
+        "components": [
+            {"id":1,"name":"A:1","path":"a.bzc","placement":{"origin":[1e300,0,0],"xAxis":[1,0,0],"zAxis":[0,0,1]}},
+            {"id":1,"name":"Дубль:1","path":"a.bzc"},
+            {"id":18446744073709551615,"name":"Начало:1","path":"a.bzc"},
+            {"id":2,"name":"B:1","path":"b.bzc","placement":{"origin":[0,0,0],"xAxis":[1,0,0],"zAxis":[1,0,0]},"properties":{"quantity":"много"}},
+            "мусор"
+        ],
+        "constraints": [
+            {"id":3,"type":"mate","value":1e30,"first":{"component":1,"kind":"plane"},"second":{"component":2,"kind":"plane"}},
+            {"id":4,"type":7},
+            {"id":5,"type":"mate","first":{"component":1,"kind":5},"second":{"component":2,"kind":"plane"}},
+            {"id":6,"type":"mate","first":{"component":1,"kind":"plane","direction":[0,0,1]},"second":{"component":2,"kind":"plane","direction":[0,0,1]}}
+        ],
+        "patterns": {"not": "a list"}
+    })", &warnings);
+    REQUIRE(a);
+    REQUIRE(a->components.size() == 2);   // the duplicate, the one taking the origin's id and the junk are dropped
+    CHECK(a->components[0].placement.translation.x == 0);   // placed at the origin instead of 1e300
+    CHECK(a->components[1].properties.quantity == 1);        // properties reset
+    REQUIRE(a->constraints.size() == 1);   // only the sound one
+    CHECK(a->constraints[0].id == ObjectId{6});
+    CHECK(warnings.size() >= 6);
+    // New ids never collide with the ones read.
+    CHECK(a->Ids().Next().value > 6);
 }
 
 TEST_CASE("assembly is saved in the .bzc container with its type") {
