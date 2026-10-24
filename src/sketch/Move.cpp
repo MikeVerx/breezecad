@@ -197,7 +197,7 @@ bool ScaleEntities(Sketch& sk, std::span<const ObjectId> entities, Vec2 centre, 
     for (Constraint& c : sk.constraints)
         if (c.type == ConstraintType::Fix && set.contains(c.refs[0])) c.fixedAt = centre + (c.fixedAt - centre) * factor;
     for (ObjectId id : entities)
-        if (Circle* c = sk.FindCircle(id)) c->radius *= factor;
+        if (Circle* c = sk.FindCircle(id); c && !c->projected) c->radius *= factor;
     return true;
 }
 

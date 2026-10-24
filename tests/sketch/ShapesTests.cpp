@@ -140,3 +140,23 @@ TEST_CASE("circle tangent to three lines: the one near the picks") {
     REQUIRE(ex);
     CHECK(ex->radius == doctest::Approx(6.0));
 }
+
+TEST_CASE("scaling a sketch leaves projected model geometry where the model put it") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId pa = sk.AddPoint(ids, {10, 0}), pb = sk.AddPoint(ids, {30, 0});
+    sk.FindPoint(pa)->projected = true;
+    sk.FindPoint(pb)->projected = true;
+    const ObjectId edge = sk.AddLine(ids, pa, pb);
+    sk.FindLine(edge)->projected = true;
+    const ObjectId hole = sk.AddCircle(ids, pa, 4.0);
+    sk.FindCircle(hole)->projected = true;
+    const ObjectId free = sk.AddPoint(ids, {10, 10});
+    sk.AddLine(ids, free, sk.AddPoint(ids, {20, 10}));
+
+    sk.ScaleAbout({0, 0}, 2.0);
+    CHECK((sk.PositionOf(pa) - Vec2{10, 0}).Length() == doctest::Approx(0.0));
+    CHECK((sk.PositionOf(pb) - Vec2{30, 0}).Length() == doctest::Approx(0.0));
+    CHECK(sk.RadiusOf(hole) == doctest::Approx(4.0));
+    CHECK((sk.PositionOf(free) - Vec2{20, 20}).Length() == doctest::Approx(0.0));
+}

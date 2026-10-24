@@ -211,7 +211,8 @@ public:
     Box2 Extents() const;
 
     /// Scales the whole sketch about `center`: points, radii, fixed positions
-    /// and dimension label offsets. Dimension values are not touched.
+    /// and dimension label offsets. Dimension values are not touched, nor is
+    /// projected model geometry (the model places it).
     void ScaleAbout(Vec2 center, double factor);
 
 private:

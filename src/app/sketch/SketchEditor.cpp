@@ -136,6 +136,10 @@ Box3 SketchBox(const doc::SketchFeature& f, const UnitSystem& units) {
 /// True when `c` is the only driving dimension of the sketch: the moment
 /// Inventor-style auto-scaling applies.
 bool IsFirstDimension(const sketch::Sketch& sk, const sketch::Constraint& c) {
+    // Projected model geometry already gives the sketch its true size: the
+    // first dimension then sets only its own value, nothing is scaled.
+    for (const sketch::Point& p : sk.points)
+        if (p.projected) return false;
     for (const sketch::Constraint& other : sk.constraints) {
         if (other.id == c.id) continue;
         if (other.type == sketch::ConstraintType::Fix) return false;   // something is pinned in place

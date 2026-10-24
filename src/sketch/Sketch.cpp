@@ -306,9 +306,11 @@ Box2 Sketch::Extents() const {
 }
 
 void Sketch::ScaleAbout(Vec2 center, double factor) {
+    // Projected model geometry is placed by the model and never scaled.
     for (Point& p : points)
-        if (!p.isOrigin) p.pos = center + (p.pos - center) * factor;
-    for (Circle& c : circles) c.radius *= factor;
+        if (!p.isOrigin && !p.projected) p.pos = center + (p.pos - center) * factor;
+    for (Circle& c : circles)
+        if (!c.projected) c.radius *= factor;
     for (Constraint& c : constraints) {
         if (c.type == ConstraintType::Fix) c.fixedAt = center + (c.fixedAt - center) * factor;
         c.labelOffset = c.labelOffset * factor;
