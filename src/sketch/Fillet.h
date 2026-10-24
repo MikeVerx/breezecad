@@ -1,8 +1,9 @@
 #pragma once
 // "Скругление" in a sketch: the corner where two lines meet becomes an arc of
 // a given radius, tangent to both. The lines are shortened to the tangent
-// points, which are the arc's ends; constraints on the old corner point go
-// with it (the corner no longer exists).
+// points, which are the arc's ends. The corner point stays as a virtual
+// sharp with dashed phantom sides leading to it, so dimensions and
+// constraints on it keep holding and nothing else moves.
 
 #include "sketch/Sketch.h"
 
@@ -12,7 +13,9 @@
 namespace bz::sketch {
 
 /// The two lines meeting at point `corner`; nullopt unless exactly two
-/// lines end there and neither is a projection.
+/// lines end there and neither is a projection. Helper (construction) lines
+/// at the corner, such as a centred rectangle's diagonals, are not counted
+/// when outline lines meet there.
 std::optional<std::pair<ObjectId, ObjectId>> CornerLines(const Sketch& sk, ObjectId corner);
 
 /// Where the arc would go.

@@ -331,6 +331,21 @@ void EquationSystem::AddConstraint(const Sketch& sk, const Constraint& c) {
                 const auto [s, e] = lineEnds(aIsLine ? a : b);
                 const auto [center, r] = circleParts(aIsLine ? b : a);
                 if (s < 0 || center < 0) return;
+                // An arc that ends where the line ends (a fillet, a slot's
+                // cap): the radius to the shared end is square to the line.
+                // Same tangency, but a simple root: the distance form has a
+                // double one there, the solver then sees spare freedom and
+                // reports the sketch as not fully defined.
+                if (const Arc* ar = sk.FindArc(aIsLine ? b : a)) {
+                    const Line* ln = sk.FindLine(aIsLine ? a : b);
+                    const ObjectId shared = (ar->start == ln->start || ar->start == ln->end) ? ar->start
+                                          : (ar->end == ln->start || ar->end == ln->end)     ? ar->end
+                                                                                             : ObjectId{};
+                    if (const int p = P(shared); shared && p >= 0) {
+                        Add(MakeEq(EqKind::Perpendicular, {center, center + 1, p, p + 1, s, s + 1, e, e + 1}, 0, src));
+                        return;
+                    }
+                }
                 // Keep the circle on the side of the line where it is now.
                 const Vec2 A = pos(s), B = pos(e), C = pos(center);
                 Equation eq = MakeEq(EqKind::PointLineVar, {center, center + 1, s, s + 1, e, e + 1, r}, 0, src);
