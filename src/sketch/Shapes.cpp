@@ -48,6 +48,9 @@ RectangleIds AddCentredRectangle(Sketch& sk, IdGenerator& ids, ObjectId centre, 
     MakeAxisAligned(sk, ids, r);
     const ObjectId diagonal = sk.AddLine(ids, c0, c2, true);
     sk.AddConstraint(ids, Make(ConstraintType::Midpoint, centre, diagonal));
+    // The other diagonal, as in Inventor: it crosses the first in the centre
+    // by itself (the sides stay square), so it needs no constraint.
+    sk.AddLine(ids, c1, c3, true);
     return r;
 }
 
@@ -83,6 +86,7 @@ std::optional<RectangleIds> AddThreePointCentredRectangle(Sketch& sk, IdGenerato
     sk.AddConstraint(ids, Make(ConstraintType::Parallel, r.sides[1], r.sides[3]));
     const ObjectId diagonal = sk.AddLine(ids, corners[0], corners[2], true);
     sk.AddConstraint(ids, Make(ConstraintType::Midpoint, centre, diagonal));
+    sk.AddLine(ids, corners[1], corners[3], true);   // the other diagonal, see AddCentredRectangle
     return r;
 }
 
