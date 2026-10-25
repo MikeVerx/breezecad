@@ -24,7 +24,14 @@ struct Motion {
 /// The origin and projected points never move.
 std::vector<ObjectId> MovedPoints(const Sketch& sk, std::span<const ObjectId> entities);
 
-/// Moves `entities`. Returns false when nothing could move.
+/// `entities` with the helpers that only exist for them: the centre of a
+/// centred rectangle (the middle of its diagonal), the construction circle
+/// of a polygon whose every vertex (or side) is chosen, points coincident
+/// with chosen ones. Moved or scaled with the rest, they keep the shape whole instead
+/// of the solver pulling it towards where they were left.
+std::vector<ObjectId> WithHelpers(const Sketch& sk, std::span<const ObjectId> entities);
+
+/// Moves `entities` (with their helpers). Returns false when nothing could move.
 bool MoveEntities(Sketch& sk, IdGenerator& ids, std::span<const ObjectId> entities, const Motion& motion);
 
 /// Copies the curves among `entities` with their own points, placed by
@@ -32,7 +39,8 @@ bool MoveEntities(Sketch& sk, IdGenerator& ids, std::span<const ObjectId> entiti
 /// too, as equalities to the originals), positions do not. Returns the new curves.
 std::vector<ObjectId> CopyEntities(Sketch& sk, IdGenerator& ids, std::span<const ObjectId> entities, const Motion& motion);
 
-/// Scales the points of `entities` about `centre` by `factor` (radii too).
+/// Scales the points of `entities` (with their helpers) about `centre` by
+/// `factor` (radii too).
 bool ScaleEntities(Sketch& sk, std::span<const ObjectId> entities, Vec2 centre, double factor);
 
 } // namespace bz::sketch
