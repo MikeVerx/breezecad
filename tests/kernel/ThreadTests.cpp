@@ -449,3 +449,26 @@ TEST_CASE("a thread builds on a shaft of any length") {
         CHECK(t.status.state == FeatureState::Ok);
     }
 }
+
+TEST_CASE("a groove the kernel leaves uncut is noticed, and cut the other way round") {
+    // G1/2, free fit, lead-in chamfer, 14 mm shaft: chamfer first, then the
+    // groove came back from OCCT "done" with the groove left out (25.10.2026,
+    // Linux and macOS alike). The thread must take its material or say so.
+    for (const double length : {12.0, 14.0, 16.0}) {
+        CAPTURE(length);
+        doc::Document d;
+        auto& sk = AddSketch(d);
+        AddCircle(d, sk, {0, 0}, 20.955 / 2);
+        AddExtrude(d, sk.id, std::format("{}", length));
+        doc::ThreadSpec spec;
+        spec.standard = doc::ThreadStandard::PipeG;
+        spec.fit = doc::ThreadFit::Free;
+        auto& t = AddSpecThread(d, 20.955 / 2, 20.955, 25.4 / 14, spec);
+        kernel::Model model;
+        model.Rebuild(d);
+        INFO(t.status.message);
+        REQUIRE(t.status.state == FeatureState::Ok);
+        const double removed = kPi * 20.955 * 20.955 / 4 * length - model.Volume();
+        CHECK(removed > 44 * length);   // about 51 mm³ a millimetre of free G1/2
+    }
+}

@@ -30,7 +30,14 @@ struct ThreadShapes {
     /// where one fused tool of a helix and a cone did not).
     std::optional<TopoDS_Shape> chamfer;
     TopoDS_Shape                cut;
+    /// How much of `cut` lies in the material, mm³ (a rough estimate): a
+    /// cut that removes much less went wrong without saying so (OCCT can
+    /// return the body nearly uncut on helical tools; 25.10.2026).
+    double                      expectedRemoval = 0;
 };
+
+/// Volume of a shape, mm³.
+double VolumeOf(const TopoDS_Shape& shape);
 
 /// The shapes of the thread of `feature` on `body`.
 Expected<ThreadShapes> ThreadTool(const TopoDS_Shape& body, const doc::ThreadFeature& feature);

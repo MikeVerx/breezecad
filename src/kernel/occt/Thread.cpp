@@ -26,6 +26,8 @@
 #include <gp_Ax3.hxx>
 #include <gp_Cylinder.hxx>
 
+#include <BRepGProp.hxx>
+#include <GProp_GProps.hxx>
 #include <algorithm>
 #include <cmath>
 #include <format>
@@ -271,6 +273,16 @@ Expected<TopoDS_Shape> Groove(const Layout& l, bool leftHanded) {
     return sweep.Shape();
 }
 
+} // namespace
+
+double VolumeOf(const TopoDS_Shape& shape) {
+    GProp_GProps props;
+    BRepGProp::VolumeProperties(shape, props);
+    return props.Mass();
+}
+
+namespace {
+
 /// The lead-in chamfers at the open ends: rings of 45° that take the
 /// crests off from the surface down to the root, so the first turn starts
 /// whole (and a printed first layer's bulge goes with them).
@@ -351,6 +363,11 @@ Expected<ThreadShapes> ThreadTool(const TopoDS_Shape& body, const doc::ThreadFea
         if (f.spec.leadChamfer && !l.openEnds.empty())
             if (TopoDS_Shape c = Chamfers(l); !c.IsNull()) out.chamfer = std::move(c);
         out.cut = tool;
+        // The groove runs along the whole helix, the material only along the
+        // face; a little of its section lies outside the surface.
+        const double faceStart = f.fromOtherEnd ? -l.site.hi : l.site.lo;
+        const double inside = std::max(0.0, std::min(l.end, faceStart + (l.site.hi - l.site.lo)) - std::max(l.begin, faceStart));
+        out.expectedRemoval = VolumeOf(tool) * inside / std::max(l.end - l.begin, 1e-9) * 0.6;
         return out;
     } catch (const Standard_Failure& failure) {
         return Error{std::format("Ошибка резьбы: {}", failure.GetMessageString())};
