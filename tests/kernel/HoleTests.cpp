@@ -239,3 +239,40 @@ TEST_CASE("coaxial centres: saved, read back, and dropped with their centre") {
     CHECK(hole.concentric[0].centre == 0);
     CHECK(hole.AxisOf(0) == &hole.concentric[0]);
 }
+
+TEST_CASE("a tapped hole: drilled for the tap, the thread cut in the wall") {
+    Plate p;
+    auto& hole = p.AddHole(HoleType::Simple, true);
+    hole.threaded = true;
+    hole.threadSize = 8;
+    hole.threadPitch.expression = "1.25";
+    kernel::Model model;
+    model.Rebuild(p.d);
+    REQUIRE(hole.status.state == FeatureState::Ok);
+    CHECK(hole.DrillDiameter() == doctest::Approx(8 - 1.0825 * 1.25));
+    const double drilled = kPi * hole.DrillDiameter() * hole.DrillDiameter() / 4 * 30;
+    // The groove: 0.2368 P² in section round about 7.2 mm, 24 turns and the run-outs.
+    const double groove = Cut(model) - drilled;
+    CHECK(groove > 0.2368 * 1.25 * 1.25 * kPi * 7.0 * 22);
+    CHECK(groove < 0.2368 * 1.25 * 1.25 * kPi * 7.6 * 27);
+
+    // Threaded only part of the way: less groove, same drill.
+    hole.threadFull = false;
+    hole.threadDepth.expression = "10";
+    p.d.MarkChanged(2);
+    model.Rebuild(p.d);
+    REQUIRE(hole.status.state == FeatureState::Ok);
+    const double part = Cut(model) - drilled;
+    CHECK(part < groove * 0.6);
+    CHECK(part > groove * 0.2);
+
+    // Saved and loaded with its thread; an old file without one is a plain hole.
+    const auto loaded = doc::DocumentFromJson(doc::DocumentToJson(p.d));
+    REQUIRE(loaded);
+    const auto* h = dynamic_cast<const doc::HoleFeature*>(loaded->Features()[2].get());
+    REQUIRE(h);
+    CHECK(h->threaded);
+    CHECK(h->threadSize == 8);
+    CHECK_FALSE(h->threadFull);
+    CHECK(h->threadDepth.expression == "10");
+}

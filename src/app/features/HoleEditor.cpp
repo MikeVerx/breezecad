@@ -4,9 +4,12 @@
 #include "app/Format.h"
 #include "app/sketch/SketchView.h"
 #include "core/I18n.h"
+#include "document/ThreadFeature.h"
+#include "ui/Menus.h"
 #include "ui/Widgets.h"
 
 #include <array>
+#include <format>
 #include <cmath>
 #include <cstdlib>
 #include <numbers>
@@ -63,7 +66,7 @@ double OuterDiameter(const doc::HoleFeature& f) {
         case HoleType::Countersink: return f.sinkDiameter.value;
         case HoleType::Simple: break;
     }
-    return f.diameter.value;
+    return f.threaded ? f.threadSize : f.diameter.value;
 }
 
 } // namespace
@@ -120,6 +123,8 @@ void HoleEditor::LoadTexts(const doc::Feature& feature) {
     myHeadDiameter = f.headDiameter.expression;
     myHeadDepth = f.headDepth.expression;
     mySinkDiameter = f.sinkDiameter.expression;
+    myThreadPitch = f.threadPitch.expression;
+    myThreadDepth = f.threadDepth.expression;
 }
 
 // --- viewport -----------------------------------------------------------------
@@ -377,10 +382,25 @@ void HoleEditor::DrawSizes(AppContext& app, Session& session, doc::HoleFeature& 
     }
     Gap(app);
 
-    Section(app, Tr("Диаметр"));
-    // Not focused on open: it is below the centres, and focusing would scroll them away.
-    ParameterField(app, session, "diameter", myDiameter, f.diameter, width, false);
+    // Резьбовое: drilled for a tap, the thread cut in the wall (as Inventor's tapped hole).
+    {
+        static constexpr std::array<ChoiceItem, 2> kinds{{{"thread-none", N_("Гладкое")}, {"thread-real", N_("Резьбовое")}}};
+        const int current = f.threaded ? 1 : 0;
+        if (const int chosen = ToolChoice(app, "threaded", N_("Стенка"), kinds, current, width); chosen != current) {
+            f.threaded = chosen == 1;
+            Changed(session);
+        }
+    }
     Gap(app);
+
+    if (f.threaded) {
+        DrawThread(app, session, f, width);
+    } else {
+        Section(app, Tr("Диаметр"));
+        // Not focused on open: it is below the centres, and focusing would scroll them away.
+        ParameterField(app, session, "diameter", myDiameter, f.diameter, width, false);
+        Gap(app);
+    }
 
     if (f.type == HoleType::Counterbore) {
         Section(app, Tr("Диаметр цековки"));
@@ -408,6 +428,55 @@ void HoleEditor::DrawSizes(AppContext& app, Session& session, doc::HoleFeature& 
         ImGui::Dummy({0, ui.S(6)});
         ParameterField(app, session, "depth", myDepth, f.depth, width, false);
     }
+    if (f.threaded) {
+        Gap(app);
+        static constexpr std::array<ChoiceItem, 2> extents{{{"thread-full", N_("На всю глубину")}, {"thread-length", N_("На длину")}}};
+        const int current = f.threadFull ? 0 : 1;
+        if (const int chosen = ToolChoice(app, "thread-extent", N_("Резьба"), extents, current, width); chosen != current) {
+            f.threadFull = chosen == 0;
+            Changed(session);
+        }
+        if (!f.threadFull) {
+            ImGui::Dummy({0, ui.S(6)});
+            ParameterField(app, session, "thread-depth", myThreadDepth, f.threadDepth, width, false);
+        }
+        Gap(app);
+        static constexpr std::array<ChoiceItem, 2> hands{{{"hand-right", N_("Правая")}, {"hand-left", N_("Левая")}}};
+        const int hand = f.threadLeft ? 1 : 0;
+        if (const int chosen = ToolChoice(app, "hand", N_("Направление"), hands, hand, width); chosen != hand) {
+            f.threadLeft = chosen == 1;
+            Changed(session);
+        }
+    }
+}
+
+void HoleEditor::DrawThread(AppContext& app, Session& session, doc::HoleFeature& f, float width) {
+    ui::Ui& ui = app.ui;
+    const auto mm = [&](double v) { return FormatValue(v, Quantity::Length, session.doc.units); };
+    Section(app, Tr("Размер резьбы"));
+    const std::string chosen = std::format("M{}\xC3\x97{}", mm(f.threadSize), mm(f.threadPitch.value));
+    if (PickChip(ui, "##thread-size", Tr("Резьба"), chosen, false, width)) ImGui::OpenPopup("##thread-sizes");
+    {
+        ui::MenuStyle style(ui);   // before Begin: must outlive the End call
+        if (ImGui::BeginPopup("##thread-sizes")) {
+            for (const double d : doc::StandardSizes()) {
+                const std::string label = std::format("M{}\xC3\x97{}", mm(d), mm(doc::CoarsePitch(d)));
+                if (ui::MenuItem(ui, label.c_str(), nullptr, {}, std::abs(f.threadSize - d) < 1e-9)) {
+                    f.threadSize = d;
+                    // A new size takes its coarse pitch; a fine one can be typed after.
+                    myThreadPitch = mm(doc::CoarsePitch(d));
+                    f.threadPitch.expression = myThreadPitch;
+                    Changed(session);
+                }
+            }
+            ImGui::EndPopup();
+        }
+    }
+    Gap(app);
+    Section(app, Tr("Шаг"));
+    ParameterField(app, session, "thread-pitch", myThreadPitch, f.threadPitch, width, false);
+    Caption(app, Trf("Сверлится под метчик: \xC3\x98{}. Резьба ISO, профиль 60\xC2\xB0.", mm(f.DrillDiameter())).c_str(), width);
+    Gap(app);
 }
 
 } // namespace bz::app

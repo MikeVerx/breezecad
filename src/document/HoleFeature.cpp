@@ -37,6 +37,13 @@ void HoleFeature::CollectParameters(std::vector<Parameter*>& out) {
     out.push_back(&headDiameter);
     out.push_back(&headDepth);
     out.push_back(&sinkDiameter);
+    out.push_back(&threadPitch);
+    out.push_back(&threadDepth);
+}
+
+double HoleFeature::DrillDiameter() const {
+    // ISO 68-1: the basic minor diameter, D - 5/4 H = D - 1.0825 P.
+    return threaded ? threadSize - 1.0825 * threadPitch.value : diameter.value;
 }
 
 void HoleFeature::SaveFields(Json& out) const {
@@ -52,6 +59,14 @@ void HoleFeature::SaveFields(Json& out) const {
     out["headDiameter"] = json_io::ToJson(headDiameter);
     out["headDepth"]    = json_io::ToJson(headDepth);
     out["sinkDiameter"] = json_io::ToJson(sinkDiameter);
+    if (threaded) {   // absent in files of 0.2.4 and older: a plain hole
+        out["threaded"]    = true;
+        out["threadSize"]  = threadSize;
+        out["threadPitch"] = json_io::ToJson(threadPitch);
+        out["threadFull"]  = threadFull;
+        out["threadDepth"] = json_io::ToJson(threadDepth);
+        out["threadLeft"]  = threadLeft;
+    }
     if (!concentric.empty()) {
         Json axes = Json::array();
         for (const HoleAxis& a : concentric) {
@@ -73,6 +88,10 @@ Status HoleFeature::LoadFields(const Json& in) {
         !ReadMember(in, "diameter", f.diameter) || !ReadMember(in, "depth", f.depth) || !ReadMember(in, "headDiameter", f.headDiameter) ||
         !ReadMember(in, "headDepth", f.headDepth) || !ReadMember(in, "sinkDiameter", f.sinkDiameter))
         return Error{"Отверстие: повреждены параметры"};
+    if (!ReadMember(in, "threaded", f.threaded) || !ReadMember(in, "threadSize", f.threadSize) ||
+        !ReadMember(in, "threadPitch", f.threadPitch) || !ReadMember(in, "threadFull", f.threadFull) ||
+        !ReadMember(in, "threadDepth", f.threadDepth) || !ReadMember(in, "threadLeft", f.threadLeft))
+        return Error{"Отверстие: повреждены параметры резьбы"};
     if (!json_io::FromId(kTypeIds, typeId, f.type)) return Error{std::format("Отверстие: неизвестный тип «{}»", typeId)};
     for (const Json& c : in.value("centres", Json::array())) {
         Vec2 v;
@@ -110,6 +129,12 @@ Status HoleFeature::LoadFields(const Json& in) {
     headDiameter = std::move(f.headDiameter);
     headDepth    = std::move(f.headDepth);
     sinkDiameter = std::move(f.sinkDiameter);
+    threaded     = f.threaded;
+    threadSize   = f.threadSize;
+    threadPitch  = std::move(f.threadPitch);
+    threadFull   = f.threadFull;
+    threadDepth  = std::move(f.threadDepth);
+    threadLeft   = f.threadLeft;
     return Status::Ok();
 }
 

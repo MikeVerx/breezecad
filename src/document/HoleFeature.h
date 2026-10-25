@@ -45,6 +45,18 @@ public:
     Parameter headDepth{.name = "", .expression = "6.4", .quantity = Quantity::Length, .value = 6.4, .error = {}};
     /// Countersink: diameter at the surface; the cone is 90°.
     Parameter sinkDiameter{.name = "", .expression = "13", .quantity = Quantity::Length, .value = 13.0, .error = {}};
+    /// Резьбовое отверстие (0.2.4.1): drilled to the thread's minor diameter
+    /// (as for a tap; `diameter` is not used then) with an ISO metric thread
+    /// cut in its wall, from the face down to `threadDepth` or the whole hole.
+    bool      threaded = false;
+    double    threadSize = 6;      ///< nominal diameter, mm (doc::StandardSizes)
+    Parameter threadPitch{.name = "", .expression = "1", .quantity = Quantity::Length, .value = 1.0, .error = {}};
+    bool      threadFull = true;   ///< the whole depth of the hole
+    Parameter threadDepth{.name = "", .expression = "8", .quantity = Quantity::Length, .value = 8.0, .error = {}};
+    bool      threadLeft = false;  ///< left-handed
+
+    /// The diameter actually drilled: the minor diameter of a threaded hole.
+    double DrillDiameter() const;
 
     std::string_view Type() const override { return kType; }
     /// Removes centre `index` and the axis that held it.

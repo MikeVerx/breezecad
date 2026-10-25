@@ -3,6 +3,7 @@
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Extrude.h"   // ApplyBoolean
 #include "kernel/occt/FaceMatch.h"
+#include "kernel/occt/Thread.h"
 
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
@@ -32,8 +33,8 @@ double Diagonal(const TopoDS_Shape& body) {
 }
 
 /// The cutting tool of one hole at `top`, pointing into the body along `down`.
-TopoDS_Shape HoleTool(const doc::HoleFeature& f, Vec3 top, Vec3 down, double depth) {
-    const double r = f.diameter.value / 2;
+Expected<TopoDS_Shape> HoleTool(const doc::HoleFeature& f, Vec3 top, Vec3 down, double depth) {
+    const double r = f.DrillDiameter() / 2;
     const gp_Ax2 start(ToPnt(top - down * kOvershoot), ToDir(down));
     TopoDS_Shape tool = BRepPrimAPI_MakeCylinder(start, r, depth + kOvershoot).Shape();
     if (f.type == doc::HoleType::Counterbore) {
@@ -45,17 +46,28 @@ TopoDS_Shape HoleTool(const doc::HoleFeature& f, Vec3 top, Vec3 down, double dep
         const TopoDS_Shape cone = BRepPrimAPI_MakeCone(start, rTop, r, rTop - r).Shape();
         tool = BRepAlgoAPI_Fuse(tool, cone).Shape();
     }
+    if (f.threaded) {
+        // The thread from the face down: the whole hole, or as deep as asked.
+        const double length = f.threadFull ? depth : std::min(f.threadDepth.value, depth);
+        const bool runsOut = f.throughAll && f.threadFull;
+        const Expected<TopoDS_Shape> groove =
+            HoleThreadGroove(top, down, f.threadSize, f.threadPitch.value, length, f.threadLeft, runsOut);
+        if (!groove) return groove.GetError();
+        tool = BRepAlgoAPI_Fuse(tool, *groove).Shape();
+    }
     return tool;
 }
 
 Status CheckSizes(const doc::HoleFeature& f) {
     for (const Parameter* p : f.Parameters())
         if (p->HasError()) return Error{p->error};
-    if (f.diameter.value <= 1e-6) return Error{"Диаметр должен быть больше нуля"};
+    if (f.DrillDiameter() <= 1e-6) return Error{"Диаметр должен быть больше нуля"};
+    if (f.threaded && f.threadPitch.value <= 1e-3) return Error{"Шаг резьбы должен быть больше нуля"};
+    if (f.threaded && !f.threadFull && f.threadDepth.value <= 1e-6) return Error{"Глубина резьбы должна быть больше нуля"};
     if (!f.throughAll && f.depth.value <= 1e-6) return Error{"Глубина должна быть больше нуля"};
-    if (f.type == doc::HoleType::Counterbore && (f.headDiameter.value <= f.diameter.value || f.headDepth.value <= 1e-6))
+    if (f.type == doc::HoleType::Counterbore && (f.headDiameter.value <= f.DrillDiameter() || f.headDepth.value <= 1e-6))
         return Error{"Цековка должна быть шире отверстия и иметь глубину"};
-    if (f.type == doc::HoleType::Countersink && f.sinkDiameter.value <= f.diameter.value)
+    if (f.type == doc::HoleType::Countersink && f.sinkDiameter.value <= f.DrillDiameter())
         return Error{"Зенковка должна быть шире отверстия"};
     return Status::Ok();
 }
@@ -73,8 +85,9 @@ Expected<TopoDS_Shape> HoleTools(const TopoDS_Shape& body, const doc::HoleFeatur
     try {
         TopoDS_Shape tools;
         for (Vec2 c : f.centres) {
-            const TopoDS_Shape tool = HoleTool(f, frame.ToWorld(c), down, depth);
-            tools = tools.IsNull() ? tool : BRepAlgoAPI_Fuse(tools, tool).Shape();
+            const Expected<TopoDS_Shape> tool = HoleTool(f, frame.ToWorld(c), down, depth);
+            if (!tool) return tool.GetError();
+            tools = tools.IsNull() ? *tool : BRepAlgoAPI_Fuse(tools, *tool).Shape();
         }
         return tools;
     } catch (const Standard_Failure& failure) {
