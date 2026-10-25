@@ -16,6 +16,10 @@ for log in "$@"; do
     # an annotation over 64 KB is dropped without a word. The errors first:
     # warnings' context lines would otherwise fill the 60 lines.
     grep -E "error:|Error:|undefined reference|cannot find|DSO missing|FAILED:" "$log" | cut -c1-300 | head -40 | emit "$name (errors)"
+    # The linker's own words come after a long toolchain path: shorten the
+    # paths and keep the whole line, or the reason is what gets cut off.
+    grep -E "(ld|ld\.exe|collect2(\.exe)?): " "$log" | sed -E 's#[^ ]*/(lib[^/ ]*\.a)#\1#g; s#[^ ]*/(ld(\.exe)?):#\1:#g' \
+        | cut -c1-900 | head -4 | emit "$name (linker)"
     grep -E "error|Error|ERROR|FAILED|Failed|failed|FATAL|Assertion|terminate called|Segmentation|Exception|SEGFAULT|TEST CASE|undefined reference|ld: |cannot find|DSO missing" "$log" \
         | grep -v "warning:" | cut -c1-300 | head -60 | emit "$name"
     # The end of the build log says how it stopped, whatever the words.
