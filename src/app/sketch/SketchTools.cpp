@@ -702,6 +702,15 @@ void SketchEditor::AddTypedDimensions(doc::Document& doc, sketch::Sketch& sk, co
             c.labelOffset = normal * off;
         } else if (c.type == ConstraintType::Diameter || c.type == ConstraintType::Radius) {
             c.labelOffset = Vec2{1, 1}.Normalized() * (sk.RadiusOf(c.refs[0]) + off);
+        } else if (const sketch::Arc* a = sk.FindArc(c.refs[0]); a && c.type == ConstraintType::ArcAngle) {
+            // Just outside the arc, across its middle (a fixed distance in
+            // millimetres put it far off a small arc).
+            const Vec2 centre = sk.PositionOf(a->center);
+            const Vec2 s = sk.PositionOf(a->start) - centre, e = sk.PositionOf(a->end) - centre;
+            double sweep = std::atan2(s.Cross(e), s.Dot(e));
+            if (sweep <= 0) sweep += 2 * kPi;
+            const double mid = std::atan2(s.y, s.x) + sweep / 2;
+            c.labelOffset = Vec2{std::cos(mid), std::sin(mid)} * (sk.RadiusOf(a->id) + off);
         }
         sk.AddConstraint(doc.Ids(), std::move(c));
         // Each one gets a fresh name: NextParameterName looks at the sketch.
