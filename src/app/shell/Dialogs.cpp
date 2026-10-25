@@ -1360,6 +1360,13 @@ void DrawAppearanceSettings(AppContext& app, float width) {
     const int t = app.settings.showTriad ? 0 : 1;
     if (const int n = ui::Segmented(ui, "triad", triad, t, 2, width); n != t) app.settings.showTriad = n == 0;
     ImGui::Dummy({0, ui.S(6)});
+    // Closed regions of a sketch tinted while it is edited: what would extrude
+    // shows at once, and a contour that did not close stays clear.
+    ui::FieldLabel(ui, Tr("Замкнутые области эскиза"));
+    static constexpr std::array<const char*, 2> regions{N_("Подкрашивать"), N_("Не подкрашивать")};
+    const int rf = app.settings.sketchRegionFill ? 0 : 1;
+    if (const int n = ui::Segmented(ui, "region-fill", regions, rf, 2, width); n != rf) app.settings.sketchRegionFill = n == 0;
+    ImGui::Dummy({0, ui.S(6)});
     ui::FieldLabel(ui, Tr("Фон вида"));
     if (ui::LinkButton(ui, "##open-backgrounds", Tr("Выбрать на вкладке «Вид» → «Фон»…"))) app.shell.backgroundMenu = true;
 }

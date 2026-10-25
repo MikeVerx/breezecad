@@ -22,8 +22,8 @@ struct RectangleIds {
 /// Axis-aligned, from two existing opposite corner points.
 RectangleIds AddCornerRectangle(Sketch& sk, IdGenerator& ids, ObjectId corner, ObjectId opposite);
 
-/// Axis-aligned around an existing centre point, one corner at `corner`. A
-/// construction diagonal keeps the centre in the middle.
+/// Axis-aligned around an existing centre point, one corner at `corner`. Two
+/// construction diagonals cross in the centre (the first one keeps it there).
 RectangleIds AddCentredRectangle(Sketch& sk, IdGenerator& ids, ObjectId centre, Vec2 corner);
 
 /// At any angle: side `a`–`b` (existing points), the opposite side through

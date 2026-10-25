@@ -305,14 +305,23 @@ bool Trim(Sketch& sk, IdGenerator& ids, const TrimSpan& span) {
     };
 
     std::vector<ObjectId> pieces;
+    // A piece whose ends are one point (a cut found on the curve's own end)
+    // would be a curve of zero length: there is no such piece.
+    const auto apart = [&](ObjectId a, ObjectId b) {
+        return a != b && (sk.PositionOf(a) - sk.PositionOf(b)).Length() > kEps * std::max(1.0, Size(ShapeOf(sk, span.curve)));
+    };
     if (kind == EntityKind::Line) {
         const Line line = *sk.FindLine(span.curve);
-        if (span.from) pieces.push_back(sk.AddLine(ids, line.start, pointAt(*span.from), line.construction));
-        if (span.to) pieces.push_back(sk.AddLine(ids, pointAt(*span.to), line.end, line.construction));
+        if (span.from)
+            if (const ObjectId p = pointAt(*span.from); apart(line.start, p)) pieces.push_back(sk.AddLine(ids, line.start, p, line.construction));
+        if (span.to)
+            if (const ObjectId p = pointAt(*span.to); apart(p, line.end)) pieces.push_back(sk.AddLine(ids, p, line.end, line.construction));
     } else if (kind == EntityKind::Arc) {
         const Arc arc = *sk.FindArc(span.curve);
-        if (span.from) pieces.push_back(sk.AddArc(ids, arc.center, arc.start, pointAt(*span.from), arc.construction));
-        if (span.to) pieces.push_back(sk.AddArc(ids, arc.center, pointAt(*span.to), arc.end, arc.construction));
+        if (span.from)
+            if (const ObjectId p = pointAt(*span.from); apart(arc.start, p)) pieces.push_back(sk.AddArc(ids, arc.center, arc.start, p, arc.construction));
+        if (span.to)
+            if (const ObjectId p = pointAt(*span.to); apart(p, arc.end)) pieces.push_back(sk.AddArc(ids, arc.center, p, arc.end, arc.construction));
     } else if (kind == EntityKind::Spline || kind == EntityKind::Ellipse) {
         // What is left becomes splines through points along the old curve
         // (an ellipse cut open is no longer an ellipse).
@@ -414,10 +423,31 @@ std::optional<ObjectId> Split(Sketch& sk, IdGenerator& ids, ObjectId curve, Vec2
     if (!at) return std::nullopt;
     const ObjectId point = sk.AddPoint(ids, *at);
     if (Line* l = sk.FindLine(curve)) {
-        const ObjectId end = l->end;
+        const ObjectId start = l->start, end = l->end;
         const bool construction = l->construction, centerline = l->centerline;
         l->end = point;
-        std::erase_if(sk.constraints, [&](const Constraint& c) { return c.type == ConstraintType::Length && c.refs[0] == curve; });
+        // What measured the whole line keeps measuring it, not the first
+        // piece: its length becomes the distance between its ends, and its
+        // middle or an equality goes to a helper line over both pieces
+        // (else the sketch tore: a centred rectangle's split diagonal kept
+        // its centre on the first half, and nothing could be solved).
+        bool needsWhole = false;
+        for (Constraint& c : sk.constraints) {
+            if (!c.References(curve)) continue;
+            if (c.type == ConstraintType::Length) {
+                c.type = ConstraintType::Distance;
+                c.refs = {start, end, {}};
+            } else if (c.type == ConstraintType::Midpoint || c.type == ConstraintType::Equal) {
+                needsWhole = true;
+            }
+        }
+        if (needsWhole) {
+            const ObjectId whole = sk.AddLine(ids, start, end, true);
+            for (Constraint& c : sk.constraints)
+                if (c.type == ConstraintType::Midpoint || c.type == ConstraintType::Equal)
+                    for (ObjectId& r : c.refs)
+                        if (r == curve) r = whole;
+        }
         const ObjectId second = sk.AddLine(ids, point, end, construction);
         sk.FindLine(second)->centerline = centerline;
         sk.AddConstraint(ids, Make(ConstraintType::Parallel, curve, second));
@@ -425,6 +455,8 @@ std::optional<ObjectId> Split(Sketch& sk, IdGenerator& ids, ObjectId curve, Vec2
     }
     const Arc* a = sk.FindArc(curve);
     const Arc copy = *a;
+    // The sweep of the whole arc no longer belongs to either piece.
+    std::erase_if(sk.constraints, [&](const Constraint& c) { return c.type == ConstraintType::ArcAngle && c.refs[0] == curve; });
     for (Arc& arc : sk.arcs)
         if (arc.id == curve) arc.end = point;
     sk.AddArc(ids, copy.center, point, copy.end, copy.construction);
