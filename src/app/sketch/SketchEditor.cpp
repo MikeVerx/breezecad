@@ -444,6 +444,14 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
                     myHover = {g.constraint, sketch::EntityKind::Constraint};
     }
 
+    // Closed regions, under the lines: what the model takes as a profile.
+    if (app.settings.sketchRegionFill)
+        if (const std::vector<kernel::SketchRegion>* regions = session.model.Regions(f->id)) {
+            const ui::ThemeColors& tc = app.ui.C();
+            const Color tint = tc.regionFill.WithAlpha(tc.regionFill.a * 0.5f);
+            for (const kernel::SketchRegion& r : *regions) FillSketchRegion(dl, view, r, tint, tint, 0.0f);
+        }
+
     SketchDrawStyle style;
     style.selection = &mySelection;
     style.hover = myHover.id;
