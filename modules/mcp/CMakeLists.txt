@@ -39,6 +39,8 @@ if(WIN32)
         # Windows would not find libstdc++-6.dll from here.
         target_link_options(bz_mcp_module PRIVATE -static)
         target_link_options(bz_mcp_bridge PRIVATE -static)
+        # A newer MinGW leaves one CRT symbol undefined in static DLLs.
+        target_sources(bz_mcp_module PRIVATE MingwCompat.c)
     endif()
 endif()
 
