@@ -60,7 +60,16 @@ jobs:
       - name: Build
         id: build
         run: cmake --build --preset windows-mingw 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+      - name: Diagnosis
+        run: |
+          set +e +o pipefail
+          exe=$(find build/windows-mingw -name bz_tests.exe | head -1)
+          grep -h "define OCC_VERSION_COMPLETE" /mingw64/include/opencascade/Standard_Version.hxx | sed 's/^/::notice title=occt::/'
+          timeout 900 "$exe" -tc="diag*" 2>&1 | grep "^DIAG" > diag.log
+          echo "exit $?" >> diag.log
+          echo "::notice title=diag::$(sed -e 's/%/%25/g' diag.log | awk 'BEGIN{ORS="%0A"} {print}')"
       - name: Test
+        if: false
         run: |
           set +e +o pipefail   # the msys2 shell runs with -e: keep going to name the crash
           # A time limit: a test that hangs fails with its name instead of

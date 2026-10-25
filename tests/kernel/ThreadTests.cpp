@@ -439,3 +439,47 @@ TEST_CASE("the lead-in chamfer takes the first crests off, and can be turned off
     CHECK(chamfered < plain - 1.0);
     CHECK(chamfered > plain - 20.0);
 }
+
+// --- Temporary diagnosis (branch diag/windows-thread, not for merging) -----
+TEST_CASE("diag: which step of a chamfered thread faults") {
+    for (const double length : {12.0, 14.0, 16.0, 20.0})
+        for (const bool chamfer : {false, true})
+            for (const double size : {0.0, 8.0}) {
+                doc::Document d;
+                auto& sk = AddSketch(d);
+                AddCircle(d, sk, {0, 0}, 4);
+                AddExtrude(d, sk.id, std::format("{}", length));
+                kernel::Model blank;
+                blank.Rebuild(d);
+                const TopoDS_Shape body = BodyOf(blank);
+                doc::ThreadFeature f;
+                f.face = doc::CylinderTouch{{0, 0, 0}, {0, 0, 1}, 4, {1, 0, 0}};
+                f.size = size;
+                f.pitch.value = 1.25;
+                f.spec.leadChamfer = chamfer;
+                std::string line = std::format("L={} chamfer={} size={}:", length, chamfer, size);
+                Expected<kernel::occt::ThreadShapes> tool = Error{"-"};
+                std::string what;
+                bool ok = guard::RunGuarded([&] { try { tool = kernel::occt::ThreadTool(body, f); } catch (...) { tool = Error{"throw"}; } }, &what);
+                line += std::format(" tool={}", ok ? (tool ? "ok" : tool.GetError().message) : "FAULT " + what);
+                TopoDS_Shape shape = body;
+                if (ok && tool && tool->chamfer) {
+                    Expected<TopoDS_Shape> r = Error{"-"};
+                    ok = guard::RunGuarded([&] { r = kernel::occt::ApplyBoolean(shape, *tool->chamfer, doc::BooleanOp::Cut); }, &what);
+                    line += std::format(" chamferCut={}", ok ? (r ? "ok" : r.GetError().message) : "FAULT " + what);
+                    if (ok && r) shape = *r;
+                }
+                if (ok && tool) {
+                    Expected<TopoDS_Shape> r = Error{"-"};
+                    ok = guard::RunGuarded([&] { r = kernel::occt::ApplyBoolean(shape, tool->cut, doc::BooleanOp::Cut); }, &what);
+                    line += std::format(" grooveCut={}", ok ? (r ? "ok" : r.GetError().message) : "FAULT " + what);
+                }
+                std::printf("DIAG %s\n", line.c_str());
+                std::fflush(stdout);
+                if (!ok) {
+                    std::printf("DIAG stop: a fault leaves OCCT's handler list dangling\n");
+                    std::fflush(stdout);
+                    return;
+                }
+            }
+}
