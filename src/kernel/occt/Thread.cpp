@@ -128,6 +128,25 @@ struct Layout {
     std::vector<std::pair<double, double>> openEnds;
 };
 
+/// The helix as a whole number of half turns, each edge exactly half a turn.
+/// Spread evenly over a length that is not, every edge is a little short of
+/// half a turn, and on some lengths (14, 16, 18, 19, 22 mm of an M8 shaft)
+/// the MinGW build of OCCT 7.9.3 (Windows) faults cutting the groove
+/// (0xc0000005; found 25.10.2026, Linux and macOS never did). The extra
+/// part runs out past an open end, where it cuts nothing; with no open end
+/// the thread ends up to half a pitch earlier.
+void WholeHalfTurns(Layout& l, bool beginOpen, bool endOpen) {
+    const double halfTurn = l.pitch / 2;
+    const double length = l.end - l.begin;
+    if (endOpen || beginOpen) {
+        const double whole = std::ceil(length / halfTurn - 1e-9) * halfTurn;
+        if (endOpen) l.end = l.begin + whole;
+        else l.begin = l.end - whole;
+    } else {
+        l.end = l.begin + std::max(2.0, std::floor(length / halfTurn + 1e-9)) * halfTurn;
+    }
+}
+
 Expected<Layout> Plan(const TopoDS_Shape& body, const doc::ThreadFeature& f) {
     if (!f.face) return Error{"Щёлкните цилиндрическую грань: вал или стенку отверстия"};
     for (const Parameter* p : {&f.pitch, &f.length})
@@ -191,6 +210,10 @@ Expected<Layout> Plan(const TopoDS_Shape& body, const doc::ThreadFeature& f) {
     }
     if (l.end - l.begin < l.pitch) return Error{"Грань слишком короткая для резьбы с таким шагом"};
     if ((l.end - l.begin) / l.pitch > 1000) return Error{"Слишком много витков (больше 1000)"};
+    const auto openAt = [&](double outward) {
+        return std::ranges::any_of(l.openEnds, [&](const auto& e) { return e.second == outward; });
+    };
+    WholeHalfTurns(l, openAt(-1.0), openAt(1.0));
     return l;
 }
 
@@ -378,6 +401,7 @@ Expected<TopoDS_Shape> HoleThreadGroove(Vec3 top, Vec3 down, const doc::ThreadCu
         l.begin = -pitch;
         l.end = throughEnd ? length + pitch : length - half;
         if (l.end - l.begin < pitch) return Error{"Отверстие слишком мелкое для резьбы с таким шагом"};
+        WholeHalfTurns(l, true, throughEnd);
         return Groove(l, leftHanded);
     } catch (const Standard_Failure& failure) {
         return Error{std::format("Ошибка резьбы: {}", failure.GetMessageString())};

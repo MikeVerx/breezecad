@@ -10,7 +10,6 @@
 #include <nlohmann/json.hpp>
 
 #include <BRepBuilderAPI_Transform.hxx>
-#include <Standard_Version.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepGProp.hxx>
 #include <GProp_GProps.hxx>
@@ -388,14 +387,6 @@ double MatedGap(doc::ThreadStandard standard, double d, double pitch, doc::Threa
 } // namespace
 
 TEST_CASE("a bolt and a nut made here screw together with the gap their fits promise") {
-#if OCC_VERSION_HEX >= 0x080000
-    // OCCT 8 (the Windows build) faults, and after a guarded fault can hang,
-    // measuring two threaded solids against each other (Extrema_ExtCC on
-    // helical faces). The geometry checked here is the same on every
-    // system: OCCT 7.6, 7.8 and 7.9 (Linux, macOS) check it.
-    MESSAGE("skipped on OCCT " OCC_VERSION_COMPLETE ": measured on OCCT 7.x");
-    return;
-#endif
     using doc::ThreadFit;
     using doc::ThreadStandard;
     // Within 0.015 mm of the promise (the search and the solids' tolerances).
@@ -438,4 +429,23 @@ TEST_CASE("the lead-in chamfer takes the first crests off, and can be turned off
     // Both ends are free: two rings of 45°, 0.77 mm deep, about half of each is thread already cut.
     CHECK(chamfered < plain - 1.0);
     CHECK(chamfered > plain - 20.0);
+}
+
+TEST_CASE("a thread builds on a shaft of any length") {
+    // Windows (OCCT 7.9.3 built by MinGW) faulted cutting the groove on 14,
+    // 16, 18, 19 and 22 mm of an M8 shaft until the helix became a whole
+    // number of half turns (25.10.2026). One rebuild each; a fault would
+    // show as an error of the thread.
+    for (int length = 10; length <= 30; ++length) {
+        CAPTURE(length);
+        doc::Document d;
+        auto& sk = AddSketch(d);
+        AddCircle(d, sk, {0, 0}, 4);
+        AddExtrude(d, sk.id, std::to_string(length));
+        auto& t = AddThread(d, 4, "1.25");
+        kernel::Model model;
+        model.Rebuild(d);
+        INFO(t.status.message);
+        CHECK(t.status.state == FeatureState::Ok);
+    }
 }
