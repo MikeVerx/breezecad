@@ -23,8 +23,8 @@ struct Chain {
 };
 
 /// The chain through `curve`: every line and arc reachable through ends
-/// shared by exactly two curves; a circle on its own. Projections and
-/// unknown ids give nullopt.
+/// shared by exactly two curves of its kind (outline or helper); a circle
+/// on its own. Projections and unknown ids give nullopt.
 std::optional<Chain> ChainOf(const Sketch& sk, ObjectId curve);
 
 /// The side of the chain `p` is on: +1 left of the travel direction, -1 right
