@@ -11,6 +11,7 @@
 #include "document/EdgeReference.h"
 #include "document/FaceReference.h"
 #include "document/Feature.h"
+#include "document/ThreadFeature.h"     // ThreadSpec
 #include "document/WorkPlaneFeature.h"   // CylinderTouch
 
 #include <optional>
@@ -54,8 +55,12 @@ public:
     bool      threadFull = true;   ///< the whole depth of the hole
     Parameter threadDepth{.name = "", .expression = "8", .quantity = Quantity::Length, .value = 8.0, .error = {}};
     bool      threadLeft = false;  ///< left-handed
+    ThreadSpec threadSpec;         ///< kind, fit, lead-in chamfer (0.2.4.2)
 
-    /// The diameter actually drilled: the minor diameter of a threaded hole.
+    /// The thread as cut into the wall (the hole's minor diameter, the groove).
+    ThreadCut ThreadGeometry() const;
+    /// The diameter actually drilled: a threaded hole's minor diameter, bored
+    /// out by its fit.
     double DrillDiameter() const;
 
     std::string_view Type() const override { return kType; }

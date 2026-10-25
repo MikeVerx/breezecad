@@ -39,11 +39,14 @@ void HoleFeature::CollectParameters(std::vector<Parameter*>& out) {
     out.push_back(&sinkDiameter);
     out.push_back(&threadPitch);
     out.push_back(&threadDepth);
+    out.push_back(&threadSpec.clearance);
 }
 
+ThreadCut HoleFeature::ThreadGeometry() const { return CutOf(threadSpec, threadSize, threadPitch.value, false); }
+
 double HoleFeature::DrillDiameter() const {
-    // ISO 68-1: the basic minor diameter, D - 5/4 H = D - 1.0825 P.
-    return threaded ? threadSize - 1.0825 * threadPitch.value : diameter.value;
+    // Metric basic: D - 5/4 H = D - 1.0825 P (ISO 68-1); others by their profile.
+    return threaded ? 2 * ThreadGeometry().surface : diameter.value;
 }
 
 void HoleFeature::SaveFields(Json& out) const {
@@ -66,6 +69,7 @@ void HoleFeature::SaveFields(Json& out) const {
         out["threadFull"]  = threadFull;
         out["threadDepth"] = json_io::ToJson(threadDepth);
         out["threadLeft"]  = threadLeft;
+        out["thread"]      = ToJson(threadSpec);
     }
     if (!concentric.empty()) {
         Json axes = Json::array();
@@ -92,6 +96,9 @@ Status HoleFeature::LoadFields(const Json& in) {
         !ReadMember(in, "threadPitch", f.threadPitch) || !ReadMember(in, "threadFull", f.threadFull) ||
         !ReadMember(in, "threadDepth", f.threadDepth) || !ReadMember(in, "threadLeft", f.threadLeft))
         return Error{"Отверстие: повреждены параметры резьбы"};
+    f.threadSpec.leadChamfer = false;   // threaded holes of 0.2.4.1: metric, nominal, no chamfer
+    if (const auto it = in.find("thread"); it != in.end() && !ReadThreadSpec(*it, f.threadSpec))
+        return Error{"Отверстие: повреждён вид резьбы"};
     if (!json_io::FromId(kTypeIds, typeId, f.type)) return Error{std::format("Отверстие: неизвестный тип «{}»", typeId)};
     for (const Json& c : in.value("centres", Json::array())) {
         Vec2 v;
@@ -135,6 +142,7 @@ Status HoleFeature::LoadFields(const Json& in) {
     threadFull   = f.threadFull;
     threadDepth  = std::move(f.threadDepth);
     threadLeft   = f.threadLeft;
+    threadSpec   = std::move(f.threadSpec);
     return Status::Ok();
 }
 

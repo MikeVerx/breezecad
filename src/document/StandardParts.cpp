@@ -571,6 +571,7 @@ public:
         f->face = CylinderTouch{{0, 0, midZ}, {0, 0, 1}, d.v / 2, {}};
         f->cosmetic = !myRealThread;
         f->size = size;
+        f->spec.leadChamfer = false;   // a library part keeps its own ends (chamfered by its sketch where the standard says)
         f->pitch.name = myDoc.NextParameterName();
         f->pitch.expression = pitch.text;
         f->pitch.value = pitch.v;

@@ -50,8 +50,21 @@ Expected<TopoDS_Shape> HoleTool(const doc::HoleFeature& f, Vec3 top, Vec3 down, 
         // The thread from the face down: the whole hole, or as deep as asked.
         const double length = f.threadFull ? depth : std::min(f.threadDepth.value, depth);
         const bool runsOut = f.throughAll && f.threadFull;
+        const doc::ThreadCut cut = f.ThreadGeometry();
+        // The lead-in chamfer: a 45° countersink of the drill from the
+        // thread's root down to the drilled wall, at the mouth. Fused into the
+        // drill like any countersink. (A through hole's far end is wherever
+        // the body ends: not known here, so not chamfered.)
+        if (f.threadSpec.leadChamfer) {
+            const double root = cut.anchor + cut.depth, wall = r;
+            const double rTop = root + kOvershoot;
+            const auto cone = [&](Vec3 at, Vec3 dir) {
+                return BRepPrimAPI_MakeCone(gp_Ax2(ToPnt(at - dir * kOvershoot), ToDir(dir)), rTop, wall, rTop - wall).Shape();
+            };
+            if (root > wall + 1e-6) tool = BRepAlgoAPI_Fuse(tool, cone(top, down)).Shape();
+        }
         const Expected<TopoDS_Shape> groove =
-            HoleThreadGroove(top, down, f.threadSize, f.threadPitch.value, length, f.threadLeft, runsOut);
+            HoleThreadGroove(top, down, cut, f.threadPitch.value, length, f.threadLeft, runsOut);
         if (!groove) return groove.GetError();
         tool = BRepAlgoAPI_Fuse(tool, *groove).Shape();
     }
@@ -63,6 +76,8 @@ Status CheckSizes(const doc::HoleFeature& f) {
         if (p->HasError()) return Error{p->error};
     if (f.DrillDiameter() <= 1e-6) return Error{"Диаметр должен быть больше нуля"};
     if (f.threaded && f.threadPitch.value <= 1e-3) return Error{"Шаг резьбы должен быть больше нуля"};
+    if (f.threaded && f.threadSpec.fit == doc::ThreadFit::Custom && f.threadSpec.clearance.HasError())
+        return Error{f.threadSpec.clearance.error};
     if (f.threaded && !f.threadFull && f.threadDepth.value <= 1e-6) return Error{"Глубина резьбы должна быть больше нуля"};
     if (!f.throughAll && f.depth.value <= 1e-6) return Error{"Глубина должна быть больше нуля"};
     if (f.type == doc::HoleType::Counterbore && (f.headDiameter.value <= f.DrillDiameter() || f.headDepth.value <= 1e-6))

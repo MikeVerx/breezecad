@@ -376,7 +376,7 @@ void ApplyThread(doc::ThreadFeature& thread, Model::Impl& impl, std::vector<Body
     Body* target = &bodies.back();
     if (thread.face)
         for (auto it = bodies.rbegin(); it != bodies.rend(); ++it)
-            if (const auto site = occt::FindThreadSite(it->shape, *thread.face)) {
+            if (const auto site = occt::FindThreadSite(it->shape, *thread.face, thread.spec.standard)) {
                 thread.site = doc::ThreadFeature::Site{site->external, site->nominal, site->length};
                 target = &*it;
                 break;
@@ -399,6 +399,8 @@ void ApplyThread(doc::ThreadFeature& thread, Model::Impl& impl, std::vector<Body
     // A chosen size the face is too small or too big for: material first.
     Expected<TopoDS_Shape> filled = tool->fill ? occt::ApplyBoolean(target->shape, *tool->fill, doc::BooleanOp::Join)
                                                : Expected<TopoDS_Shape>(target->shape);
+    // The lead-in chamfer first: a simple cone against the plain surface.
+    if (filled && tool->chamfer) filled = occt::ApplyBoolean(*filled, *tool->chamfer, doc::BooleanOp::Cut);
     Expected<TopoDS_Shape> result = filled ? occt::ApplyBoolean(*filled, tool->cut, doc::BooleanOp::Cut) : filled;
     if (!result) {
         thread.status = {FeatureState::Error, result.GetError().message};

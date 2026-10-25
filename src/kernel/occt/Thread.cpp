@@ -3,7 +3,10 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
+#include <BRepPrimAPI_MakeRevol.hxx>
+#include <gp_Ax1.hxx>
 #include <TopoDS_Wire.hxx>
 #include <gp_Ax2.hxx>
 #include <BRep_Tool.hxx>
@@ -26,24 +29,18 @@
 #include <algorithm>
 #include <cmath>
 #include <format>
+#include <optional>
+#include <utility>
+#include <vector>
 
 namespace bz::kernel::occt {
 namespace {
 
-// ISO 68-1 basic profile, fundamental triangle height H = 0.866P, flanks at
-// 60°. An external thread is 17/24 H deep (0.6134P) with a P/8 flat on its
-// crest; an internal one is 5/8 H deep (0.5413P, from the minor diameter a
-// tap drill leaves to the nominal one) with a P/4 flat on its crest. So the
-// groove is a trapezoid: 7/8 P wide at the shaft's surface (3/4 P at the
-// hole's), narrowing along the flanks to the root. Its pitch diameter then
-// lies where it must, 3/8 H inside the nominal one: a nut and a bolt made
-// here fit each other and fit real ones.
-constexpr double kExternalDepth = 0.6134;
-constexpr double kInternalDepth = 0.5413;
-constexpr double kExternalMouth = 0.875;   // of the pitch: groove width at the shaft's surface
-constexpr double kInternalMouth = 0.75;    // …at the hole's surface
+// The groove is the basic profile of the kind (doc::BasicProfile: metric
+// ISO 68-1, pipe G ISO 228-1, trapezoidal ISO 2904) — a trapezoid as wide as
+// the space between two teeth at the part's surface, narrowing along the
+// flanks to a flat root — moved and deepened by the fit (doc::CutOf).
 constexpr double kOvershoot = 0.1;   // of the pitch: the groove starts this far outside the surface
-const double kFlank = std::tan(kPi / 6);   // the flank's run across per unit of depth
 
 struct Site {
     TopoDS_Face face;
@@ -98,17 +95,18 @@ Expected<Site> Find(const TopoDS_Shape& body, const doc::CylinderTouch& ref) {
 
 } // namespace
 
-Expected<ThreadSite> FindThreadSite(const TopoDS_Shape& body, const doc::CylinderTouch& ref) {
+Expected<ThreadSite> FindThreadSite(const TopoDS_Shape& body, const doc::CylinderTouch& ref, doc::ThreadStandard standard) {
     try {
         const Expected<Site> s = Find(body, ref);
         if (!s) return s.GetError();
         const double d = 2 * s->radius;
         // A hole is the minor diameter: add back the depth of the thread
-        // that a coarse tap of the matching size would cut.
+        // that a tap of the matching size would cut.
         double nominal = d;
         if (!s->external)
-            for (int i = 0; i < 3; ++i) nominal = d + 2 * kInternalDepth * doc::CoarsePitch(nominal);
-        return ThreadSite{s->external, doc::StandardSize(nominal), s->hi - s->lo};
+            for (int i = 0; i < 3; ++i)
+                nominal = d + 2 * doc::BasicProfile(standard, doc::StandardPitch(standard, nominal), false).minorOffset;
+        return ThreadSite{s->external, doc::NearestStandardSize(standard, nominal), s->hi - s->lo};
     } catch (const Standard_Failure& failure) {
         return Error{std::format("Ошибка резьбы: {}", failure.GetMessageString())};
     }
@@ -120,12 +118,14 @@ namespace {
 /// cosmetic drawing.
 struct Layout {
     Site   site;
-    double pitch = 0, depth = 0;
-    double mouth = 0;          ///< groove width at the crest radius
-    double crest = 0;          ///< radius the thread is made at: the major (shaft) or minor (hole) radius
+    double pitch = 0;
+    doc::ThreadCut cut;        ///< the groove (anchor radius, depth, mouth) and the turned or bored surface
+    double flank = 0;          ///< tan of the half angle: the flank's run along per unit of depth
     double begin = 0, end = 0; ///< along `axis` from the face's axis point
     Vec3   axis, across;
     double side = -1;          ///< -1 shaft (the groove goes in), +1 hole
+    /// Open ends for the lead-in chamfer: where (along `axis`) and which way is out (±1).
+    std::vector<std::pair<double, double>> openEnds;
 };
 
 Expected<Layout> Plan(const TopoDS_Shape& body, const doc::ThreadFeature& f) {
@@ -139,15 +139,16 @@ Expected<Layout> Plan(const TopoDS_Shape& body, const doc::ThreadFeature& f) {
     if (!found) return found.GetError();
     l.site = *found;
     const Site& s = l.site;
-    l.depth = (s.external ? kExternalDepth : kInternalDepth) * l.pitch;
-    l.mouth = (s.external ? kExternalMouth : kInternalMouth) * l.pitch;
+    if (f.spec.fit == doc::ThreadFit::Custom && f.spec.clearance.HasError()) return Error{f.spec.clearance.error};
     l.side = s.external ? -1.0 : 1.0;
     // A chosen standard size wins over the face: a shaft is cut down to
-    // it, a hole bored out to its minor diameter.
-    l.crest = s.radius;
-    if (f.size > 0) l.crest = s.external ? f.size / 2 : f.size / 2 - l.depth;
-    if (l.crest <= 1e-3) return Error{"Шаг слишком крупный для такого диаметра"};
-    if (s.external && l.depth >= l.crest * 0.9) return Error{"Шаг слишком крупный для такого диаметра"};
+    // it, a hole bored out to its minor diameter. Without one the face is
+    // the basic surface (a shaft's major, a hole's minor diameter).
+    const double nominal = f.size > 0 ? f.size : (s.external ? 2 * s.radius : 0.0);
+    l.cut = doc::CutOf(f.spec, nominal, l.pitch, s.external, f.size > 0 ? std::nullopt : std::optional<double>(s.radius));
+    l.flank = std::tan(l.cut.halfAngle);
+    if (l.cut.anchor <= 1e-3 || l.cut.surface <= 1e-3) return Error{"Шаг слишком крупный для такого диаметра"};
+    if (s.external && l.cut.depth >= l.cut.anchor * 0.9) return Error{"Шаг слишком крупный для такого диаметра"};
     const double faceLength = s.hi - s.lo;
     double length = faceLength;
     if (!f.fullLength) {
@@ -167,15 +168,27 @@ Expected<Layout> Plan(const TopoDS_Shape& body, const doc::ThreadFeature& f) {
     // An open end (the tip of a shaft, the mouth of a hole): the groove
     // runs out past it. A closed one (a shoulder, the bottom of a blind
     // hole): the groove stops short of it rather than cutting into it.
-    const double half = l.mouth / 2 + kOvershoot * l.pitch * kFlank;
+    const double half = l.cut.mouth / 2 + kOvershoot * l.pitch * l.flank;
     BRepClass3d_SolidClassifier classifier(body);
     const auto open = [&](double along, double outward) {
-        const Vec3 p = s.axisPoint + axis * (along + outward * std::min(0.2 * l.pitch, 0.5)) + l.across * (s.radius + l.side * l.depth / 2);
+        const Vec3 p = s.axisPoint + axis * (along + outward * std::min(0.2 * l.pitch, 0.5)) + l.across * (s.radius + l.side * l.cut.depth / 2);
         classifier.Perform(gp_Pnt(p.x, p.y, p.z), 1e-7);
         return classifier.State() == TopAbs_OUT;
     };
-    l.begin += open(l.begin, -1) ? -l.pitch : half;
-    if (length >= faceLength - 1e-9) l.end += open(l.end, 1) ? l.pitch : -half;
+    if (open(l.begin, -1)) {
+        l.openEnds.push_back({l.begin, -1.0});
+        l.begin -= l.pitch;
+    } else {
+        l.begin += half;
+    }
+    if (length >= faceLength - 1e-9) {
+        if (open(l.end, 1)) {
+            l.openEnds.push_back({l.end, 1.0});
+            l.end += l.pitch;
+        } else {
+            l.end -= half;
+        }
+    }
     if (l.end - l.begin < l.pitch) return Error{"Грань слишком короткая для резьбы с таким шагом"};
     if ((l.end - l.begin) / l.pitch > 1000) return Error{"Слишком много витков (больше 1000)"};
     return l;
@@ -205,25 +218,25 @@ Expected<TopoDS_Wire> Helix(const Layout& l, double radius, bool leftHanded) {
 
 /// The helical groove of a planned thread (the solid that is cut out).
 Expected<TopoDS_Shape> Groove(const Layout& l, bool leftHanded) {
-    const Expected<TopoDS_Wire> helix = Helix(l, l.crest, leftHanded);
+    const Expected<TopoDS_Wire> helix = Helix(l, l.cut.anchor, leftHanded);
     if (!helix) return helix.GetError();
 
     // The groove in the plane through the axis at the helix start: its
     // mouth a little outside the surface, its flat root `depth` into
     // the material (see the profile above).
     const double over = kOvershoot * l.pitch;
-    const double top = l.mouth / 2 + over * kFlank;      // half width a little outside
-    const double root = l.mouth / 2 - l.depth * kFlank;  // half width at the root
+    const double top = l.cut.mouth / 2 + over * l.flank;          // half width a little outside
+    const double root = l.cut.mouth / 2 - l.cut.depth * l.flank;  // half width at the root
     const Vec3 origin = l.site.axisPoint + l.axis * l.begin;
     const auto at = [&](double radial, double along) {
-        const Vec3 p = origin + l.across * (l.crest + radial) + l.axis * along;
+        const Vec3 p = origin + l.across * (l.cut.anchor + radial) + l.axis * along;
         return gp_Pnt(p.x, p.y, p.z);
     };
     BRepBuilderAPI_MakePolygon profile;
     profile.Add(at(-l.side * over, -top));
     profile.Add(at(-l.side * over, top));
-    profile.Add(at(l.side * l.depth, root));
-    profile.Add(at(l.side * l.depth, -root));
+    profile.Add(at(l.side * l.cut.depth, root));
+    profile.Add(at(l.side * l.cut.depth, -root));
     profile.Close();
     if (!profile.IsDone()) return Error{"Резьба: не удалось построить профиль"};
 
@@ -233,6 +246,38 @@ Expected<TopoDS_Shape> Groove(const Layout& l, bool leftHanded) {
     sweep.Build();
     if (!sweep.IsDone() || !sweep.MakeSolid()) return Error{"Резьба не строится с такими размерами"};
     return sweep.Shape();
+}
+
+/// The lead-in chamfers at the open ends: rings of 45° that take the
+/// crests off from the surface down to the root, so the first turn starts
+/// whole (and a printed first layer's bulge goes with them).
+TopoDS_Shape Chamfers(const Layout& l) {
+    TopoDS_Shape out;
+    const double over = kOvershoot * l.pitch;
+    const double r0 = l.cut.surface;
+    const double r1 = l.cut.anchor + l.side * l.cut.depth;   // the root
+    const double deep = std::abs(r1 - r0);
+    for (const auto& [end, outward] : l.openEnds) {
+        const auto at = [&](double along, double radius) {
+            const Vec3 p = l.site.axisPoint + l.axis * along + l.across * std::max(radius, 1e-3);
+            return gp_Pnt(p.x, p.y, p.z);
+        };
+        // A triangle in a plane through the axis: its long side is the cone
+        // through (end, root) and (end - depth, surface), the rest outside.
+        // Outside it reaches further than the groove (1.7 over, not 1): their
+        // faces must not lie on one cylinder, the fuse fails on such.
+        const double reach = 1.7 * over;
+        BRepBuilderAPI_MakePolygon triangle(at(end + outward * over, r1 + l.side * over),
+                                            at(end - outward * (deep + reach), r0 - l.side * reach),
+                                            at(end + outward * over, r0 - l.side * reach), true);
+        if (!triangle.IsDone()) continue;
+        const BRepBuilderAPI_MakeFace face(triangle.Wire());
+        if (!face.IsDone()) continue;
+        const gp_Ax1 axis(gp_Pnt(l.site.axisPoint.x, l.site.axisPoint.y, l.site.axisPoint.z), gp_Dir(l.axis.x, l.axis.y, l.axis.z));
+        const TopoDS_Shape ring = BRepPrimAPI_MakeRevol(face.Face(), axis, 2 * kPi).Shape();
+        out = out.IsNull() ? ring : BRepAlgoAPI_Fuse(out, ring).Shape();
+    }
+    return out;
 }
 
 /// A solid cylinder (radius `r`) along the layout's thread length.
@@ -257,26 +302,31 @@ Expected<ThreadShapes> ThreadTool(const TopoDS_Shape& body, const doc::ThreadFea
         // diameter, or inside the minor one, is cut too. Too little (a thinner
         // shaft, a wider hole): material is added up to the crest first, along
         // the face only, so the thread is whole instead of cut short.
+        // A fit's flat crests are the same: the shaft turned or the hole
+        // bored to the cut's surface.
         ThreadShapes out;
         const double over = kOvershoot * l.pitch;
         const double r = l.site.radius;
-        if (l.site.external && r > l.crest + 1e-6) {
-            tool = BRepAlgoAPI_Fuse(tool, BRepAlgoAPI_Cut(Rod(l, r + over), Rod(l, l.crest)).Shape()).Shape();
-        } else if (!l.site.external && r < l.crest - 1e-6) {
-            tool = BRepAlgoAPI_Fuse(tool, Rod(l, l.crest)).Shape();
-        } else if (std::abs(r - l.crest) > 1e-6) {
+        const double target = l.cut.surface;
+        if (l.site.external && r > target + 1e-6) {
+            tool = BRepAlgoAPI_Fuse(tool, BRepAlgoAPI_Cut(Rod(l, r + over), Rod(l, target)).Shape()).Shape();
+        } else if (!l.site.external && r < target - 1e-6) {
+            tool = BRepAlgoAPI_Fuse(tool, Rod(l, target)).Shape();
+        } else if (std::abs(r - target) > 1e-6) {
             Layout onFace = l;   // the face's own length: nothing added past its ends
             const double faceStart = f.fromOtherEnd ? -l.site.hi : l.site.lo;
             onFace.begin = std::max(l.begin, faceStart);
             onFace.end = std::min(l.end, faceStart + (l.site.hi - l.site.lo));
             if (onFace.end - onFace.begin > 1e-6) {
-                const double inner = std::min(r, l.crest), outer = std::max(r, l.crest);
+                const double inner = std::min(r, target), outer = std::max(r, target);
                 // A hair into the face so the two solids fuse into one.
                 const double hair = std::min(0.01, (outer - inner) / 4);
                 out.fill = l.site.external ? BRepAlgoAPI_Cut(Rod(onFace, outer), Rod(onFace, inner - hair)).Shape()
                                            : BRepAlgoAPI_Cut(Rod(onFace, outer + hair), Rod(onFace, inner)).Shape();
             }
         }
+        if (f.spec.leadChamfer && !l.openEnds.empty())
+            if (TopoDS_Shape c = Chamfers(l); !c.IsNull()) out.chamfer = std::move(c);
         out.cut = tool;
         return out;
     } catch (const Standard_Failure& failure) {
@@ -304,7 +354,7 @@ Expected<TopoDS_Shape> CosmeticThread(const TopoDS_Shape& body, const doc::Threa
     }
 }
 
-Expected<TopoDS_Shape> HoleThreadGroove(Vec3 top, Vec3 down, double nominal, double pitch, double length,
+Expected<TopoDS_Shape> HoleThreadGroove(Vec3 top, Vec3 down, const doc::ThreadCut& cut, double pitch, double length,
                                         bool leftHanded, bool throughEnd) {
     if (pitch <= 1e-3) return Error{"Шаг резьбы должен быть больше нуля"};
     if (length < pitch) return Error{"Резьба короче одного шага"};
@@ -312,20 +362,19 @@ Expected<TopoDS_Shape> HoleThreadGroove(Vec3 top, Vec3 down, double nominal, dou
     try {
         Layout l;
         l.pitch = pitch;
-        l.depth = kInternalDepth * pitch;
-        l.mouth = kInternalMouth * pitch;
+        l.cut = cut;
+        l.flank = std::tan(cut.halfAngle);
         l.side = 1.0;
-        l.crest = nominal / 2 - l.depth;
-        if (l.crest <= 1e-3) return Error{"Шаг слишком крупный для такого диаметра"};
+        if (cut.anchor <= 1e-3 || cut.surface <= 1e-3) return Error{"Шаг слишком крупный для такого диаметра"};
         l.site.axisPoint = top;
         l.site.axisDir = down.Normalized();
-        l.site.radius = l.crest;
+        l.site.radius = cut.surface;
         l.site.external = false;
         l.axis = l.site.axisDir;
         l.across = std::abs(l.axis.z) < 0.9 ? l.axis.Cross({0, 0, 1}).Normalized() : l.axis.Cross({1, 0, 0}).Normalized();
         // The mouth of the hole is open: the groove starts a pitch above it.
         // At the bottom of a blind hole it stops a groove's width short.
-        const double half = l.mouth / 2 + kOvershoot * pitch * kFlank;
+        const double half = l.cut.mouth / 2 + kOvershoot * pitch * l.flank;
         l.begin = -pitch;
         l.end = throughEnd ? length + pitch : length - half;
         if (l.end - l.begin < pitch) return Error{"Отверстие слишком мелкое для резьбы с таким шагом"};
