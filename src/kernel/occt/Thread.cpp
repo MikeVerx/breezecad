@@ -367,7 +367,8 @@ Expected<ThreadShapes> ThreadTool(const TopoDS_Shape& body, const doc::ThreadFea
         // face; a little of its section lies outside the surface.
         const double faceStart = f.fromOtherEnd ? -l.site.hi : l.site.lo;
         const double inside = std::max(0.0, std::min(l.end, faceStart + (l.site.hi - l.site.lo)) - std::max(l.begin, faceStart));
-        out.expectedRemoval = VolumeOf(tool) * inside / std::max(l.end - l.begin, 1e-9) * 0.6;
+        // The groove alone: a bore fused into the tool lies mostly in the hole.
+        out.expectedRemoval = VolumeOf(*groove) * inside / std::max(l.end - l.begin, 1e-9) * 0.6;
         return out;
     } catch (const Standard_Failure& failure) {
         return Error{std::format("Ошибка резьбы: {}", failure.GetMessageString())};
