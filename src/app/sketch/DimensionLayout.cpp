@@ -2,6 +2,7 @@
 
 #include "app/Format.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace bz::app {
@@ -50,9 +51,18 @@ std::optional<std::tuple<Vec2, Vec2, Vec2>> AngleParts(const sketch::Sketch& sk,
     return std::tuple{vertex, u1, u2};
 }
 
+/// Counter-clockwise sweep of an arc from its start to its end, (0; 2 pi).
+double ArcSweep(const sketch::Sketch& sk, const sketch::Arc& ar) {
+    const Vec2 c = sk.PositionOf(ar.center);
+    const Vec2 s = sk.PositionOf(ar.start) - c, e = sk.PositionOf(ar.end) - c;
+    double sweep = std::atan2(s.Cross(e), s.Dot(e));
+    if (sweep <= 1e-12) sweep += 2 * kPi;
+    return sweep;
+}
+
 std::string Label(const sketch::Sketch& sk, const sketch::Constraint& c, double value, const UnitSystem& units) {
     std::string text;
-    if (c.type == ConstraintType::Angle) {
+    if (sketch::IsAngular(c.type)) {
         text = FormatValue(std::abs(value), Quantity::Angle, units, 2) + (units.angle == AngleUnit::Degree ? "\xC2\xB0" : "");
     } else {
         text = FormatValue(value, Quantity::Length, units, 3);
@@ -82,6 +92,11 @@ std::optional<Vec2> DimensionAnchor(const sketch::Sketch& sk, const sketch::Cons
             if (!parts) return std::nullopt;
             return std::get<0>(*parts);
         }
+        case ConstraintType::ArcAngle: {
+            const sketch::Arc* ar = sk.FindArc(c.refs[0]);
+            if (!ar) return std::nullopt;
+            return sk.PositionOf(ar->center);
+        }
         default: {
             const auto ends = LinearEnds(sk, c);
             if (!ends) return std::nullopt;
@@ -101,6 +116,11 @@ std::optional<double> MeasureDimension(const sketch::Sketch& sk, const sketch::C
             const Vec2 d1 = sk.PositionOf(l1->end) - sk.PositionOf(l1->start);
             const Vec2 d2 = sk.PositionOf(l2->end) - sk.PositionOf(l2->start);
             return std::atan2(d1.Cross(d2), d1.Dot(d2));
+        }
+        case ConstraintType::ArcAngle: {
+            const sketch::Arc* ar = sk.FindArc(c.refs[0]);
+            if (!ar) return std::nullopt;
+            return ArcSweep(sk, *ar);
         }
         case ConstraintType::DistanceX: {
             const auto ends = LinearEnds(sk, c);
@@ -168,6 +188,37 @@ std::optional<DimensionLayout> LayoutDimension(const sketch::Sketch& sk, const s
             out.arrows.push_back({out.arc.front(), (out.arc.front() - out.arc[1]).Normalized()});
             out.label = vertex + offset;
             out.anchor = vertex;
+            return out;
+        }
+        case ConstraintType::ArcAngle: {
+            // An arc of its own, concentric, from the radius to the start to
+            // the radius to the end; short extension lines lead out to it.
+            const sketch::Arc* ar = sk.FindArc(c.refs[0]);
+            if (!ar) return std::nullopt;
+            const Vec2 centre = sk.PositionOf(ar->center);
+            const double r = sk.RadiusOf(ar->id);
+            const double a0 = std::atan2(sk.PositionOf(ar->start).y - centre.y, sk.PositionOf(ar->start).x - centre.x);
+            const double sweep = ArcSweep(sk, *ar);
+            Vec2 offset = c.labelOffset;
+            if (offset.Length() < 1e-9) {
+                const double mid = a0 + sweep / 2;
+                offset = Vec2{std::cos(mid), std::sin(mid)} * (r + 10.0);
+            }
+            const double radius = std::max(offset.Length(), 1e-6);
+            constexpr int kSteps = 48;
+            for (int i = 0; i <= kSteps; ++i) {
+                const double a = a0 + sweep * i / kSteps;
+                out.arc.push_back(centre + Vec2{std::cos(a), std::sin(a)} * radius);
+            }
+            for (const Vec2 end : {out.arc.front(), out.arc.back()}) {
+                const Vec2 u = (end - centre).Normalized();
+                const Vec2 onArc = centre + u * r;
+                if (std::abs(radius - r) > 1e-9) out.lines.push_back({onArc, end + u * (radius > r ? 2.0 : -2.0)});
+            }
+            out.arrows.push_back({out.arc.back(), (out.arc.back() - out.arc[out.arc.size() - 2]).Normalized()});
+            out.arrows.push_back({out.arc.front(), (out.arc.front() - out.arc[1]).Normalized()});
+            out.label = centre + offset;
+            out.anchor = centre;
             return out;
         }
         default: {

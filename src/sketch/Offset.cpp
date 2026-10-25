@@ -124,10 +124,13 @@ std::optional<std::vector<Seg>> Build(const Sketch& sk, const Chain& chain, doub
             y.a = x.b;
         }
     }
-    // A line that turned around has been offset past its length.
+    // A line that turned around has been offset past its length; a piece
+    // that shrank to (almost) nothing would be a zero-length curve.
+    const double tiny = 1e-6 * std::max(1.0, std::abs(d));
     for (std::size_t i = 0; i < n; ++i) {
         const Seg orig = SegOf(sk, chain.pieces[i]);
         if (segs[i].line && (segs[i].b - segs[i].a).Dot(orig.b - orig.a) <= 0) return std::nullopt;
+        if ((segs[i].b - segs[i].a).Length() < tiny) return std::nullopt;
     }
     return segs;
 }
@@ -179,13 +182,23 @@ std::optional<Chain> ChainOf(const Sketch& sk, ObjectId curve) {
     if (sk.FindCircle(curve) || sk.FindEllipse(curve)) return Chain{{{curve, false}}, true};
     if (const Spline* sp = sk.FindSpline(curve)) return Chain{{{curve, false}}, sp->Closed()};
     if (!EndsOf(sk, curve)) return std::nullopt;
-    // Curves ending at each point.
+    // Curves ending at each point. Only those of the same kind as the picked
+    // one: an outline runs on through a corner where a helper line also
+    // ends (a centred rectangle's diagonal, a fillet's phantom side).
+    const auto helper = [&](ObjectId id) {
+        if (const Line* l = sk.FindLine(id)) return l->construction;
+        if (const Arc* a = sk.FindArc(id)) return a->construction;
+        return false;
+    };
+    const bool kind = helper(curve);
     std::map<ObjectId, std::vector<ObjectId>> at;
     for (const Line& l : sk.lines) {
+        if (l.construction != kind) continue;
         at[l.start].push_back(l.id);
         at[l.end].push_back(l.id);
     }
     for (const Arc& a : sk.arcs) {
+        if (a.construction != kind) continue;
         at[a.start].push_back(a.id);
         at[a.end].push_back(a.id);
     }

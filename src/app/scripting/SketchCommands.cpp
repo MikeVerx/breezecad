@@ -253,7 +253,7 @@ Json Constrain(AppContext& app, const Json& args) {
     if (c.type == ConstraintType::Fix) c.fixedAt = edit.Sk().PositionOf(c.refs[0]);
     ObjectId added;
     if (sketch::IsDimensional(c.type)) {
-        const Quantity q = c.type == ConstraintType::Angle ? Quantity::Angle : Quantity::Length;
+        const Quantity q = sketch::IsAngular(c.type) ? Quantity::Angle : Quantity::Length;
         added = edit.Dimension(c.type, c.refs[0], c.refs[1], 0.0, {8, 8}, q);
         sketch::Constraint* made = edit.Sk().FindConstraint(added);
         made->refs               = c.refs;

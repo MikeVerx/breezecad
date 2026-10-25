@@ -85,6 +85,7 @@ struct Settings {
     int         textureQuality = 0;   ///< pictures on faces: 0 high, 1 medium, 2 low (TextureLimit)
     bool        backgroundRebuild = true;   ///< long rebuilds on another thread (the window stays responsive)
     bool        showAllConstraints = false;   ///< sketch: every constraint glyph, or only those of the selection (F8 / F9)
+    bool        sketchRegionFill = true;      ///< sketch: tint the closed regions (what would extrude)
     /// Ribbon groups shown as icons without captions ("sketch:Изменить": the
     /// tab and the group's Russian caption). The rest show the captions.
     std::vector<std::string> ribbonIconsOnly{"sketch:Зависимости"};

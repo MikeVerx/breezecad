@@ -123,9 +123,12 @@ enum class ConstraintType : unsigned char {
     Radius,          ///< circle/arc
     Diameter,        ///< circle/arc
     Angle,           ///< line, line          — counter-clockwise from first to second
+    ArcAngle,        ///< arc                 — its sweep, counter-clockwise from start to end
 };
 
 bool IsDimensional(ConstraintType type);
+/// A dimension whose value is an angle (radians), not a length.
+inline bool IsAngular(ConstraintType type) { return type == ConstraintType::Angle || type == ConstraintType::ArcAngle; }
 
 struct Constraint {
     ObjectId                id;
@@ -211,7 +214,8 @@ public:
     Box2 Extents() const;
 
     /// Scales the whole sketch about `center`: points, radii, fixed positions
-    /// and dimension label offsets. Dimension values are not touched.
+    /// and dimension label offsets. Dimension values are not touched, nor is
+    /// projected model geometry (the model places it).
     void ScaleAbout(Vec2 center, double factor);
 
 private:

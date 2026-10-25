@@ -106,7 +106,7 @@ void Place(const sketch::Sketch& sk, sketch::Constraint& c, const UnitSystem& un
     const Vec2 dir0 = wish.Normalized();
 
     const bool radial = c.type == ConstraintType::Diameter || c.type == ConstraintType::Radius;
-    const bool angle = c.type == ConstraintType::Angle;
+    const bool angle = sketch::IsAngular(c.type);
     const double step = 24.0 * s.mmPerPixel * s.uiScale;
     const double base = radial ? sk.RadiusOf(c.refs[0]) : 0.0;
     // An angle's label also picks which of the angles is meant: never flipped, barely turned.

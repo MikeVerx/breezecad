@@ -136,12 +136,16 @@ Box3 SketchBox(const doc::SketchFeature& f, const UnitSystem& units) {
 /// True when `c` is the only driving dimension of the sketch: the moment
 /// Inventor-style auto-scaling applies.
 bool IsFirstDimension(const sketch::Sketch& sk, const sketch::Constraint& c) {
+    // Projected model geometry already gives the sketch its true size: the
+    // first dimension then sets only its own value, nothing is scaled.
+    for (const sketch::Point& p : sk.points)
+        if (p.projected) return false;
     for (const sketch::Constraint& other : sk.constraints) {
         if (other.id == c.id) continue;
         if (other.type == sketch::ConstraintType::Fix) return false;   // something is pinned in place
         if (sketch::IsDimensional(other.type) && !other.reference) return false;
     }
-    return c.type != sketch::ConstraintType::Angle;
+    return !sketch::IsAngular(c.type);
 }
 
 } // namespace
@@ -440,6 +444,14 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
                     myHover = {g.constraint, sketch::EntityKind::Constraint};
     }
 
+    // Closed regions, under the lines: what the model takes as a profile.
+    if (app.settings.sketchRegionFill)
+        if (const std::vector<kernel::SketchRegion>* regions = session.model.Regions(f->id)) {
+            const ui::ThemeColors& tc = app.ui.C();
+            const Color tint = tc.regionFill.WithAlpha(tc.regionFill.a * 0.5f);
+            for (const kernel::SketchRegion& r : *regions) FillSketchRegion(dl, view, r, tint, tint, 0.0f);
+        }
+
     SketchDrawStyle style;
     style.selection = &mySelection;
     style.hover = myHover.id;
@@ -695,7 +707,7 @@ void SketchEditor::HandleInlineEdit(AppContext& app, Session& session, const Ske
             at.y = tip.y - ui.S(18) - ui.S(12);
     }
     ImGui::SetCursorScreenPos({at.x - width / 2, at.y - ui.S(18)});
-    const Quantity q = c->type == sketch::ConstraintType::Angle ? Quantity::Angle : Quantity::Length;
+    const Quantity q = sketch::IsAngular(c->type) ? Quantity::Angle : Quantity::Length;
     // A click on another dimension puts its name into the formula, as in
     // Inventor: "d3" replaces an untouched value, otherwise it is added.
     const ImVec2 mouse = ImGui::GetMousePos();

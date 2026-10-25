@@ -64,6 +64,7 @@ add_executable(bz_tests
     sketch/OffsetTests.cpp
     sketch/ShapesTests.cpp
     sketch/SolverTests.cpp
+    sketch/StressTests.cpp
     sketch/TrimTests.cpp)
 target_link_libraries(bz_tests PRIVATE bz::miniz bz::core bz::sketch bz::document bz::assembly bz::kernel bz::modules bz::doctest bz::json)
 add_dependencies(bz_tests bz_example_module bz_example_module_fail)

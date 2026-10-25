@@ -55,7 +55,8 @@ struct DrawOptions {
     bool          polygonInscribed = true;
     std::string   length, angle;    ///< line
     std::string   width, height;    ///< rectangle
-    std::string   size;             ///< circle / polygon diameter, arc radius
+    std::string   size;             ///< circle / polygon / arc diameter
+    std::string   arcAngle;         ///< arc: its sweep
     std::string   filletRadius = "5";   ///< Скругление: kept between corners
     std::string   text = "BreezeCAD";     ///< Текст: the words of the next text, or of the one being edited
     std::string   textHeight = "5";
@@ -238,6 +239,14 @@ private:
     void FinishDrawingStep(AppContext& app, Session& session, const Snap& snap);
     /// Clicks the active tool needs, in its current mode.
     std::size_t ClicksNeeded() const;
+    /// Дуга: follows the cursor round the centre (myArcSweep).
+    void TrackArcSweep(Vec2 cursor);
+    /// The arc being drawn: its end for the cursor at `pos`, and which way it runs.
+    struct ArcSpan {
+        Vec2 start, end;   ///< as clicked: the arc runs from start, counter-clockwise when ccw
+        bool ccw = true;
+    };
+    std::optional<ArcSpan> PendingArc(Vec2 pos) const;
     /// Moves the cursor position to honour typed sizes; true when it moved.
     bool ApplyTypedSizes(const UnitSystem& units, Vec2& pos) const;
     /// A typed size to turn into a dimension; its label goes away from `inside`.
@@ -267,6 +276,12 @@ private:
     double                myMmPerPixel = 0.1;   ///< of the last frame, to place automatic dimension labels
     bool                  myAutoArrange = false;   ///< SetAutoArrange
     std::vector<PointRef> myClicks;
+    /// Дуга (центр, начало, конец): the angle the cursor has gone round the
+    /// centre since the start was clicked, signed (counter-clockwise > 0).
+    /// The arc follows the cursor's way round, past half a turn too.
+    double                myArcSweep = 0.0;
+    double                myArcLast = 0.0;   ///< the cursor's angle on the last frame
+    bool                  myArcTracking = false;
     /// A chain of lines: where it began and where the next line starts. A
     /// line that ends where the chain began closes it, and the chain stops.
     ObjectId myChainStart, myChainEnd;

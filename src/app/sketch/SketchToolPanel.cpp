@@ -271,7 +271,10 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
             if (myOptions.circle == CircleMode::CentreRadius) field(Tr("Диаметр"), "##d", myOptions.size, Quantity::Length);
             break;
         case SketchTool::Arc:
-            if (myOptions.arc == ArcMode::CentreEnds) field(Tr("Радиус"), "##r", myOptions.size, Quantity::Length);
+            if (myOptions.arc == ArcMode::CentreEnds) {
+                field(Tr("Диаметр"), "##d", myOptions.size, Quantity::Length);
+                field(Tr("Угол дуги"), "##arc-angle", myOptions.arcAngle, Quantity::Angle);
+            }
             break;
         case SketchTool::Fillet:
             field(Tr("Радиус"), "##fillet", myOptions.filletRadius, Quantity::Length);

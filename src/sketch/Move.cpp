@@ -32,7 +32,49 @@ std::vector<ObjectId> MovedPoints(const Sketch& sk, std::span<const ObjectId> en
     return out;
 }
 
-bool MoveEntities(Sketch& sk, IdGenerator& ids, std::span<const ObjectId> entities, const Motion& motion) {
+std::vector<ObjectId> WithHelpers(const Sketch& sk, std::span<const ObjectId> entities) {
+    std::vector<ObjectId> out(entities.begin(), entities.end());
+    std::unordered_set<ObjectId> chosen(out.begin(), out.end());
+    const auto add = [&](ObjectId id) {
+        if (chosen.insert(id).second) out.push_back(id);
+    };
+    // Two rounds: a helper may hang on another one (a centre coincident with a point).
+    for (int round = 0; round < 2; ++round) {
+        const std::vector<ObjectId> moving = MovedPoints(sk, out);
+        const std::unordered_set<ObjectId> points(moving.begin(), moving.end());
+        const auto lineMoves = [&](ObjectId id) {
+            const Line* l = sk.FindLine(id);
+            return l && points.contains(l->start) && points.contains(l->end);
+        };
+        for (const Constraint& c : sk.constraints) {
+            if (c.type == ConstraintType::Midpoint && lineMoves(c.refs[1]) && sk.FindPoint(c.refs[0])) add(c.refs[0]);
+            if (c.type == ConstraintType::Coincident) {
+                if (points.contains(c.refs[0]) && sk.FindPoint(c.refs[1])) add(c.refs[1]);
+                if (points.contains(c.refs[1]) && sk.FindPoint(c.refs[0])) add(c.refs[0]);
+            }
+        }
+        for (const Circle& ci : sk.circles) {
+            if (!ci.construction || chosen.contains(ci.id)) continue;
+            // Inscribed polygons hold it by their vertices, circumscribed ones by their sides.
+            bool held = false, allMove = true;
+            for (const Constraint& c : sk.constraints) {
+                if (c.type == ConstraintType::PointOnCurve && c.refs[1] == ci.id) {
+                    held = true;
+                    allMove = allMove && points.contains(c.refs[0]);
+                } else if (c.type == ConstraintType::Tangent && (c.refs[0] == ci.id || c.refs[1] == ci.id)) {
+                    held = true;
+                    allMove = allMove && lineMoves(c.refs[0] == ci.id ? c.refs[1] : c.refs[0]);
+                }
+            }
+            if (held && allMove) add(ci.id);
+        }
+    }
+    return out;
+}
+
+bool MoveEntities(Sketch& sk, IdGenerator& ids, std::span<const ObjectId> chosen, const Motion& motion) {
+    const std::vector<ObjectId> all = WithHelpers(sk, chosen);
+    const std::span<const ObjectId> entities(all);
     const std::vector<ObjectId> moved = MovedPoints(sk, entities);
     if (moved.empty()) return false;
     const std::unordered_set<ObjectId> set(moved.begin(), moved.end());
@@ -187,8 +229,10 @@ std::vector<ObjectId> CopyEntities(Sketch& sk, IdGenerator& ids, std::span<const
     return created;
 }
 
-bool ScaleEntities(Sketch& sk, std::span<const ObjectId> entities, Vec2 centre, double factor) {
+bool ScaleEntities(Sketch& sk, std::span<const ObjectId> chosen, Vec2 centre, double factor) {
     if (factor <= 0) return false;
+    const std::vector<ObjectId> all = WithHelpers(sk, chosen);
+    const std::span<const ObjectId> entities(all);
     const std::vector<ObjectId> moved = MovedPoints(sk, entities);
     if (moved.empty()) return false;
     const std::unordered_set<ObjectId> set(moved.begin(), moved.end());
@@ -197,7 +241,7 @@ bool ScaleEntities(Sketch& sk, std::span<const ObjectId> entities, Vec2 centre, 
     for (Constraint& c : sk.constraints)
         if (c.type == ConstraintType::Fix && set.contains(c.refs[0])) c.fixedAt = centre + (c.fixedAt - centre) * factor;
     for (ObjectId id : entities)
-        if (Circle* c = sk.FindCircle(id)) c->radius *= factor;
+        if (Circle* c = sk.FindCircle(id); c && !c->projected) c->radius *= factor;
     return true;
 }
 
