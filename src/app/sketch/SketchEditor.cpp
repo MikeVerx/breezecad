@@ -145,7 +145,7 @@ bool IsFirstDimension(const sketch::Sketch& sk, const sketch::Constraint& c) {
         if (other.type == sketch::ConstraintType::Fix) return false;   // something is pinned in place
         if (sketch::IsDimensional(other.type) && !other.reference) return false;
     }
-    return c.type != sketch::ConstraintType::Angle;
+    return !sketch::IsAngular(c.type);
 }
 
 } // namespace
@@ -699,7 +699,7 @@ void SketchEditor::HandleInlineEdit(AppContext& app, Session& session, const Ske
             at.y = tip.y - ui.S(18) - ui.S(12);
     }
     ImGui::SetCursorScreenPos({at.x - width / 2, at.y - ui.S(18)});
-    const Quantity q = c->type == sketch::ConstraintType::Angle ? Quantity::Angle : Quantity::Length;
+    const Quantity q = sketch::IsAngular(c->type) ? Quantity::Angle : Quantity::Length;
     // A click on another dimension puts its name into the formula, as in
     // Inventor: "d3" replaces an untouched value, otherwise it is added.
     const ImVec2 mouse = ImGui::GetMousePos();

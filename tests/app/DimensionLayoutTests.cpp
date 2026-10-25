@@ -71,3 +71,24 @@ TEST_CASE("a radius label goes round its circle") {
     REQUIRE_FALSE(l->arrows.empty());
     CHECK(l->arrows.front().tip.y == doctest::Approx(-10.0));   // on the circle, toward the label
 }
+
+TEST_CASE("an arc's angle dimension measures its sweep and draws an arc of its own") {
+    sketch::Sketch sk;
+    IdGenerator ids;
+    const ObjectId c = sk.AddPoint(ids, {0, 0}), s = sk.AddPoint(ids, {0, -10}), e = sk.AddPoint(ids, {10, 0});
+    // Counter-clockwise from (0, -10) to (10, 0): a quarter turn.
+    const ObjectId arc = sk.AddArc(ids, c, s, e);
+    sketch::Constraint d;
+    d.type = sketch::ConstraintType::ArcAngle;
+    d.refs = {arc, {}, {}};
+    d.parameter.value = 1.5 * kPi;
+    const std::optional<double> measured = MeasureDimension(sk, d);
+    REQUIRE(measured);
+    CHECK(*measured == doctest::Approx(0.5 * kPi));
+    const std::optional<DimensionLayout> l = LayoutDimension(sk, d, UnitSystem{});
+    REQUIRE(l);
+    CHECK(l->arc.size() > 2);
+    CHECK((l->anchor - Vec2{0, 0}).Length() == doctest::Approx(0.0));
+    CHECK(l->text.find("270") == 0);   // the text shows the parameter (1.5 pi), not the measured quarter
+    CHECK(l->arrows.size() == 2);
+}

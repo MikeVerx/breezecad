@@ -36,6 +36,7 @@ bool IsDimensional(ConstraintType type) {
         case ConstraintType::Radius:
         case ConstraintType::Diameter:
         case ConstraintType::Angle:
+        case ConstraintType::ArcAngle:
             return true;
         default:
             return false;

@@ -367,6 +367,15 @@ void EquationSystem::AddConstraint(const Sketch& sk, const Constraint& c) {
             }
             return;
         }
+        case ConstraintType::ArcAngle: {
+            // The angle from the radius to the start to the radius to the end.
+            const Arc* ar = sk.FindArc(a);
+            if (!ar) return;
+            const int ce = P(ar->center), s = P(ar->start), e = P(ar->end);
+            if (ce < 0 || s < 0 || e < 0) return;
+            Add(MakeEq(EqKind::Angle, {ce, ce + 1, s, s + 1, ce, ce + 1, e, e + 1}, c.parameter.value, src));
+            return;
+        }
         case ConstraintType::Distance:
         case ConstraintType::Length: {
             const auto [p, q] = c.type == ConstraintType::Length ? lineEnds(a) : std::pair{P(a), P(b)};

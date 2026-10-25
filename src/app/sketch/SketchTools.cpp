@@ -272,7 +272,7 @@ std::optional<sketch::Constraint> DimensionFromPicks(const sketch::Sketch& sk, c
         return std::nullopt;
     }
     if (const auto anchor = DimensionAnchor(sk, c)) c.labelOffset = cursor - *anchor;
-    c.parameter.quantity = c.type == ConstraintType::Angle ? Quantity::Angle : Quantity::Length;
+    c.parameter.quantity = sketch::IsAngular(c.type) ? Quantity::Angle : Quantity::Length;
     return c;
 }
 
@@ -306,6 +306,7 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
         options.ortho = app.settings.orthoMode;
     }
     mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
+    TrackArcSweep(mySnap.pos);
     // A typed size wins over snapping: the point lands where the size says.
     if (ApplyTypedSizes(session.doc.units, mySnap.pos)) {
         const Vec2 pos = mySnap.pos;
@@ -585,6 +586,38 @@ std::size_t SketchEditor::ClicksNeeded() const {
     }
 }
 
+void SketchEditor::TrackArcSweep(Vec2 cursor) {
+    const bool drawingArc = myTool == SketchTool::Arc && myOptions.arc == ArcMode::CentreEnds && myClicks.size() == 2;
+    if (!drawingArc) {
+        myArcTracking = false;
+        myArcSweep = 0.0;
+        return;
+    }
+    const Vec2 centre = myClicks[0].pos;
+    const Vec2 d = cursor - centre;
+    if (d.Length() < 1e-12) return;
+    const double angle = std::atan2(d.y, d.x);
+    if (!myArcTracking) {
+        const Vec2 s = myClicks[1].pos - centre;
+        myArcLast = std::atan2(s.y, s.x);
+        myArcSweep = 0.0;
+        myArcTracking = true;
+    }
+    // Small steps add up: the arc grows past half a turn the way the cursor
+    // goes, and shrinks back when it returns (as in Inventor).
+    myArcSweep += std::remainder(angle - myArcLast, 2 * kPi);
+    myArcSweep = std::clamp(myArcSweep, -2 * kPi + 1e-6, 2 * kPi - 1e-6);
+    myArcLast = angle;
+}
+
+std::optional<SketchEditor::ArcSpan> SketchEditor::PendingArc(Vec2 pos) const {
+    if (myClicks.size() != 2) return std::nullopt;
+    const Vec2 centre = myClicks[0].pos, start = myClicks[1].pos;
+    const double r = (start - centre).Length();
+    if (r < 1e-12 || (pos - centre).Length() < 1e-12) return std::nullopt;
+    return ArcSpan{start, centre + Direction(centre, pos) * r, myArcSweep >= 0};
+}
+
 bool SketchEditor::ApplyTypedSizes(const UnitSystem& units, Vec2& pos) const {
     if (myClicks.empty()) return false;
     const Vec2 first = myClicks.front().pos, last = myClicks.back().pos;
@@ -633,10 +666,20 @@ bool SketchEditor::ApplyTypedSizes(const UnitSystem& units, Vec2& pos) const {
         case SketchTool::Arc: {
             const bool sized = myTool == SketchTool::Circle ? myOptions.circle == CircleMode::CentreRadius
                                                             : myOptions.arc == ArcMode::CentreEnds;
+            if (!sized) return false;
+            if (myTool == SketchTool::Arc && step == 2) {
+                // A typed sweep: the end is that far round, the way the cursor went.
+                const auto sweep = TypedValue(myOptions.arcAngle, Quantity::Angle, units);
+                if (!sweep || *sweep <= 0 || *sweep >= 2 * kPi) return false;
+                const Vec2 from = last - first;
+                const double turn = myArcSweep < 0 ? -*sweep : *sweep;
+                const double c = std::cos(turn), s = std::sin(turn);
+                pos = first + Vec2{from.x * c - from.y * s, from.x * s + from.y * c};
+                return true;
+            }
             const auto size = length(myOptions.size);
-            if (step != 1 || !sized || !size) return false;
-            const double r = myTool == SketchTool::Circle ? *size / 2 : *size;   // diameter / radius
-            pos = first + Direction(first, pos) * r;
+            if (step != 1 || !size) return false;
+            pos = first + Direction(first, pos) * (*size / 2);   // a diameter
             return true;
         }
         default: return false;
@@ -649,7 +692,7 @@ void SketchEditor::AddTypedDimensions(doc::Document& doc, sketch::Sketch& sk, co
         if (text.empty()) continue;
         c.parameter.name = doc.NextParameterName();
         c.parameter.expression = text;
-        c.parameter.quantity = Quantity::Length;
+        c.parameter.quantity = sketch::IsAngular(c.type) ? Quantity::Angle : Quantity::Length;
         // Label a little off the curve, in screen terms.
         const double off = 28.0 * myMmPerPixel;
         if (const sketch::Line* l = sk.FindLine(c.refs[0]); l && c.type == ConstraintType::Length) {
@@ -1582,14 +1625,18 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
                 startRef = myClicks[1];
                 endRef = myClicks[2];
                 if (!endRef.id) endRef.pos = c + (endRef.pos - c).Normalized() * r;
-                // The arc goes counter-clockwise; swap ends when drawn clockwise.
-                if ((startRef.pos - c).Cross(endRef.pos - c) < 0) std::swap(startRef, endRef);
+                // Sketch arcs run counter-clockwise: an arc drawn the other
+                // way round (the cursor went clockwise) has its ends swapped.
+                if (myArcSweep < 0) std::swap(startRef, endRef);
             }
             const ObjectId centre = myOptions.arc == ArcMode::ThreePoints ? sk.AddPoint(ids, c) : Resolve(d, sk, myClicks[0]);
             const ObjectId s = Resolve(d, sk, startRef);
             const ObjectId e = Resolve(d, sk, endRef);
             const ObjectId arc = sk.AddArc(ids, centre, s, e);
-            if (myOptions.arc == ArcMode::CentreEnds) dims.push_back({Make(ConstraintType::Radius, arc), myOptions.size, {}});
+            if (myOptions.arc == ArcMode::CentreEnds) {
+                dims.push_back({Make(ConstraintType::Diameter, arc), myOptions.size, {}});
+                dims.push_back({Make(ConstraintType::ArcAngle, arc), myOptions.arcAngle, {}});
+            }
             break;
         }
         default:
@@ -1884,11 +1931,11 @@ void SketchEditor::DrawShapePreview(AppContext& app, const SketchView& view, con
                 }
             } else if (step == 1) {
                 DrawSketchSegment(ui, dl, view, a, b, faint, 1.2f);
-            } else {
-                const Vec2 s = myClicks[1].pos;
-                const Vec2 e = a + Direction(a, b) * (s - a).Length();
-                if ((s - a).Cross(e - a) < 0) arc(a, e, s);
-                else arc(a, s, e);
+            } else if (const std::optional<ArcSpan> span = PendingArc(b)) {
+                DrawSketchSegment(ui, dl, view, a, span->start, faint, 1.2f);
+                DrawSketchSegment(ui, dl, view, a, span->end, faint, 1.2f);
+                if (span->ccw) arc(a, span->start, span->end);
+                else arc(a, span->end, span->start);
             }
             break;
         default: break;

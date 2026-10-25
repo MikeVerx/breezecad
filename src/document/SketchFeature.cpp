@@ -15,7 +15,7 @@ using json_io::ReadMember;
 using json_io::ToJson;
 using sketch::ConstraintType;
 
-constexpr std::array<std::pair<ConstraintType, std::string_view>, 20> kConstraintIds{{
+constexpr std::array<std::pair<ConstraintType, std::string_view>, 21> kConstraintIds{{
     {ConstraintType::Coincident, "coincident"},
     {ConstraintType::Horizontal, "horizontal"},
     {ConstraintType::Vertical, "vertical"},
@@ -36,6 +36,7 @@ constexpr std::array<std::pair<ConstraintType, std::string_view>, 20> kConstrain
     {ConstraintType::Radius, "radius"},
     {ConstraintType::Diameter, "diameter"},
     {ConstraintType::Angle, "angle"},
+    {ConstraintType::ArcAngle, "arcAngle"},
 }};
 
 Error Bad(std::string_view what) { return Error{std::format("Эскиз: повреждено поле «{}»", what)}; }

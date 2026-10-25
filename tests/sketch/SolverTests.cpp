@@ -415,3 +415,27 @@ TEST_CASE("a conflict in one shape leaves the whole sketch untouched") {
     CHECK((r.sk.PositionOf(r.corners[1][2]) - moved).Length() < 1e-12);   // not solved halfway
     CHECK((moved - before).Length() > 1);
 }
+
+TEST_CASE("arc angle dimension drives the sweep, past half a turn too") {
+    Sketch sk;
+    IdGenerator ids;
+    const ObjectId origin = sk.EnsureOrigin(ids);
+    const ObjectId s = sk.AddPoint(ids, {10, 0}), e = sk.AddPoint(ids, {0, 10});
+    const ObjectId arc = sk.AddArc(ids, origin, s, e);
+    Constraint h;
+    h.type = ConstraintType::Horizontal;
+    h.refs = {origin, s, {}};
+    sk.AddConstraint(ids, h);
+    sk.AddConstraint(ids, Dim(ConstraintType::Diameter, 20, arc));
+    for (const double degrees : {30.0, 135.0, 270.0, 350.0}) {
+        Constraint a = Dim(ConstraintType::ArcAngle, degrees * kPi / 180, arc);
+        const ObjectId id = sk.AddConstraint(ids, a);
+        REQUIRE(Solve(sk).converged);
+        const Vec2 c = sk.PositionOf(origin), u = sk.PositionOf(s) - c, v = sk.PositionOf(e) - c;
+        double sweep = std::atan2(u.Cross(v), u.Dot(v));
+        if (sweep <= 0) sweep += 2 * kPi;
+        CHECK(sweep * 180 / kPi == doctest::Approx(degrees).epsilon(1e-6));
+        CHECK(v.Length() == doctest::Approx(10.0));
+        sk.Remove(id);
+    }
+}
