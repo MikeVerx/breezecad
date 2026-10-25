@@ -60,7 +60,17 @@ jobs:
       - name: Build
         id: build
         run: cmake --build --preset windows-mingw 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+      - name: Diagnosis
+        run: |
+          set +e +o pipefail
+          exe=$(find build/windows-mingw -name bz_tests.exe | head -1)
+          : > diag.log
+          for L in 10 11 12 13 14 15 16 17 18 19 20 22 25 30; do
+            BZ_DIAG_LEN=$L timeout 120 "$exe" -tc="diag: one*" 2>&1 | grep "^DIAG" >> diag.log || echo "DIAG old L=$L CRASH/TIMEOUT" >> diag.log
+          done
+          echo "::notice title=diag-old::$(sed -e 's/%/%25/g' diag.log | awk 'BEGIN{ORS="%0A"} {print}')"
       - name: Test
+        if: false
         run: |
           set +e +o pipefail   # the msys2 shell runs with -e: keep going to name the crash
           ctest --preset windows-mingw --output-on-failure 2>&1 | tee test.log

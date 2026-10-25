@@ -1,7 +1,18 @@
 #include "../Fixtures.h"
 #include "document/BzcFile.h"
 #include "document/ThreadFeature.h"
+#include "core/FaultGuard.h"
 #include "kernel/Model.h"
+#include "kernel/occt/ModelImpl.h"
+#include "kernel/occt/Thread.h"
+
+#include <BRepAlgoAPI_Cut.hxx>
+#include <BRepCheck_Analyzer.hxx>
+#include <BRepGProp.hxx>
+#include <GProp_GProps.hxx>
+#include <cstdio>
+#include <cstdlib>
+#include <format>
 
 #include <doctest.h>
 
@@ -159,4 +170,38 @@ TEST_CASE("a chosen standard size wins over the shaft, a cosmetic thread cuts no
     CHECK(t->size == 8);
     CHECK(t->cosmetic);
     CHECK(doc::StandardSizes().size() == 22);
+}
+
+// --- Temporary diagnosis on the code before 0.2.4.1 (not for merging) ------
+TEST_CASE("diag: one thread case") {
+    const char* len = std::getenv("BZ_DIAG_LEN");
+    if (!len) return;
+    const double length = std::atof(len);
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddCircle(d, sk, {0, 0}, 4);
+    AddExtrude(d, sk.id, std::format("{}", length));
+    kernel::Model blank;
+    blank.Rebuild(d);
+    const TopoDS_Shape body = blank.GetImpl().bodies.back().shape;
+    doc::ThreadFeature f;
+    f.face = doc::CylinderTouch{{0, 0, 0}, {0, 0, 1}, 4, {1, 0, 0}};
+    f.pitch.value = 1.25;
+    std::string what, result = "?";
+    const bool ok = guard::RunGuarded([&] {
+        try {
+            const auto tool = kernel::occt::ThreadTool(body, f);
+            if (!tool) { result = "tool: " + tool.GetError().message; return; }
+            BRepAlgoAPI_Cut cut(body, *tool);
+            if (!cut.IsDone()) { result = "not done"; return; }
+            GProp_GProps p;
+            BRepGProp::VolumeProperties(cut.Shape(), p);
+            result = std::format("ok valid={} vol={:.2f}", BRepCheck_Analyzer(cut.Shape()).IsValid(), p.Mass());
+        } catch (const Standard_Failure& e) {
+            result = std::string("throw ") + e.GetMessageString();
+        }
+    }, &what);
+    std::printf("DIAG old L=%g %s\n", length, ok ? result.c_str() : ("FAULT " + what).c_str());
+    std::fflush(stdout);
+    std::_Exit(0);
 }
