@@ -27,6 +27,7 @@
 #include <gp_Cylinder.hxx>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cmath>
 #include <format>
 #include <optional>
@@ -188,6 +189,10 @@ Expected<Layout> Plan(const TopoDS_Shape& body, const doc::ThreadFeature& f) {
         } else {
             l.end -= half;
         }
+    }
+    if (const char* v = std::getenv("BZ_DIAG_VARIANT"); v && (v[0] == '2' || v[0] == '4') && l.openEnds.size() == 2) {
+        const double halves = std::ceil((l.end - l.begin) / (l.pitch / 2) - 1e-9);
+        l.end = l.begin + halves * l.pitch / 2;   // DIAG: a whole number of half-turn edges
     }
     if (l.end - l.begin < l.pitch) return Error{"Грань слишком короткая для резьбы с таким шагом"};
     if ((l.end - l.begin) / l.pitch > 1000) return Error{"Слишком много витков (больше 1000)"};

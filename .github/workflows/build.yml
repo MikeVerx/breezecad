@@ -65,7 +65,10 @@ jobs:
           set +e +o pipefail
           exe=$(find build/windows-mingw -name bz_tests.exe | head -1)
           grep -h "define OCC_VERSION_COMPLETE" /mingw64/include/opencascade/Standard_Version.hxx | sed 's/^/::notice title=occt::/'
-          timeout 900 "$exe" -tc="diag*" 2>&1 | grep "^DIAG" > diag.log
+          : > diag.log
+          for v in 0 1 2 3 4; do for L in 10 11 12 13 14 15 16 17 18 19 20 22 25 30; do
+            BZ_DIAG_LEN=$L BZ_DIAG_VARIANT=$v timeout 120 "$exe" -tc="diag: one*" 2>&1 | grep "^DIAG" >> diag.log || echo "DIAG L=$L v=$v CRASH/TIMEOUT" >> diag.log
+          done; done
           echo "exit $?" >> diag.log
           echo "::notice title=diag::$(sed -e 's/%/%25/g' diag.log | awk 'BEGIN{ORS="%0A"} {print}')"
       - name: Test

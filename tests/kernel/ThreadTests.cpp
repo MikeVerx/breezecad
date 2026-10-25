@@ -9,7 +9,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include <BRepAlgoAPI_Cut.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
+#include <BRepCheck_Analyzer.hxx>
+#include <ShapeFix_Shape.hxx>
+#include <TopTools_ListOfShape.hxx>
+#include <cstdio>
+#include <cstdlib>
 #include <Standard_Version.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepGProp.hxx>
@@ -441,45 +447,52 @@ TEST_CASE("the lead-in chamfer takes the first crests off, and can be turned off
 }
 
 // --- Temporary diagnosis (branch diag/windows-thread, not for merging) -----
-TEST_CASE("diag: which step of a chamfered thread faults") {
-    for (const double length : {12.0, 14.0, 16.0, 20.0})
-        for (const bool chamfer : {false, true})
-            for (const double size : {0.0, 8.0}) {
-                doc::Document d;
-                auto& sk = AddSketch(d);
-                AddCircle(d, sk, {0, 0}, 4);
-                AddExtrude(d, sk.id, std::format("{}", length));
-                kernel::Model blank;
-                blank.Rebuild(d);
-                const TopoDS_Shape body = BodyOf(blank);
-                doc::ThreadFeature f;
-                f.face = doc::CylinderTouch{{0, 0, 0}, {0, 0, 1}, 4, {1, 0, 0}};
-                f.size = size;
-                f.pitch.value = 1.25;
-                f.spec.leadChamfer = chamfer;
-                std::string line = std::format("L={} chamfer={} size={}:", length, chamfer, size);
-                Expected<kernel::occt::ThreadShapes> tool = Error{"-"};
-                std::string what;
-                bool ok = guard::RunGuarded([&] { try { tool = kernel::occt::ThreadTool(body, f); } catch (...) { tool = Error{"throw"}; } }, &what);
-                line += std::format(" tool={}", ok ? (tool ? "ok" : tool.GetError().message) : "FAULT " + what);
-                TopoDS_Shape shape = body;
-                if (ok && tool && tool->chamfer) {
-                    Expected<TopoDS_Shape> r = Error{"-"};
-                    ok = guard::RunGuarded([&] { r = kernel::occt::ApplyBoolean(shape, *tool->chamfer, doc::BooleanOp::Cut); }, &what);
-                    line += std::format(" chamferCut={}", ok ? (r ? "ok" : r.GetError().message) : "FAULT " + what);
-                    if (ok && r) shape = *r;
-                }
-                if (ok && tool) {
-                    Expected<TopoDS_Shape> r = Error{"-"};
-                    ok = guard::RunGuarded([&] { r = kernel::occt::ApplyBoolean(shape, tool->cut, doc::BooleanOp::Cut); }, &what);
-                    line += std::format(" grooveCut={}", ok ? (r ? "ok" : r.GetError().message) : "FAULT " + what);
-                }
-                std::printf("DIAG %s\n", line.c_str());
-                std::fflush(stdout);
-                if (!ok) {
-                    std::printf("DIAG stop: a fault leaves OCCT's handler list dangling\n");
-                    std::fflush(stdout);
-                    return;
-                }
+// One case per process (a fault leaves OCCT's handler list dangling):
+// BZ_DIAG_LEN shaft length, BZ_DIAG_VARIANT 0 as is, 1 fuzzy cut,
+// 2 whole half turns, 3 groove fixed by ShapeFix, 4 = 2 + 1.
+TEST_CASE("diag: one thread case") {
+    const char* len = std::getenv("BZ_DIAG_LEN");
+    if (!len) return;
+    const double length = std::atof(len);
+    const int variant = std::getenv("BZ_DIAG_VARIANT") ? std::atoi(std::getenv("BZ_DIAG_VARIANT")) : 0;
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddCircle(d, sk, {0, 0}, 4);
+    AddExtrude(d, sk.id, std::format("{}", length));
+    kernel::Model blank;
+    blank.Rebuild(d);
+    const TopoDS_Shape body = BodyOf(blank);
+    doc::ThreadFeature f;
+    f.face = doc::CylinderTouch{{0, 0, 0}, {0, 0, 1}, 4, {1, 0, 0}};
+    f.pitch.value = 1.25;
+    f.spec.leadChamfer = false;
+    std::string what, result = "?";
+    const bool ok = guard::RunGuarded([&] {
+        try {
+            const auto tool = kernel::occt::ThreadTool(body, f);
+            if (!tool) { result = "tool: " + tool.GetError().message; return; }
+            TopoDS_Shape groove = tool->cut;
+            if (variant == 3) {
+                ShapeFix_Shape fix(groove);
+                fix.Perform();
+                groove = fix.Shape();
             }
+            BRepAlgoAPI_Cut cut;
+            TopTools_ListOfShape a, t;
+            a.Append(body);
+            t.Append(groove);
+            cut.SetArguments(a);
+            cut.SetTools(t);
+            if (variant == 1 || variant == 4) cut.SetFuzzyValue(1e-5);
+            cut.Build();
+            if (!cut.IsDone()) { result = "not done"; return; }
+            BRepCheck_Analyzer check(cut.Shape());
+            result = std::format("ok valid={} vol={:.2f}", check.IsValid(), VolumeOf(cut.Shape()));
+        } catch (const Standard_Failure& e) {
+            result = std::string("throw ") + e.GetMessageString();
+        }
+    }, &what);
+    std::printf("DIAG L=%g v=%d %s\n", length, variant, ok ? result.c_str() : ("FAULT " + what).c_str());
+    std::fflush(stdout);
+    std::_Exit(0);   // no teardown through a dangling handler list
 }
