@@ -37,8 +37,6 @@ private:
     void DrawFaceSection(AppContext& app, Session& session, doc::HoleFeature& f, float width);
     void DrawCentres(AppContext& app, Session& session, doc::HoleFeature& f, float width);
     void DrawSizes(AppContext& app, Session& session, doc::HoleFeature& f, float width);
-    /// Резьбовое отверстие: the size from the list and the pitch.
-    void DrawThread(AppContext& app, Session& session, doc::HoleFeature& f, float width);
     /// A click on the model: choose the face or add a centre on it.
     void ClickModel(AppContext& app, Session& session, doc::HoleFeature& f, const ViewportFrame& vf);
     /// "Соосно": a click on a round edge or a cylindrical face adds a centre
@@ -46,7 +44,6 @@ private:
     void ClickCoaxial(AppContext& app, Session& session, doc::HoleFeature& f, const ViewportFrame& vf);
 
     std::string        myDiameter, myDepth, myHeadDiameter, myHeadDepth, mySinkDiameter;
-    std::string        myThreadPitch, myThreadDepth, myThreadClearance;
     std::optional<int> myHoveredCentre;
     DragArrow          myArrow;   ///< depth
     bool               myCoaxial = false;   ///< clicks make coaxial centres

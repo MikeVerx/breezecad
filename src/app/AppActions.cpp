@@ -209,7 +209,7 @@ void RegisterActions(AppContext& app) {
     a.Add({"feature.fillet", N_("Сопряжение"), "fillet", 0, N_("Скруглить рёбра тела"), inModel, [&app] { StartFillet(app); }});
     a.Add({"feature.hole", N_("Отверстие"), "hole", ImGuiKey_H, N_("Просверлить отверстия в плоской грани: простые, с цековкой или зенковкой (H)"),
            inModel, [&app] { StartHole(app); }});
-    a.Add({"feature.thread", N_("Резьба"), "thread", 0, N_("Резьба на валу или в отверстии: метрическая, трубная G, трапецеидальная Tr; посадки для печати"),
+    a.Add({"feature.thread", N_("Резьба"), "thread", 0, N_("Метрическая резьба на валу или в отверстии (ISO, крупный шаг)"),
            inModel, [&app] { StartThread(app); }});
     a.Add({"feature.workPlane", N_("Плоскость"), "work-plane", 0, N_("Рабочая плоскость: смещение, посередине, под углом, по трём точкам, касательная"), inModel,
            [&app] { StartWorkPlane(app); }});

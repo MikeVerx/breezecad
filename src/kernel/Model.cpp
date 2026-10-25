@@ -376,7 +376,7 @@ void ApplyThread(doc::ThreadFeature& thread, Model::Impl& impl, std::vector<Body
     Body* target = &bodies.back();
     if (thread.face)
         for (auto it = bodies.rbegin(); it != bodies.rend(); ++it)
-            if (const auto site = occt::FindThreadSite(it->shape, *thread.face, thread.spec.standard)) {
+            if (const auto site = occt::FindThreadSite(it->shape, *thread.face)) {
                 thread.site = doc::ThreadFeature::Site{site->external, site->nominal, site->length};
                 target = &*it;
                 break;
@@ -391,43 +391,13 @@ void ApplyThread(doc::ThreadFeature& thread, Model::Impl& impl, std::vector<Body
         thread.status = {FeatureState::Ok, {}};
         return;
     }
-    const Expected<occt::ThreadShapes> tool = occt::ThreadTool(target->shape, thread);
-    if (!tool) {
-        thread.status = {FeatureState::Error, tool.GetError().message};
-        return;
-    }
-    // A chosen size the face is too small or too big for: material first.
-    const Expected<TopoDS_Shape> filled = tool->fill ? occt::ApplyBoolean(target->shape, *tool->fill, doc::BooleanOp::Join)
-                                                     : Expected<TopoDS_Shape>(target->shape);
-    if (!filled) {
-        thread.status = {FeatureState::Error, filled.GetError().message};
-        return;
-    }
-    // A boolean with a helical tool can come back "done" with the tool left
-    // out (the body nearly uncut, OCCT 7.8 and 7.9 alike): the groove must
-    // remove about what it holds. Tried in two orders, then said plainly.
-    const double start = occt::VolumeOf(*filled);
-    const auto cutWhole = [&](const Expected<TopoDS_Shape>& from) { return from && start - occt::VolumeOf(*from) >= tool->expectedRemoval; };
-    const auto chamferOf = [&](const Expected<TopoDS_Shape>& from) {
-        return from && tool->chamfer ? occt::ApplyBoolean(*from, *tool->chamfer, doc::BooleanOp::Cut) : from;
-    };
-    // The lead-in chamfer first (a simple cone against the plain surface), then the groove…
-    const Expected<TopoDS_Shape> chamfered = chamferOf(*filled);
-    Expected<TopoDS_Shape> result = chamfered ? occt::ApplyBoolean(*chamfered, tool->cut, doc::BooleanOp::Cut) : chamfered;
-    // …or the groove first, then the chamfer.
-    if (result && !cutWhole(result)) {
-        log::Warn("{}: the groove was cut short ({:.0f} of {:.0f} mm³ expected), trying the other order", thread.name,
-                     start - occt::VolumeOf(*result), tool->expectedRemoval);
-        result = chamferOf(occt::ApplyBoolean(*filled, tool->cut, doc::BooleanOp::Cut));
-    }
-    if (result && !cutWhole(result))
-        result = Error{"Ядро геометрии не смогло прорезать резьбу на этой грани. Измените длину резьбы или детали на "
-                       "долю миллиметра — обычно это помогает"};
+    const Expected<TopoDS_Shape> tool = occt::ThreadTool(target->shape, thread);
+    Expected<TopoDS_Shape> result = tool ? occt::ApplyBoolean(target->shape, *tool, doc::BooleanOp::Cut) : tool;
     if (!result) {
         thread.status = {FeatureState::Error, result.GetError().message};
         return;
     }
-    impl.tools[thread.id] = {tool->cut, doc::BooleanOp::Cut, {}};
+    impl.tools[thread.id] = {*tool, doc::BooleanOp::Cut, {}};
     target->shape = *result;
     thread.status = {FeatureState::Ok, {}};
 }

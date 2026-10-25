@@ -1,5 +1,4 @@
 #include "app/features/FeatureOperationEditor.h"
-#include "app/features/ThreadEditor.h"
 #include "app/features/ToolChoice.h"
 
 #include "app/Format.h"
@@ -13,7 +12,6 @@
 #include "document/Origin.h"
 #include "document/SketchSolidFeature.h"
 #include "document/WorkPlaneFeature.h"
-#include "ui/Menus.h"
 #include "ui/Widgets.h"
 
 #include <algorithm>
@@ -401,129 +399,5 @@ bool FeatureOperationEditor::PickChip(ui::Ui& ui, const char* id, const std::str
     return clicked;
 }
 
-
-bool FeatureOperationEditor::ThreadControls(AppContext& app, Session& session, doc::ThreadSpec& spec, double& size,
-                                            double faceNominal, std::string& clearanceText, float width, bool byFace) {
-    using doc::ThreadFit;
-    using doc::ThreadStandard;
-    ui::Ui& ui = app.ui;
-    const UnitSystem& units = session.doc.units;
-    const auto mm = [&](double v) { return FormatValue(v, Quantity::Length, units); };
-    bool sizeChanged = false;
-
-    // The kind.
-    static constexpr std::array<const char*, 3> kKinds{N_("Метрическая (M)"), N_("Трубная цилиндрическая (G)"),
-                                                       N_("Трапецеидальная (Tr)")};
-    Section(app, Tr("Тип резьбы"));
-    if (PickChip(ui, "##thread-kind", Tr("Тип"), Tr(kKinds[static_cast<std::size_t>(spec.standard)]), false, width))
-        ImGui::OpenPopup("##thread-kinds");
-    {
-        ui::MenuStyle style(ui);   // before Begin: must outlive the End call
-        if (ImGui::BeginPopup("##thread-kinds")) {
-            for (std::size_t i = 0; i < kKinds.size(); ++i) {
-                const auto kind = static_cast<ThreadStandard>(i);
-                if (ui::MenuItem(ui, Tr(kKinds[i]), nullptr, {}, spec.standard == kind) && spec.standard != kind) {
-                    spec.standard = kind;
-                    if (size > 0) {   // the size of the new series nearest the old one
-                        double best = doc::ThreadSizes(kind).front().nominal;
-                        for (const doc::ThreadSize& s : doc::ThreadSizes(kind))
-                            if (std::abs(s.nominal - size) < std::abs(best - size)) best = s.nominal;
-                        size = best;
-                    }
-                    sizeChanged = true;
-                    Changed(session);
-                }
-            }
-            ImGui::EndPopup();
-        }
-    }
-    Gap(app);
-
-    // The size: by the face, or from the series.
-    Section(app, Tr("Размер"));
-    const std::string chosen = size > 0 ? ThreadDesignation(spec.standard, size, doc::StandardPitch(spec.standard, size), units)
-                             : faceNominal > 0 ? Trf("по грани ({})", ThreadDesignation(spec.standard, faceNominal,
-                                                                                         doc::StandardPitch(spec.standard, faceNominal), units))
-                                               : std::string(Tr("По грани"));
-    if (PickChip(ui, "##size", Tr("Резьба"), chosen, false, width)) ImGui::OpenPopup("##sizes");
-    {
-        ui::MenuStyle style(ui);
-        if (ImGui::BeginPopup("##sizes")) {
-            if (byFace && ui::MenuItem(ui, Tr("По грани"), nullptr, {}, size <= 0)) {
-                size = 0;
-                sizeChanged = true;
-                Changed(session);
-            }
-            for (const doc::ThreadSize& s : doc::ThreadSizes(spec.standard)) {
-                const std::string label = ThreadDesignation(spec.standard, s.nominal, s.pitch, units);
-                if (ui::MenuItem(ui, label.c_str(), nullptr, {}, std::abs(size - s.nominal) < 1e-9)) {
-                    size = s.nominal;
-                    sizeChanged = true;
-                    Changed(session);
-                }
-            }
-            ImGui::EndPopup();
-        }
-    }
-    Gap(app);
-
-    // The fit (the owner's classes, 25.10.2026).
-    static constexpr std::array<const char*, 5> kFits{N_("Номинал"), N_("Свободная (печать — печать)"), N_("Тугая (печать — печать)"),
-                                                      N_("Под металл"), N_("Свой зазор")};
-    Section(app, Tr("Посадка"));
-    if (PickChip(ui, "##thread-fit", Tr("Посадка"), Tr(kFits[static_cast<std::size_t>(spec.fit)]), false, width))
-        ImGui::OpenPopup("##thread-fits");
-    {
-        ui::MenuStyle style(ui);
-        if (ImGui::BeginPopup("##thread-fits")) {
-            for (std::size_t i = 0; i < kFits.size(); ++i) {
-                const auto fit = static_cast<ThreadFit>(i);
-                if (ui::MenuItem(ui, Tr(kFits[i]), nullptr, {}, spec.fit == fit) && spec.fit != fit) {
-                    spec.fit = fit;
-                    Changed(session);
-                }
-            }
-            ImGui::EndPopup();
-        }
-    }
-    const doc::FitAllowance a = doc::AllowanceOf(spec);
-    switch (spec.fit) {
-        case ThreadFit::Nominal:
-            Caption(app, Tr("Профиль по стандарту, без зазоров. Допуски — в слайсере или при обработке."), width);
-            break;
-        case ThreadFit::Free:
-            Caption(app, Trf("Печать к печати с запасом: герметичные соединения с лентой, частое закручивание. Зазор по "
-                             "среднему диаметру {} на деталь, вершины срезаны.", mm(2 * a.shift)).c_str(), width);
-            break;
-        case ThreadFit::Snug:
-            Caption(app, Trf("Печать к печати плотно: точность по оси, без герметичности. Зазор по среднему диаметру {} "
-                             "на деталь.", mm(2 * a.shift)).c_str(), width);
-            break;
-        case ThreadFit::Metal:
-            Caption(app, Trf("Печатная деталь под металлический болт или гайку: зазор {} только у печатной стороны.",
-                             mm(2 * a.shift)).c_str(), width);
-            break;
-        case ThreadFit::Custom:
-            ImGui::Dummy({0, ui.S(6)});
-            ParameterField(app, session, "thread-clearance", clearanceText, spec.clearance, width, false);
-            Caption(app, Tr("Зазор по среднему диаметру этой детали. Вершины срезаются и впадины углубляются на 0,05 мм."), width);
-            break;
-    }
-    if (spec.fit == ThreadFit::Free || spec.fit == ThreadFit::Snug || spec.fit == ThreadFit::Metal)
-        Caption(app, Tr("Начальные значения для FDM (сопло 0,4 мм). Точнее — по пробной печати, через «Свой зазор»."), width);
-    Gap(app);
-
-    // The lead-in chamfer.
-    {
-        static constexpr std::array<ChoiceItem, 2> kChamfer{{{nullptr, N_("С фаской")}, {nullptr, N_("Без фаски")}}};
-        const int current = spec.leadChamfer ? 0 : 1;
-        if (const int picked = ToolChoice(app, "lead-chamfer", N_("Заходная фаска"), kChamfer, current, width); picked != current) {
-            spec.leadChamfer = picked == 0;
-            Changed(session);
-        }
-    }
-    Gap(app);
-    return sizeChanged;
-}
 
 } // namespace bz::app

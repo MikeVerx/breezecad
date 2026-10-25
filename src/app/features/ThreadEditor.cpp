@@ -11,18 +11,6 @@
 
 namespace bz::app {
 
-std::string ThreadDesignation(doc::ThreadStandard standard, double nominal, double pitch, const UnitSystem& units) {
-    const auto mm = [&](double v) { return FormatValue(v, Quantity::Length, units); };
-    switch (standard) {
-        case doc::ThreadStandard::PipeG:
-            if (const std::string name = doc::PipeSizeName(nominal); !name.empty()) return name;
-            return "G\xC3\x98" + mm(nominal);   // not a standard size: by its diameter
-        case doc::ThreadStandard::Trapezoidal: return "Tr" + mm(nominal) + "\xC3\x97" + mm(pitch);
-        case doc::ThreadStandard::Metric:      break;
-    }
-    return "M" + mm(nominal) + "\xC3\x97" + mm(pitch);
-}
-
 bool ThreadEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::ThreadFeature*>(&f) != nullptr; }
 
 std::string ThreadEditor::Hint() const {
@@ -38,7 +26,6 @@ void ThreadEditor::LoadTexts(const doc::Feature& feature) {
     const auto& f = static_cast<const doc::ThreadFeature&>(feature);
     myPitch = f.pitch.expression;
     myLength = f.length.expression;
-    myClearance = f.spec.clearance.expression;
     myAutoPitch = false;
 }
 
@@ -65,7 +52,7 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
     // The standard pitch of the size (chosen, or measured by the rebuild).
     if (myAutoPitch && (f.site || f.size > 0)) {
         myAutoPitch = false;
-        const double pitch = doc::StandardPitch(f.spec.standard, f.size > 0 ? f.size : f.site->nominal);
+        const double pitch = doc::CoarsePitch(f.size > 0 ? f.size : f.site->nominal);
         if (std::abs(pitch - f.pitch.value) > 1e-9) {
             myPitch = FormatValue(pitch, Quantity::Length, session.doc.units);
             f.pitch.expression = myPitch;
@@ -73,10 +60,11 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
         }
     }
 
+    const auto mm = [&](double v) { return FormatValue(v, Quantity::Length, session.doc.units); };
     Section(app, Tr("Грань"));
     std::string size;
     if (f.site)
-        size = std::format("{} {}", ThreadDesignation(f.spec.standard, f.size > 0 ? f.size : f.site->nominal, f.pitch.value, session.doc.units),
+        size = std::format("M{}\xC3\x97{} {}", mm(f.size > 0 ? f.size : f.site->nominal), mm(f.pitch.value),
                            f.site->external ? Tr("наружная") : Tr("внутренняя"));
     else if (f.face)
         size = Tr("выбрана");
@@ -84,21 +72,33 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
     Caption(app, Tr("На валу резьба врезается внутрь, в отверстии — в стенку: отверстие считается диаметром под метчик."), width);
     Gap(app);
 
-    // Kind, size, fit, lead-in chamfer.
-    if (ThreadControls(app, session, f.spec, f.size, f.site ? f.site->nominal : 0.0, myClearance, width, true)) myAutoPitch = true;
+    // The standard size: by the face, or chosen from the list.
+    Section(app, Tr("Размер"));
+    const std::string chosen = f.size > 0 ? "M" + mm(f.size) : std::string(Tr("По грани"));
+    if (PickChip(ui, "##size", Tr("Резьба"), chosen, false, width)) ImGui::OpenPopup("##sizes");
+    {
+        ui::MenuStyle style(ui);   // before Begin: must outlive the End call
+        if (ImGui::BeginPopup("##sizes")) {
+            if (ui::MenuItem(ui, Tr("По грани"), nullptr, {}, f.size <= 0)) {
+                f.size = 0;
+                myAutoPitch = true;
+                Changed(session);
+            }
+            for (double d : doc::StandardSizes()) {
+                const std::string label = std::format("M{}\xC3\x97{}", mm(d), mm(doc::CoarsePitch(d)));
+                if (ui::MenuItem(ui, label.c_str(), nullptr, {}, std::abs(f.size - d) < 1e-9)) {
+                    f.size = d;
+                    myAutoPitch = true;
+                    Changed(session);
+                }
+            }
+            ImGui::EndPopup();
+        }
+    }
     if (f.size > 0 && f.site && std::abs(f.site->nominal - f.size) > 1e-6) {
-        // Too much material is cut away; too little is added, so the thread is whole.
-        const bool bigger = f.size > f.site->nominal;
-        const auto name = [&](double d) {
-            return ThreadDesignation(f.spec.standard, d, doc::StandardPitch(f.spec.standard, d), session.doc.units);
-        };
-        const std::string was = name(f.site->nominal), now = name(f.size);
-        const std::string note =
-            f.site->external
-                ? (bigger ? Trf("Вал под {}, выбрана {}: недостающий материал добавится, резьба будет полной.", was, now)
-                          : Trf("Вал под {}, выбрана {}: лишнее снаружи срежется.", was, now))
-                : (bigger ? Trf("Отверстие под {}, выбрана {}: оно будет расточено.", was, now)
-                          : Trf("Отверстие под {}, выбрана {}: стенка нарастёт, резьба будет полной, не обрезанной.", was, now));
+        const std::string note = f.site->external
+                                     ? Trf("Вал под M{}, выбрана M{}: лишнее снаружи срежется, резьба будет M{}.", mm(f.site->nominal), mm(f.size), mm(f.size))
+                                     : Trf("Отверстие под M{}, выбрана M{}: оно будет расточено под M{}.", mm(f.site->nominal), mm(f.size), mm(f.size));
         Caption(app, note.c_str(), width);
     }
     Gap(app);

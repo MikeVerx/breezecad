@@ -3,7 +3,6 @@
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Extrude.h"   // ApplyBoolean
 #include "kernel/occt/FaceMatch.h"
-#include "kernel/occt/Thread.h"
 
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
@@ -33,8 +32,8 @@ double Diagonal(const TopoDS_Shape& body) {
 }
 
 /// The cutting tool of one hole at `top`, pointing into the body along `down`.
-Expected<TopoDS_Shape> HoleTool(const doc::HoleFeature& f, Vec3 top, Vec3 down, double depth) {
-    const double r = f.DrillDiameter() / 2;
+TopoDS_Shape HoleTool(const doc::HoleFeature& f, Vec3 top, Vec3 down, double depth) {
+    const double r = f.diameter.value / 2;
     const gp_Ax2 start(ToPnt(top - down * kOvershoot), ToDir(down));
     TopoDS_Shape tool = BRepPrimAPI_MakeCylinder(start, r, depth + kOvershoot).Shape();
     if (f.type == doc::HoleType::Counterbore) {
@@ -46,43 +45,17 @@ Expected<TopoDS_Shape> HoleTool(const doc::HoleFeature& f, Vec3 top, Vec3 down, 
         const TopoDS_Shape cone = BRepPrimAPI_MakeCone(start, rTop, r, rTop - r).Shape();
         tool = BRepAlgoAPI_Fuse(tool, cone).Shape();
     }
-    if (f.threaded) {
-        // The thread from the face down: the whole hole, or as deep as asked.
-        const double length = f.threadFull ? depth : std::min(f.threadDepth.value, depth);
-        const bool runsOut = f.throughAll && f.threadFull;
-        const doc::ThreadCut cut = f.ThreadGeometry();
-        // The lead-in chamfer: a 45° countersink of the drill from the
-        // thread's root down to the drilled wall, at the mouth. Fused into the
-        // drill like any countersink. (A through hole's far end is wherever
-        // the body ends: not known here, so not chamfered.)
-        if (f.threadSpec.leadChamfer) {
-            const double root = cut.anchor + cut.depth, wall = r;
-            const double rTop = root + kOvershoot;
-            const auto cone = [&](Vec3 at, Vec3 dir) {
-                return BRepPrimAPI_MakeCone(gp_Ax2(ToPnt(at - dir * kOvershoot), ToDir(dir)), rTop, wall, rTop - wall).Shape();
-            };
-            if (root > wall + 1e-6) tool = BRepAlgoAPI_Fuse(tool, cone(top, down)).Shape();
-        }
-        const Expected<TopoDS_Shape> groove =
-            HoleThreadGroove(top, down, cut, f.threadPitch.value, length, f.threadLeft, runsOut);
-        if (!groove) return groove.GetError();
-        tool = BRepAlgoAPI_Fuse(tool, *groove).Shape();
-    }
     return tool;
 }
 
 Status CheckSizes(const doc::HoleFeature& f) {
     for (const Parameter* p : f.Parameters())
         if (p->HasError()) return Error{p->error};
-    if (f.DrillDiameter() <= 1e-6) return Error{"Диаметр должен быть больше нуля"};
-    if (f.threaded && f.threadPitch.value <= 1e-3) return Error{"Шаг резьбы должен быть больше нуля"};
-    if (f.threaded && f.threadSpec.fit == doc::ThreadFit::Custom && f.threadSpec.clearance.HasError())
-        return Error{f.threadSpec.clearance.error};
-    if (f.threaded && !f.threadFull && f.threadDepth.value <= 1e-6) return Error{"Глубина резьбы должна быть больше нуля"};
+    if (f.diameter.value <= 1e-6) return Error{"Диаметр должен быть больше нуля"};
     if (!f.throughAll && f.depth.value <= 1e-6) return Error{"Глубина должна быть больше нуля"};
-    if (f.type == doc::HoleType::Counterbore && (f.headDiameter.value <= f.DrillDiameter() || f.headDepth.value <= 1e-6))
+    if (f.type == doc::HoleType::Counterbore && (f.headDiameter.value <= f.diameter.value || f.headDepth.value <= 1e-6))
         return Error{"Цековка должна быть шире отверстия и иметь глубину"};
-    if (f.type == doc::HoleType::Countersink && f.sinkDiameter.value <= f.DrillDiameter())
+    if (f.type == doc::HoleType::Countersink && f.sinkDiameter.value <= f.diameter.value)
         return Error{"Зенковка должна быть шире отверстия"};
     return Status::Ok();
 }
@@ -100,9 +73,8 @@ Expected<TopoDS_Shape> HoleTools(const TopoDS_Shape& body, const doc::HoleFeatur
     try {
         TopoDS_Shape tools;
         for (Vec2 c : f.centres) {
-            const Expected<TopoDS_Shape> tool = HoleTool(f, frame.ToWorld(c), down, depth);
-            if (!tool) return tool.GetError();
-            tools = tools.IsNull() ? *tool : BRepAlgoAPI_Fuse(tools, *tool).Shape();
+            const TopoDS_Shape tool = HoleTool(f, frame.ToWorld(c), down, depth);
+            tools = tools.IsNull() ? tool : BRepAlgoAPI_Fuse(tools, tool).Shape();
         }
         return tools;
     } catch (const Standard_Failure& failure) {

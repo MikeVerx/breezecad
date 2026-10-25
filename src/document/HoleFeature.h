@@ -11,7 +11,6 @@
 #include "document/EdgeReference.h"
 #include "document/FaceReference.h"
 #include "document/Feature.h"
-#include "document/ThreadFeature.h"     // ThreadSpec
 #include "document/WorkPlaneFeature.h"   // CylinderTouch
 
 #include <optional>
@@ -46,22 +45,6 @@ public:
     Parameter headDepth{.name = "", .expression = "6.4", .quantity = Quantity::Length, .value = 6.4, .error = {}};
     /// Countersink: diameter at the surface; the cone is 90°.
     Parameter sinkDiameter{.name = "", .expression = "13", .quantity = Quantity::Length, .value = 13.0, .error = {}};
-    /// Резьбовое отверстие (0.2.4.1): drilled to the thread's minor diameter
-    /// (as for a tap; `diameter` is not used then) with an ISO metric thread
-    /// cut in its wall, from the face down to `threadDepth` or the whole hole.
-    bool      threaded = false;
-    double    threadSize = 6;      ///< nominal diameter, mm (doc::StandardSizes)
-    Parameter threadPitch{.name = "", .expression = "1", .quantity = Quantity::Length, .value = 1.0, .error = {}};
-    bool      threadFull = true;   ///< the whole depth of the hole
-    Parameter threadDepth{.name = "", .expression = "8", .quantity = Quantity::Length, .value = 8.0, .error = {}};
-    bool      threadLeft = false;  ///< left-handed
-    ThreadSpec threadSpec;         ///< kind, fit, lead-in chamfer (0.2.4.2)
-
-    /// The thread as cut into the wall (the hole's minor diameter, the groove).
-    ThreadCut ThreadGeometry() const;
-    /// The diameter actually drilled: a threaded hole's minor diameter, bored
-    /// out by its fit.
-    double DrillDiameter() const;
 
     std::string_view Type() const override { return kType; }
     /// Removes centre `index` and the axis that held it.

@@ -4,12 +4,9 @@
 #include "app/Format.h"
 #include "app/sketch/SketchView.h"
 #include "core/I18n.h"
-#include "document/ThreadFeature.h"
-#include "ui/Menus.h"
 #include "ui/Widgets.h"
 
 #include <array>
-#include <format>
 #include <cmath>
 #include <cstdlib>
 #include <numbers>
@@ -66,7 +63,7 @@ double OuterDiameter(const doc::HoleFeature& f) {
         case HoleType::Countersink: return f.sinkDiameter.value;
         case HoleType::Simple: break;
     }
-    return f.threaded ? f.threadSize : f.diameter.value;
+    return f.diameter.value;
 }
 
 } // namespace
@@ -123,9 +120,6 @@ void HoleEditor::LoadTexts(const doc::Feature& feature) {
     myHeadDiameter = f.headDiameter.expression;
     myHeadDepth = f.headDepth.expression;
     mySinkDiameter = f.sinkDiameter.expression;
-    myThreadPitch = f.threadPitch.expression;
-    myThreadDepth = f.threadDepth.expression;
-    myThreadClearance = f.threadSpec.clearance.expression;
 }
 
 // --- viewport -----------------------------------------------------------------
@@ -383,25 +377,10 @@ void HoleEditor::DrawSizes(AppContext& app, Session& session, doc::HoleFeature& 
     }
     Gap(app);
 
-    // Резьбовое: drilled for a tap, the thread cut in the wall (as Inventor's tapped hole).
-    {
-        static constexpr std::array<ChoiceItem, 2> kinds{{{"thread-none", N_("Гладкое")}, {"thread-real", N_("Резьбовое")}}};
-        const int current = f.threaded ? 1 : 0;
-        if (const int chosen = ToolChoice(app, "threaded", N_("Стенка"), kinds, current, width); chosen != current) {
-            f.threaded = chosen == 1;
-            Changed(session);
-        }
-    }
+    Section(app, Tr("Диаметр"));
+    // Not focused on open: it is below the centres, and focusing would scroll them away.
+    ParameterField(app, session, "diameter", myDiameter, f.diameter, width, false);
     Gap(app);
-
-    if (f.threaded) {
-        DrawThread(app, session, f, width);
-    } else {
-        Section(app, Tr("Диаметр"));
-        // Not focused on open: it is below the centres, and focusing would scroll them away.
-        ParameterField(app, session, "diameter", myDiameter, f.diameter, width, false);
-        Gap(app);
-    }
 
     if (f.type == HoleType::Counterbore) {
         Section(app, Tr("Диаметр цековки"));
@@ -429,41 +408,6 @@ void HoleEditor::DrawSizes(AppContext& app, Session& session, doc::HoleFeature& 
         ImGui::Dummy({0, ui.S(6)});
         ParameterField(app, session, "depth", myDepth, f.depth, width, false);
     }
-    if (f.threaded) {
-        Gap(app);
-        static constexpr std::array<ChoiceItem, 2> extents{{{"thread-full", N_("На всю глубину")}, {"thread-length", N_("На длину")}}};
-        const int current = f.threadFull ? 0 : 1;
-        if (const int chosen = ToolChoice(app, "thread-extent", N_("Резьба"), extents, current, width); chosen != current) {
-            f.threadFull = chosen == 0;
-            Changed(session);
-        }
-        if (!f.threadFull) {
-            ImGui::Dummy({0, ui.S(6)});
-            ParameterField(app, session, "thread-depth", myThreadDepth, f.threadDepth, width, false);
-        }
-        Gap(app);
-        static constexpr std::array<ChoiceItem, 2> hands{{{"hand-right", N_("Правая")}, {"hand-left", N_("Левая")}}};
-        const int hand = f.threadLeft ? 1 : 0;
-        if (const int chosen = ToolChoice(app, "hand", N_("Направление"), hands, hand, width); chosen != hand) {
-            f.threadLeft = chosen == 1;
-            Changed(session);
-        }
-    }
-}
-
-void HoleEditor::DrawThread(AppContext& app, Session& session, doc::HoleFeature& f, float width) {
-    const auto mm = [&](double v) { return FormatValue(v, Quantity::Length, session.doc.units); };
-    // Kind, size, fit, lead-in chamfer; a new size takes its standard pitch
-    // (a fine one can be typed after).
-    if (ThreadControls(app, session, f.threadSpec, f.threadSize, 0.0, myThreadClearance, width, false)) {
-        myThreadPitch = mm(doc::StandardPitch(f.threadSpec.standard, f.threadSize));
-        f.threadPitch.expression = myThreadPitch;
-        Changed(session);
-    }
-    Section(app, Tr("Шаг"));
-    ParameterField(app, session, "thread-pitch", myThreadPitch, f.threadPitch, width, false);
-    Caption(app, Trf("Сверлится под метчик: \xC3\x98{}.", mm(f.DrillDiameter())).c_str(), width);
-    Gap(app);
 }
 
 } // namespace bz::app
