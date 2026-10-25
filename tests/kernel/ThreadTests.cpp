@@ -34,10 +34,15 @@ TEST_CASE("an external thread cuts a groove along the shaft") {
     model.Rebuild(d);
     REQUIRE(thread.status.state == FeatureState::Ok);
     const double shaft = kPi * 16 * 20;
-    // Groove: a 60° triangle 0.6134P deep, about 0.22 P² in section, 16 turns.
+    // ISO 68-1 groove: a trapezoid 7/8 P wide at the surface, 0.6134 P deep,
+    // flanks at 60°: 0.3195 P² in section, its centre of area 0.237 P below
+    // the surface; 16 turns along the 20 mm. A groove of the right width puts
+    // the pitch diameter where it belongs (the old V groove was too narrow:
+    // about 125 mm³ here, a bolt too fat for a nut).
+    const double area = 0.3195 * 1.25 * 1.25;
+    const double expected = area * 2 * kPi * (4 - 0.237 * 1.25) * 16;
     const double cut = shaft - model.Volume();
-    CHECK(cut > 80);
-    CHECK(cut < 180);
+    CHECK(cut == doctest::Approx(expected).epsilon(0.08));
 
     thread.fullLength = false;
     thread.length.expression = "10";
@@ -159,4 +164,45 @@ TEST_CASE("a chosen standard size wins over the shaft, a cosmetic thread cuts no
     CHECK(t->size == 8);
     CHECK(t->cosmetic);
     CHECK(doc::StandardSizes().size() == 22);
+}
+
+TEST_CASE("a size bigger than the shaft or smaller than the hole comes out whole, not cut short") {
+    // A 6 mm shaft with M8 chosen: material grows to 8 mm first, then the thread.
+    {
+        doc::Document d;
+        auto& sk = AddSketch(d);
+        AddCircle(d, sk, {0, 0}, 3);
+        AddExtrude(d, sk.id, "20");
+        auto& thread = AddThread(d, 3, "1.25");
+        thread.size = 8;
+        kernel::Model model;
+        model.Rebuild(d);
+        REQUIRE(thread.status.state == FeatureState::Ok);
+        doc::Document ref;
+        auto& rs = AddSketch(ref);
+        AddCircle(ref, rs, {0, 0}, 4);
+        AddExtrude(ref, rs.id, "20");
+        AddThread(ref, 4, "1.25");
+        kernel::Model m8;
+        m8.Rebuild(ref);
+        CHECK(model.Volume() == doctest::Approx(m8.Volume()).epsilon(0.01));
+    }
+    // A 10 mm hole with M6 chosen: the wall grows in to the minor diameter.
+    {
+        doc::Document d;
+        auto& sk = AddSketch(d);
+        AddRect(d, sk, {-10, -10}, {10, 10});
+        AddCircle(d, sk, {0, 0}, 5);
+        AddExtrude(d, sk.id, "12");
+        auto& thread = AddThread(d, 5, "1");
+        thread.size = 6;
+        kernel::Model model;
+        model.Rebuild(d);
+        REQUIRE(thread.status.state == FeatureState::Ok);
+        const double minor = 6 - 1.0825;
+        const double plate = 400 * 12 - kPi * minor * minor / 4 * 12;
+        // Less the groove: 0.2368 P² in section, about 9 mm³ a turn round 6 mm.
+        CHECK(plate - model.Volume() > 20);
+        CHECK(plate - model.Volume() < 70);
+    }
 }

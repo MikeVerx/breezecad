@@ -391,13 +391,20 @@ void ApplyThread(doc::ThreadFeature& thread, Model::Impl& impl, std::vector<Body
         thread.status = {FeatureState::Ok, {}};
         return;
     }
-    const Expected<TopoDS_Shape> tool = occt::ThreadTool(target->shape, thread);
-    Expected<TopoDS_Shape> result = tool ? occt::ApplyBoolean(target->shape, *tool, doc::BooleanOp::Cut) : tool;
+    const Expected<occt::ThreadShapes> tool = occt::ThreadTool(target->shape, thread);
+    if (!tool) {
+        thread.status = {FeatureState::Error, tool.GetError().message};
+        return;
+    }
+    // A chosen size the face is too small or too big for: material first.
+    Expected<TopoDS_Shape> filled = tool->fill ? occt::ApplyBoolean(target->shape, *tool->fill, doc::BooleanOp::Join)
+                                               : Expected<TopoDS_Shape>(target->shape);
+    Expected<TopoDS_Shape> result = filled ? occt::ApplyBoolean(*filled, tool->cut, doc::BooleanOp::Cut) : filled;
     if (!result) {
         thread.status = {FeatureState::Error, result.GetError().message};
         return;
     }
-    impl.tools[thread.id] = {*tool, doc::BooleanOp::Cut, {}};
+    impl.tools[thread.id] = {tool->cut, doc::BooleanOp::Cut, {}};
     target->shape = *result;
     thread.status = {FeatureState::Ok, {}};
 }

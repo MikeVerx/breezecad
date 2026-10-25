@@ -96,9 +96,18 @@ void ThreadEditor::DrawBody(AppContext& app, Session& session, doc::Feature& fea
         }
     }
     if (f.size > 0 && f.site && std::abs(f.site->nominal - f.size) > 1e-6) {
-        const std::string note = f.site->external
-                                     ? Trf("Вал под M{}, выбрана M{}: лишнее снаружи срежется, резьба будет M{}.", mm(f.site->nominal), mm(f.size), mm(f.size))
-                                     : Trf("Отверстие под M{}, выбрана M{}: оно будет расточено под M{}.", mm(f.site->nominal), mm(f.size), mm(f.size));
+        // Too much material is cut away; too little is added, so the thread is whole.
+        const bool bigger = f.size > f.site->nominal;
+        const std::string note =
+            f.site->external
+                ? (bigger ? Trf("Вал под M{}, выбрана M{}: недостающий материал добавится до M{}, резьба будет полной.",
+                                mm(f.site->nominal), mm(f.size), mm(f.size))
+                          : Trf("Вал под M{}, выбрана M{}: лишнее снаружи срежется, резьба будет M{}.", mm(f.site->nominal),
+                                mm(f.size), mm(f.size)))
+                : (bigger ? Trf("Отверстие под M{}, выбрана M{}: оно будет расточено под M{}.", mm(f.site->nominal), mm(f.size),
+                                mm(f.size))
+                          : Trf("Отверстие под M{}, выбрана M{}: стенка нарастёт до M{}, резьба будет полной, не обрезанной.",
+                                mm(f.site->nominal), mm(f.size), mm(f.size)));
         Caption(app, note.c_str(), width);
     }
     Gap(app);
