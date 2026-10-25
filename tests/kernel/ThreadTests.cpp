@@ -356,19 +356,19 @@ TEST_CASE("a bolt and a nut made here screw together with the gap their fits pro
     using doc::ThreadFit;
     using doc::ThreadStandard;
     // Within 0.015 mm of the promise (the search and the solids' tolerances).
-    const auto near = [](double gap, double promised) { return std::abs(gap - promised) < 0.015; };
+    const auto within = [](double gap, double promised) { return std::abs(gap - promised) < 0.015; };
     // As in the book: no gap at all (a metal pair meets "in zero"; printed,
     // it would not turn).
     CHECK(MatedGap(ThreadStandard::Metric, 8, 1.25, ThreadFit::Nominal, ThreadFit::Nominal) < 0.01);
     // Printed to printed: 0.075 mm across each flank from each part (free),
     // half that (snug).
-    CHECK(near(MatedGap(ThreadStandard::Metric, 8, 1.25, ThreadFit::Free, ThreadFit::Free), 0.15));
-    CHECK(near(MatedGap(ThreadStandard::Metric, 8, 1.25, ThreadFit::Snug, ThreadFit::Snug), 0.075));
+    CHECK(within(MatedGap(ThreadStandard::Metric, 8, 1.25, ThreadFit::Free, ThreadFit::Free), 0.15));
+    CHECK(within(MatedGap(ThreadStandard::Metric, 8, 1.25, ThreadFit::Snug, ThreadFit::Snug), 0.075));
     // A printed nut on a metal bolt (here the basic one): 0.05 from the printed side.
-    CHECK(near(MatedGap(ThreadStandard::Metric, 8, 1.25, ThreadFit::Nominal, ThreadFit::Metal), 0.05));
+    CHECK(within(MatedGap(ThreadStandard::Metric, 8, 1.25, ThreadFit::Nominal, ThreadFit::Metal), 0.05));
     // The same flank gap whatever the thread angle.
-    CHECK(near(MatedGap(ThreadStandard::Trapezoidal, 16, 4, ThreadFit::Free, ThreadFit::Free), 0.15));
-    CHECK(near(MatedGap(ThreadStandard::PipeG, 20.955, 25.4 / 14, ThreadFit::Free, ThreadFit::Free), 0.15));
+    CHECK(within(MatedGap(ThreadStandard::Trapezoidal, 16, 4, ThreadFit::Free, ThreadFit::Free), 0.15));
+    CHECK(within(MatedGap(ThreadStandard::PipeG, 20.955, 25.4 / 14, ThreadFit::Free, ThreadFit::Free), 0.15));
 }
 
 TEST_CASE("the lead-in chamfer takes the first crests off, and can be turned off") {
