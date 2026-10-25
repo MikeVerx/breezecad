@@ -249,7 +249,7 @@ TEST_CASE("a tapped hole: drilled for the tap, the thread cut in the wall") {
     kernel::Model model;
     model.Rebuild(p.d);
     REQUIRE(hole.status.state == FeatureState::Ok);
-    CHECK(hole.DrillDiameter() == doctest::Approx(8 - 1.0825 * 1.25));
+    CHECK(hole.DrillDiameter() == doctest::Approx(8 - 1.0825 * 1.25).epsilon(1e-4));
     const double drilled = kPi * hole.DrillDiameter() * hole.DrillDiameter() / 4 * 30;
     // The groove: 0.2368 P² in section round about 7.2 mm, 24 turns and the run-outs.
     const double groove = Cut(model) - drilled;

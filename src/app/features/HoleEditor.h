@@ -46,7 +46,7 @@ private:
     void ClickCoaxial(AppContext& app, Session& session, doc::HoleFeature& f, const ViewportFrame& vf);
 
     std::string        myDiameter, myDepth, myHeadDiameter, myHeadDepth, mySinkDiameter;
-    std::string        myThreadPitch, myThreadDepth;
+    std::string        myThreadPitch, myThreadDepth, myThreadClearance;
     std::optional<int> myHoveredCentre;
     DragArrow          myArrow;   ///< depth
     bool               myCoaxial = false;   ///< clicks make coaxial centres

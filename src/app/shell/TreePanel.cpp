@@ -24,6 +24,7 @@
 #include "document/WorkAxisFeature.h"
 #include "document/WorkPlaneFeature.h"
 #include "app/assembly/AssemblyUi.h"
+#include "app/features/ThreadEditor.h"
 #include "app/assembly/InPlace.h"
 #include "assembly/AssemblyFile.h"
 #include "ui/Menus.h"
@@ -157,13 +158,14 @@ std::string FeatureMeta(const doc::Feature& f, const doc::Document& d) {
     if (const auto* shell = dynamic_cast<const doc::ShellFeature*>(&f))
         return FormatValue(shell->thickness.value, Quantity::Length, d.units) + " " + UnitLabel(Quantity::Length, d.units);
     if (const auto* hole = dynamic_cast<const doc::HoleFeature*>(&f)) {
-        std::string meta = "\xC3\x98" + FormatValue(hole->diameter.value, Quantity::Length, d.units);   // Ø6.6
+        std::string meta = hole->threaded ? ThreadDesignation(hole->threadSpec.standard, hole->threadSize, hole->threadPitch.value, d.units)
+                                          : "\xC3\x98" + FormatValue(hole->diameter.value, Quantity::Length, d.units);   // Ø6.6
         if (hole->centres.size() > 1) meta += " \xC3\x97" + std::to_string(hole->centres.size());
         return meta;
     }
-    if (const auto* thread = dynamic_cast<const doc::ThreadFeature*>(&f); thread && thread->site)
-        return "M" + FormatValue(thread->site->nominal, Quantity::Length, d.units) + "\xC3\x97" +
-               FormatValue(thread->pitch.value, Quantity::Length, d.units);   // M8×1.25
+    if (const auto* thread = dynamic_cast<const doc::ThreadFeature*>(&f); thread && thread->site)   // M8×1.25, G1/2, Tr16×4
+        return ThreadDesignation(thread->spec.standard, thread->size > 0 ? thread->size : thread->site->nominal,
+                                 thread->pitch.value, d.units);
     if (const auto* wp = dynamic_cast<const doc::WorkPlaneFeature*>(&f))
         return (wp->reversed ? "\xE2\x88\x92" : "") + FormatValue(wp->offset.value, Quantity::Length, d.units) + " " +
                UnitLabel(Quantity::Length, d.units);

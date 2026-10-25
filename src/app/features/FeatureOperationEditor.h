@@ -7,6 +7,7 @@
 
 #include "app/features/OperationEditor.h"
 #include "document/FaceReference.h"
+#include "document/ThreadFeature.h"
 
 #include <functional>
 #include <memory>
@@ -86,6 +87,15 @@ protected:
     /// empty; the active one (where the next click goes) has a stronger
     /// border. True when clicked.
     static bool PickChip(ui::Ui& ui, const char* id, const std::string& caption, const std::string& value, bool active, float width);
+
+    /// What a thread is («Резьба», a threaded hole): its kind, size, fit and
+    /// lead-in chamfer. `size` is the nominal diameter; 0 means "by the face"
+    /// (offered when `byFace`; `faceNominal` is what the face turned out to
+    /// be, 0 when not known). `clearanceText` is the custom fit's field.
+    /// Returns true when the kind or size changed: the standard pitch then
+    /// belongs to the new size. Marks the feature changed itself.
+    bool ThreadControls(AppContext& app, Session& session, doc::ThreadSpec& spec, double& size, double faceNominal,
+                        std::string& clearanceText, float width, bool byFace);
 
     bool myFocusFirstField = false;   ///< focus the main value when the panel opens
 

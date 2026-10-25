@@ -125,6 +125,7 @@ void HoleEditor::LoadTexts(const doc::Feature& feature) {
     mySinkDiameter = f.sinkDiameter.expression;
     myThreadPitch = f.threadPitch.expression;
     myThreadDepth = f.threadDepth.expression;
+    myThreadClearance = f.threadSpec.clearance.expression;
 }
 
 // --- viewport -----------------------------------------------------------------
@@ -451,31 +452,17 @@ void HoleEditor::DrawSizes(AppContext& app, Session& session, doc::HoleFeature& 
 }
 
 void HoleEditor::DrawThread(AppContext& app, Session& session, doc::HoleFeature& f, float width) {
-    ui::Ui& ui = app.ui;
     const auto mm = [&](double v) { return FormatValue(v, Quantity::Length, session.doc.units); };
-    Section(app, Tr("Размер резьбы"));
-    const std::string chosen = std::format("M{}\xC3\x97{}", mm(f.threadSize), mm(f.threadPitch.value));
-    if (PickChip(ui, "##thread-size", Tr("Резьба"), chosen, false, width)) ImGui::OpenPopup("##thread-sizes");
-    {
-        ui::MenuStyle style(ui);   // before Begin: must outlive the End call
-        if (ImGui::BeginPopup("##thread-sizes")) {
-            for (const double d : doc::StandardSizes()) {
-                const std::string label = std::format("M{}\xC3\x97{}", mm(d), mm(doc::CoarsePitch(d)));
-                if (ui::MenuItem(ui, label.c_str(), nullptr, {}, std::abs(f.threadSize - d) < 1e-9)) {
-                    f.threadSize = d;
-                    // A new size takes its coarse pitch; a fine one can be typed after.
-                    myThreadPitch = mm(doc::CoarsePitch(d));
-                    f.threadPitch.expression = myThreadPitch;
-                    Changed(session);
-                }
-            }
-            ImGui::EndPopup();
-        }
+    // Kind, size, fit, lead-in chamfer; a new size takes its standard pitch
+    // (a fine one can be typed after).
+    if (ThreadControls(app, session, f.threadSpec, f.threadSize, 0.0, myThreadClearance, width, false)) {
+        myThreadPitch = mm(doc::StandardPitch(f.threadSpec.standard, f.threadSize));
+        f.threadPitch.expression = myThreadPitch;
+        Changed(session);
     }
-    Gap(app);
     Section(app, Tr("Шаг"));
     ParameterField(app, session, "thread-pitch", myThreadPitch, f.threadPitch, width, false);
-    Caption(app, Trf("Сверлится под метчик: \xC3\x98{}. Резьба ISO, профиль 60\xC2\xB0.", mm(f.DrillDiameter())).c_str(), width);
+    Caption(app, Trf("Сверлится под метчик: \xC3\x98{}.", mm(f.DrillDiameter())).c_str(), width);
     Gap(app);
 }
 
