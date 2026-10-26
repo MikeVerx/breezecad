@@ -29,23 +29,32 @@ std::string_view CutCr(std::string_view s) {
     return s;
 }
 
+/// A number as DXF writes it ("-12.5", "1.0E+02"; "+1", "1,5" from careless
+/// writers). Parsed by hand: floating-point std::from_chars is missing from the
+/// Android and older Apple C++ libraries, and strtod follows the C locale.
 double Number(std::string_view s) {
     s = Trim(s);
+    std::size_t i = 0;
+    bool negative = false;
+    if (i < s.size() && (s[i] == '+' || s[i] == '-')) negative = s[i++] == '-';
     double v = 0.0;
-    const auto r = std::from_chars(s.data(), s.data() + s.size(), v);
-    if (r.ec != std::errc{}) {
-        // Some writers put "+1.0" or use a comma.
-        std::string t(s);
-        for (char& c : t)
-            if (c == ',') c = '.';
-        if (!t.empty() && t[0] == '+') t.erase(0, 1);
-        try {
-            return std::stod(t);
-        } catch (...) {
-            return 0.0;
-        }
+    bool digits = false;
+    while (i < s.size() && s[i] >= '0' && s[i] <= '9') v = v * 10.0 + (s[i++] - '0'), digits = true;
+    if (i < s.size() && (s[i] == '.' || s[i] == ',')) {
+        ++i;
+        double scale = 0.1;
+        while (i < s.size() && s[i] >= '0' && s[i] <= '9') v += (s[i++] - '0') * scale, scale *= 0.1, digits = true;
     }
-    return v;
+    if (!digits) return 0.0;
+    if (i < s.size() && (s[i] == 'e' || s[i] == 'E')) {
+        ++i;
+        bool negativeExp = false;
+        if (i < s.size() && (s[i] == '+' || s[i] == '-')) negativeExp = s[i++] == '-';
+        int e = 0;
+        while (i < s.size() && s[i] >= '0' && s[i] <= '9' && e < 400) e = e * 10 + (s[i++] - '0');
+        v *= std::pow(10.0, negativeExp ? -e : e);
+    }
+    return negative ? -v : v;
 }
 
 int Integer(std::string_view s) { return static_cast<int>(std::lround(Number(s))); }

@@ -199,3 +199,14 @@ TEST_CASE("a text of several lines is written as one TEXT per line") {
     CHECK(back->entities[1].text == "S = 2 мм x");
     CHECK(back->entities[1].at.y == doctest::Approx(10 - 8));
 }
+
+TEST_CASE("numbers as DXF writers put them") {
+    const std::string text = "  0\nSECTION\n  2\nENTITIES\n  0\nLINE\n  8\n0\n 10\n-12.5\n 20\n1.0E+02\n 11\n+3\n 21\n  1,25  \n  0\nENDSEC\n  0\nEOF\n";
+    const auto d = Read(text);
+    REQUIRE(d.HasValue());
+    REQUIRE(d->entities.size() == 1);
+    CHECK(d->entities[0].a.x == doctest::Approx(-12.5));
+    CHECK(d->entities[0].a.y == doctest::Approx(100));
+    CHECK(d->entities[0].b.x == doctest::Approx(3));
+    CHECK(d->entities[0].b.y == doctest::Approx(1.25));
+}
