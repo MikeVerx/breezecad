@@ -6,6 +6,7 @@ add_library(bz_document STATIC
     DocumentTypes.cpp
     CoilFeature.cpp
     SectionFeature.cpp
+    SheetMetalFeature.cpp
     ShellFeature.cpp
     EdgeFeature.cpp
     ExtrudeFeature.cpp
@@ -28,7 +29,7 @@ add_library(bz_document STATIC
     WorkAxisFeature.cpp
     WorkPointFeature.cpp)
 target_link_libraries(bz_document
-    PUBLIC  bz::core bz::sketch bz::json
+    PUBLIC  bz::core bz::sketch bz::sheetmetal bz::json
     PRIVATE bz::miniz)
 bz_set_warnings(bz_document)
 add_library(bz::document ALIAS bz_document)

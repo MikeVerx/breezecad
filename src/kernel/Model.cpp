@@ -17,6 +17,7 @@
 #include "document/PatternFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
+#include "document/SheetMetalFeature.h"
 #include "document/ShellFeature.h"
 #include "document/ThreadFeature.h"
 #include "document/WorkAxisFeature.h"
@@ -29,6 +30,7 @@
 #include "kernel/occt/FaceMatch.h"
 #include "kernel/occt/Fillet.h"
 #include "kernel/occt/Points.h"
+#include "kernel/occt/SheetMetal.h"
 #include "kernel/occt/Shell.h"
 #include "kernel/occt/Hole.h"
 #include "kernel/occt/Loft.h"
@@ -905,6 +907,242 @@ bool FollowSupport(doc::SketchFeature& sk, const doc::Document& doc, const std::
     return false;
 }
 
+// --- Sheet metal (src/sheetmetal; docs/ADR/0007-sheet-metal.md) -------------------
+
+/// True when `f` changes bodies: anything but sketches and work geometry.
+bool ChangesBodies(const doc::Feature& f) {
+    return !dynamic_cast<const doc::SketchFeature*>(&f) && !dynamic_cast<const doc::WorkPlaneFeature*>(&f) &&
+           !dynamic_cast<const doc::WorkAxisFeature*>(&f) && !dynamic_cast<const doc::WorkPointFeature*>(&f);
+}
+
+bool IsSheetOperationOf(const doc::Feature& f, ObjectId base) {
+    if (const auto* s = dynamic_cast<const doc::SheetMetalFeature*>(&f)) return s->id == base;
+    if (const auto* fl = dynamic_cast<const doc::FlangeFeature*>(&f)) return fl->sheet == base;
+    if (const auto* c = dynamic_cast<const doc::SheetCutFeature*>(&f)) return c->sheet == base;
+    return false;
+}
+
+/// The sheet as the sheet operation before feature `index` left it; nullptr
+/// and `error` when there is none or an ordinary operation stands between.
+const SheetInfo* PreviousSheet(const Model::Impl& impl, const doc::Document& doc, std::size_t index, ObjectId sheet, const char* what,
+                               std::string& error) {
+    const SheetInfo* previous = nullptr;
+    const doc::Feature* between = nullptr;
+    bool found = false;
+    for (std::size_t k = index; k-- > 0;) {
+        const doc::Feature& g = *doc.Features()[k];
+        if (!doc.IsActive(k) || g.suppressed) continue;
+        if (IsSheetOperationOf(g, sheet)) {
+            if (const auto it = impl.sheets.find(g.id); it != impl.sheets.end()) previous = &it->second;
+            found = true;
+            break;
+        }
+        if (ChangesBodies(g)) between = &g;
+    }
+    if (!found || !previous) {
+        error = found ? "Предыдущая операция листа не построилась" : "Лист не найден";
+        return nullptr;
+    }
+    if (between) {
+        error = std::format("Между листом и операцией «{}» стоит «{}»: перенесите её выше обычных операций", what, between->name);
+        return nullptr;
+    }
+    return previous;
+}
+
+/// Builds the sheet's body from `info` and keeps `info` as the sheet after operation `id`.
+/// `flange`: the flange this operation added (checked for going into the rest of the part).
+void PutSheet(SheetInfo info, ObjectId id, ObjectId sheet, Model::Impl& impl, std::vector<Body>& bodies, doc::FeatureStatus& status,
+              std::optional<std::size_t> flange = std::nullopt) {
+    const auto body = std::find_if(bodies.begin(), bodies.end(), [&](const Body& b) { return b.id == sheet; });
+    if (body == bodies.end()) {
+        status = {FeatureState::Error, "Тело листа не найдено"};
+        return;
+    }
+    std::vector<std::size_t> clashes;
+    Expected<TopoDS_Shape> shape = occt::MakeSheetBody(info.part, info.layout, info.frame, flange ? &clashes : nullptr);
+    if (!shape) {
+        status = {FeatureState::Error, shape.GetError().message};
+        return;
+    }
+    body->shape = *shape;
+    impl.sheets[id] = std::move(info);
+    status = {FeatureState::Ok, {}};
+    if (flange && std::find(clashes.begin(), clashes.end(), *flange) != clashes.end())
+        status = {FeatureState::Warning, "Полка врезается в другую часть листа: измените высоту, угол, ширину или направление"};
+}
+
+/// «Лист»: one sketch region becomes a plate; the part starts here.
+void ApplySheet(doc::SheetMetalFeature& f, Model::Impl& impl, std::vector<Body>& bodies, const doc::Document& doc) {
+    f.operation = doc::BooleanOp::NewBody;
+    f.ApplyAuto();
+    if (!f.thickness.HasError() && f.thickness.value <= 0.0) {
+        f.status = {FeatureState::Error, "Толщина листа должна быть больше нуля"};
+        return;
+    }
+    ApplySketchSolid(f, impl, bodies, f.status, doc,
+                     [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature&, const Frame& frame) -> Expected<TopoDS_Shape> {
+                         if (faces.empty()) return Error{"В эскизе нет замкнутого контура для листа"};
+                         if (faces.size() > 1) return Error{"Для листа нужен один замкнутый контур: щёлкните его в эскизе"};
+                         Expected<sheet::Region> region = occt::RegionFromFace(faces[0], frame);
+                         if (!region) return region.GetError();
+                         SheetInfo info;
+                         info.base = f.id;
+                         info.frame = frame;
+                         info.part.rules = f.Rules();
+                         info.part.base = std::move(*region);
+                         info.part.reversed = f.reversed;
+                         Expected<sheet::Layout> layout = sheet::Solve(info.part);
+                         if (!layout) return layout.GetError();
+                         info.layout = std::move(*layout);
+                         Expected<TopoDS_Shape> body = occt::MakeSheetBody(info.part, info.layout, frame);
+                         if (body) impl.sheets[f.id] = std::move(info);
+                         return body;
+                     });
+    if (f.status.state != FeatureState::Ok) impl.sheets.erase(f.id);
+}
+
+/// «Отбортовка»: the part of the sheet's previous operation plus this flange;
+/// the sheet's body is built again from it.
+void ApplyFlange(doc::FlangeFeature& f, Model::Impl& impl, std::vector<Body>& bodies, const doc::Document& doc, std::size_t index) {
+    for (const Parameter* p : f.Parameters())
+        if (p->HasError()) {
+            f.status = {FeatureState::Error, p->error};
+            return;
+        }
+    if (!f.edgeSet && !f.onFlange) {
+        f.status = {FeatureState::Error, "Щёлкните ребро листа, на котором сделать отбортовку"};
+        return;
+    }
+    std::string error;
+    const SheetInfo* previous = PreviousSheet(impl, doc, index, f.sheet, "Отбортовка", error);
+    if (!previous) {
+        f.status = {FeatureState::Error, error};
+        return;
+    }
+    SheetInfo info = *previous;
+    int parent = -1;
+    if (f.onFlange) {
+        const auto it = std::find(info.flangeIds.begin(), info.flangeIds.end(), f.onFlange);
+        if (it == info.flangeIds.end()) {
+            f.status = {FeatureState::Error, "Полка, на которой стоит отбортовка, не найдена (удалена или погашена)"};
+            return;
+        }
+        parent = static_cast<int>(it - info.flangeIds.begin());
+    }
+    sheet::Flange fl{info.frame.ToLocal(f.edge), f.height.value, f.angle.value, f.down, parent};
+    fl.onEdge = f.onEdge;
+    if (parent < 0 && f.widthMode == doc::FlangeWidth::Offsets) fl.offsetStart = f.offset1.value, fl.offsetEnd = f.offset2.value;
+    if (parent < 0 && f.widthMode == doc::FlangeWidth::Centered) fl.centered = true, fl.width = f.width.value;
+    info.part.flanges.push_back(fl);
+    info.flangeIds.push_back(f.id);
+    std::size_t failed = 0;
+    Expected<sheet::Layout> layout = sheet::Solve(info.part, &failed);
+    if (!layout) {
+        std::string text = layout.GetError().message;
+        if (failed + 1 == info.part.flanges.size())
+            if (const auto colon = text.find(": "); colon != std::string::npos && text.starts_with("Отбортовка")) text = text.substr(colon + 2);
+        f.status = {FeatureState::Error, text};
+        return;
+    }
+    info.layout = std::move(*layout);
+    const sheet::BentFlange& placed = info.layout.flanges.back();
+    if (parent < 0) {
+        f.edge = info.frame.ToWorld(placed.edgeMiddle);   // follows the edge as it is now
+        info.part.flanges.back().edgePoint = placed.edgeMiddle;
+    } else {   // the middle of the edge it stands on, in model space
+        const Vec3 m = placed.start + placed.along * (placed.width / 2);
+        f.edge = info.frame.ToWorld({m.x, m.y}) + info.frame.normal * m.z;
+    }
+    f.edgeSet = true;
+    const std::size_t added = info.part.flanges.size() - 1;
+    PutSheet(std::move(info), f.id, f.sheet, impl, bodies, f.status, added);
+}
+
+/// «Вырез»: the sketch's contours, on a face of the sheet, through it.
+void ApplySheetCut(doc::SheetCutFeature& f, Model::Impl& impl, std::vector<Body>& bodies, const doc::Document& doc, std::size_t index) {
+    std::string error;
+    const SheetInfo* previous = PreviousSheet(impl, doc, index, f.sheet, "Вырез", error);
+    if (!previous) {
+        f.status = {FeatureState::Error, error};
+        return;
+    }
+    const auto* sk = doc.FindAs<doc::SketchFeature>(f.sketch);
+    const auto profile = impl.sketches.find(f.sketch);
+    if (!sk || profile == impl.sketches.end() || sk->status.state == FeatureState::Error) {
+        f.status = {FeatureState::Error, "Эскиз выреза не найден или с ошибками"};
+        return;
+    }
+    const std::vector<TopoDS_Face> faces = occt::SelectFaces(profile->second, f.profiles);
+    if (faces.empty()) {
+        f.status = {FeatureState::Error, "Щёлкните замкнутый контур эскиза, который вырезать"};
+        return;
+    }
+    SheetInfo info = *previous;
+    const Frame& sketchFrame = profile->second.frame;
+    const Frame& part = info.frame;
+    const double s = info.part.rules.thickness, z0 = info.part.reversed ? -s : 0.0;
+    const auto toPart = [&](Vec3 w) {
+        const Vec3 d = w - part.origin;
+        return Vec3{d.Dot(part.xDir), d.Dot(part.YDir()), d.Dot(part.normal)};
+    };
+    const Vec3 n = toPart(part.origin + sketchFrame.normal);   // the sketch's normal, part coordinates
+    const Vec3 o = toPart(sketchFrame.origin);
+    // Which face the sketch lies on: the plate's top or bottom, or a side of a flange's strip.
+    int face = -2;
+    Vec3 faceOrigin, faceX, faceY;
+    const auto onPlane = [&](Vec3 normal, Vec3 point) {
+        if (std::abs(n.Dot(normal)) < 1 - 1e-6) return false;
+        const double off = (o - point).Dot(normal);
+        return std::abs(off) < 1e-3 || std::abs(off - s) < 1e-3;
+    };
+    if (onPlane({0, 0, 1}, {0, 0, z0})) face = -1, faceOrigin = {0, 0, 0}, faceX = {1, 0, 0}, faceY = {0, 1, 0};
+    for (std::size_t k = 0; k < info.layout.flanges.size() && face == -2; ++k) {
+        const sheet::BentFlange& b = info.layout.flanges[k];
+        if (onPlane(b.stripNormal, b.stripStart)) face = static_cast<int>(k), faceOrigin = b.stripStart, faceX = b.along, faceY = b.stripOut;
+    }
+    if (face == -2) {
+        f.status = {FeatureState::Error, "Эскиз выреза должен лежать на грани листа или полки (на плоской части)"};
+        return;
+    }
+    const auto toFace = [&](Vec2 p) {
+        const Vec3 q = toPart(sketchFrame.ToWorld(p)) - faceOrigin;
+        return Vec2{q.Dot(faceX), q.Dot(faceY)};
+    };
+    const Vec2 ex = toFace({1, 0}) - toFace({0, 0}), ey = toFace({0, 1}) - toFace({0, 0});
+    const bool flips = ex.Cross(ey) < 0;
+    for (const TopoDS_Face& region : faces) {
+        Expected<sheet::Region> r = occt::RegionFromFace(region, sketchFrame);
+        if (!r) {
+            f.status = {FeatureState::Error, r.GetError().message};
+            return;
+        }
+        if (!r->holes.empty()) {
+            f.status = {FeatureState::Error, "Контур выреза с островом внутри пока нельзя: остров выпадет"};
+            return;
+        }
+        sheet::Loop mapped;
+        for (const sheet::Segment& sg : r->outer) {
+            sheet::Segment m = sg;
+            m.a = toFace(sg.a), m.b = toFace(sg.b), m.center = toFace(sg.center);
+            if (flips) m.ccw = !m.ccw;
+            mapped.push_back(m);
+        }
+        info.part.cuts.push_back({face, std::move(mapped)});
+    }
+    std::size_t failed = 0;
+    Expected<sheet::Layout> layout = sheet::Solve(info.part, &failed);
+    if (!layout) {
+        std::string text = layout.GetError().message;
+        if (failed >= info.part.flanges.size())
+            if (const auto colon = text.find(": "); colon != std::string::npos && text.starts_with("Вырез")) text = text.substr(colon + 2);
+        f.status = {FeatureState::Error, text};
+        return;
+    }
+    info.layout = std::move(*layout);
+    PutSheet(std::move(info), f.id, f.sheet, impl, bodies, f.status);
+}
+
 /// OCCT prints progress reports (STEP statistics...) to stdout; keep only
 /// warnings and errors, our own log covers the rest.
 /// Process-wide OCCT setup: fewer messages, booleans on the calling thread.
@@ -966,6 +1204,7 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
         impl.cachedOrder[i] = f.id;
         impl.tools.erase(f.id);   // set again below if the operation succeeds
         impl.decorations.erase(f.id);
+        impl.sheets.erase(f.id);
 
         const auto featureStart = std::chrono::steady_clock::now();
         const bool skip = !doc.IsActive(i) || f.suppressed;
@@ -1119,6 +1358,12 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                 PlaceWorkPoint(*wpt, doc, bodies);
             } else if (auto* section = dynamic_cast<doc::SectionFeature*>(&f)) {
                 ApplySection(*section, doc, bodies);
+            } else if (auto* sheetBase = dynamic_cast<doc::SheetMetalFeature*>(&f)) {
+                ApplySheet(*sheetBase, impl, bodies, doc);
+            } else if (auto* flange = dynamic_cast<doc::FlangeFeature*>(&f)) {
+                ApplyFlange(*flange, impl, bodies, doc, i);
+            } else if (auto* sheetCut = dynamic_cast<doc::SheetCutFeature*>(&f)) {
+                ApplySheetCut(*sheetCut, impl, bodies, doc, i);
             } else if (f.status.state == FeatureState::NotComputed) {
                 f.status = {FeatureState::Error, "Операция этого типа не поддерживается"};
             }
@@ -1239,6 +1484,7 @@ Model Model::Fork(std::size_t start) const {
         p.regions = profile.regions;
         for (const TopoDS_Face& face : profile.faces) p.faces.push_back(TopoDS::Face(copied(face)));
     }
+    b.sheets = a.sheets;   // plain data, no shapes
     return fork;
 }
 
@@ -1259,6 +1505,7 @@ void Model::Adopt(Model&& fork, std::size_t start) {
         take(a.sketches, b.sketches);
         take(a.copyPreviews, b.copyPreviews);
         take(a.decorations, b.decorations);
+        take(a.sheets, b.sheets);
     }
     std::erase_if(a.decorations, [&](const auto& d) { return std::ranges::find(a.cachedOrder, d.first) == a.cachedOrder.end(); });
     a.costMs = std::move(b.costMs);
@@ -1317,6 +1564,21 @@ Expected<RevolvedProjection> Model::ProjectRevolved(const doc::FaceReference& fa
     const std::optional<TopoDS_Face> found = occt::ResolveAnyFace(body, face);
     if (!found) return Error{"Грань не найдена"};
     return occt::ProjectRevolved(body, *found, plane);
+}
+
+std::optional<SheetInfo> Model::Sheet(const doc::Document& doc, ObjectId base) const {
+    const auto& features = doc.Features();
+    for (std::size_t k = features.size(); k-- > 0;) {
+        const doc::Feature& g = *features[k];
+        if (!doc.IsActive(k) || g.suppressed || !IsSheetOperationOf(g, base)) continue;
+        if (const auto it = myImpl->sheets.find(g.id); it != myImpl->sheets.end()) return it->second;
+    }
+    return std::nullopt;
+}
+
+std::optional<SheetInfo> Model::SheetAt(ObjectId operation) const {
+    if (const auto it = myImpl->sheets.find(operation); it != myImpl->sheets.end()) return it->second;
+    return std::nullopt;
 }
 
 std::optional<MassProperties> Model::Properties() const {

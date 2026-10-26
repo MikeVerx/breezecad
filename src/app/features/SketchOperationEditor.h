@@ -29,6 +29,8 @@ protected:
     /// The sketch a new operation starts on, given the one StartNew proposes
     /// (the selected or last unused sketch). The default keeps it.
     virtual ObjectId ChooseSketch(const Session& session, ObjectId proposed) const;
+    /// False: no "Операция" choice (the operation always makes a new body: «Лист»).
+    virtual bool ShowsOperation() const { return true; }
     /// A new feature of this kind with defaults (sketch, name and id are set by the caller).
     virtual std::unique_ptr<doc::SketchSolidFeature> Create(Session& session, ObjectId sketch) const = 0;
     /// The operation's own options, below "Операция" and "Профиль".

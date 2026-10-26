@@ -4,6 +4,7 @@
 #include "app/Application.h"
 #include "app/BetaTesting.h"
 #include "app/Operations.h"
+#include "app/features/DxfEditor.h"
 #include "app/assembly/AssemblyUi.h"
 #include "app/assembly/InPlace.h"
 #include "app/features/OperationEditors.h"
@@ -239,6 +240,17 @@ void RegisterActions(AppContext& app) {
            [&app] { StartSection(app); }});
     a.Add({"feature.shell", N_("Оболочка"), "shell", 0, N_("Сделать тело полым со стенками заданной толщины; выбранные грани удаляются"),
            inModel, [&app] { StartShell(app); }});
+    a.Add({"sheet.base", N_("Лист"), "sheet", 0, N_("Листовая деталь: замкнутый контур эскиза становится листом; впишите толщину — радиус гиба и K-фактор подтянутся сами"),
+           partDoc, [&app] { StartSheet(app); }});
+    a.Add({"sheet.flange", N_("Отбортовка"), "flange", 0, N_("Загнуть полку на ребре листа: высота, угол, вверх или вниз"), inModel,
+           [&app] { StartFlange(app); }});
+    a.Add({"sheet.cut", N_("Вырез"), "sheet-cut", 0,
+           N_("Вырез сквозь лист или полку по эскизу на её грани; попадает и в развёртку"), inModel, [&app] { StartSheetCut(app); }});
+    a.Add({"sheet.flatPattern", N_("Развёртка"), "flat-pattern", 0, N_("Плоская заготовка листовой детали: размеры, масса, сохранение в DXF"), inModel,
+           [&app] { app.shell.showFlatPattern = true; }});
+    a.Add({"sheet.dxfEditor", N_("Редактор DXF"), "dxf-editor", 0,
+           N_("Подготовка заготовки к резке: слои рез/гиб/маркировка, перенос, поворот, текст, замер, поиск разрывов и дублей, сохранение DXF для AutoCAD и станка"),
+           {}, [&app] { OpenDxfEditor(app, {}, Tr("Новый чертёж")); }});
     a.Add({"feature.chamfer", N_("Фаска"), "chamfer", 0, N_("Срезать рёбра тела под 45°"), inModel, [&app] { StartChamfer(app); }});
 
     // --- sketch ---

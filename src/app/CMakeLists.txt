@@ -27,6 +27,7 @@ set(BZ_APP_SOURCES
     scripting/DocumentCommands.cpp
     scripting/PartCommands.cpp
     scripting/SketchCommands.cpp
+    scripting/SheetCommands.cpp
     scripting/SolidCommands.cpp
     scripting/TopologyCommands.cpp
     scripting/GenericCommands.cpp
@@ -45,6 +46,8 @@ set(BZ_APP_SOURCES
     features/SweepEditor.cpp
     features/ThreadEditor.cpp
     features/PointPick.cpp
+    features/DxfEditor.cpp
+    features/SheetMetalEditors.cpp
     features/ShellEditor.cpp
     features/WorkAxisEditor.cpp
     features/WorkPointEditor.cpp

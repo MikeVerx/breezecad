@@ -8,6 +8,7 @@
 #include "document/LoftFeature.h"
 #include "document/PatternFeature.h"
 #include "document/RevolveFeature.h"
+#include "document/SheetMetalFeature.h"
 #include "document/ShellFeature.h"
 #include "document/SketchFeature.h"
 #include "document/SweepFeature.h"
@@ -38,6 +39,9 @@ FeatureRegistry& FeatureRegistry::Default() {
         r.Register(std::string(ShellFeature::kType), [] { return std::make_unique<ShellFeature>(); });
         r.Register(std::string(WorkPointFeature::kType), [] { return std::make_unique<WorkPointFeature>(); });
         r.Register(std::string(ThreadFeature::kType), [] { return std::make_unique<ThreadFeature>(); });
+        r.Register(std::string(SheetMetalFeature::kType), [] { return std::make_unique<SheetMetalFeature>(); });
+        r.Register(std::string(FlangeFeature::kType), [] { return std::make_unique<FlangeFeature>(); });
+        r.Register(std::string(SheetCutFeature::kType), [] { return std::make_unique<SheetCutFeature>(); });
         return r;
     }();
     return registry;
