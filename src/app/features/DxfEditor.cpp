@@ -1,6 +1,7 @@
 #include "app/features/DxfEditor.h"
 
 #include "app/AppContext.h"
+#include "app/mobile/MobileState.h"
 #include "app/shell/Shell.h"
 #include "core/I18n.h"
 #include "core/PathText.h"
@@ -15,6 +16,7 @@
 #include <cmath>
 #include <fstream>
 #include <format>
+#include <map>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -54,6 +56,11 @@ struct Editor {
     std::string moveX = "0", moveY = "0", angle = "90";
     std::string text = "Деталь 1", textHeight = "5";
     std::string textLayer = dxf::kMark;
+    // Fingers on the drawing (the phone): where each was last frame, and
+    // what a one-finger drag does — pans, or moves the selection it started on.
+    std::map<int, ImVec2> fingersLast;
+    bool fingerDecided = false, fingerMoves = false;
+    bool sidePanel = false;   ///< the phone: the panels instead of the drawing
     // Measure: up to two picked points.
     std::vector<Vec2> measure;
     // The last check.
@@ -89,6 +96,34 @@ ImU32 AciColor(int aci, ImU32 seven) {
     float r, g, b;
     ImGui::ColorConvertHSVtoRGB(h, 1.0f, v, r, g, b);
     return IM_COL32(static_cast<int>(r * 255), static_cast<int>(g * 255), static_cast<int>(b * 255), 255);
+}
+
+/// The colour as drawn on `background`: one too close to it in brightness
+/// (yellow on the light theme, blue on the dark one) is pulled towards the
+/// text colour until it stands out. Only the picture: the file keeps its colour.
+ImU32 Readable(ImU32 colour, ImU32 background, ImU32 text) {
+    const auto luminance = [](ImU32 c) {
+        const auto ch = [](unsigned v) {
+            const double x = v / 255.0;
+            return x <= 0.04045 ? x / 12.92 : std::pow((x + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * ch(c & 0xFF) + 0.7152 * ch((c >> 8) & 0xFF) + 0.0722 * ch((c >> 16) & 0xFF);
+    };
+    const auto contrast = [&](ImU32 a, ImU32 b) {
+        const double la = luminance(a), lb = luminance(b);
+        return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
+    };
+    // 3:1 — the WCAG level for lines and shapes (WCAG 2.1, 1.4.11).
+    ImU32 out = colour;
+    for (int step = 1; step <= 10 && contrast(out, background) < 3.0; ++step) {
+        const float t = step / 10.0f;
+        const auto mix = [&](int shift) {
+            const float a = static_cast<float>((colour >> shift) & 0xFF), b = static_cast<float>((text >> shift) & 0xFF);
+            return static_cast<ImU32>(a + (b - a) * t + 0.5f) << shift;
+        };
+        out = mix(0) | mix(8) | mix(16) | (colour & 0xFF000000u);
+    }
+    return out;
 }
 
 /// What a layer is for, in Russian, for the known shop layers.
@@ -130,10 +165,52 @@ bool LayerVisible(const Editor& e, const Entity& en) {
     return !l || l->visible;
 }
 
-ImU32 ColorOf(const Editor& e, const Entity& en, ImU32 seven) {
-    if (en.color != 256) return AciColor(en.color, seven);
+ImU32 ColorOf(const Editor& e, const Entity& en, ImU32 seven, ImU32 background) {
+    if (en.color != 256) return Readable(AciColor(en.color, seven), background, seven);
     const dxf::Layer* l = e.drawing.FindLayer(en.layer);
-    return AciColor(l ? l->color : 7, seven);
+    return Readable(AciColor(l ? l->color : 7, seven), background, seven);
+}
+
+/// The layer's colour: a square to click and the AutoCAD colours to choose from.
+/// Returns true when one was picked (`aci` changed).
+bool ColourPicker(ui::Ui& ui, const char* id, ImVec2 at, float h, int& aci) {
+    const ui::ThemeColors& c = ui.C();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float side = ui.S(12);
+    ImGui::SetCursorScreenPos({at.x, at.y});
+    ImGui::InvisibleButton(id, {side + ui.S(8), h});
+    const bool clicked = ImGui::IsItemClicked();
+    if (ImGui::IsItemHovered()) ui::ItemTooltip(ui, Tr("Цвет слоя"));
+    const ImVec2 a{at.x + ui.S(4), at.y + h / 2 - side / 2}, b{a.x + side, a.y + side};
+    dl->AddRectFilled(a, b, AciColor(aci, ui::ToU32(c.text)), ui.S(3));
+    dl->AddRect(a, b, ui::ToU32(c.fieldBorder), ui.S(3));
+    if (clicked) ImGui::OpenPopup(id);
+    bool picked = false;
+    if (ImGui::BeginPopup(id)) {
+        // The standard nine, the greys and a row of hues (AutoCAD index colours).
+        static constexpr std::array<int, 24> choices{1,  2,  3,  4,  5,  6,  7,  8,  9,  30, 40, 50,
+                                                     70, 90, 110, 130, 150, 170, 190, 210, 230, 250, 252, 254};
+        const float cell = ui.S(28);
+        for (std::size_t i = 0; i < choices.size(); ++i) {
+            if (i % 8 != 0) ImGui::SameLine(0, ui.S(4));
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            ImGui::PushID(static_cast<int>(i));
+            if (ImGui::InvisibleButton("c", {cell, cell})) {
+                aci = choices[i];
+                picked = true;
+                ImGui::CloseCurrentPopup();
+            }
+            const bool hot = ImGui::IsItemHovered();
+            ImDrawList* pl = ImGui::GetWindowDrawList();
+            pl->AddRectFilled(p, {p.x + cell, p.y + cell}, AciColor(choices[i], ui::ToU32(c.text)), ui.S(4));
+            pl->AddRect(p, {p.x + cell, p.y + cell}, ui::ToU32(hot || aci == choices[i] ? c.accent : c.fieldBorder), ui.S(4), 0,
+                        ui.S(hot || aci == choices[i] ? 2.0f : 1.0f));
+            if (hot) ui::ItemTooltip(ui, std::format("{} {}", Tr("Цвет AutoCAD"), choices[i]).c_str());
+            ImGui::PopID();
+        }
+        ImGui::EndPopup();
+    }
+    return picked;
 }
 
 void DeleteSelected(Editor& e) {
@@ -261,6 +338,61 @@ void OpenAsk(AppContext& app, Editor& e) {
     if (!OpenDxfEditorFile(app, *file, &error)) app.notes.Error(error);
 }
 
+/// Narrow screens (the phone): a row of icons, the drawing or the panels in turn.
+void DrawCompactToolbar(AppContext& app, Editor& e, float width) {
+    ui::Ui& ui = app.ui;
+    {
+        ui::FontScope font(ui.fonts.title);
+        ImGui::TextUnformatted((e.title + (e.dirty ? " *" : "")).c_str());
+    }
+    const float b = ui.S(40), gap = ui.S(4), icon = ui.S(20);
+    struct Button {
+        const char* id;
+        const char* icon;
+        const char* tip;
+        bool enabled, active;
+    };
+    const std::array<Button, 11> row{{
+        {"##c-panels", "ui-sliders", Tr("Панели: слои, проверка, перенос"), true, e.sidePanel},
+        {"##c-select", "ui-cursor", Tr("Выбор"), true, !e.sidePanel && e.tool == Tool::Select},
+        {"##c-text", "ui-edit", Tr("Текст"), true, !e.sidePanel && e.tool == Tool::Text},
+        {"##c-measure", "ui-ruler", Tr("Замер"), true, !e.sidePanel && e.tool == Tool::Measure},
+        {"##c-delete", "ui-trash", Tr("Удалить выбранное"), !e.selected.empty(), false},
+        {"##c-undo", "ui-undo", Tr("Отменить"), !e.undo.empty(), false},
+        {"##c-redo", "ui-redo", Tr("Повторить"), !e.redo.empty(), false},
+        {"##c-fit", "ui-maximize", Tr("Вписать"), true, false},
+        {"##c-open", "ui-open", Tr("Открыть…"), true, false},
+        {"##c-save", "ui-save", Tr("Сохранить"), true, false},
+        {"##c-close", "ui-close", Tr("Закрыть"), true, false},
+    }};
+    float x = 0;
+    for (std::size_t i = 0; i < row.size(); ++i) {
+        if (i > 0) {
+            if (x + gap + b <= width) ImGui::SameLine(0, gap), x += gap;
+            else x = 0;   // the next row
+        }
+        x += b;
+        if (!ui::IconButton(ui, row[i].id, row[i].icon, b, icon, row[i].tip, row[i].enabled, row[i].active) || !row[i].enabled) continue;
+        switch (i) {
+            case 0: e.sidePanel = !e.sidePanel; break;
+            case 1: case 2: case 3:
+                e.tool = static_cast<Tool>(i - 1);
+                e.measure.clear();
+                e.sidePanel = false;
+                break;
+            case 4: DeleteSelected(e); break;
+            case 5: Undo(e); break;
+            case 6: Redo(e); break;
+            case 7: e.fitPending = true; e.sidePanel = false; break;
+            case 8: OpenAsk(app, e); break;
+            case 9: Save(app, e); break;
+            default:
+                if (e.dirty) e.confirmClose = true;
+                else e.open = false;
+        }
+    }
+}
+
 void DrawToolbar(AppContext& app, Editor& e, float width) {
     ui::Ui& ui = app.ui;
     const ImVec2 bs{ui.S(118), ui.S(32)};
@@ -305,9 +437,11 @@ void DrawLayers(AppContext& app, Editor& e, float width) {
         if (ImGui::InvisibleButton("eye", {ui.S(26), h})) l.visible = !l.visible;
         ui.icons.Draw(dl, l.visible ? "ui-eye" : "ui-eye-off", {p.x + ui.S(5), p.y + (h - ui.S(16)) / 2}, ui.S(16),
                       l.visible ? c.textSecondary : c.textDisabled);
-        ImGui::SameLine(0, 0);
-        dl->AddRectFilled({p.x + ui.S(30), p.y + h / 2 - ui.S(6)}, {p.x + ui.S(42), p.y + h / 2 + ui.S(6)}, AciColor(l.color, ui::ToU32(c.text)), ui.S(3));
-        dl->AddRect({p.x + ui.S(30), p.y + h / 2 - ui.S(6)}, {p.x + ui.S(42), p.y + h / 2 + ui.S(6)}, ui::ToU32(c.fieldBorder), ui.S(3));
+        int colour = l.color;
+        if (ColourPicker(ui, "colour", {p.x + ui.S(26), p.y}, h, colour) && colour != l.color) {
+            Remember(e);
+            e.drawing.layers[i].color = colour;
+        }
         const std::string label = LayerLabel(l.name);
         dl->AddText(ui.fonts.body, ui.S(13), {p.x + ui.S(50), p.y + (h - ui.S(13)) / 2}, ui::ToU32(l.visible ? c.text : c.textDisabled),
                     label.c_str());
@@ -316,8 +450,8 @@ void DrawLayers(AppContext& app, Editor& e, float width) {
         // «→» puts the selection on this layer.
         const float arrowW = ui.S(26);
         dl->AddText(ui.fonts.mono, ui.S(12), {p.x + width - arrowW - ns.x - ui.S(8), p.y + (h - ui.S(12)) / 2}, ui::ToU32(c.textMuted), n.c_str());
-        ImGui::SetCursorScreenPos({p.x + ui.S(26), p.y});
-        ImGui::InvisibleButton("row", {width - ui.S(26) - arrowW, h});
+        ImGui::SetCursorScreenPos({p.x + ui.S(46), p.y});
+        ImGui::InvisibleButton("row", {width - ui.S(46) - arrowW, h});
         if (ImGui::IsItemClicked()) {   // select everything on the layer
             e.selected.clear();
             for (std::size_t k = 0; k < e.drawing.entities.size(); ++k)
@@ -333,14 +467,17 @@ void DrawLayers(AppContext& app, Editor& e, float width) {
         ImGui::SetCursorScreenPos({p.x, p.y + h});
         ImGui::PopID();
     }
-    Caption(ui, Tr("Глаз — показать или скрыть слой. Стрелка — перенести выбранное на слой. Станок режет по слою «Рез»."));
+    Caption(ui, Tr("Глаз — показать или скрыть слой, квадрат — цвет слоя. Стрелка — перенести выбранное на слой. Станок режет по слою «Рез»."));
 }
 
 void DrawSelection(AppContext& app, Editor& e, float width) {
     ui::Ui& ui = app.ui;
     Section(ui, Trf("Выбрано: {}", e.selected.size()).c_str());
     if (e.selected.empty()) {
-        Caption(ui, Tr("Щелчок — выбрать, Shift — добавить. Рамка слева направо — что целиком внутри, справа налево — что задето."));
+        if (app.shell.mobile.touchScreen)
+            Caption(ui, Tr("Касание — выбрать или снять, по одному. Палец по выбранному — перенести, по пустому месту — сдвинуть вид, двумя пальцами — масштаб."));
+        else
+            Caption(ui, Tr("Щелчок — выбрать, Shift — добавить. Рамка слева направо — что целиком внутри, справа налево — что задето."));
         return;
     }
     const float half = (width - ui.S(8)) / 2;
@@ -385,7 +522,7 @@ void DrawToolPanel(AppContext& app, Editor& e, float width) {
         ui::TextField(ui, "##text", e.text, width);
         ui::FieldLabel(ui, Tr("Высота букв, мм"));
         ui::TextField(ui, "##th", e.textHeight, width);
-        Caption(ui, Trf("Щёлкните на чертеже, где начать строку. Ляжет на слой «{}».", LayerLabel(e.textLayer)));
+        Caption(ui, Trf("Щёлкните или коснитесь чертежа там, где начать строку. Ляжет на слой «{}».", LayerLabel(e.textLayer)));
     } else if (e.tool == Tool::Measure) {
         if (e.measure.size() == 2) {
             const Vec2 d = e.measure[1] - e.measure[0];
@@ -447,6 +584,109 @@ void DrawCheckPanel(AppContext& app, Editor& e, float width) {
     }
 }
 
+/// The nearest visible entity within `px` screen pixels of `at`.
+std::optional<std::size_t> PickAt(const Editor& e, Vec2 at, double px) {
+    std::optional<std::size_t> under;
+    double best = px / e.scale;
+    for (std::size_t i = 0; i < e.drawing.entities.size(); ++i) {
+        const Entity& en = e.drawing.entities[i];
+        if (!LayerVisible(e, en)) continue;
+        const double d = dxf::Distance(en, at);
+        if (d < best) best = d, under = i;
+    }
+    return under;
+}
+
+/// Fingers on the drawing (mobile/TouchInput hands them over raw): one finger
+/// pans, or drags the selection it started on; two pinch to zoom and pan; a
+/// tap does what a click does — picks (a tap on a picked one drops it, so
+/// several are picked tap by tap), places the text, sets a measure point.
+template <class ToModel>
+void Fingers(AppContext& app, Editor& e, ImVec2 p0, ImVec2 size, const ToModel& toModel) {
+    ui::Ui& ui = app.ui;
+    mobile::MobileState& m = app.shell.mobile;
+    // Only when nothing is open over the drawing (a menu, a colour list).
+    if (!ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) {
+        m.canvasSeen = true;
+        m.canvasMin = p0;
+        m.canvasMax = {p0.x + size.x, p0.y + size.y};
+    }
+    const auto& fingers = m.canvasFingers;
+    std::map<int, ImVec2> now;
+    for (const auto& f : fingers) now[f.id] = f.at;
+    if (fingers.size() == 1 && e.fingersLast.count(fingers[0].id)) {
+        const auto& f = fingers[0];
+        const ImVec2 last = e.fingersLast[f.id];
+        if (!e.fingerDecided && std::hypot(f.at.x - f.start.x, f.at.y - f.start.y) > ui.S(10)) {
+            e.fingerDecided = true;
+            const Vec2 start = toModel(f.start);
+            e.fingerMoves = false;
+            if (e.tool == Tool::Select)
+                for (const std::size_t i : e.selected)
+                    if (dxf::Distance(e.drawing.entities[i], start) < ui.S(14) / e.scale) e.fingerMoves = true;
+            if (e.fingerMoves) e.beforeDrag = e.drawing;
+        }
+        if (e.fingerDecided) {
+            const Vec2 by = toModel(f.at) - toModel(last);
+            if (e.fingerMoves) {
+                for (const std::size_t i : e.selected) dxf::Move(e.drawing.entities[i], by);
+            } else {
+                e.centre = e.centre - by;
+            }
+        }
+    } else if (fingers.size() >= 2 && e.fingersLast.count(fingers[0].id) && e.fingersLast.count(fingers[1].id)) {
+        // Pinch: the point between the fingers stays under them.
+        const ImVec2 a0 = e.fingersLast[fingers[0].id], b0 = e.fingersLast[fingers[1].id];
+        const ImVec2 a1 = fingers[0].at, b1 = fingers[1].at;
+        const double d0 = std::hypot(a0.x - b0.x, a0.y - b0.y), d1 = std::hypot(a1.x - b1.x, a1.y - b1.y);
+        const ImVec2 m0{(a0.x + b0.x) / 2, (a0.y + b0.y) / 2}, m1{(a1.x + b1.x) / 2, (a1.y + b1.y) / 2};
+        const Vec2 under = toModel(m0);
+        if (d0 > 1.0 && d1 > 1.0) e.scale = std::clamp(e.scale * d1 / d0, 1e-4, 1e5);
+        // After the zoom, put `under` back below the new midpoint.
+        const Vec2 moved = toModel(m1);
+        e.centre = e.centre + (under - moved);
+        e.fingerDecided = true;
+        e.fingerMoves = false;
+    }
+    if (fingers.empty() && e.fingerMoves && e.beforeDrag) {
+        e.undo.push_back(std::move(*e.beforeDrag));
+        e.redo.clear();
+        e.dirty = true;
+        e.check.reset();
+    }
+    if (fingers.empty()) {
+        e.fingerDecided = e.fingerMoves = false;
+        if (!e.pressed) e.beforeDrag.reset();
+    }
+    e.fingersLast = std::move(now);
+
+    if (!m.canvasTapped) return;
+    m.canvasTapped = false;
+    const Vec2 at = toModel(m.canvasTapAt);
+    if (e.tool == Tool::Select) {
+        if (const auto under = PickAt(e, at, ui.S(14))) {
+            if (!e.selected.erase(*under)) e.selected.insert(*under);
+        } else {
+            e.selected.clear();
+        }
+    } else if (e.tool == Tool::Text) {
+        Remember(e);
+        e.drawing.EnsureLayer(e.textLayer, 3);
+        e.drawing.entities.push_back(Entity::Text(at, std::max(0.5, Parse(e.textHeight, 5)), 0, e.text, e.textLayer));
+        e.selected = {e.drawing.entities.size() - 1};
+    } else if (e.tool == Tool::Measure) {
+        std::optional<Vec2> snap;
+        double best = ui.S(18) / e.scale;
+        for (const Entity& en : e.drawing.entities) {
+            if (!LayerVisible(e, en)) continue;
+            for (const Vec2 v : dxf::SnapPoints(en))
+                if (const double d = (v - at).Length(); d < best) best = d, snap = v;
+        }
+        if (e.measure.size() >= 2) e.measure.clear();
+        e.measure.push_back(snap ? *snap : at);
+    }
+}
+
 /// The drawing area: drawing, picking, dragging, the tools.
 void DrawCanvas(AppContext& app, Editor& e, ImVec2 size) {
     ui::Ui& ui = app.ui;
@@ -478,6 +718,7 @@ void DrawCanvas(AppContext& app, Editor& e, ImVec2 size) {
     if (ImGui::IsItemActive() && (ImGui::IsMouseDragging(ImGuiMouseButton_Right) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle))) {
         e.centre = e.centre - Vec2{io.MouseDelta.x / e.scale, -io.MouseDelta.y / e.scale};
     }
+    Fingers(app, e, p0, size, toModel);
 
     // A light grid every 10 mm when zoomed in enough, every 100 otherwise.
     {
@@ -497,15 +738,7 @@ void DrawCanvas(AppContext& app, Editor& e, ImVec2 size) {
 
     // What is under the cursor (nearest within a few pixels).
     std::optional<std::size_t> under;
-    if (hovered && !e.boxing) {
-        double best = ui.S(6) / e.scale;
-        for (std::size_t i = 0; i < e.drawing.entities.size(); ++i) {
-            const Entity& en = e.drawing.entities[i];
-            if (!LayerVisible(e, en)) continue;
-            const double d = dxf::Distance(en, cursor);
-            if (d < best) best = d, under = i;
-        }
-    }
+    if (hovered && !e.boxing && app.shell.mobile.canvasFingers.empty()) under = PickAt(e, cursor, ui.S(6));
 
     // The entities.
     const ImU32 selectedColor = ui::ToU32(c.sketchSelected), hoverColor = ui::ToU32(c.sketchHover), seven = ui::ToU32(c.text);
@@ -514,7 +747,7 @@ void DrawCanvas(AppContext& app, Editor& e, ImVec2 size) {
         if (!LayerVisible(e, en)) continue;
         const bool sel = e.selected.count(i) > 0;
         const bool hot = under && *under == i;
-        const ImU32 col = sel ? selectedColor : hot ? hoverColor : ColorOf(e, en, seven);
+        const ImU32 col = sel ? selectedColor : hot ? hoverColor : ColorOf(e, en, seven, ui::ToU32(c.field));
         const float thick = ui.S(sel || hot ? 2.2f : 1.2f);
         if (en.kind == Kind::Text) {
             const float px = static_cast<float>(en.height * e.scale);
@@ -746,7 +979,8 @@ void DrawDxfEditor(AppContext& app) {
     const char* id = "##dxf-editor";
     if (!ImGui::IsPopupOpen(id)) ImGui::OpenPopup(id);
     ImGui::SetNextWindowPos({display.x / 2, display.y / 2}, ImGuiCond_Always, {0.5f, 0.5f});
-    ImGui::SetNextWindowSize({display.x - ui.S(32), display.y - ui.S(32)}, ImGuiCond_Always);
+    const float margin = ui.S(app.shell.mobile.phone ? 8.0f : 32.0f);
+    ImGui::SetNextWindowSize({display.x - margin, display.y - margin}, ImGuiCond_Always);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ui.S(16, 14));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ui.S(12));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ui.S(8, 6));
@@ -755,19 +989,25 @@ void DrawDxfEditor(AppContext& app) {
     if (!visible) return;
 
     const float width = ImGui::GetContentRegionAvail().x;
-    DrawToolbar(app, e, width);
+    // The phone (or a narrow window): icons, and the drawing or the panels in turn.
+    const bool compact = app.shell.mobile.phone || width < ui.S(900);
+    if (compact) DrawCompactToolbar(app, e, width);
+    else DrawToolbar(app, e, width);
     ImGui::Dummy({0, ui.S(4)});
-    const float left = ui.S(270);
+    const float left = compact ? width : ui.S(270);
     const float height = ImGui::GetContentRegionAvail().y;
-    ImGui::BeginChild("##dxf-side", {left, height}, ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
-    const float w = left - ui.S(8);
-    DrawToolPanel(app, e, w);
-    DrawLayers(app, e, w);
-    DrawSelection(app, e, w);
-    DrawCheckPanel(app, e, w);
-    ImGui::EndChild();
-    ImGui::SameLine(0, ui.S(10));
-    DrawCanvas(app, e, {width - left - ui.S(10), height});
+    if (!compact || e.sidePanel) {
+        ImGui::BeginChild("##dxf-side", {left, height}, ImGuiChildFlags_None, compact ? 0 : ImGuiWindowFlags_NoScrollbar);
+        const float w = left - ui.S(8);
+        DrawToolPanel(app, e, w);
+        DrawLayers(app, e, w);
+        DrawSelection(app, e, w);
+        DrawCheckPanel(app, e, w);
+        ImGui::EndChild();
+    }
+    if (!compact) ImGui::SameLine(0, ui.S(10));
+    if (!compact) DrawCanvas(app, e, {width - left - ui.S(10), height});
+    else if (!e.sidePanel) DrawCanvas(app, e, {width, height});
 
     // Closing with unsaved changes.
     if (e.confirmClose) {
