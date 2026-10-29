@@ -28,6 +28,8 @@
 #include "ui/Menus.h"
 #include "platform/Launch.h"
 #include "ui/Widgets.h"
+#include "app/features/DxfEditor.h"
+#include "app/features/SheetMetalEditors.h"
 
 #include <array>
 #include <imgui_internal.h>
@@ -1944,6 +1946,8 @@ void DrawDialogs(AppContext& app) {
     }
 
     DrawMassProperties(app);
+    DrawFlatPatternWindow(app);
+    DrawDxfEditor(app);
     DrawLibrary(app);
     DrawSaveToLibrary(app);
     DrawBackgroundMenu(app);

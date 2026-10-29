@@ -77,6 +77,7 @@ struct ShellState {
     std::string        shortcutFilter;
     std::string        shortcutNote;             ///< "taken from …" after a reassignment
     bool               showMassProperties = false;   ///< the "МЦХ" window
+    bool               showFlatPattern = false;      ///< the «Развёртка» window (sheet metal)
     bool               showLibrary = false;          ///< the standard parts window ("Библиотека")
     /// "В библиотеку": the open part saved as an item of the user's library
     /// (SaveToLibrary.cpp). `variables` are the part's user variables, `use`

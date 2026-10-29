@@ -189,6 +189,21 @@ struct MobileState {
         std::string file;     ///< its file (UTF-8), to share
     } lastCrash;
 
+    // --- A flat drawing inside a panel (the DXF editor): its fingers come raw ---
+    // The panel puts its box here every frame it draws it (`canvasSeen`); a
+    // finger that lands in it goes neither to ImGui nor to the 3D view: the
+    // panel reads the fingers and pans, zooms and picks itself.
+    struct CanvasFinger {
+        int    id = -1;
+        ImVec2 start{0, 0}, at{0, 0};
+        double since = 0;
+    };
+    bool   canvasSeen = false;            ///< drawn this frame (reset by the touch input)
+    ImVec2 canvasMin{0, 0}, canvasMax{0, 0};
+    std::vector<CanvasFinger> canvasFingers;
+    bool   canvasTapped = false;          ///< a finger lifted without moving: a tap…
+    ImVec2 canvasTapAt{0, 0};             ///< …here (the panel clears `canvasTapped`)
+
     // --- Stylus (ADR-0004, "Стилус") ---
     bool   penNear = false;      ///< hovering or touching: fingers only navigate (palm rejection)
     double penSeenAt = -10.0;

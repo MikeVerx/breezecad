@@ -50,6 +50,9 @@ void StartRevolve(AppContext& app);
 void StartFillet(AppContext& app);
 void StartChamfer(AppContext& app);
 void StartShell(AppContext& app);
+void StartSheet(AppContext& app);
+void StartFlange(AppContext& app);
+void StartSheetCut(AppContext& app);
 void StartWorkPoint(AppContext& app);
 /// Builds a standard part (doc::parts) and opens it as a new document;
 /// reports what went wrong otherwise. True on success.

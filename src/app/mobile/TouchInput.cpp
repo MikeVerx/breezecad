@@ -188,6 +188,9 @@ void TouchInput::BeginFrame(AppContext& app, double now) {
     myGestures.SetTuning({static_cast<double>(tune.tapSlop), tune.longPress});
     Fling(now);
 
+    myCanvas = m.canvasSeen;
+    m.canvasSeen = false;
+    if (!myCanvas) m.canvasFingers.clear();
     for (const PointerEvent& e : myQueue) Route1(app, e);
     myQueue.clear();
 
@@ -279,6 +282,14 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
             return;
         }
     }
+    if (e.action == PointerAction::Down && myCanvas && Inside(at, m.canvasMin, m.canvasMax)) {
+        // A flat drawing in a panel: the panel takes the finger as it is.
+        myFlingX = myFlingY = 0;
+        myRoutes[e.id] = Route::Canvas;
+        m.canvasFingers.push_back({e.id, at, at, e.time});
+        myQueued = std::max(myQueued, 2);
+        return;
+    }
     if (e.action == PointerAction::Down) {
         myFlingX = myFlingY = 0;   // a finger stops a flung list
         Route route = Route::View;
@@ -314,6 +325,8 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
             myNumpadId = -1;
             myQueued = std::max(myQueued, 2);
         }
+    } else if (route == Route::Canvas) {
+        CanvasEvent(m, e);
     } else if (route == Route::Ui) {
         UiEvent(e);
     } else if (route == Route::View) {
@@ -322,6 +335,26 @@ void TouchInput::Route1(AppContext& app, const PointerEvent& e) {
         else if (e.action == PointerAction::Cancel) myGestures.Cancel();
     }
     if (e.action == PointerAction::Up || e.action == PointerAction::Cancel) myRoutes.erase(e.id);
+}
+
+void TouchInput::CanvasEvent(MobileState& m, const PointerEvent& e) {
+    const ImVec2 at{e.x, e.y};
+    const auto it = std::find_if(m.canvasFingers.begin(), m.canvasFingers.end(), [&](const MobileState::CanvasFinger& f) { return f.id == e.id; });
+    if (it == m.canvasFingers.end()) return;
+    myQueued = std::max(myQueued, 2);
+    if (e.action == PointerAction::Move) {
+        it->at = at;
+        return;
+    }
+    if (e.action == PointerAction::Up) {
+        // Lifted where it went down, alone and soon: a tap.
+        const bool still = std::hypot(at.x - it->start.x, at.y - it->start.y) <= mySlop;
+        if (still && m.canvasFingers.size() == 1 && e.time - it->since < 0.6) {
+            m.canvasTapped = true;
+            m.canvasTapAt = it->start;
+        }
+    }
+    if (e.action == PointerAction::Up || e.action == PointerAction::Cancel) m.canvasFingers.erase(it);
 }
 
 void TouchInput::UiEvent(const PointerEvent& e) {

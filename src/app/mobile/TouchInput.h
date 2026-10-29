@@ -45,7 +45,7 @@ public:
     bool Busy() const;
 
 private:
-    enum class Route : unsigned char { Ui, View, Pen, Mouse, Numpad, NumpadLine, Ignored };
+    enum class Route : unsigned char { Ui, View, Pen, Mouse, Numpad, NumpadLine, Canvas, Ignored };
     struct UiFinger {
         int    id = -1;
         ImVec2 start{0, 0}, at{0, 0};
@@ -58,6 +58,7 @@ private:
     void Wheel(float dx, float dy);   ///< scroll what is under the mouse by this finger travel (dp)
     void Fling(double now);
     void UiEvent(const PointerEvent& e);
+    void CanvasEvent(MobileState& m, const PointerEvent& e);
     void PenEvent(AppContext& app, const PointerEvent& e);
     void MouseEvent(const PointerEvent& e);
     void ApplyGestures(AppContext& app);
@@ -108,6 +109,7 @@ private:
     std::uint64_t  myPutBackFrom = 0;         ///< ✕ while holding: undo when the content moved from this…
     int            myPutBackIn = 0;           ///< …this many frames later (the release is taken first)
 
+    bool   myCanvas = false;      ///< a flat drawing was drawn last frame (MobileState::canvasMin/Max)
     float  mySlop = 10.0f;        ///< the user's tap slop (dp)
     float  myScrollSpeed = 1.0f;
     // The numpad (its keys are not ImGui items: see mobile/Numpad.cpp)

@@ -51,6 +51,7 @@ void AddDocumentCommands(Commands& out);   // DocumentCommands.cpp: open, save, 
 void AddPartCommands(Commands& out);       // PartCommands.cpp: tree, parameters, properties, edits
 void AddSketchCommands(Commands& out);     // SketchCommands.cpp: sketches and their geometry
 void AddSolidCommands(Commands& out);      // SolidCommands.cpp: extrude, revolve, thread
+void AddSheetCommands(Commands& out);      // SheetCommands.cpp: sheet metal, flat pattern, DXF
 void AddTopologyCommands(Commands& out);   // TopologyCommands.cpp: faces, edges, measure
 void AddGenericCommands(Commands& out);    // GenericCommands.cpp: any feature by its fields, the tree
 void AddFeatureCommands(Commands& out);    // FeatureCommands.cpp: hole, fillet, shell, patterns, mirror, loft

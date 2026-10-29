@@ -1,4 +1,5 @@
 #include "app/Operations.h"
+#include "app/features/SheetMetalEditors.h"
 
 #include "app/Format.h"
 #include "app/features/OperationEditors.h"
@@ -303,6 +304,31 @@ void StartShell(AppContext& app) {
     if (!s) return;
     app.ops.Close(app, *s);
     app.ops.shell.StartNew(app, *s);
+}
+
+void StartSheet(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.sheet.StartNew(app, *s);
+}
+
+void StartFlange(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.flange.StartNew(app, *s);
+}
+
+void StartSheetCut(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    if (!LastSheet(s->doc)) {
+        app.notes.Info(Tr("Сначала сделайте лист: эскиз с замкнутым контуром и «Лист»"));
+        return;
+    }
+    app.ops.sheetCut.StartNew(app, *s);
 }
 
 void StartHole(AppContext& app) {

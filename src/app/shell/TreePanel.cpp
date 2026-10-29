@@ -16,6 +16,7 @@
 #include "document/PatternFeature.h"
 #include "document/RevolveFeature.h"
 #include "document/SectionFeature.h"
+#include "document/SheetMetalFeature.h"
 #include "document/ShellFeature.h"
 #include "document/WorkPointFeature.h"
 #include "document/SketchFeature.h"
@@ -753,6 +754,9 @@ const char* FeatureIcon(const doc::Feature& f) {
     if (dynamic_cast<const doc::ThreadFeature*>(&f)) return "tree-thread";
     if (dynamic_cast<const doc::SectionFeature*>(&f)) return "tree-cut-section";
     if (dynamic_cast<const doc::ShellFeature*>(&f)) return "tree-shell";
+    if (dynamic_cast<const doc::SheetMetalFeature*>(&f)) return "tree-sheet";
+    if (dynamic_cast<const doc::FlangeFeature*>(&f)) return "tree-flange";
+    if (dynamic_cast<const doc::SheetCutFeature*>(&f)) return "tree-sheet-cut";
     return "tree-unknown";
 }
 

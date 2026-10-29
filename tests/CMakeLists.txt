@@ -48,6 +48,7 @@ add_executable(bz_tests
     kernel/RevolveTests.cpp
     kernel/RevolveProjectedTests.cpp
     kernel/SectionTests.cpp
+    kernel/SheetMetalModelTests.cpp
     kernel/ShellTests.cpp
     kernel/StandardPartsTests.cpp
     kernel/SweepTests.cpp
@@ -57,6 +58,8 @@ add_executable(bz_tests
     kernel/WorkPlaneTests.cpp
     kernel/WorkPointTests.cpp
     modules/ModuleTests.cpp
+    sheetmetal/DxfTests.cpp
+    sheetmetal/SheetMetalTests.cpp
     sketch/FilletTests.cpp
     sketch/MirrorTests.cpp
     sketch/ClipboardTests.cpp
@@ -66,7 +69,7 @@ add_executable(bz_tests
     sketch/SolverTests.cpp
     sketch/StressTests.cpp
     sketch/TrimTests.cpp)
-target_link_libraries(bz_tests PRIVATE bz::miniz bz::core bz::sketch bz::document bz::assembly bz::kernel bz::modules bz::doctest bz::json)
+target_link_libraries(bz_tests PRIVATE bz::miniz bz::core bz::sketch bz::document bz::assembly bz::kernel bz::sheetmetal bz::modules bz::doctest bz::json)
 add_dependencies(bz_tests bz_example_module bz_example_module_fail)
 if(ANDROID)
     # The tests run on a phone or the emulator, not where they were built:

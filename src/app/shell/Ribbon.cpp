@@ -264,6 +264,14 @@ void ModelRibbonImpl(RibbonSink& r) {
     r.EndColumn();
     r.EndGroup();
 
+    r.BeginGroup(N_("Листовой металл"));
+    r.Large("sheet.base", Tr("Лист"));
+    r.Large("sheet.flange", Tr("Отбор-\nтовка"));
+    r.Large("sheet.cut", Tr("Вырез"));
+    r.Large("sheet.flatPattern", Tr("Развёртка"));
+    r.Large("sheet.dxfEditor", Tr("Редактор\nDXF"));
+    r.EndGroup();
+
     r.BeginGroup(N_("Массив"));
     r.BeginColumn();
     r.Small("feature.patternRect");

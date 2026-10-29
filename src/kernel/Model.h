@@ -8,6 +8,7 @@
 #include "document/Document.h"
 #include "document/EdgeReference.h"
 #include "kernel/Projection.h"
+#include "sheetmetal/SheetPart.h"
 
 #include <filesystem>
 #include <memory>
@@ -27,6 +28,16 @@ struct SketchRegion {
 struct BodyInfo {
     ObjectId    id;      ///< id of the feature that created the body
     std::string name;    ///< "Тело1"
+};
+
+/// A sheet metal part as one of its operations left it (src/sheetmetal):
+/// what the flat pattern and the panels work from.
+struct SheetInfo {
+    ObjectId      base;     ///< the «Лист» feature
+    Frame         frame;    ///< its sketch plane: 2D coordinates of `part` are in it
+    sheet::Part   part;
+    sheet::Layout layout;
+    std::vector<ObjectId> flangeIds;   ///< the «Отбортовка» of each of part.flanges
 };
 
 struct Bounds {
@@ -138,6 +149,12 @@ public:
     /// The body of revolution with the face `face` (of the body before
     /// feature `featureIndex`) on `plane`: axis, outline and cut by the plane.
     Expected<RevolvedProjection> ProjectRevolved(const doc::FaceReference& face, const Frame& plane, std::size_t featureIndex) const;
+
+    /// The sheet metal part of the «Лист» `base` after its last active
+    /// operation in `doc`; nullopt when it was not built.
+    std::optional<SheetInfo> Sheet(const doc::Document& doc, ObjectId base) const;
+    /// The sheet metal part right after the «Лист» or «Отбортовка» `operation`.
+    std::optional<SheetInfo> SheetAt(ObjectId operation) const;
 
     /// Volume, area, centre and exact size of all bodies; nullopt without bodies.
     std::optional<MassProperties> Properties() const;

@@ -279,7 +279,7 @@ void SketchOperationEditor::DrawBody(AppContext& app, Session& session, doc::Fea
                                                     {"op-new", N_("Новое тело")}}};
     static constexpr std::array<BooleanOp, 4> order{BooleanOp::Join, BooleanOp::Cut, BooleanOp::Intersect, BooleanOp::NewBody};
     const int current = static_cast<int>(std::find(order.begin(), order.end(), f.operation) - order.begin());
-    const int chosen = ToolChoice(app, "op", N_("Операция"), ops, current, width, bodyBefore ? 0 : 0b0111);
+    const int chosen = ShowsOperation() ? ToolChoice(app, "op", N_("Операция"), ops, current, width, bodyBefore ? 0 : 0b0111) : current;
     if (chosen != current) {
         f.operation = order[static_cast<std::size_t>(chosen)];
         Changed(session);

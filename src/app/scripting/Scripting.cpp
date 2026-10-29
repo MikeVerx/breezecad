@@ -27,6 +27,7 @@ const Commands& Table() {
         AddPartCommands(all);
         AddSketchCommands(all);
         AddSolidCommands(all);
+        AddSheetCommands(all);
         AddTopologyCommands(all);
         AddGenericCommands(all);
         AddFeatureCommands(all);

@@ -20,7 +20,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 UI_DIRS = ['src/app', 'src/ui']
-LOWER_DIRS = ['src/document', 'src/kernel', 'src/core', 'src/sketch', 'src/platform']
+LOWER_DIRS = ['src/document', 'src/kernel', 'src/core', 'src/sketch', 'src/sheetmetal', 'src/platform']
 CYR = re.compile(r'[А-Яа-яЁё]')
 LITERAL = r'"(?:[^"\\\n]|\\.)*"'
 RUN = re.compile(r'{0}(?:\s*{0})*'.format(LITERAL))
