@@ -40,6 +40,10 @@
 #include <set>
 #include <thread>
 
+#ifndef BZ_SETUP_VERSION
+#define BZ_SETUP_VERSION "0"
+#endif
+
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
 
 namespace fs = std::filesystem;
@@ -402,6 +406,13 @@ void Note(const std::string& text, ImU32 fg, ImU32 bg) {
     dl->AddRectFilled(at, {at.x + w, at.y + size.y + S(16)}, bg, S(6));
     dl->AddText(F.small, F.small->FontSize, {at.x + S(10), at.y + S(8)}, fg, text.c_str(), nullptr, w - S(20));
     ImGui::Dummy({w, size.y + S(16)});
+}
+
+/// The small "opens a list" mark (the font has no ▾).
+void Chevron(ImDrawList* dl, ImVec2 c, ImU32 colour) {
+    const float w = S(4.5f), h = S(2.5f);
+    dl->AddLine({c.x - w, c.y - h}, {c.x, c.y + h}, colour, S(1.5f));
+    dl->AddLine({c.x, c.y + h}, {c.x + w, c.y - h}, colour, S(1.5f));
 }
 
 // --- the license --------------------------------------------------------------
@@ -777,7 +788,7 @@ void PageLanguage() {
     for (const LanguageInfo& l : Languages())
         if (CurrentLanguage() == l.code) cur = &l;
     const std::string label = cur ? cur->name : "English";
-    const std::string hint = SystemLanguage() == CurrentLanguage() ? std::string(Tr("system")) + "  ▾" : "▾";
+    const std::string hint = SystemLanguage() == CurrentLanguage() ? std::string(Tr("system")) : std::string();
     const float fw = S(300);
     ImGui::SetCursorScreenPos({cx - fw / 2, y});
     const ImVec2 f0 = ImGui::GetCursorScreenPos();
@@ -788,7 +799,8 @@ void PageLanguage() {
     dl->AddRect(f0, {f0.x + fw, f0.y + S(42)}, hov ? P.accentBorder : P.line, S(8));
     dl->AddText(F.body, F.body->FontSize, {f0.x + S(14), f0.y + S(12)}, P.text, label.c_str());
     const float hw = F.small->CalcTextSizeA(F.small->FontSize, FLT_MAX, 0, hint.c_str()).x;
-    dl->AddText(F.small, F.small->FontSize, {f0.x + fw - S(14) - hw, f0.y + S(13)}, P.muted, hint.c_str());
+    dl->AddText(F.small, F.small->FontSize, {f0.x + fw - S(32) - hw, f0.y + S(13)}, P.muted, hint.c_str());
+    Chevron(dl, {f0.x + fw - S(20), f0.y + S(21)}, P.muted);
 
     // "Language" in the corner: the one word most people know whatever they speak.
     const char* lang = "Language";
@@ -926,7 +938,12 @@ void PageFolder() {
     for (const LanguageInfo& l : Languages())
         if (W.uiLanguage == l.code) currentName = l.name;
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-    if (ImGui::BeginCombo("##uilang", currentName)) {
+    const bool open = ImGui::BeginCombo("##uilang", currentName, ImGuiComboFlags_NoArrowButton);
+    {
+        const ImVec2 r = ImGui::GetItemRectMax(), l = ImGui::GetItemRectMin();
+        Chevron(ImGui::GetWindowDrawList(), {r.x - S(16), (l.y + r.y) / 2}, P.muted);
+    }
+    if (open) {
         for (const LanguageInfo& l : Languages()) {
             std::string item = l.name;
             if (m)
