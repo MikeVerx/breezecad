@@ -974,8 +974,8 @@ void DrawMouseSettings(AppContext& app, float width) {
         }
         ImGui::Dummy({0, ui.S(4)});
     };
-    gestureRow(Tr("Вращение"), "orbit", s.mouse.orbit, false);
-    gestureRow(Tr("Сдвиг"), "pan", s.mouse.pan, false);
+    gestureRow(Tr("Вращение вида"), "orbit", s.mouse.orbit, false);
+    gestureRow(Tr("Сдвиг вида"), "pan", s.mouse.pan, false);
     gestureRow(Tr("Масштаб перетаскиванием (колесо прокрутки масштабирует всегда)"), "zoom", s.mouse.zoom, true);
 
     // Two gestures on the same button and modifiers cannot both work.

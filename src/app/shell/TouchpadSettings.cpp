@@ -13,9 +13,9 @@ namespace bz::app {
 namespace {
 
 // The order the choices are shown in, and the values behind them.
-constexpr std::array<const char*, 4> kMoveLabels{N_("Сдвиг"), N_("Вращение"), N_("Масштаб"), N_("Нет")};
+constexpr std::array<const char*, 4> kMoveLabels{N_("Сдвиг вида"), N_("Вращение вида"), N_("Масштаб"), N_("Нет")};
 constexpr std::array<TouchMove, 4>   kMoves{TouchMove::Pan, TouchMove::Orbit, TouchMove::Zoom, TouchMove::None};
-constexpr std::array<const char*, 3> kTurnLabels{N_("Крен вида"), N_("Вращение"), N_("Нет")};
+constexpr std::array<const char*, 3> kTurnLabels{N_("Крен вида"), N_("Вращение вида"), N_("Нет")};
 constexpr std::array<TouchTurn, 3>   kTurns{TouchTurn::Roll, TouchTurn::Orbit, TouchTurn::None};
 
 template <class T, std::size_t N>
