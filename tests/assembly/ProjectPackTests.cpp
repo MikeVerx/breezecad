@@ -21,7 +21,8 @@ namespace {
 
 fs::path Fresh(const char* name) {
     const fs::path dir = fs::temp_directory_path() / PathFromUtf8(name);
-    fs::remove_all(dir);
+    std::error_code ec;
+    fs::remove_all(dir, ec);   // a leftover of a run that failed half way
     fs::create_directories(dir);
     return dir;
 }
@@ -138,7 +139,8 @@ TEST_CASE("a project carries the assembly and every part, and opens whole somewh
     const auto source = LoadAssembly(assemblyFile);
     REQUIRE(source);
     CHECK(source->components[3].path == "../Общие/Ось.bzc");
-    fs::remove_all(root);
+    std::error_code ec;
+    fs::remove_all(root, ec);
 }
 
 TEST_CASE("unpacking never overwrites what is already in the folder") {
@@ -153,11 +155,15 @@ TEST_CASE("unpacking never overwrites what is already in the folder") {
     CHECK(main.GetError().message.find("Ось.bzc") != std::string::npos);
     // Nothing was written: not even the files that did not clash.
     CHECK_FALSE(fs::exists(target / PathFromUtf8("Узел.bza")));
-    std::ifstream in(target / PathFromUtf8("Ось.bzc"));
     std::string kept;
-    std::getline(in, kept);
+    {
+        // Closed before the folder goes: Windows does not delete an open file.
+        std::ifstream in(target / PathFromUtf8("Ось.bzc"));
+        std::getline(in, kept);
+    }
     CHECK(kept == "моя важная деталь");
-    fs::remove_all(root);
+    std::error_code ec;
+    fs::remove_all(root, ec);
 }
 
 TEST_CASE("a project file that is not one, or is damaged or unsafe, is refused") {
@@ -195,5 +201,6 @@ TEST_CASE("a project file that is not one, or is damaged or unsafe, is refused")
     CHECK(ReadProject(root / "short.bzp"));
     CHECK_FALSE(UnpackProject(root / "short.bzp", root / "out2"));
     CHECK_FALSE(ReadProject(root / "no-such.bzp"));
-    fs::remove_all(root);
+    std::error_code ec;
+    fs::remove_all(root, ec);
 }
