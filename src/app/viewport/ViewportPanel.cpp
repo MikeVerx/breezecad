@@ -422,9 +422,12 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             break;
         }
     }
-    // The section bar sits over the model, under the context menu.
+    // The section bar sits over the model, under the context menu. The section
+    // stays on in a sketch and while a plane is picked for one: a sketch drawn
+    // inside a cut part is the very reason to cut it (it used to go off there).
     const bool modelMode = session.mode == EditMode::Model;
-    app.viewport.SetSection(modelMode ? SectionFrame(session, app.shell.section) : std::nullopt);
+    const bool sectionMode = SectionApplies(session.mode);
+    app.viewport.SetSection(sectionMode ? SectionFrame(session, app.shell.section) : std::nullopt);
     app.viewport.ShowInterferences(modelMode && app.shell.interference ? &session.model : nullptr);
     // A pattern or mirror being edited: its sources and copies outlined.
     {
@@ -432,7 +435,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
         const bool copying = op && (op == &app.ops.pattern || op == &app.ops.mirror);
         app.viewport.ShowCopyPreview(copying ? &session.model : nullptr, copying ? op->EditedFeature() : ObjectId{});
     }
-    if (modelMode) DrawSectionBar(app, session, vf);
+    if (sectionMode) DrawSectionBar(app, session, vf);
     if (measuring) DrawMeasure(app, session, vf);
     ContextMenu(app, session);
     DrawMarkingMenu(app, session);

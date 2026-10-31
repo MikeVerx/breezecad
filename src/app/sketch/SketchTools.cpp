@@ -21,6 +21,7 @@
 #include "sketch/Trim.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <array>
 #include <cmath>
 #include <span>
@@ -798,9 +799,14 @@ void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchVie
             for (int guard = 0, again = 1; again && guard < 200; ++guard) {
                 again = 0;
                 std::vector<ObjectId> curves;
+                // The sketch's own curves first: where a line was drawn over a
+                // model edge, the fence cuts the line, not the edge.
                 for (const auto& l : trial.lines) if (!l.projected) curves.push_back(l.id);
                 for (const auto& c : trial.circles) if (!c.projected) curves.push_back(c.id);
                 for (const auto& a : trial.arcs) if (!a.projected) curves.push_back(a.id);
+                for (const auto& l : trial.lines) if (l.projected) curves.push_back(l.id);
+                for (const auto& c : trial.circles) if (c.projected) curves.push_back(c.id);
+                for (const auto& a : trial.arcs) if (a.projected) curves.push_back(a.id);
                 for (const auto& s : trial.splines) curves.push_back(s.id);
                 for (const auto& e : trial.ellipses) curves.push_back(e.id);
                 for (const ObjectId id : curves) {
@@ -830,13 +836,24 @@ void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchVie
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) myFence.clear();
     const bool onCurve = myHover && IsAnyCurve(myHover.kind);
     if (!onCurve || !myCursor) return;
-    // Projected geometry belongs to the model.
     const sketch::Sketch& sk = f->sketch;
-    const sketch::Line* line = sk.FindLine(myHover.id);
-    const sketch::Circle* circle = sk.FindCircle(myHover.id);
-    const sketch::Arc* arc = sk.FindArc(myHover.id);
-    if ((line && line->projected) || (circle && circle->projected) || (arc && arc->projected)) return;
-    const std::optional<sketch::TrimSpan> span = sketch::FindTrimSpan(f->sketch, myHover.id, *myCursor);
+    const auto isProjected = [&](ObjectId id) {
+        const sketch::Line* line = sk.FindLine(id);
+        const sketch::Circle* circle = sk.FindCircle(id);
+        const sketch::Arc* arc = sk.FindArc(id);
+        return (line && line->projected) || (circle && circle->projected) || (arc && arc->projected);
+    };
+    // A sketch line drawn over a model edge: the line is what is meant, not
+    // the edge under it (the edge was found first and nothing happened).
+    ObjectId target = myHover.id;
+    if (isProjected(target)) {
+        const SketchHit other = HitTest(sk, view, ImGui::GetMousePos(), session.doc.units, target);
+        if (other && IsAnyCurve(other.kind) && !isProjected(other.id)) target = other.id;
+    }
+    // Projected model geometry can be cut too (it was refused without a word):
+    // what is left stays in place and no longer follows the model.
+    const bool cuttingProjection = isProjected(target);
+    const std::optional<sketch::TrimSpan> span = sketch::FindTrimSpan(f->sketch, target, *myCursor);
     if (!span) return;
 
     // The piece that would go: thick and dashed in the warning colour.
@@ -857,6 +874,7 @@ void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchVie
     f->PruneProjections();
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
     session.CommitInPlaceEdit(std::move(before), Tr("Обрезка"));
+    if (cuttingProjection) app.notes.Info(Tr("Обрезанная проекция осталась на месте, но за моделью больше не следует"));
 }
 
 void SketchEditor::HandleExtend(AppContext& app, Session& session, const SketchView& view) {

@@ -122,18 +122,25 @@ set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/resources.cpp PROPERTIES
 
 option(BZ_SETUP_STATIC_GLFW "Build GLFW from source into the Linux installer" OFF)
 if(BZ_SETUP_STATIC_GLFW)
-    include(FetchContent)
-    set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)   # X11 (XWayland on Wayland desktops): fewer build dependencies
-    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-    set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-    set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
-    set(BUILD_SHARED_LIBS OFF)
-    FetchContent_Declare(setup_glfw URL https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip)
-    FetchContent_MakeAvailable(setup_glfw)
-    set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED})
-    set(SETUP_GLFW glfw)
+    # Built on its own (ExternalProject): the program's find_package(glfw3)
+    # already owns the target name "glfw". GLFW 3.4 opens X11 itself at run
+    # time (dlopen), so the static library adds no dependency.
+    include(ExternalProject)
+    set(SETUP_GLFW_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/setup-glfw)
+    ExternalProject_Add(setup_glfw_build
+        URL https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip
+        PREFIX ${SETUP_GLFW_PREFIX}
+        CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${SETUP_GLFW_PREFIX}/install -DCMAKE_INSTALL_LIBDIR=lib
+                   -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DBUILD_SHARED_LIBS=OFF -DGLFW_BUILD_WAYLAND=OFF -DGLFW_BUILD_X11=ON
+                   -DGLFW_BUILD_EXAMPLES=OFF -DGLFW_BUILD_TESTS=OFF -DGLFW_BUILD_DOCS=OFF
+                   -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+        BUILD_BYPRODUCTS ${SETUP_GLFW_PREFIX}/install/lib/libglfw3.a)
+    file(MAKE_DIRECTORY ${SETUP_GLFW_PREFIX}/install/include)
+    add_library(setup_glfw STATIC IMPORTED)
+    set_target_properties(setup_glfw PROPERTIES IMPORTED_LOCATION ${SETUP_GLFW_PREFIX}/install/lib/libglfw3.a
+                                                INTERFACE_INCLUDE_DIRECTORIES ${SETUP_GLFW_PREFIX}/install/include)
+    add_dependencies(setup_glfw setup_glfw_build)
+    set(SETUP_GLFW setup_glfw ${CMAKE_DL_LIBS} m)
 else()
     find_package(glfw3 3.3 REQUIRED)
     set(SETUP_GLFW glfw)

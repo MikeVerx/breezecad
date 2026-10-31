@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/AssemblyState.h"
+#include "app/EditMode.h"
 #include "core/Expected.h"
 #include "document/Commands.h"
 #include "document/Document.h"
@@ -15,11 +16,7 @@
 
 namespace bz::app {
 
-enum class EditMode : unsigned char {
-    Model,       ///< the part with its tree
-    PickPlane,   ///< "Начать эскиз": waiting for a plane or a flat face
-    Sketch,      ///< editing a sketch
-};
+
 
 /// One open document with everything that belongs to it: the recipe,
 /// undo history, computed geometry, file, camera and editing state.

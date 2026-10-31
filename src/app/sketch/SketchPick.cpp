@@ -138,6 +138,7 @@ SketchHit HitTest(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse
 
     bestDistance = CurveRadius();
     const auto tryCurve = [&](ObjectId id, sketch::EntityKind kind) {
+        if (id == ignore) return;
         const float d = CurveDistance(sk, view, id, mouse);
         if (d < bestDistance) {
             bestDistance = d;

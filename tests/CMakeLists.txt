@@ -5,6 +5,7 @@ add_executable(bz_tests
     app/NewTemplatesTests.cpp
     app/SettingsTests.cpp
     app/GestureTests.cpp
+    app/SectionTests.cpp
     # The app is an executable; its OCCT-free pieces are compiled in directly.
     ${PROJECT_SOURCE_DIR}/src/app/Format.cpp
     ${PROJECT_SOURCE_DIR}/src/app/NewTemplates.cpp
