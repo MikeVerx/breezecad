@@ -8,7 +8,7 @@
 
 namespace bz::app {
 
-std::filesystem::path LanguagePackDir() { return platform::ConfigDir() / "lang"; }
+std::filesystem::path LanguagePackDir() { return platform::LanguagesDir(); }
 
 std::vector<i18n::Language> AvailableLanguages() {
     return i18n::Available(platform::AssetsDir() / "lang", LanguagePackDir());

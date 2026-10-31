@@ -401,6 +401,7 @@ struct Viewport::Impl {
 
     Handle(Graphic3d_ClipPlane) section;        ///< null: no section
     std::optional<Frame>        sectionFrame;   ///< as last set
+    Handle(Graphic3d_Texture2D) backgroundPicture;   ///< as last set (Preview takes it away for a moment)
 
     std::vector<PlaneQuad>         planes;        ///< as last set
     std::vector<Handle(AIS_Shape)> planeShapes;   ///< their presentations
@@ -953,6 +954,7 @@ void Viewport::SetBackgroundPicture(int width, int height, std::span<const std::
     Impl& m = *myImpl;
     Handle(Graphic3d_Texture2D) texture;
     if (width > 0 && height > 0) texture = MakePictureTexture(width, height, rgba);
+    m.backgroundPicture = texture;
     m.view->SetBackgroundImage(texture, Aspect_FM_STRETCH, false);
     m.dirty = true;
 }
@@ -1119,6 +1121,59 @@ std::optional<Image> Viewport::Snapshot(const CameraState& camera, int width, in
             to[3] = 255;
         }
     }
+    return out;
+}
+
+std::optional<Image> Viewport::Preview(Vec3 direction, Vec3 up, int size) {
+    Impl& m = *myImpl;
+    if (m.shown.empty() || size < 16) return std::nullopt;
+    // Only the model: no planes, sketch marks, section or background picture.
+    std::vector<Handle(AIS_InteractiveObject)> hidden;
+    for (const auto& list : {std::cref(m.planeShapes), std::cref(m.decorations), std::cref(m.overlapShapes)})
+        for (const Handle(AIS_Shape)& s : list.get())
+            if (!s.IsNull() && m.context->IsDisplayed(s)) {
+                m.context->Erase(s, false);
+                hidden.push_back(s);
+            }
+    if (!m.section.IsNull()) m.view->RemoveClipPlane(m.section);
+    if (!m.backgroundPicture.IsNull()) m.view->SetBackgroundImage(Handle(Graphic3d_Texture2D)(), Aspect_FM_STRETCH, false);
+
+    // The same picture on black and on white: where they differ is how much
+    // of the background shows through, so the preview has real transparency
+    // (soft edges included) whatever the theme.
+    const CameraState camera = FitCamera(direction, up, {}, 1.06, 1.0);
+    const auto onBackground = [&](const Quantity_Color& colour) {
+        m.view->SetBgGradientColors(colour, colour, Aspect_GradientFillMethod_Vertical, false);
+        return Snapshot(camera, size, size);
+    };
+    const std::optional<Image> dark = onBackground(Quantity_Color(Quantity_NOC_BLACK));
+    const std::optional<Image> light = onBackground(Quantity_Color(Quantity_NOC_WHITE));
+
+    m.view->SetBgGradientColors(ToQuantity(m.colors.backgroundTop), ToQuantity(m.colors.backgroundBottom),
+                                m.colors.radialBackground ? Aspect_GradientFillMethod_Elliptical : Aspect_GradientFillMethod_Vertical, false);
+    if (!m.backgroundPicture.IsNull()) m.view->SetBackgroundImage(m.backgroundPicture, Aspect_FM_STRETCH, false);
+    if (!m.section.IsNull()) m.view->AddClipPlane(m.section);
+    for (const Handle(AIS_InteractiveObject)& s : hidden) m.context->Display(s, false);
+    m.dirty = true;
+
+    if (!dark || !light || dark->width != light->width || dark->height != light->height) return std::nullopt;
+    Image out = *dark;
+    bool any = false;
+    for (std::size_t i = 0; i + 3 < out.rgba.size(); i += 4) {
+        // light - dark = 255 * (1 - alpha) in each channel; the mean is the steadiest.
+        const int through = (int(light->rgba[i]) - dark->rgba[i] + int(light->rgba[i + 1]) - dark->rgba[i + 1] +
+                             int(light->rgba[i + 2]) - dark->rgba[i + 2]) / 3;
+        const int alpha = std::clamp(255 - through, 0, 255);
+        out.rgba[i + 3] = static_cast<std::uint8_t>(alpha);
+        if (alpha > 0) {
+            any = true;
+            for (int c = 0; c < 3; ++c)   // on black the colour is premultiplied: undo it
+                out.rgba[i + c] = static_cast<std::uint8_t>(std::min(255, dark->rgba[i + c] * 255 / alpha));
+        } else {
+            out.rgba[i] = out.rgba[i + 1] = out.rgba[i + 2] = 0;
+        }
+    }
+    if (!any) return std::nullopt;
     return out;
 }
 

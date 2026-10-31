@@ -393,13 +393,14 @@ Expected<Assembly> AssemblyFromJson(std::string_view text, std::vector<std::stri
     }
 }
 
-Status SaveAssembly(const Assembly& assembly, const std::filesystem::path& path, std::string_view generator) {
+Status SaveAssembly(const Assembly& assembly, const std::filesystem::path& path, std::string_view generator,
+                    std::span<const std::uint8_t> preview) {
     // Only the pictures its looks still use.
     std::map<std::string, std::vector<std::uint8_t>> pictures;
     for (const doc::Appearance& a : assembly.look.used)
         if (const auto it = assembly.look.pictures.find(a.picture); a.HasPicture() && it != assembly.look.pictures.end())
             pictures.insert(*it);
-    return doc::WriteBzcArchive(path, doc::kAssemblyType, generator, AssemblyToJson(assembly), pictures);
+    return doc::WriteBzcArchive(path, doc::kAssemblyType, generator, AssemblyToJson(assembly), pictures, preview);
 }
 
 Expected<Assembly> LoadAssembly(const std::filesystem::path& path, std::vector<std::string>* warnings) {

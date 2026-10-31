@@ -261,7 +261,10 @@ bool Workspace::SaveTo(Session& session, const std::filesystem::path& requested,
             return false;
         }
     }
-    const Status status = session.WriteFile(target, kGenerator);
+    // The picture for the file manager, while the document is on the screen.
+    std::vector<std::uint8_t> preview;
+    if (previewMaker && ActiveTab() == &session) preview = previewMaker();
+    const Status status = session.WriteFile(target, kGenerator, preview);
     if (!status) {
         if (session.assembly) {
             assembly::RebasePaths(session.assembly->assembly, target, from);

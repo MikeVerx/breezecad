@@ -35,6 +35,7 @@ using json_io::ReadMember;
 
 constexpr const char* kManifestName = "manifest.json";
 constexpr const char* kDocumentName = "document.json";
+constexpr const char* kPreviewName = "preview.png";   // the model for the file manager, optional
 
 std::string NowIso() {
     const auto now = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
@@ -246,8 +247,17 @@ Expected<Document> DocumentFromJson(std::string_view text, LoadReport* report) {
 }
 
 Status WriteBzcArchive(const std::filesystem::path& path, std::string_view documentType, std::string_view generator,
-                       const std::string& document, const std::map<std::string, std::vector<std::uint8_t>>& pictures) {
+                       const std::string& document, const std::map<std::string, std::vector<std::uint8_t>>& pictures,
+                       std::span<const std::uint8_t> preview) {
     const std::string manifest = Manifest(documentType, generator).dump(1, '\t');
+    // No new picture (a part written while another document is on the
+    // screen): the one the file had stays, a little old rather than none.
+    std::vector<std::uint8_t> kept;
+    if (preview.empty())
+        if (Expected<std::vector<std::uint8_t>> old = ReadBzcPreview(path); old) {
+            kept = std::move(*old);
+            preview = kept;
+        }
 
     mz_zip_archive zip{};
     if (!mz_zip_writer_init_heap(&zip, 0, 64 * 1024)) return Error{"Не удалось подготовить архив"};
@@ -257,6 +267,8 @@ Status WriteBzcArchive(const std::filesystem::path& path, std::string_view docum
     // Pictures of the appearances (already compressed formats: stored as they are).
     for (const auto& [name, data] : pictures)
         added = added && mz_zip_writer_add_mem(&zip, ("pictures/" + name).c_str(), data.data(), data.size(), MZ_NO_COMPRESSION);
+    if (!preview.empty())
+        added = added && mz_zip_writer_add_mem(&zip, kPreviewName, preview.data(), preview.size(), MZ_NO_COMPRESSION);
     void* buffer = nullptr;
     std::size_t size = 0;
     const bool finalized = added && mz_zip_writer_finalize_heap_archive(&zip, &buffer, &size);
@@ -344,8 +356,33 @@ Expected<std::string> ReadDocumentType(const std::filesystem::path& path) {
     return archive->documentType;
 }
 
-Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::string_view generator) {
-    return WriteBzcArchive(path, kPartType, generator, DocumentToJson(doc), doc.look.pictures);
+Expected<std::vector<std::uint8_t>> ReadBzcPreview(const std::filesystem::path& path) {
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) return Error{"Файла нет"};
+    // Read whole: miniz's own file reading takes ANSI paths on Windows, and
+    // Cyrillic names are the rule here.
+    Expected<std::string> bytes = ReadWholeFile(path);
+    if (!bytes) return bytes.GetError();
+    mz_zip_archive zip{};
+    if (!mz_zip_reader_init_mem(&zip, bytes->data(), bytes->size(), 0)) return Error{"Это не документ BreezeCAD"};
+    std::vector<std::uint8_t> out;
+    const int index = mz_zip_reader_locate_file(&zip, kPreviewName, nullptr, 0);
+    if (index >= 0) {
+        std::size_t size = 0;
+        if (void* data = mz_zip_reader_extract_to_heap(&zip, static_cast<mz_uint>(index), &size, 0)) {
+            const auto* bytes = static_cast<const std::uint8_t*>(data);
+            out.assign(bytes, bytes + size);
+            mz_free(data);
+        }
+    }
+    mz_zip_reader_end(&zip);
+    if (out.empty()) return Error{"В документе нет картинки"};
+    return out;
+}
+
+Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::string_view generator,
+               std::span<const std::uint8_t> preview) {
+    return WriteBzcArchive(path, kPartType, generator, DocumentToJson(doc), doc.look.pictures, preview);
 }
 
 Expected<Document> LoadBzc(const std::filesystem::path& path, LoadReport* report) {

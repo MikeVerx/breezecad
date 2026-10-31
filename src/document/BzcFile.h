@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -37,13 +38,18 @@ Expected<BzcArchive> ReadBzcArchive(const std::filesystem::path& path);
 /// Writes the container atomically (temporary file, then rename).
 Status WriteBzcArchive(const std::filesystem::path& path, std::string_view documentType, std::string_view generator,
                        const std::string& documentJson,
-                       const std::map<std::string, std::vector<std::uint8_t>>& pictures = {});
+                       const std::map<std::string, std::vector<std::uint8_t>>& pictures = {},
+                       std::span<const std::uint8_t> preview = {});
+/// The picture of the model kept in the file (PNG with transparency) for the
+/// file manager's icons. Without a new one, WriteBzcArchive keeps the old.
+Expected<std::vector<std::uint8_t>> ReadBzcPreview(const std::filesystem::path& path);
 /// The kind of document in the file ("part", "assembly"...).
 Expected<std::string> ReadDocumentType(const std::filesystem::path& path);
 
 /// Writes the document atomically: a temporary file is written next to the
 /// target and renamed over it, so a crash never leaves a half-written file.
-Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::string_view generator);
+Status SaveBzc(const Document& doc, const std::filesystem::path& path, std::string_view generator,
+               std::span<const std::uint8_t> preview = {});
 
 Expected<Document> LoadBzc(const std::filesystem::path& path, LoadReport* report = nullptr);
 

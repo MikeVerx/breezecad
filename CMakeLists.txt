@@ -34,6 +34,10 @@ option(BZ_BUILD_TESTS "Build unit tests"                          ON)
 option(BZ_BUILD_MCP   "Build the MCP module package (modules/mcp → .bzmod)" OFF)
 # Android: the app is a native library (src/android) packed into an APK by
 # scripts/android/package-apk.sh; the desktop app (BZ_BUILD_APP) is off there.
+# Windows: the installer and the File Explorer previews (installer/).
+if(WIN32)
+    option(BZ_BUILD_INSTALLER "Build BreezeCAD-Setup.exe and bz_thumbs.dll" ON)
+endif()
 if(ANDROID)
     option(BZ_BUILD_ANDROID_APP "Build the Android app library (libbreezecad.so)" ON)
 endif()
@@ -50,6 +54,10 @@ include(ThirdParty)
 include(OpenCascade)
 
 add_subdirectory(src)
+
+if(WIN32 AND BZ_BUILD_INSTALLER)
+    add_subdirectory(installer)
+endif()
 
 if(BZ_BUILD_MCP)   # a separate package, not a part of the program
     add_subdirectory(modules/mcp)

@@ -18,6 +18,8 @@
 #include "core/Profile.h"
 #include "core/PathText.h"
 #include "kernel/TextGeometry.h"
+#include "render/Viewport.h"
+#include "ui/ViewCube.h"
 #include "platform/Paths.h"
 #include "platform/ProcessInfo.h"
 #include "platform/SystemTheme.h"
@@ -28,6 +30,7 @@
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 #include <lunasvg.h>
+#include <miniz.h>
 #if defined(__ANDROID__)
 #include "app/android/AndroidInput.h"
 #include "platform/Android.h"
@@ -53,6 +56,24 @@ ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(int keycode, int scancode);
 #endif
 
 namespace bz::app {
+namespace {
+
+/// The model on the screen as a PNG with transparency (empty when there is
+/// nothing to draw): saved into the document for the file manager's icons.
+std::vector<std::uint8_t> DocumentPreview(render::Viewport& viewport) {
+    const std::optional<Image> image = viewport.Preview(-ui::kHomeDirection, {0, 0, 1}, 512);
+    if (!image) return {};
+    std::size_t size = 0;
+    void* png = tdefl_write_image_to_png_file_in_memory(image->rgba.data(), image->width, image->height, 4, &size);
+    if (!png) return {};
+    const auto* bytes = static_cast<const std::uint8_t*>(png);
+    std::vector<std::uint8_t> out(bytes, bytes + size);
+    mz_free(png);
+    return out;
+}
+
+} // namespace
+
 namespace {
 
 /// Test hook (BZ_FAULT_TEST): "crash" — an access violation, "hang" — the
@@ -251,6 +272,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myContext = std::make_unique<AppContext>(AppContext{*myUi, mySettings, myWorkspace, myActions, myNotes, *myAutosave,
                                                         myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}, {}});
     myContext->recovery = &myRecovery;
+    myWorkspace.previewMaker = [this] { return DocumentPreview(myViewport); };
     RegisterActions(*myContext);
     LoadStandardPacks(*myContext);
     StartModules();
@@ -258,7 +280,10 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
 
     for (const auto& file : files) {
         progress(Trf("Открытие {}…", ToUtf8(file.filename())));
-        myWorkspace.Open(file, myNotes, mySettings);
+        // A module or a library opened from File Explorer installs; a document opens.
+        const std::u8string ext = file.extension().u8string();
+        if (ext == u8".bzmod" || ext == u8".BZMOD" || ext == u8".bzlib" || ext == u8".BZLIB") OpenDropped(*myContext, file);
+        else myWorkspace.Open(file, myNotes, mySettings);
     }
     // Nothing asked for: the last file, if the user wants it (and it is still there).
     if (files.empty() && mySettings.reopenLast && !mySettings.recentFiles.empty()) {
@@ -432,6 +457,30 @@ int Application::Run() {
 }
 
 /// Modules from the folder next to the program (shipped) and from the user's
+/// Packages (.bzmod) put into the modules folder — by the installer, or by
+/// hand into the portable program's "module" folder — installed on start.
+/// Installing one is the person's consent, as in Settings → Modules.
+void Application::InstallDroppedModules(const std::filesystem::path& dir) {
+    std::error_code ec;
+    std::vector<std::filesystem::path> packages;
+    for (const auto& e : std::filesystem::directory_iterator(dir, ec))
+        if (e.is_regular_file(ec) && e.path().extension() == ".bzmod") packages.push_back(e.path());
+    std::sort(packages.begin(), packages.end());
+    for (const std::filesystem::path& p : packages) {
+        if (Expected<std::string> id = myModules->Install(p); id) {
+            std::filesystem::remove(p, ec);
+            const modules::ModuleEntry* m = myModules->Find(*id);
+            myNotes.Info(Trf("Модуль «{}» установлен", m ? m->manifest.name : *id));
+        } else {
+            // Kept aside, not tried again on every start.
+            std::filesystem::path aside = p;
+            aside += ".failed";
+            std::filesystem::rename(p, aside, ec);
+            myNotes.Error(Trf("Модуль {} не установлен: {}", ToUtf8(p.filename()), Tr(id.GetError().message)));
+        }
+    }
+}
+
 /// config folder (installed by the user); see src/modules/ModuleManager.h.
 void Application::StartModules() {
     const std::filesystem::path config = platform::ConfigDir();
@@ -444,8 +493,14 @@ void Application::StartModules() {
     modules::HostInfo host = modules::HostInfo::Detect();
     host.openGL            = myWindow.OpenGLVersion();
     myModules->Discover(platform::AssetsDir().parent_path() / "modules", host);
-    myModules->SetInstallDir(config / "modules");
-    myModules->Discover(config / "modules", host);
+    // The user's modules: next to a portable program ("module"), in the
+    // settings folder for an installed one; earlier versions kept them in
+    // the settings folder in any case, so that one is read too.
+    const std::filesystem::path own = platform::ModulesDir();
+    myModules->SetInstallDir(own);
+    myModules->Discover(own, host);
+    if (std::error_code ec; !std::filesystem::equivalent(own, config / "modules", ec)) myModules->Discover(config / "modules", host);
+    InstallDroppedModules(own);
     myModules->LoadAll();
     myContext->modules = myModules.get();
     if (const std::string& id = myModules->CrashedLastRun(); !id.empty()) {

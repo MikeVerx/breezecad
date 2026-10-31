@@ -144,6 +144,11 @@ public:
     /// screen (the window's view is not touched). nullopt when the graphics
     /// cannot (no OpenGL context yet).
     std::optional<Image> Snapshot(const CameraState& camera, int width, int height);
+    /// The model alone looking along `direction`, fitted into a size x size
+    /// square with a transparent background (no planes, sketch marks,
+    /// section or background picture): the picture saved in documents for
+    /// the file manager. nullopt when there is nothing to draw.
+    std::optional<Image> Preview(Vec3 direction, Vec3 up, int size);
 
     /// Orbit about `pivot`, angles in radians: `pitch` around the screen's
     /// horizontal axis; `yaw` around the screen's vertical axis (free, as in

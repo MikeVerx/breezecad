@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -23,6 +24,9 @@ public:
     std::vector<std::unique_ptr<Session>> sessions;
     /// Why the last Open failed (empty: it did not), for callers that report it themselves.
     std::string lastOpenError;
+    /// The document in front as a PNG with transparency (empty: none), put
+    /// into the file on saving so the file manager shows the model.
+    std::function<std::vector<std::uint8_t>()> previewMaker;
 
     /// The document in front: a part edited in place in the assembly in
     /// front is that part (every part tool then works on it as is).
