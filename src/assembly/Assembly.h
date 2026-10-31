@@ -26,6 +26,8 @@ struct ComponentProperties {
     std::string name;          ///< "Кронштейн"; empty: taken from the part
     std::string material;      ///< empty: taken from the part
     int         quantity = 1;  ///< how many this entry counts for (a parts list may group equal ones)
+    std::string position;      ///< item number in the parts list ("3"); empty: numbered in order
+    std::string note;          ///< the parts list's "Примечание"
 
     bool operator==(const ComponentProperties&) const = default;
 };

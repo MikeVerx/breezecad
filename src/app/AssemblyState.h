@@ -105,6 +105,19 @@ public:
     /// Problems found by the last Update (missing part files...), to show once.
     std::vector<std::string> problems;
 
+    /// What is wrong with the assembly now, for the two counters in the
+    /// header: red for part files (missing or unreadable), yellow for the
+    /// assembly itself (constraints that do not hold or repeat others).
+    struct Issue {
+        enum class Kind : unsigned char { MissingFile, BrokenFile, FailedConstraint, RedundantConstraint };
+        Kind        kind;
+        ObjectId    id;        ///< the component or the constraint
+        std::string name;      ///< as in the tree
+        std::string detail;    ///< why (Russian, translated when shown)
+        bool        Red() const { return kind == Kind::MissingFile || kind == Kind::BrokenFile; }
+    };
+    std::vector<Issue> Issues() const;
+
     /// Remembers the assembly as it is, before a change (one undo step).
     void Checkpoint(std::string label);
     bool Undo();

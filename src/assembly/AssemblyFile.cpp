@@ -148,7 +148,9 @@ std::string AssemblyToJson(const Assembly& a) {
                 {{"designation", c.properties.designation},
                  {"name", c.properties.name},
                  {"material", c.properties.material},
-                 {"quantity", c.properties.quantity}}}};
+                 {"quantity", c.properties.quantity},
+                 {"position", c.properties.position},
+                 {"note", c.properties.note}}}};
         if (c.grounded) j["grounded"] = true;
         if (!c.visible) j["visible"] = false;
         components.push_back(std::move(j));
@@ -253,7 +255,8 @@ Expected<Assembly> AssemblyFromJsonUnguarded(std::string_view text, std::vector<
         }
         if (const auto p = j.find("properties"); p != j.end() && p->is_object()) {
             if (!ReadMember(*p, "designation", c.properties.designation) || !ReadMember(*p, "name", c.properties.name) ||
-                !ReadMember(*p, "material", c.properties.material) || !ReadMember(*p, "quantity", c.properties.quantity)) {
+                !ReadMember(*p, "material", c.properties.material) || !ReadMember(*p, "quantity", c.properties.quantity) ||
+                !ReadMember(*p, "position", c.properties.position) || !ReadMember(*p, "note", c.properties.note)) {
                 c.properties = {};
                 warn(std::format("Свойства компонента «{}» повреждены и сброшены", c.name));
             }

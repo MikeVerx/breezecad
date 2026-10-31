@@ -284,6 +284,24 @@ void DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             }
             y += ui.S(40);
         }
+        // A part picked in the assembly: its data one click away (it appears
+        // with the selection and goes with it).
+        if (session.assembly && !app.ops.Active())
+            if (const assembly::Component* picked = session.assembly->assembly.FindComponent(session.assembly->selected)) {
+                y += ui.S(4);
+                dl->AddLine({pos.x + ui.S(10), y - ui.S(2)}, {pos.x + railW - ui.S(10), y - ui.S(2)}, ui::ToU32(c.dividerSoft));
+                ImGui::SetCursorScreenPos({pos.x + (railW - ui.S(36)) / 2, y + ui.S(4)});
+                const bool active = app.shell.leftTab == LeftTab::Properties;
+                const std::string tip = Trf("Данные детали «{}»", picked->name);
+                if (ui::IconButton(ui, "##rail-part", "ui-info", 36, 20, tip.c_str(), true, active)) {
+                    app.shell.measuring = false;
+                    app.shell.leftTab = LeftTab::Properties;
+                }
+                if (!active) {   // a dot: something new to look at
+                    const ImVec2 dot{pos.x + (railW + ui.S(36)) / 2 - ui.S(5), y + ui.S(9)};
+                    dl->AddCircleFilled(dot, ui.S(3.5f), ui::ToU32(c.accent));
+                }
+            }
         EndArea();
     }
 

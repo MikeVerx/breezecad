@@ -1,3 +1,7 @@
+#include "platform/Launch.h"
+#include "assembly/AssemblyFile.h"
+#include "app/AssemblyState.h"
+#include "app/Operations.h"
 #include "app/viewport/ViewportPanel.h"
 #include "core/Monitor.h"
 
@@ -89,6 +93,7 @@ void ContextMenu(AppContext& app, Session& session) {
     if (!ImGui::BeginPopup("##viewport-menu")) return;
     const auto item = [&](const char* id) {
         const Action* a = app.actions.Find(id);
+        if (!a) return;   // a command a build does not have: no row, never a crash
         const std::string sc = ActionRegistry::ChordText(a->chord);
         if (ui::MenuItem(ui, a->Label(), sc.empty() ? nullptr : sc.c_str(), a->icon, false, a->IsEnabled())) {
             const std::string action = id;
@@ -107,6 +112,28 @@ void ContextMenu(AppContext& app, Session& session) {
         item("sketch.construction");
         item("sketch.centerline");
         item("edit.delete");
+    } else if (session.assembly) {
+        // The picked part's own commands first, then the assembly's.
+        AssemblyState& st = *session.assembly;
+        if (const assembly::Component* c = st.assembly.FindComponent(st.selected)) {
+            const std::filesystem::path file = assembly::ResolvePartPath(session.path, c->path);
+            if (ui::MenuItem(ui, Tr("Свойства детали"), nullptr, "ui-sliders")) app.shell.leftTab = LeftTab::Properties;
+            item("assembly.editInPlace");
+            if (ui::MenuItem(ui, Tr("Открыть в отдельной вкладке"), nullptr, "ui-open"))
+                app.Later([&app, file] { OpenDocument(app, file); });
+            if (ui::MenuItem(ui, Tr("Открыть в папке"), nullptr, "ui-folder") && !platform::ShowInFolder(file))
+                app.notes.Error(Tr("Не удалось открыть папку"));
+            item("assembly.ground");
+            ImGui::Separator();
+        }
+        item("assembly.place");
+        item("assembly.mate");
+        ImGui::Separator();
+        item("tools.measure");
+        item("view.section");
+        ImGui::Separator();
+        item("view.home");
+        item("view.fit");
     } else {
         // Sketches first (the most frequent thing done with a flat face), then
         // the look of the selected faces, then the rest.

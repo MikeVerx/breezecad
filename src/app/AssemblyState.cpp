@@ -267,6 +267,24 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
     return changed;
 }
 
+std::vector<AssemblyState::Issue> AssemblyState::Issues() const {
+    std::vector<Issue> out;
+    for (const assembly::Component& c : assembly.components) {
+        const std::string problem = geometry.ProblemOf(c.id);
+        if (problem.empty()) continue;
+        const bool missing = problem.rfind("Файл не найден", 0) == 0;
+        out.push_back({missing ? Issue::Kind::MissingFile : Issue::Kind::BrokenFile, c.id, c.name, problem});
+    }
+    for (const assembly::Constraint& c : assembly.constraints) {
+        if (c.suppressed) continue;
+        if (c.state == assembly::ConstraintState::Failed)
+            out.push_back({Issue::Kind::FailedConstraint, c.id, c.name, "Зависимость не выполняется: детали нельзя поставить так, как она требует"});
+        else if (c.state == assembly::ConstraintState::Redundant)
+            out.push_back({Issue::Kind::RedundantConstraint, c.id, c.name, "Лишняя зависимость: повторяет то, что уже задают другие"});
+    }
+    return out;
+}
+
 bool AssemblyState::Update(const std::filesystem::path& file, std::string_view contextName) {
     const std::uint64_t before = geometry.Shown().Revision();
     {

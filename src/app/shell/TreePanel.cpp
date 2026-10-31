@@ -2,6 +2,11 @@
 // under the operations that use them, as in Inventor) and the end-of-part
 // marker, which can be dragged to roll the part back.
 
+#include "platform/Launch.h"
+#include "core/PathText.h"
+#include "platform/FileDialogs.h"
+#include "platform/Paths.h"
+#include "app/assembly/AssemblyIssues.h"
 #include "app/Format.h"
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
@@ -57,6 +62,7 @@ struct RowResult {
     bool doubleClicked = false;
     bool caretClicked = false;
     bool eyeClicked = false;
+    bool statusClicked = false;   ///< on the status icon (a problem to fix)
     bool hovered = false;
 };
 
@@ -116,6 +122,12 @@ RowResult Row(AppContext& app, const char* id, const std::string& name, const Ro
     if (style.statusIcon) {
         right -= ui.S(16);
         ui.icons.Draw(dl, style.statusIcon, {right, p.y + (h - ui.S(15)) / 2}, ui.S(15), {1, 1, 1, 1});
+        const ImVec2 mouse = ImGui::GetMousePos();
+        if (r.clicked && mouse.x >= right - ui.S(4) && mouse.x <= right + ui.S(20)) {
+            r.statusClicked = true;
+            r.clicked = false;
+        }
+        if (r.hovered && mouse.x >= right - ui.S(4) && mouse.x <= right + ui.S(20)) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         right -= ui.S(6);
     }
     if (!style.meta.empty()) {
@@ -569,15 +581,56 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
         }
         if (r.clicked) st.selected = id;
         if (r.doubleClicked && !picking) app.Later([&app, &session, id] { EditInPlace(app, session, id); });
+        // The red mark of a part whose file is gone or broken: how to fix it.
+        if (r.statusClicked) {
+            st.selected = id;
+            ImGui::OpenPopup("##fix-part");
+        }
+        {
+            ui::MenuStyle menu(ui);
+            if (ImGui::BeginPopup("##fix-part")) {
+                const std::string problem = st.geometry.ProblemOf(id);
+                if (!problem.empty()) {
+                    // The file's name, not its whole path: the menu stays narrow.
+                    const std::filesystem::path file = assembly::ResolvePartPath(session.path, comp.path);
+                    const std::string line = problem.rfind("Файл не найден", 0) == 0 ? Trf("Не найден файл {}", ToUtf8(file.filename()))
+                                                                                     : Tr(problem);
+                    ui::MenuItem(ui, line.c_str(), nullptr, "status-error", false, false);
+                }
+                if (ui::MenuItem(ui, Tr("Указать файл детали…"), nullptr, "ui-open")) {
+                    const auto file = platform::ShowOpenDialog(Tr("Файл детали"), {{Tr("Деталь BreezeCAD"), "*.bzc"}},
+                                                               session.path.empty() ? platform::DocumentsDir() : session.path.parent_path());
+                    if (file) app.Later([&app, &session, id, f = *file] { ReplacePart(app, session, id, f); });
+                }
+                if (ui::MenuItem(ui, Tr("Найти все в папке…"), nullptr, "ui-folder")) {
+                    const auto folder = platform::ShowFolderDialog(Tr("Папка с деталями"), session.path.empty() ? platform::DocumentsDir()
+                                                                                                                 : session.path.parent_path());
+                    if (folder)
+                        app.Later([&app, &session, f = *folder] {
+                            const int found = FindMissingParts(app, session, f);
+                            if (found > 0) app.notes.Success(Trf("Найдено деталей: {}", found));
+                            else app.notes.Error(Tr("В этой папке нет деталей с такими именами"));
+                        });
+                }
+                ImGui::Separator();
+                if (ui::MenuItem(ui, Tr("Удалить из сборки"), "Del", "ui-trash")) app.Later([&app, &session] { AssemblyDelete(app, session); });
+                ImGui::EndPopup();
+            }
+        }
         {
             ui::MenuStyle menu(ui);
             if (ImGui::BeginPopupContextItem("##comp-menu")) {
                 st.selected = id;
                 if (ui::MenuItem(ui, Tr("Править на месте"), nullptr, "edit-in-place"))
                     app.Later([&app, &session, id] { EditInPlace(app, session, id); });
-                if (ui::MenuItem(ui, Tr("Открыть деталь"), nullptr, "ui-open")) {
+                if (ui::MenuItem(ui, Tr("Свойства детали"), nullptr, "ui-sliders")) app.shell.leftTab = LeftTab::Properties;
+                if (ui::MenuItem(ui, Tr("Открыть в отдельной вкладке"), nullptr, "ui-open")) {
                     const std::filesystem::path file = assembly::ResolvePartPath(session.path, comp.path);
                     app.Later([&app, file] { OpenDocument(app, file); });
+                }
+                if (ui::MenuItem(ui, Tr("Открыть в папке"), nullptr, "ui-folder")) {
+                    const std::filesystem::path file = assembly::ResolvePartPath(session.path, comp.path);
+                    if (!platform::ShowInFolder(file)) app.notes.Error(Tr("Не удалось открыть папку"));
                 }
                 if (ui::MenuItem(ui, comp.grounded ? Tr("Освободить") : Tr("Закрепить"), nullptr, "ui-lock"))
                     app.Later([&app] { ToggleGrounded(app); });

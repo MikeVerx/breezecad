@@ -1,3 +1,4 @@
+#include "platform/Launch.h"
 #include "app/assembly/AssemblyUi.h"
 #include "app/assembly/InPlace.h"
 #include "app/viewport/Planes.h"
@@ -126,12 +127,27 @@ void DrawComponentProperties(AppContext& app, Session& session, Component& c, fl
     if (const std::string problem = st.geometry.ProblemOf(c.id); !problem.empty()) LabelText(ui, Tr(problem), ui.C().danger);
     ImGui::Dummy({0, ui.S(8)});
 
+    // Open the part on its own, or find its file.
+    {
+        const std::filesystem::path file = assembly::ResolvePartPath(session.path, c.path);
+        const float half = (width - ui.S(6)) / 2;
+        if (ui::SecondaryButton(ui, "##c-open-tab", Tr("Открыть во вкладке"), nullptr, {half, ui.S(30)}))
+            app.Later([&app, file] { OpenDocument(app, file); });
+        ImGui::SameLine(0, ui.S(6));
+        if (ui::SecondaryButton(ui, "##c-show-file", Tr("Показать в папке"), nullptr, {half, ui.S(30)}) && !platform::ShowInFolder(file))
+            app.notes.Error(Tr("Не удалось открыть папку"));
+        ImGui::Dummy({0, ui.S(8)});
+    }
+
+    ComponentText(app, st, c, Tr("Позиция в спецификации"), "##c-position", &assembly::ComponentProperties::position,
+                  std::string{}, width);
     ComponentText(app, st, c, Tr("Обозначение"), "##c-designation", &assembly::ComponentProperties::designation,
                   part ? part->info.designation : std::string{}, width);
     ComponentText(app, st, c, Tr("Наименование"), "##c-pname", &assembly::ComponentProperties::name,
                   part ? part->info.name : std::string{}, width);
     ComponentText(app, st, c, Tr("Материал"), "##c-material", &assembly::ComponentProperties::material,
                   part ? part->info.material : std::string{}, width);
+    ComponentText(app, st, c, Tr("Примечание"), "##c-note", &assembly::ComponentProperties::note, std::string{}, width);
     ui::FieldLabel(ui, Tr("Количество"));
     {
         const ImVec2 p = ImGui::GetCursorScreenPos();

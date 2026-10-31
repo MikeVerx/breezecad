@@ -7,6 +7,7 @@ set(BZ_APP_SOURCES
     Application.cpp
     AssemblyState.cpp
     Autosave.cpp
+    assembly/AssemblyIssues.cpp
     assembly/AssemblyUi.cpp
     assembly/InPlace.cpp
     Backgrounds.cpp

@@ -1,6 +1,7 @@
 // Header row: brand menu, quick access toolbar, document title, command
 // search with its drop-down, and live stats (FPS, memory, objects).
 
+#include "app/assembly/AssemblyIssues.h"
 #include "app/BetaTesting.h"
 #include "app/Operations.h"
 #include "app/features/OperationEditors.h"
@@ -323,6 +324,9 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
         }
     }
     const float searchX = right - statsWidth - searchWidth;
+    // An assembly's problems: red (part files) and yellow (the assembly) counters.
+    const float issuesW = DrawIssueCounters(app, searchX - ui.S(8), pos.y + h / 2);
+    const float titleRight = issuesW > 0 ? searchX - issuesW - ui.S(16) : searchX;
 
     // Title in the middle of what is left.
     {
@@ -339,9 +343,9 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
         // The testers' build says so (screenshots in bug reports show it).
         const std::string tag = beta::Enabled() ? std::string(" \xC2\xB7 ") + Tr("для бета-тестеров") : std::string();
         const float w3 = tag.empty() ? 0 : f1->CalcTextSizeA(ui.S(13), FLT_MAX, 0, tag.c_str()).x;
-        const float mid = (x + searchX) / 2;
+        const float mid = (x + titleRight) / 2;
         float tx = std::max(x + ui.S(8), mid - (w1 + w2 + w3) / 2);
-        if (tx + w1 + w2 + w3 < searchX - ui.S(8)) {
+        if (tx + w1 + w2 + w3 < titleRight - ui.S(8)) {
             const float ty = pos.y + (h - ui.S(13)) / 2 - ui.S(1);
             dl->AddText(f1, ui.S(13), {tx, ty}, ui::ToU32(c.text), name.c_str());
             dl->AddText(f2, ui.S(13), {tx + w1, ty}, ui::ToU32(c.textMuted), suffix);

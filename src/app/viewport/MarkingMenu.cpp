@@ -102,7 +102,7 @@ std::array<std::string, 8> HotMenuDefault(HotEnvironment env) {
             return {"sketch.line", "sketch.rectangle", "sketch.circle", "sketch.arc",
                     "sketch.dimension", "sketch.trim", "sketch.construction", "sketch.finish"};
         case HotEnvironment::Assembly:
-            return {"assembly.place", "assembly.constrain", "assembly.move", "assembly.rotate",
+            return {"assembly.place", "assembly.mate", "assembly.move", "assembly.rotate",
                     "assembly.create", "tools.measure", "view.fit", "view.home"};
         case HotEnvironment::Part: break;
     }

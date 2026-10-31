@@ -11,5 +11,9 @@ namespace bz::platform {
 bool OpenUrl(const std::string& url);
 /// Shows `folder` in the file manager, creating it first if needed.
 bool OpenFolder(const std::filesystem::path& folder);
+/// The file manager at `file`'s folder with the file selected (Windows,
+/// macOS); on Linux the folder alone (file managers differ). Its folder
+/// when the file is gone.
+bool ShowInFolder(const std::filesystem::path& file);
 
 } // namespace bz::platform
