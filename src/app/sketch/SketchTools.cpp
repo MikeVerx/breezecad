@@ -307,6 +307,14 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
     }
     mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
     TrackArcSweep(mySnap.pos);
+    myLastAim = mySnap.pos;
+    // Sizes typed before the first click make the whole shape: it hangs on
+    // the cursor by its base point until a click puts it down.
+    if (myClicks.empty() && TypedShapeComplete(session.doc.units)) {
+        myClicks.push_back(RefFromSnap(mySnap));
+        myFloating = true;
+        mySnap.pos = mySnap.pos + Vec2{1e-6, 1e-6};   // up and right of the base point
+    }
     // A typed size wins over snapping: the point lands where the size says.
     if (ApplyTypedSizes(session.doc.units, mySnap.pos)) {
         const Vec2 pos = mySnap.pos;
@@ -317,9 +325,35 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
     myMmPerPixel = view.MmPerPixel();
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && view.vf.hovered) {
+        myFloating = false;   // its base point is a real click now
         myClicks.push_back(RefFromSnap(mySnap));
         FinishDrawingStep(app, session, mySnap);
     }
+}
+
+bool SketchEditor::TypedShapeComplete(const UnitSystem& units) const {
+    const auto length = [&](const std::string& text) { return TypedValue(text, Quantity::Length, units); };
+    switch (myTool) {
+        case SketchTool::Rectangle:
+            if (myOptions.rectangle == RectangleMode::Polygon) return length(myOptions.size).has_value();
+            return (myOptions.rectangle == RectangleMode::Corners || myOptions.rectangle == RectangleMode::Centre) &&
+                   length(myOptions.width) && length(myOptions.height);
+        case SketchTool::Circle: return myOptions.circle == CircleMode::CentreRadius && length(myOptions.size);
+        default: return false;
+    }
+}
+
+bool SketchEditor::CommitTyped(AppContext& app, Session& session) {
+    const bool drawing = myTool == SketchTool::Line || myTool == SketchTool::Rectangle || myTool == SketchTool::Circle ||
+                         myTool == SketchTool::Arc;
+    if (!drawing || myClicks.empty() || myFloating || !Active(session)) return false;
+    Vec2 pos = myLastAim;
+    if (!ApplyTypedSizes(session.doc.units, pos)) return false;
+    Snap at;
+    at.pos = pos;
+    myClicks.push_back(RefFromSnap(at));
+    FinishDrawingStep(app, session, at);
+    return true;
 }
 
 void SketchEditor::HandleProject(AppContext& app, Session& session, const SketchView& view) {

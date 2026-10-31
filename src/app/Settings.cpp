@@ -59,6 +59,7 @@ Settings FromJson(const nlohmann::json& j) {
     s.orbitSpeed      = std::clamp(j.value("orbitSpeed", s.orbitSpeed), 0.25, 4.0);
     s.invertOrbit     = j.value("invertOrbit", s.invertOrbit);
     s.turntableOrbit  = j.value("turntableOrbit", s.turntableOrbit);
+    s.middleClickConfirms = j.value("middleClickConfirms", s.middleClickConfirms);
     s.flickGestures   = j.value("flickGestures", s.flickGestures);
     if (const auto h = j.find("hotMenu"); h != j.end() && h->is_object()) {
         s.hotMenu.trigger = std::clamp(h->value("trigger", 0), 0, 3);
@@ -254,6 +255,7 @@ nlohmann::json Settings::ToJson() const {
         {"orbitSpeed", orbitSpeed},
         {"invertOrbit", invertOrbit},
         {"turntableOrbit", turntableOrbit},
+        {"middleClickConfirms", middleClickConfirms},
         {"flickGestures", flickGestures},
         {"hotMenu", {{"trigger", hotMenu.trigger}, {"sketch", hotMenu.sketch}, {"part", hotMenu.part}, {"assembly", hotMenu.assembly}}},
         {"language", language},

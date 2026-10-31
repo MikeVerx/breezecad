@@ -201,6 +201,8 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
             nav.zoomAt = mouse;
         } else if (button == ImGuiMouseButton_Right) {
             nav.button = -1;   // a right click not bound to a gesture: just the menu, on release
+        } else {
+            nav.button = -3;   // the wheel pressed with no gesture on it: only its click counts
         }
     }
     // In a sketch, a right click that ends a chain is not a menu click.
@@ -208,6 +210,25 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
     // The radial menu took this right press: its release opens nothing else.
     if (nav.button == -2) {
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Right)) nav.button = -1;
+        return false;
+    }
+    // A click of the wheel (pressed and released without moving) confirms, as
+    // Enter does — whatever Enter does at the moment: a typed value, the end
+    // of a chain, an operation, a constraint. KOMPAS-3D works this way.
+    const auto middleClick = [&] {
+        if (!app.settings.middleClickConfirms) return;
+        const ImVec2 d = ImGui::GetMouseDragDelta(ImGuiMouseButton_Middle, 0.0f);
+        if (std::abs(d.x) > 3.0f || std::abs(d.y) > 3.0f) return;
+        ImGuiIO& w = ImGui::GetIO();
+        w.AddKeyEvent(ImGuiKey_Enter, true);   // trickled: down this frame, up the next
+        w.AddKeyEvent(ImGuiKey_Enter, false);
+        mon::Action("view", "щелчок колесом");
+    };
+    if (nav.button == -3) {
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Middle)) {
+            nav.button = -1;
+            middleClick();
+        }
         return false;
     }
     if (nav.button < 0 && ImGui::IsMouseReleased(ImGuiMouseButton_Right) && sceneHovered && !busy && !sketchBusy &&
@@ -232,8 +253,7 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
             // A short right click: the context menu; a short middle click
             // confirms the operation, like in KOMPAS.
             if (!nav.moved && nav.button == ImGuiMouseButton_Right && !sketchBusy) ImGui::OpenPopup("##viewport-menu");
-            if (!nav.moved && nav.button == ImGuiMouseButton_Middle && app.ops.Active())
-                app.Later([&app, &session] { EnterPressed(app); });
+            if (!nav.moved && nav.button == ImGuiMouseButton_Middle) middleClick();
             nav.orbiting = nav.panning = nav.zooming = false;
             nav.button = -1;
         }

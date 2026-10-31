@@ -994,6 +994,13 @@ void DrawMouseSettings(AppContext& app, float width) {
         s.mouseCustom = true;
     }
     ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Щелчок колесом"));
+    {
+        static constexpr std::array<const char*, 2> click{N_("Подтверждает (как Enter)"), N_("Ничего не делает")};
+        const int cur = s.middleClickConfirms ? 0 : 1;
+        if (const int n = ui::Segmented(ui, "middle-click", click, cur, 2, width); n != cur) s.middleClickConfirms = n == 0;
+    }
+    ImGui::Dummy({0, ui.S(6)});
     ui::FieldLabel(ui, Tr("Скорость вращения"));
     {
         static constexpr std::array<const char*, 4> speeds{N_("Медленно"), N_("Обычно"), N_("Быстро"), N_("Очень быстро")};

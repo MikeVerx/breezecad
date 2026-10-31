@@ -496,6 +496,12 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
 
     myClickUsed = false;
     if (myEditDimension) HandleInlineEdit(app, session, view);
+    // Enter (or a click of the wheel) after typing a size puts the point the
+    // size gives — no click needed, wherever the mouse is (on the panel too).
+    else if ((ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) &&
+             CommitTyped(app, session)) {
+        mySeedField = -1;
+    }
     if (myClickUsed || (!vf.hovered && !myDragging)) return;
 
     // The clipboard takes the clicks while its base point is picked or a copy is placed.
@@ -545,6 +551,11 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
         default:                    HandleConstraint(app, session, view); break;
     }
     if (doc::SketchFeature* still = Active(session)) DrawPreview(app, view, still->sketch, session.doc.units);
+    // The floating shape's base point was only for this frame's picture.
+    if (myFloating) {
+        if (!myClicks.empty()) myClicks.pop_back();
+        myFloating = false;
+    }
 }
 
 void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchView& view) {
