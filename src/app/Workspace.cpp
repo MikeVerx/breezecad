@@ -152,6 +152,15 @@ bool Workspace::Open(const std::filesystem::path& file, Notifications& notes, Se
     return true;
 }
 
+std::filesystem::path Workspace::SaveFolder(const Session& session, const Settings& settings) {
+    // A saved document stays in its own folder ("Сохранить как"); a new one
+    // goes where the last one went, while that folder is still there.
+    if (!session.path.empty()) return session.path.parent_path();
+    std::error_code ec;
+    if (!settings.lastSaveFolder.empty() && std::filesystem::is_directory(settings.lastSaveFolder, ec)) return settings.lastSaveFolder;
+    return platform::DocumentsDir();
+}
+
 bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settings& settings) {
     // A part edited in an assembly is saved with it (into its copy beside it).
     if (session.host) return Save(*session.host, saveAs, notes, settings);
@@ -161,11 +170,10 @@ bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settin
             notes.Error(problem);
             return false;
         }
-        const std::filesystem::path folder = session.path.empty() ? platform::DocumentsDir() : session.path.parent_path();
         const doc::DocumentTypeInfo* type = doc::DocumentTypeRegistry::Default().Find(session.DocumentType());
         const std::string ext = type ? type->extension : std::string(".bzc");
         const std::string name = session.assembly ? Tr("Сборка BreezeCAD") : Tr("Деталь BreezeCAD");
-        const auto chosen = platform::ShowSaveDialog(Tr("Сохранить документ"), folder / PathFromUtf8(session.Title() + ext),
+        const auto chosen = platform::ShowSaveDialog(Tr("Сохранить документ"), SaveFolder(session, settings) / PathFromUtf8(session.Title() + ext),
                                                      {{name, "*" + ext}}, ext);
         if (!chosen) return false;
         target = *chosen;
@@ -178,7 +186,10 @@ bool Workspace::Save(Session& session, bool saveAs, Notifications& notes, Settin
                 return false;
             }
     }
-    return SaveTo(session, target, notes, settings);
+    const bool asked = target != session.path;
+    const bool saved = SaveTo(session, target, notes, settings);
+    if (saved && asked) settings.lastSaveFolder = target.parent_path();
+    return saved;
 }
 
 bool Workspace::GatherParts(Session& session, const std::filesystem::path& from, const std::filesystem::path& to,

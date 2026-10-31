@@ -52,6 +52,10 @@ public:
     static Expected<std::unique_ptr<Session>> LoadSession(const std::filesystem::path& file,
                                                           std::vector<std::string>* warnings);
 
+    /// The folder the save window opens in: the document's own, else the
+    /// last one a document was saved to, else Documents.
+    static std::filesystem::path SaveFolder(const Session& session, const Settings& settings);
+
     /// Opens a .bzc file (or activates it when already open).
     bool Open(const std::filesystem::path& file, Notifications& notes, Settings& settings);
 

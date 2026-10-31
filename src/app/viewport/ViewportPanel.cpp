@@ -108,13 +108,16 @@ void ContextMenu(AppContext& app, Session& session) {
         item("sketch.centerline");
         item("edit.delete");
     } else {
-        FaceSelectionMenu(app, session);
-        if (app.shell.nav.facePlane && ui::MenuItem(ui, Tr("Эскиз на этой грани"), nullptr, "sketch")) {
+        // Sketches first (the most frequent thing done with a flat face), then
+        // the look of the selected faces, then the rest.
+        if (app.shell.nav.facePlane && ui::MenuItem(ui, Tr("Эскиз на грани"), nullptr, "sketch")) {
             const doc::SketchPlacement placement{app.shell.nav.faceBody, *app.shell.nav.facePlane, true,
                                                  {app.shell.nav.facePlane->normal, app.shell.nav.pivot}};
             app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
         }
         item("sketch.start");
+        ImGui::Separator();
+        FaceSelectionMenu(app, session);
         item("feature.extrude");
         ImGui::Separator();
         item("tools.measure");
