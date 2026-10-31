@@ -415,7 +415,13 @@ struct Viewport::Impl {
         std::vector<ObjectId>          ids;
         std::vector<TopoDS_Shape>      bodies;
         bool                           picking = false;
+        bool                           facePicking = false;
     } surroundings;
+    bool IsContextShape(const Handle(SelectMgr_SelectableObject)& obj) const {
+        for (const auto& s : surroundings.shapes)
+            if (obj == s) return true;
+        return false;
+    }
     std::vector<Handle(AIS_Shape)> copyShapes;              ///< pattern/mirror preview shown
     std::uint64_t                  copyRevision = 0;
     ObjectId                       copyFeature;
@@ -1490,23 +1496,61 @@ void Viewport::SetContext(const kernel::Model* model) {
         // is never loaded into the selector, and a later Activate is ignored
         // (the faded parts' edges could not be clicked to project them).
         m.context->Display(ais, AIS_Shaded, AIS_Shape::SelectionMode(TopAbs_EDGE), false);
-        if (!c.picking) m.context->Deactivate(ais);
+        if (c.facePicking) m.context->Activate(ais, AIS_Shape::SelectionMode(TopAbs_FACE));
+        if (!c.picking) m.context->Deactivate(ais, AIS_Shape::SelectionMode(TopAbs_EDGE));
         c.shapes.push_back(ais);
         c.ids.push_back(b.id);
         c.bodies.push_back(b.shape);
     }
 }
 
+namespace {
+/// The selection modes of the context's shapes as asked (edges, faces).
+void ActivateContext(AIS_InteractiveContext& ctx, const Handle(AIS_Shape)& s, bool edges, bool faces) {
+    ctx.Deactivate(s);
+    if (edges) ctx.Activate(s, AIS_Shape::SelectionMode(TopAbs_EDGE));
+    if (faces) ctx.Activate(s, AIS_Shape::SelectionMode(TopAbs_FACE));
+}
+} // namespace
+
 void Viewport::SetContextPicking(bool on) {
     Impl& m = *myImpl;
     Impl::Context& c = m.surroundings;
     if (c.picking == on) return;
     c.picking = on;
-    for (const auto& s : c.shapes) {
-        if (on) m.context->Activate(s, AIS_Shape::SelectionMode(TopAbs_EDGE));
-        else m.context->Deactivate(s);
-    }
+    for (const auto& s : c.shapes) ActivateContext(*m.context, s, c.picking, c.facePicking);
     m.dirty = true;
+}
+
+void Viewport::SetContextFacePicking(bool on) {
+    Impl& m = *myImpl;
+    Impl::Context& c = m.surroundings;
+    if (c.facePicking == on) return;
+    c.facePicking = on;
+    for (const auto& s : c.shapes) ActivateContext(*m.context, s, c.picking, c.facePicking);
+    m.dirty = true;
+}
+
+std::optional<Viewport::ContextFace> Viewport::PickContextFace(Vec2 pixel) {
+    Impl& m = *myImpl;
+    const Impl::Context& c = m.surroundings;
+    if (!c.facePicking || c.shapes.empty()) return std::nullopt;
+    const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
+    const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->Pick(px, py, m.view);
+    for (int i = 1; i <= selector->NbPicked(); ++i) {
+        const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
+        if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_FACE) continue;
+        for (std::size_t b = 0; b < c.shapes.size(); ++b) {
+            if (owner->Selectable() != c.shapes[b]) continue;
+            const std::optional<Vec3> normal = kernel::occt::PlanarNormal(TopoDS::Face(owner->Shape()));
+            if (!normal) return std::nullopt;   // the nearest face is curved
+            return ContextFace{c.ids[b], doc::FaceReference{*normal, ToVec(selector->PickedPoint(i).XYZ())}};
+        }
+        return std::nullopt;   // the edited part's own face is nearer
+    }
+    return std::nullopt;
 }
 
 std::optional<Viewport::ContextEdge> Viewport::PickContextEdge(Vec2 pixel) {
@@ -1767,7 +1811,12 @@ bool Viewport::OriginalUnder(Vec2 pixel) {
     if (!m.original.active) return false;
     const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
     selector->Pick(static_cast<int>(std::lround(pixel.x * m.pixelScale)), static_cast<int>(std::lround(pixel.y * m.pixelScale)), m.view);
-    return selector->NbPicked() > 0;
+    // The faded parts around a part edited in place are not its own body.
+    for (int i = 1; i <= selector->NbPicked(); ++i) {
+        const Handle(SelectMgr_EntityOwner) owner = selector->Picked(i);
+        if (owner.IsNull() || !m.IsContextShape(owner->Selectable())) return true;
+    }
+    return false;
 }
 
 std::optional<doc::FaceReference> Viewport::PickFace(Vec2 pixel, bool curvedToo) {
@@ -1780,6 +1829,7 @@ std::optional<doc::FaceReference> Viewport::PickFace(Vec2 pixel, bool curvedToo)
     for (int i = 1; i <= selector->NbPicked(); ++i) {
         const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
         if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_FACE) continue;
+        if (m.IsContextShape(owner->Selectable())) continue;   // another part's face (PickContextFace)
         const TopoDS_Face& face = TopoDS::Face(owner->Shape());
         const Vec3 point = ToVec(selector->PickedPoint(i).XYZ());
         if (const std::optional<Vec3> normal = kernel::occt::PlanarNormal(face)) return doc::FaceReference{*normal, point};

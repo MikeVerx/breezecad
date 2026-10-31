@@ -3,7 +3,9 @@
 #include "kernel/ContextProjection.h"
 
 #include "document/Recompute.h"
+#include "document/ExtrudeFeature.h"
 #include "document/SketchFeature.h"
+#include "kernel/occt/FaceMatch.h"
 #include "kernel/occt/AssemblyModelImpl.h"
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Project.h"
@@ -47,6 +49,22 @@ void Mix(std::uint64_t& h, Vec3 v) {
 }
 
 bool Matches(const doc::ContextProjection& p, std::string_view assembly) { return p.adaptive && p.assembly == assembly; }
+bool Matches(const doc::ContextPlane& p, std::string_view assembly) { return p.adaptive && p.assembly == assembly; }
+
+/// The extrusion's "до грани" of another part in `assembly`, if it has one.
+const doc::ContextPlane* ContextTargetOf(const doc::Feature& f, std::string_view assembly) {
+    const auto* ex = dynamic_cast<const doc::ExtrudeFeature*>(&f);
+    if (!ex || ex->extent != doc::ExtentType::ToPlane || !ex->toContext || !Matches(*ex->toContext, assembly)) return nullptr;
+    return &*ex->toContext;
+}
+
+Frame Moved(const assembly::Placement& p, const Frame& f) {
+    Frame out = f;
+    out.origin = p.Point(f.origin);
+    out.normal = p.Direction(f.normal);
+    out.xDir = p.Direction(f.xDir);
+    return out;
+}
 
 } // namespace
 
@@ -119,6 +137,20 @@ Expected<ProjectedCurve> AssemblyModel::ProjectSourceEdge(const assembly::Assemb
     }
 }
 
+std::optional<Frame> AssemblyModel::SourcePlane(const assembly::Assembly& a, ObjectId target, ObjectId source,
+                                                const doc::FaceReference& face, doc::FaceReference* now) const {
+    const Impl::Part* part = myImpl->PartFor(source);
+    if (!a.FindComponent(source) || !part || part->shape.IsNull()) return std::nullopt;
+    try {
+        const std::optional<Frame> own = occt::ResolvePlaneFrame(part->shape, face);
+        if (!own) return std::nullopt;
+        if (now) *now = doc::FaceReference{own->normal, own->origin};
+        return Moved(Relative(a, target, source), *own);
+    } catch (const Standard_Failure&) {
+        return std::nullopt;
+    }
+}
+
 // --- adaptivity --------------------------------------------------------------------
 
 bool HasContextProjections(const doc::Document& doc, std::string_view assembly) {
@@ -126,6 +158,8 @@ bool HasContextProjections(const doc::Document& doc, std::string_view assembly) 
         if (const auto* sk = dynamic_cast<const doc::SketchFeature*>(f.get()))
             for (const doc::ContextProjection& p : sk->contextProjections)
                 if (Matches(p, assembly)) return true;
+    for (const auto& f : doc.Features())
+        if (ContextTargetOf(*f, assembly)) return true;
     return false;
 }
 
@@ -138,6 +172,11 @@ std::uint64_t ContextKey(const AssemblyModel& geometry, const assembly::Assembly
     Mix(h, geometry.PartGenerationOf(target));
     std::unordered_set<ObjectId> sources;
     for (const auto& f : doc.Features()) {
+        if (const doc::ContextPlane* t = ContextTargetOf(*f, assembly)) {   // an extrusion up to another part's face
+            sources.insert(t->component);
+            Mix(h, f->id.value);
+            continue;
+        }
         const auto* sk = dynamic_cast<const doc::SketchFeature*>(f.get());
         if (!sk) continue;
         bool any = false;
@@ -172,6 +211,24 @@ AdaptResult AdaptContextProjections(const AssemblyModel& geometry, const assembl
     AdaptResult result;
     std::size_t first = static_cast<std::size_t>(-1);
     for (std::size_t i = 0; i < doc.FeatureCount(); ++i) {
+        // An extrusion up to another part's face: the plane where that face is now.
+        if (auto* ex = dynamic_cast<doc::ExtrudeFeature*>(doc.Features()[i].get());
+            ex && ex->extent == doc::ExtentType::ToPlane && ex->toContext && Matches(*ex->toContext, assembly)) {
+            doc::FaceReference found = ex->toContext->face;
+            const std::optional<Frame> now = geometry.SourcePlane(a, target, ex->toContext->component, ex->toContext->face, &found);
+            if (!now) {
+                ++result.lost;   // the extrusion keeps going to where the face was
+                continue;
+            }
+            const Frame& was = ex->toContext->plane;
+            const double offset = std::abs((now->origin - was.origin).Dot(now->normal));
+            if (offset < 1e-7 && (now->normal - was.normal).Length() < 1e-9) continue;
+            ex->toContext->plane = *now;
+            ex->toContext->face = found;
+            ++result.moved;
+            first = std::min(first, i);
+            continue;
+        }
         auto* sk = dynamic_cast<doc::SketchFeature*>(doc.Features()[i].get());
         if (!sk) continue;
         bool moved = false;
@@ -214,10 +271,14 @@ bool WouldCycle(const AssemblyModel& geometry, const assembly::Assembly& a, Obje
         const doc::Document* part = geometry.PartOf(c);
         if (!part) continue;
         if (part == targetPart) return true;
-        for (const auto& f : part->Features())
+        for (const auto& f : part->Features()) {
             if (const auto* sk = dynamic_cast<const doc::SketchFeature*>(f.get()))
                 for (const doc::ContextProjection& p : sk->contextProjections)
                     if (p.assembly == assembly && a.FindComponent(p.component)) stack.push_back(p.component);
+            if (const auto* ex = dynamic_cast<const doc::ExtrudeFeature*>(f.get());
+                ex && ex->toContext && ex->toContext->assembly == assembly && a.FindComponent(ex->toContext->component))
+                stack.push_back(ex->toContext->component);
+        }
     }
     return false;
 }

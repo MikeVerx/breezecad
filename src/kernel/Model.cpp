@@ -1236,7 +1236,8 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                                      std::optional<Frame> target;
                                      std::optional<TopoDS_Face> until;
                                      if (ex->extent == doc::ExtentType::ToPlane) {
-                                         if (ex->toPlane) target = PlaneOf(ex->toPlane, doc);
+                                         if (ex->toContext) target = ex->toContext->plane;   // another part's face, as last placed
+                                         else if (ex->toPlane) target = PlaneOf(ex->toPlane, doc);
                                          else if (ex->toFace.IsSet() && ex->toFace.curved) {
                                              for (auto it = bodies.rbegin(); it != bodies.rend() && !until; ++it)
                                                  until = occt::ResolveAnyFace(it->shape, ex->toFace);

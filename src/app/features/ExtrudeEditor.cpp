@@ -1,4 +1,6 @@
 #include "app/features/ExtrudeEditor.h"
+#include "kernel/ContextProjection.h"
+#include "app/AssemblyState.h"
 #include "app/features/ToolChoice.h"
 
 #include "app/Format.h"
@@ -59,20 +61,53 @@ bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::Sketc
         if (index < 0) return false;
         app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Faces);
         const Vec2 at = view.vf.ToLocal(ImGui::GetMousePos());
-        if (view.vf.hovered && app.viewport.OriginalUnder(at)) {
+        // Another part's face nearer than this part's own (edited in an assembly): that one.
+        const bool contextNearer = session.host && session.host->assembly && view.vf.hovered && app.viewport.PickContextFace(at);
+        if (!contextNearer && view.vf.hovered && app.viewport.OriginalUnder(at)) {
             const std::optional<doc::FaceReference> face = app.viewport.PickFace(at, true);
             if (face && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
                 f.toFace = *face;
                 f.toPlane = {};
+                f.toContext.reset();
                 myPickTarget = false;
                 Changed(session);
             }
             return true;
         }
+        // A part edited in an assembly: a flat face of another part (KOMPAS's
+        // and Inventor's "до поверхности" in place). It follows that face.
+        if (session.host && session.host->assembly && view.vf.hovered)
+            if (const auto ctx = app.viewport.PickContextFace(at)) {
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                    AssemblyState& st = *session.host->assembly;
+                    const ObjectId target = session.inPlaceOf;
+                    const std::string name = session.host->ContextName();
+                    if (kernel::WouldCycle(st.geometry, st.assembly, ctx->body, target, name)) {
+                        app.notes.Info(Tr("Та деталь сама следует за этой: выдавливание до её грани замкнуло бы их друг на друга"));
+                        return true;
+                    }
+                    // The face in the other part's own coordinates (what stays true when it moves).
+                    const assembly::Placement relative = st.assembly.PlacementOf(target).Inverse() * st.assembly.PlacementOf(ctx->body);
+                    const assembly::Placement back = relative.Inverse();
+                    doc::ContextPlane link;
+                    link.assembly = name;
+                    link.component = ctx->body;
+                    link.face = doc::FaceReference{back.Direction(ctx->face.normal), back.Point(ctx->face.point)};
+                    link.plane = doc::PlaneFrame(ctx->face);
+                    if (const assembly::Component* c = st.assembly.FindComponent(ctx->body)) link.componentName = c->name;
+                    f.toContext = std::move(link);
+                    f.toFace = {};
+                    f.toPlane = {};
+                    myPickTarget = false;
+                    Changed(session);
+                }
+                return true;
+            }
         const ObjectId before = f.toPlane;
         PickPlane(app, session, f.toPlane, view.vf);
         if (f.toPlane != before) {
             f.toFace = {};
+            f.toContext.reset();
             myPickTarget = false;
         }
         return true;
@@ -179,14 +214,19 @@ void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
             target = Tr("Плоскость XZ");
         } else if (f.toPlane == doc::origin::kPlaneYZ) {
             target = Tr("Плоскость YZ");
+        } else if (f.toContext) {
+            target = f.toContext->componentName.empty() ? std::string(Tr("грань другой детали"))
+                                                        : Trf("грань «{}»", f.toContext->componentName);
         } else if (const doc::Feature* p = f.toPlane ? session.doc.Find(f.toPlane) : nullptr) {
             target = p->name;
         } else if (f.toFace.IsSet()) {
             target = f.toFace.curved ? Tr("кривая грань") : Tr("плоская грань");
         }
         if (PickChip(ui, "##to", Tr("До"), target, myPickTarget, width)) myPickTarget = true;
-        Caption(app, Tr("Щёлкните плоскость или грань тела, плоскую или кривую: конец выдавливания примет её форму. "
-                        "Если грань меньше выдавливания, её поверхность продолжится за края."),
+        Caption(app, session.host ? Tr("Щёлкните плоскость или грань — этой детали или плоскую грань другой детали сборки: "
+                                       "тогда выдавливание будет следовать за ней.")
+                                  : Tr("Щёлкните плоскость или грань тела, плоскую или кривую: конец выдавливания примет её форму. "
+                                       "Если грань меньше выдавливания, её поверхность продолжится за края."),
                 width);
     }
     Gap(app);

@@ -197,6 +197,17 @@ public:
     /// Makes the edges of the context pickable (projecting them into a
     /// sketch); off by default. Cheap to call every frame.
     void SetContextPicking(bool on);
+    /// Makes the faces of the context pickable (an extrusion up to another
+    /// part's face); off by default. Cheap to call every frame.
+    void SetContextFacePicking(bool on);
+    /// The flat context face under `pixel` (SetContextFacePicking on): which
+    /// body (the component) and the face, in the context's coordinates (the
+    /// edited part's). Nullopt over a curved face or nothing.
+    struct ContextFace {
+        ObjectId           body;
+        doc::FaceReference face;
+    };
+    std::optional<ContextFace> PickContextFace(Vec2 pixel);
     /// The context edge under `pixel` (SetContextPicking on): which body
     /// (its id: the component) and the edge, in the context's coordinates.
     struct ContextEdge {

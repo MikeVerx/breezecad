@@ -17,6 +17,7 @@ public:
     std::string Hint() const override;
     /// Choosing the face "до": faces under the cursor light up.
     bool        PicksOriginal() const override { return myPickTarget; }
+    bool        PicksContextFaces() const override { return myPickTarget; }
 
 protected:
     const char* Icon() const override { return "tree-extrude"; }
