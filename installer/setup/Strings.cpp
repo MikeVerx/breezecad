@@ -2,9 +2,14 @@
 
 #include "Install.h"
 
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#else
+#include <cstdlib>
+#include "Resources.h"
+#endif
 
 #include <nlohmann/json.hpp>
 
@@ -49,6 +54,18 @@ State& S() {
 std::span<const LanguageInfo> Languages() { return kLanguages; }
 
 std::string SystemLanguage() {
+#ifndef _WIN32
+    std::string tag;
+    for (const char* var : {"LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"})
+        if (const char* v = std::getenv(var); v && *v) {
+            tag = v;
+            break;
+        }
+    tag = tag.substr(0, tag.find_first_of("_.@:"));
+    for (const LanguageInfo& l : kLanguages)
+        if (tag == l.code) return tag;
+    return "en";
+#else
     wchar_t name[LOCALE_NAME_MAX_LENGTH] = {};
     // The interface language, not the region's formats: a Russian Windows set
     // to German number formats still speaks Russian.
@@ -60,6 +77,7 @@ std::string SystemLanguage() {
     for (const LanguageInfo& l : kLanguages)
         if (code == l.code) return code;
     return "en";
+#endif
 }
 
 void UseLanguage(const std::string& code) {
@@ -94,12 +112,16 @@ std::string Size(std::uint64_t bytes) {
 }
 
 std::span<const std::uint8_t> Resource(const wchar_t* name) {
+#ifndef _WIN32
+    return EmbeddedResource(Utf8(name));
+#else
     HRSRC found = FindResourceW(nullptr, name, MAKEINTRESOURCEW(10) /* RT_RCDATA */);
     if (!found) return {};
     HGLOBAL loaded = LoadResource(nullptr, found);
     const void* data = loaded ? LockResource(loaded) : nullptr;
     if (!data) return {};
     return {static_cast<const std::uint8_t*>(data), SizeofResource(nullptr, found)};
+#endif
 }
 
 } // namespace bz::setup

@@ -130,5 +130,11 @@
  "pain.4.t": "Ctrl+S après chaque fonction",
  "pain.4.s": "Personne n'a inventé ce réflexe, il nous a été inculqué — au prix d'heures perdues avec une fenêtre plantée.",
  "pain.4.f": "Votre travail reste",
- "pain.4.x": "Enregistrement automatique toutes les 2, 5 ou 10 minutes, même en pleine esquisse. Après un plantage, un bouton vous ramène là où vous étiez."
+ "pain.4.x": "Enregistrement automatique toutes les 2, 5 ou 10 minutes, même en pleine esquisse. Après un plantage, un bouton vous ramène là où vous étiez.",
+ "p.notabs.lx": "Le chemin doit commencer par « / » ou « ~/ », par ex. ~/BreezeCAD.",
+ "p.root.lx": "Pas à la racine — choisissez un dossier comme ~/BreezeCAD.",
+ "p.system.lx": "Pas dans un dossier système (/usr, /etc, /var…).",
+ "opt.sub.lx": "Raccourcis et fichiers que le système ouvrira avec BreezeCAD.",
+ "startmenu.lx": "Dans le menu des applications",
+ "fin.sub.lx": "BreezeCAD est dans le menu des applications. Pièces et assemblages s’ouvrent désormais d’un double clic."
 }

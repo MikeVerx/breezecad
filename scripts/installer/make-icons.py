@@ -121,6 +121,14 @@ def main():
         path = os.path.join(OUT, kind + ".ico")
         big.save(path, sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
         print(path)
+        # Linux (desktop file types) and macOS (document icons) take PNGs.
+        png = os.path.join(OUT, "png", kind + ".png")
+        os.makedirs(os.path.dirname(png), exist_ok=True)
+        big.save(png)
+    # The program's own icon as a PNG, from its .ico.
+    app = Image.open(os.path.join(os.path.dirname(OUT), "..", "resources", "app.ico"))
+    app.size = max(app.info.get("sizes", [app.size]))
+    app.convert("RGBA").resize((256, 256), Image.LANCZOS).save(os.path.join(OUT, "png", "app.png"))
 
 
 if __name__ == "__main__":

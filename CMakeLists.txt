@@ -37,6 +37,8 @@ option(BZ_BUILD_MCP   "Build the MCP module package (modules/mcp → .bzmod)" OF
 # Windows: the installer and the File Explorer previews (installer/).
 if(WIN32)
     option(BZ_BUILD_INSTALLER "Build BreezeCAD-Setup.exe and bz_thumbs.dll" ON)
+elseif(UNIX AND NOT APPLE AND NOT ANDROID)
+    option(BZ_BUILD_INSTALLER "Build BreezeCAD-Setup-linux" ON)
 endif()
 if(ANDROID)
     option(BZ_BUILD_ANDROID_APP "Build the Android app library (libbreezecad.so)" ON)
@@ -55,7 +57,7 @@ include(OpenCascade)
 
 add_subdirectory(src)
 
-if(WIN32 AND BZ_BUILD_INSTALLER)
+if(BZ_BUILD_INSTALLER)
     add_subdirectory(installer)
 endif()
 

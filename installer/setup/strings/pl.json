@@ -130,5 +130,11 @@
  "pain.4.t": "Ctrl+S po każdej operacji",
  "pain.4.s": "Nikt nie wymyślił tego odruchu, wytresowano go — kosztem godzin pracy, które zniknęły razem z oknem programu.",
  "pain.4.f": "Praca nie przepadnie",
- "pain.4.x": "Autozapis co 2, 5 lub 10 minut, nawet w środku szkicu. Po awarii jeden przycisk przywraca Cię tam, gdzie skończyłeś."
+ "pain.4.x": "Autozapis co 2, 5 lub 10 minut, nawet w środku szkicu. Po awarii jeden przycisk przywraca Cię tam, gdzie skończyłeś.",
+ "p.notabs.lx": "Ścieżka musi zaczynać się od „/” lub „~/”, np. ~/BreezeCAD.",
+ "p.root.lx": "Nie w katalogu głównym — wybierz folder, np. ~/BreezeCAD.",
+ "p.system.lx": "Nie w folderze systemowym (/usr, /etc, /var…).",
+ "opt.sub.lx": "Skróty i pliki, które system będzie otwierać w BreezeCAD.",
+ "startmenu.lx": "W menu aplikacji",
+ "fin.sub.lx": "BreezeCAD jest w menu aplikacji. Części i złożenia otwierają się teraz dwuklikiem."
 }

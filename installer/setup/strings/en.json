@@ -130,5 +130,11 @@
  "pain.4.t": "Ctrl+S after every feature",
  "pain.4.s": "Nobody invented this reflex, it was trained into us — at the cost of hours lost with a crashed window.",
  "pain.4.f": "Your work stays",
- "pain.4.x": "Autosave every 2, 5 or 10 minutes, even mid-sketch. After a crash one button brings you back where you stopped."
+ "pain.4.x": "Autosave every 2, 5 or 10 minutes, even mid-sketch. After a crash one button brings you back where you stopped.",
+ "p.notabs.lx": "The path must start with “/” or “~/”, e.g. ~/BreezeCAD.",
+ "p.root.lx": "Not in the root folder — choose a folder such as ~/BreezeCAD.",
+ "p.system.lx": "Not in a system folder (/usr, /etc, /var…).",
+ "opt.sub.lx": "Shortcuts and the files your system will open in BreezeCAD.",
+ "startmenu.lx": "In the applications menu",
+ "fin.sub.lx": "BreezeCAD is in the applications menu. Parts and assemblies now open with a double click."
 }

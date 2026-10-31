@@ -15,16 +15,26 @@
 #include "Strings.h"
 #include "../thumbnails/Badge.h"
 
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
 #include <d3d11.h>
 #include <dwmapi.h>
 #include <shellapi.h>
-
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
+#else
+// Linux: the same pages in a GLFW window with OpenGL (every desktop has it;
+// GLFW is linked in, it loads X11 or Wayland itself).
+#include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
+#include <unistd.h>
+#include <cstdio>
+#endif
 #include <miniz.h>
 #include <stb_image.h>
 
@@ -44,7 +54,9 @@
 #define BZ_SETUP_VERSION "0"
 #endif
 
+#ifdef _WIN32
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM, LPARAM);
+#endif
 
 namespace fs = std::filesystem;
 using namespace bz::setup;
@@ -69,10 +81,38 @@ Palette Dark() {
             IM_COL32(0xF8, 0x71, 0x71, 255), IM_COL32(0x3A, 0x1B, 0x1B, 255), IM_COL32(0, 0, 0, 140)};
 }
 bool SystemIsDark() {
+#ifdef _WIN32
     DWORD light = 1, size = sizeof(light);
     RegGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", L"AppsUseLightTheme",
                  RRF_RT_REG_DWORD, nullptr, &light, &size);
     return light == 0;
+#else
+    // GNOME 42+ and others that follow it: org.gnome.desktop.interface color-scheme.
+    if (const char* theme = std::getenv("GTK_THEME"); theme && std::strstr(theme, "dark")) return true;
+    std::string out;
+    if (FILE* p = ::popen("gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null", "r")) {
+        char buffer[128];
+        while (std::fgets(buffer, sizeof(buffer), p)) out += buffer;
+        ::pclose(p);
+    }
+    return out.find("dark") != std::string::npos;
+#endif
+}
+
+#ifdef _WIN32
+unsigned long ProcessId() { return GetCurrentProcessId(); }
+#else
+unsigned long ProcessId() { return static_cast<unsigned long>(::getpid()); }
+#endif
+
+/// A text that differs on Linux ("key.lx": no drive letters, no Start menu); the shared one otherwise.
+const char* TrOs(const char* key) {
+#ifndef _WIN32
+    const std::string lx = std::string(key) + ".lx";
+    const char* t = Tr(lx);
+    if (lx != t) return t;
+#endif
+    return Tr(key);
 }
 
 Palette P = Light();
@@ -87,6 +127,7 @@ struct Fonts {
 
 // --- graphics -----------------------------------------------------------------
 
+#ifdef _WIN32
 ID3D11Device*           gDevice = nullptr;
 ID3D11DeviceContext*    gContext = nullptr;
 IDXGISwapChain*         gSwap = nullptr;
@@ -161,6 +202,37 @@ void Drop(Texture& t) {
     t = {};
 }
 
+#else
+GLFWwindow* gWindow = nullptr;
+bool        gCloseAsked = false;
+bool        gFontsDirty = true;
+
+struct Texture {
+    GLuint view = 0;
+    int    w = 0, h = 0;
+    explicit operator bool() const { return view != 0; }
+    ImTextureID id() const { return static_cast<ImTextureID>(view); }
+};
+
+Texture MakeTexture(const std::uint8_t* rgba, int w, int h) {
+    Texture t;
+    glGenTextures(1, &t.view);
+    glBindTexture(GL_TEXTURE_2D, t.view);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    t.w = w;
+    t.h = h;
+    return t;
+}
+void Drop(Texture& t) {
+    if (t.view) glDeleteTextures(1, &t.view);
+    t = {};
+}
+
+#endif
+
 /// The BreezeCAD mark `height` pixels high in `colour` (tested point by
 /// point like the previews' badge: no SVG renderer in the installer).
 Texture MarkTexture(int height, ImU32 colour) {
@@ -199,15 +271,25 @@ std::vector<std::uint8_t> ReadFile(const fs::path& p) {
     return {std::istreambuf_iterator<char>(in), {}};
 }
 
-/// Windows' own font for a script the IBM Plex faces lack (CJK), first found.
+/// The system's own font for a script the IBM Plex faces lack (CJK), first found.
 std::optional<fs::path> SystemFont(std::initializer_list<const wchar_t*> names) {
+#ifdef _WIN32
     wchar_t dir[MAX_PATH] = {};
     GetWindowsDirectoryW(dir, MAX_PATH);
-    for (const wchar_t* n : names) {
-        const fs::path p = fs::path(dir) / L"Fonts" / n;
-        std::error_code ec;
-        if (fs::exists(p, ec)) return p;
-    }
+    const std::vector<fs::path> dirs = {fs::path(dir) / L"Fonts"};
+#else
+    // Noto Sans CJK holds all three; WenQuanYi is Chinese only.
+    const std::vector<fs::path> dirs = {"/usr/share/fonts/opentype/noto", "/usr/share/fonts/noto-cjk", "/usr/share/fonts/google-noto-cjk",
+                                        "/usr/share/fonts/truetype/noto", "/usr/share/fonts/noto", "/usr/share/fonts/truetype/wqy"};
+    (void)names;
+    names = {L"NotoSansCJK-Regular.ttc", L"wqy-microhei.ttc", L"wqy-zenhei.ttc"};
+#endif
+    for (const fs::path& d : dirs)
+        for (const wchar_t* n : names) {
+            const fs::path p = d / n;
+            std::error_code ec;
+            if (fs::exists(p, ec)) return p;
+        }
     return std::nullopt;
 }
 
@@ -234,6 +316,14 @@ void BuildFonts() {
     if (zh.empty()) if (auto f = SystemFont({L"msyh.ttc", L"simsun.ttc"})) zh = ReadFile(*f);
     if (ja.empty()) if (auto f = SystemFont({L"YuGothM.ttc", L"meiryo.ttc", L"msgothic.ttc"})) ja = ReadFile(*f);
     if (ko.empty()) if (auto f = SystemFont({L"malgun.ttf", L"gulim.ttc"})) ko = ReadFile(*f);
+    // Noto Sans CJK (Linux): one collection for all three, the face by
+    // language (JP 0, KR 1, SC 2), and any one face has the others' names.
+    int cjkFace = 0;
+    if (cjkFile && cjkFile->filename().string().starts_with("NotoSansCJK")) cjkFace = lang == "ja" ? 0 : lang == "ko" ? 1 : 2;
+#ifndef _WIN32
+    ja.clear();
+    ko.clear();
+#endif
 
     const auto add = [&](const wchar_t* resource, float size, bool withNames) -> ImFont* {
         const auto bytes = Resource(resource);
@@ -246,8 +336,11 @@ void BuildFonts() {
         merge.MergeMode = true;
         merge.FontDataOwnedByAtlas = false;
         merge.PixelSnapH = true;
-        if (cjk && !cjkBytes.empty())
-            io.Fonts->AddFontFromMemoryTTF(cjkBytes.data(), static_cast<int>(cjkBytes.size()), S(size), &merge, cjk);
+        if (cjk && !cjkBytes.empty()) {
+            ImFontConfig face = merge;
+            face.FontNo = cjkFace;
+            io.Fonts->AddFontFromMemoryTTF(cjkBytes.data(), static_cast<int>(cjkBytes.size()), S(size), &face, cjk);
+        }
         if (withNames)
             for (auto* f : {&zh, &ja, &ko})
                 if (!f->empty()) io.Fonts->AddFontFromMemoryTTF(f->data(), static_cast<int>(f->size()), S(size), &merge, names.Data);
@@ -262,7 +355,12 @@ void BuildFonts() {
     F.eyebrow = add(L"FONT_SEMIBOLD", 11.5f, false);
     F.mono = add(L"FONT_MONO", 12.5f, false);
     io.FontDefault = F.body;
+#ifdef _WIN32
     ImGui_ImplDX11_InvalidateDeviceObjects();
+#else
+    ImGui_ImplOpenGL3_DestroyFontsTexture();
+    ImGui_ImplOpenGL3_CreateFontsTexture();
+#endif
 }
 
 void ApplyStyle() {
@@ -614,7 +712,7 @@ void Install(Manifest m, Choices c, bool needsAdmin) {
     if (needsAdmin) {
         SetStatus(Tr("st.admin"), downloadShare);
         std::error_code ec;
-        const fs::path zip = fs::temp_directory_path(ec) / std::format(L"bz-setup-{}.zip", GetCurrentProcessId());
+        const fs::path zip = fs::temp_directory_path(ec) / std::format(L"bz-setup-{}.zip", ProcessId());
         {
             std::ofstream out(zip, std::ios::binary | std::ios::trunc);
             out.write(reinterpret_cast<const char*>(files[0].data()), static_cast<std::streamsize>(files[0].size()));
@@ -924,11 +1022,11 @@ void PageFolder() {
         case PathState::Ok: Note(Trf("p.ok", freeText, needText), P.ok, P.okSoft); break;
         case PathState::NeedsAdmin: Note(Trf("p.admin", freeText, needText), P.accent, P.accentSoft); break;
         case PathState::Empty: Note(Tr("p.empty"), P.bad, P.badSoft); break;
-        case PathState::NotAbsolute: Note(Tr("p.notabs"), P.bad, P.badSoft); break;
-        case PathState::DriveRoot: Note(Tr("p.root"), P.bad, P.badSoft); break;
-        case PathState::BadCharacters: Note(Tr("p.chars"), P.bad, P.badSoft); break;
+        case PathState::NotAbsolute: Note(TrOs("p.notabs"), P.bad, P.badSoft); break;
+        case PathState::DriveRoot: Note(TrOs("p.root"), P.bad, P.badSoft); break;
+        case PathState::BadCharacters: Note(TrOs("p.chars"), P.bad, P.badSoft); break;
         case PathState::NoDrive: Note(Trf("p.nodrive", Utf8(std::wstring(1, W.check.drive))), P.bad, P.badSoft); break;
-        case PathState::SystemFolder: Note(Tr("p.system"), P.bad, P.badSoft); break;
+        case PathState::SystemFolder: Note(TrOs("p.system"), P.bad, P.badSoft); break;
         case PathState::Foreign: Note(Tr("p.foreign"), P.bad, P.badSoft); break;
         case PathState::NoSpace: Note(Trf("p.nospace", freeText, needText), P.bad, P.badSoft); break;
         }
@@ -1046,7 +1144,7 @@ void PageModules() {
 void PageOptions() {
     DrawRail(4);
     BeginContent(true);
-    Heading(Tr("opt.title"), Tr("opt.sub"));
+    Heading(Tr("opt.title"), TrOs("opt.sub"));
     const float colW = (ImGui::GetContentRegionAvail().x - S(28)) / 2;
     if (ImGui::BeginTable("opts", 2, ImGuiTableFlags_SizingFixedFit)) {
         ImGui::TableSetupColumn("a", ImGuiTableColumnFlags_WidthFixed, colW);
@@ -1055,7 +1153,7 @@ void PageOptions() {
         Text(F.eyebrow, P.muted, Tr("shortcuts"));
         ImGui::Dummy({0, S(2)});
         Check("desk", Tr("desktop"), &W.choices.desktop);
-        Check("start", Tr("startmenu"), &W.choices.startMenu);
+        Check("start", TrOs("startmenu"), &W.choices.startMenu);
         ImGui::TableNextColumn();
         Text(F.eyebrow, P.muted, Tr("assoc"));
         ImGui::Dummy({0, S(2)});
@@ -1195,7 +1293,7 @@ void PageDone() {
     const std::string version = m ? m->version : std::string();
     Text(F.h2, P.text, W.updating ? Trf("fin.upd", version) : Trf("fin.title", version));
     ImGui::Dummy({0, S(2)});
-    Text(F.body, P.muted, Tr("fin.sub"), ImGui::GetContentRegionAvail().x * 0.9f);
+    Text(F.body, P.muted, TrOs("fin.sub"), ImGui::GetContentRegionAvail().x * 0.9f);
     ImGui::Dummy({0, S(10)});
     Check("run", Tr("run"), &W.runAfter);
     Check("news", Tr("news"), &W.newsAfter);
@@ -1382,6 +1480,7 @@ void MakeTextures() {
     W.markSmall = MarkTexture(static_cast<int>(S(14)), P.accent);
 }
 
+#ifdef _WIN32
 void ResizeToDpi(HWND hwnd, UINT dpi) {
     gScale = dpi / 96.0f;
     RECT r{0, 0, static_cast<LONG>(S(kWindowW)), static_cast<LONG>(S(kWindowH))};
@@ -1415,6 +1514,8 @@ LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM w, LPARAM l) {
     return DefWindowProcW(hwnd, msg, w, l);
 }
 
+#endif
+
 // --- pictures of every page (CI) -------------------------------------------------
 // BZ_SETUP_SHOTS=<folder>: the installer walks through its pages on its own
 // (a made-up release, nothing downloaded or written) and saves each one as
@@ -1429,6 +1530,7 @@ std::size_t       gShot = 0;
 int               gShotFrame = 0;
 fs::path          gShotDir;
 
+#ifdef _WIN32
 void SaveShot(const fs::path& file) {
     ID3D11Texture2D* back = nullptr;
     gSwap->GetBuffer(0, IID_PPV_ARGS(&back));
@@ -1460,6 +1562,26 @@ void SaveShot(const fs::path& file) {
     }
     back->Release();
 }
+
+#else
+void SaveShot(const fs::path& file) {
+    int w = 0, h = 0;
+    glfwGetFramebufferSize(gWindow, &w, &h);
+    std::vector<std::uint8_t> rgba(static_cast<std::size_t>(w) * h * 4), flipped(rgba.size());
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+    for (int y = 0; y < h; ++y) {   // OpenGL's rows go up
+        std::memcpy(&flipped[static_cast<std::size_t>(y) * w * 4], &rgba[static_cast<std::size_t>(h - 1 - y) * w * 4], static_cast<std::size_t>(w) * 4);
+        for (int x = 0; x < w; ++x) flipped[(static_cast<std::size_t>(y) * w + x) * 4 + 3] = 255;
+    }
+    std::size_t size = 0;
+    if (void* png = tdefl_write_image_to_png_file_in_memory(flipped.data(), w, h, 4, &size)) {
+        std::ofstream(file, std::ios::binary).write(static_cast<const char*>(png), static_cast<std::streamsize>(size));
+        mz_free(png);
+    }
+}
+
+#endif
 
 void Language(const char* code) {
     if (CurrentLanguage() != code) {
@@ -1504,8 +1626,13 @@ void PrepareShots(const fs::path& dir) {
         {"03-license", [] { W.langPopup = false; W.screen = Screen::License; }},
         {"04-decline", [] { W.dialog = Dialog::Decline; }},
         {"05-folder", [] { W.dialog = Dialog::None; W.screen = Screen::Folder; W.pathText = Utf8(DefaultDir().wstring()); }},
+#ifdef _WIN32
         {"06-folder-error", [] { W.pathText = "Q:\\BreezeCAD"; }},
         {"07-folder-admin", [] { W.pathText = "C:\\Program Files\\BreezeCAD"; }},
+#else
+        {"06-folder-error", [] { W.pathText = "BreezeCAD"; }},
+        {"07-folder-admin", [] { W.pathText = "/opt/BreezeCAD"; }},
+#endif
         {"08-folder-update", [] { W.updating = true; W.existing = Installed{DefaultDir(), "0.2.4.1-Beta"}; W.pathText = Utf8(DefaultDir().wstring()); }},
         {"09-modules", [] { W.updating = false; W.existing.reset(); W.pathText = Utf8(DefaultDir().wstring()); W.screen = Screen::Modules; }},
         {"10-options", [] { W.screen = Screen::Options; }},
@@ -1540,6 +1667,7 @@ void ShotTick() {
     }
 }
 
+#ifdef _WIN32
 int RunWindow(const std::wstring& title) {
     WNDCLASSEXW wc{sizeof(wc), CS_CLASSDC, WndProc, 0, 0, GetModuleHandleW(nullptr), nullptr, LoadCursorW(nullptr, IDC_ARROW), nullptr, nullptr,
                    L"BreezeCADSetup", nullptr};
@@ -1618,6 +1746,99 @@ int RunWindow(const std::wstring& title) {
     return 0;
 }
 
+#else
+int RunWindow(const std::wstring& title) {
+    if (!glfwInit()) {
+        std::fprintf(stderr, "BreezeCAD Setup: no display (run it in the desktop session)\n");
+        return 1;
+    }
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
+    // The scale of the screen the window opens on (1 on most Linux desktops, 2 on HiDPI).
+    float sx = 1, sy = 1;
+    if (GLFWmonitor* mon = glfwGetPrimaryMonitor()) glfwGetMonitorContentScale(mon, &sx, &sy);
+    gScale = std::max(1.0f, sx);
+    if (const char* forced = std::getenv("BZ_SETUP_SCALE")) gScale = static_cast<float>(std::atof(forced));
+    gWindow = glfwCreateWindow(static_cast<int>(S(kWindowW)), static_cast<int>(S(kWindowH)), Utf8(title).c_str(), nullptr, nullptr);
+    if (!gWindow) {
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);   // an old driver: the GL 2 path of the backend
+        gWindow = glfwCreateWindow(static_cast<int>(S(kWindowW)), static_cast<int>(S(kWindowH)), Utf8(title).c_str(), nullptr, nullptr);
+    }
+    if (!gWindow) {
+        std::fprintf(stderr, "BreezeCAD Setup: OpenGL is not available\n");
+        glfwTerminate();
+        return 1;
+    }
+    if (const auto png = Resource(L"ICON_app"); !png.empty()) {
+        int w = 0, h = 0, c = 0;
+        if (stbi_uc* rgba = stbi_load_from_memory(png.data(), static_cast<int>(png.size()), &w, &h, &c, 4)) {
+            const GLFWimage icon{w, h, rgba};
+            glfwSetWindowIcon(gWindow, 1, &icon);
+            stbi_image_free(rgba);
+        }
+    }
+    glfwSetWindowCloseCallback(gWindow, [](GLFWwindow* w) {
+        glfwSetWindowShouldClose(w, GLFW_FALSE);   // the pages decide (during the installation it asks first)
+        gCloseAsked = true;
+    });
+    glfwMakeContextCurrent(gWindow);
+    glfwSwapInterval(1);
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::GetIO().IniFilename = nullptr;
+    ImGui::GetIO().LogFilename = nullptr;
+    ImGui_ImplGlfw_InitForOpenGL(gWindow, true);
+    ImGui_ImplOpenGL3_Init(nullptr);
+    for (int i = 0; i < 4; ++i) {
+        const std::wstring name = std::format(L"PAIN{}", i + 1);
+        W.pain[i] = JpegTexture(name.c_str());
+    }
+
+    float lastScale = 0;
+    while (!W.quit) {
+        glfwPollEvents();
+        if (glfwGetWindowAttrib(gWindow, GLFW_ICONIFIED)) {
+            glfwWaitEventsTimeout(0.05);
+            continue;
+        }
+        if (gFontsDirty || lastScale != gScale) {
+            BuildFonts();
+            ApplyStyle();
+            MakeTextures();
+            gFontsDirty = false;
+            lastScale = gScale;
+        }
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+        Frame();
+        ImGui::Render();
+        int w = 0, h = 0;
+        glfwGetFramebufferSize(gWindow, &w, &h);
+        glViewport(0, 0, w, h);
+        const ImVec4 clear = V4(P.panel);
+        glClearColor(clear.x, clear.y, clear.z, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        ShotTick();
+        glfwSwapBuffers(gWindow);
+    }
+    W.cancel = true;
+    if (W.worker.joinable()) W.worker.join();
+    if (W.loader.joinable()) W.loader.join();
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+    glfwDestroyWindow(gWindow);
+    glfwTerminate();
+    return 0;
+}
+
+#endif
+
 // --- entry points -------------------------------------------------------------
 
 /// The elevated helper: unpack into a folder the person cannot write to.
@@ -1651,13 +1872,43 @@ std::string LanguageFromSettings() {
     return text.substr(q1 + 1, q2 - q1 - 1);
 }
 
+#ifndef _WIN32
+/// The file managers' previews: the picture a part, assembly or project keeps
+/// inside (preview.png), taken out as is — the file manager scales it.
+int Thumbnail(const fs::path& in, const fs::path& out) {
+    std::ifstream file(in, std::ios::binary);
+    const std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(file), {}};
+    mz_zip_archive zip{};
+    if (bytes.empty() || !mz_zip_reader_init_mem(&zip, bytes.data(), bytes.size(), 0)) return 1;
+    std::size_t size = 0;
+    void* png = nullptr;
+    // A project keeps the assembly's picture at the top; documents keep theirs too.
+    for (const char* name : {"preview.png", "thumbnail.png"}) {
+        const int index = mz_zip_reader_locate_file(&zip, name, nullptr, 0);
+        if (index >= 0 && (png = mz_zip_reader_extract_to_heap(&zip, static_cast<mz_uint>(index), &size, 0))) break;
+    }
+    mz_zip_reader_end(&zip);
+    if (!png) return 1;
+    std::ofstream(out, std::ios::binary).write(static_cast<const char*>(png), static_cast<std::streamsize>(size));
+    mz_free(png);
+    return 0;
+}
+#endif
+
 } // namespace
 
+#ifdef _WIN32
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     std::vector<std::wstring> args(argv + 1, argv + argc);
     LocalFree(argv);
+#else
+int main(int argc, char** argv) {
+    std::vector<std::wstring> args;
+    for (int i = 1; i < argc; ++i) args.push_back(Wide(argv[i]));
+    if (args.size() >= 3 && args[0] == L"--thumbnail") return Thumbnail(argv[2], argv[3]);
+#endif
     const auto has = [&](const wchar_t* a) { return std::find(args.begin(), args.end(), a) != args.end(); };
     P = SystemIsDark() ? Dark() : Light();
 
@@ -1698,6 +1949,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // Runs from a copy in %TEMP%: the folder (with this very file) is removed.
         const auto found = FindInstalled();
         fs::path dir = found ? found->dir : SelfPath().parent_path();
+#ifdef _WIN32
         if (!has(L"--from-temp")) {
             std::error_code ec;
             const fs::path copy = fs::temp_directory_path(ec) / std::format(L"BreezeCAD-uninstall-{}.exe", GetCurrentProcessId());
@@ -1708,6 +1960,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             ShellExecuteW(nullptr, L"open", copy.c_str(), params.c_str(), nullptr, SW_SHOWNORMAL);
             return 0;
         }
+#endif
         for (std::size_t i = 0; i + 1 < args.size(); ++i)
             if (args[i] == L"--dir") dir = args[i + 1];
         if (has(L"--quiet")) {
@@ -1723,7 +1976,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     W.existing = FindInstalled();
     W.updating = W.existing.has_value();
     W.pathText = Utf8((W.existing ? W.existing->dir : DefaultDir()).wstring());
+#ifdef _WIN32
     if (const wchar_t* shots = _wgetenv(L"BZ_SETUP_SHOTS"); shots && *shots) {
+#else
+    if (const char* shots = std::getenv("BZ_SETUP_SHOTS"); shots && *shots) {
+#endif
         PrepareShots(shots);
         return RunWindow(L"BreezeCAD");
     }

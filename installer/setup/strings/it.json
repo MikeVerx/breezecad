@@ -130,5 +130,11 @@
  "pain.4.t": "Ctrl+S dopo ogni operazione",
  "pain.4.s": "Nessuno ha inventato questo riflesso, ce l'hanno insegnato: con ore di lavoro sparite insieme alla finestra del programma.",
  "pain.4.f": "Il tuo lavoro resta",
- "pain.4.x": "Salvataggio automatico ogni 2, 5 o 10 minuti, anche a metà di uno schizzo. Dopo un crash un pulsante ti riporta dove eri."
+ "pain.4.x": "Salvataggio automatico ogni 2, 5 o 10 minuti, anche a metà di uno schizzo. Dopo un crash un pulsante ti riporta dove eri.",
+ "p.notabs.lx": "Il percorso deve iniziare con “/” o “~/”, ad es. ~/BreezeCAD.",
+ "p.root.lx": "Non nella radice: scegli una cartella come ~/BreezeCAD.",
+ "p.system.lx": "Non in una cartella di sistema (/usr, /etc, /var…).",
+ "opt.sub.lx": "Collegamenti e file che il sistema aprirà con BreezeCAD.",
+ "startmenu.lx": "Nel menu delle applicazioni",
+ "fin.sub.lx": "BreezeCAD è nel menu delle applicazioni. Parti e assiemi ora si aprono con un doppio clic."
 }

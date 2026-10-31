@@ -130,5 +130,11 @@
  "pain.4.t": "Strg+S nach jedem Schritt",
  "pain.4.s": "Diesen Reflex hat niemand erfunden, er wurde antrainiert — mit Stunden Arbeit, die mit dem Programmfenster verschwunden sind.",
  "pain.4.f": "Ihre Arbeit bleibt",
- "pain.4.x": "Automatisches Speichern alle 2, 5 oder 10 Minuten, sogar mitten in der Skizze. Nach einem Absturz bringt Sie ein Klick dorthin zurück, wo Sie waren."
+ "pain.4.x": "Automatisches Speichern alle 2, 5 oder 10 Minuten, sogar mitten in der Skizze. Nach einem Absturz bringt Sie ein Klick dorthin zurück, wo Sie waren.",
+ "p.notabs.lx": "Der Pfad muss mit „/“ oder „~/“ beginnen, z. B. ~/BreezeCAD.",
+ "p.root.lx": "Nicht im Stammverzeichnis – wählen Sie einen Ordner wie ~/BreezeCAD.",
+ "p.system.lx": "Nicht in einem Systemordner (/usr, /etc, /var…).",
+ "opt.sub.lx": "Verknüpfungen und Dateien, die das System mit BreezeCAD öffnet.",
+ "startmenu.lx": "Im Anwendungsmenü",
+ "fin.sub.lx": "BreezeCAD ist im Anwendungsmenü. Teile und Baugruppen öffnen sich jetzt per Doppelklick."
 }

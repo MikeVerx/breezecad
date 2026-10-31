@@ -130,5 +130,11 @@
  "pain.4.t": "Ctrl+S tras cada operación",
  "pain.4.s": "Nadie inventó este reflejo, nos lo enseñaron a la fuerza: con horas de trabajo perdidas junto a la ventana del programa.",
  "pain.4.f": "Su trabajo no se pierde",
- "pain.4.x": "Guardado automático cada 2, 5 o 10 minutos, incluso a mitad de un croquis. Tras un fallo, un botón le devuelve a donde estaba."
+ "pain.4.x": "Guardado automático cada 2, 5 o 10 minutos, incluso a mitad de un croquis. Tras un fallo, un botón le devuelve a donde estaba.",
+ "p.notabs.lx": "La ruta debe empezar por «/» o «~/», por ejemplo ~/BreezeCAD.",
+ "p.root.lx": "No en la raíz: elija una carpeta como ~/BreezeCAD.",
+ "p.system.lx": "No en una carpeta del sistema (/usr, /etc, /var…).",
+ "opt.sub.lx": "Accesos directos y archivos que el sistema abrirá con BreezeCAD.",
+ "startmenu.lx": "En el menú de aplicaciones",
+ "fin.sub.lx": "BreezeCAD está en el menú de aplicaciones. Piezas y ensamblajes se abren ahora con doble clic."
 }

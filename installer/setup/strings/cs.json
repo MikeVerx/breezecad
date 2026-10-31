@@ -130,5 +130,11 @@
  "pain.4.t": "Ctrl+S po každé operaci",
  "pain.4.s": "Tento reflex nikdo nevymyslel, byl vycvičen — za cenu hodin práce, které zmizely spolu s oknem programu.",
  "pain.4.f": "Práce se neztratí",
- "pain.4.x": "Automatické ukládání každé 2, 5 nebo 10 minut, i uprostřed náčrtu. Po pádu vás jedno tlačítko vrátí tam, kde jste skončili."
+ "pain.4.x": "Automatické ukládání každé 2, 5 nebo 10 minut, i uprostřed náčrtu. Po pádu vás jedno tlačítko vrátí tam, kde jste skončili.",
+ "p.notabs.lx": "Cesta musí začínat „/“ nebo „~/“, např. ~/BreezeCAD.",
+ "p.root.lx": "Ne do kořene — zvolte složku, např. ~/BreezeCAD.",
+ "p.system.lx": "Ne do systémové složky (/usr, /etc, /var…).",
+ "opt.sub.lx": "Zástupci a soubory, které systém otevře v BreezeCAD.",
+ "startmenu.lx": "V nabídce aplikací",
+ "fin.sub.lx": "BreezeCAD je v nabídce aplikací. Díly a sestavy se nyní otevírají dvojklikem."
 }

@@ -130,5 +130,11 @@
  "pain.4.t": "Her işlemden sonra Ctrl+S",
  "pain.4.s": "Bu refleksi kimse icat etmedi, bize öğretildi — program penceresiyle birlikte kaybolan saatlerce iş pahasına.",
  "pain.4.f": "Emeğiniz kaybolmaz",
- "pain.4.x": "Her 2, 5 veya 10 dakikada otomatik kayıt, çizimin ortasında bile. Bir çökmeden sonra tek düğme sizi kaldığınız yere döndürür."
+ "pain.4.x": "Her 2, 5 veya 10 dakikada otomatik kayıt, çizimin ortasında bile. Bir çökmeden sonra tek düğme sizi kaldığınız yere döndürür.",
+ "p.notabs.lx": "Yol “/” veya “~/” ile başlamalı, örneğin ~/BreezeCAD.",
+ "p.root.lx": "Kök klasöre değil — ~/BreezeCAD gibi bir klasör seçin.",
+ "p.system.lx": "Sistem klasörüne değil (/usr, /etc, /var…).",
+ "opt.sub.lx": "Kısayollar ve sistemin BreezeCAD ile açacağı dosyalar.",
+ "startmenu.lx": "Uygulamalar menüsünde",
+ "fin.sub.lx": "BreezeCAD uygulamalar menüsünde. Parçalar ve montajlar artık çift tıklamayla açılır."
 }
