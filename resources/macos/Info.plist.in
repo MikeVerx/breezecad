@@ -34,6 +34,184 @@
 	<true/>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
+	<!-- Its files: Finder opens them in BreezeCAD, shows their icons and (the
+	     Quick Look extension in PlugIns) the model's picture. -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>BreezeCAD Part</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>CFBundleTypeIconFile</key>
+			<string>part</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>io.github.mikeverx.breezecad.part</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>BreezeCAD Assembly</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>CFBundleTypeIconFile</key>
+			<string>assembly</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>io.github.mikeverx.breezecad.assembly</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>BreezeCAD Project</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>CFBundleTypeIconFile</key>
+			<string>project</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>io.github.mikeverx.breezecad.project</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>BreezeCAD Module</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>CFBundleTypeIconFile</key>
+			<string>module</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>io.github.mikeverx.breezecad.module</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>BreezeCAD Library</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>CFBundleTypeIconFile</key>
+			<string>library</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>io.github.mikeverx.breezecad.library</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>io.github.mikeverx.breezecad.part</string>
+			<key>UTTypeDescription</key>
+			<string>BreezeCAD Part</string>
+			<key>UTTypeIconFile</key>
+			<string>part</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>bzc</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>io.github.mikeverx.breezecad.assembly</string>
+			<key>UTTypeDescription</key>
+			<string>BreezeCAD Assembly</string>
+			<key>UTTypeIconFile</key>
+			<string>assembly</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>bza</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>io.github.mikeverx.breezecad.project</string>
+			<key>UTTypeDescription</key>
+			<string>BreezeCAD Project</string>
+			<key>UTTypeIconFile</key>
+			<string>project</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>bzp</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>io.github.mikeverx.breezecad.module</string>
+			<key>UTTypeDescription</key>
+			<string>BreezeCAD Module</string>
+			<key>UTTypeIconFile</key>
+			<string>module</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>bzmod</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>io.github.mikeverx.breezecad.library</string>
+			<key>UTTypeDescription</key>
+			<string>BreezeCAD Library</string>
+			<key>UTTypeIconFile</key>
+			<string>library</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>bzlib</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 MikeVerx. MPL-2.0.</string>
 </dict>

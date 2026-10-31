@@ -473,6 +473,30 @@ jobs:
         run: |
           bash scripts/package-macos.sh build/macos/bin release
           bash scripts/package-macos.sh build/macos/bin release --beta
+      # Finder's side: the types are the app's, Quick Look draws the picture a
+      # part keeps inside (the thumbnail extension), the disk image mounts.
+      - name: File types, thumbnails and the disk image
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        continue-on-error: true
+        run: |
+          mkdir -p /tmp/ql shots && ditto -x -k release/BreezeCAD-macos.zip /tmp/ql
+          app=/tmp/ql/BreezeCAD.app
+          /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app"
+          pluginkit -a "$app/Contents/PlugIns/BreezeCADThumbnails.appex" || true
+          ext=$(pluginkit -m -p com.apple.quicklook.thumbnail -v 2>/dev/null | grep -i breezecad || true)
+          python3 - <<'PY'
+          import zipfile
+          z = zipfile.ZipFile("/tmp/ql/Пример.bzc", "w")
+          z.writestr("manifest.json", "{}")
+          z.write("installer/icons/png/part.png", "preview.png")
+          z.close()
+          PY
+          uti=$(mdls -name kMDItemContentType -raw /tmp/ql/Пример.bzc 2>/dev/null || true)
+          qlmanage -t -s 256 -o shots /tmp/ql/Пример.bzc > ql.log 2>&1 || true
+          thumb=$(ls shots/*.bzc.png 2>/dev/null | head -1)
+          hdiutil attach -nobrowse -readonly release/BreezeCAD-macos.dmg > dmg.log && mounted=yes || mounted=no
+          [ "$mounted" = yes ] && ls /Volumes/BreezeCAD > dmg-list.txt && hdiutil detach -quiet /Volumes/BreezeCAD
+          echo "::notice title=macOS Finder::type: ${uti:-?}; extension: ${ext:-not registered}; thumbnail: ${thumb:-none ($(tail -1 ql.log))}; dmg: $mounted ($(tr '\n' ' ' < dmg-list.txt 2>/dev/null)) $(du -h release/BreezeCAD-macos.dmg | cut -f1)"
       # From the unpacked zip, with Homebrew's libraries moved away: does the
       # app start on its own?
       - name: Start check
@@ -504,7 +528,9 @@ jobs:
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         with:
           name: BreezeCAD-macos
-          path: release/BreezeCAD-macos.zip
+          path: |
+            release/BreezeCAD-macos.zip
+            release/BreezeCAD-macos.dmg
           compression-level: 0
           retention-days: 30
       - uses: actions/upload-artifact@v4
@@ -559,7 +585,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           files=(BreezeCAD-windows.zip BreezeCAD-beta-windows.zip BreezeCAD-linux.tar.gz BreezeCAD-beta-linux.tar.gz
-                 BreezeCAD-macos.zip BreezeCAD-beta-macos.zip
+                 BreezeCAD-macos.zip BreezeCAD-macos.dmg BreezeCAD-beta-macos.zip
                  BreezeCAD-Setup.exe BreezeCAD-Setup-offline.exe setup-manifest.json
                  BreezeCAD-Setup-linux BreezeCAD-Setup-linux-offline setup-manifest-linux.json BreezeCAD-linux.zip)
           for f in "${files[@]}"; do test -s "release/$f" || { echo "::error::missing $f"; exit 1; }; done
@@ -580,6 +606,7 @@ jobs:
           • BreezeCAD-beta-linux.tar.gz — для бета-тестеров: внутри «Запустить BreezeCAD.sh» и «ИНСТРУКЦИЯ для тестеров.txt».
 
           macOS 14+ на процессорах Apple (M1 и новее):
+          • BreezeCAD-macos.dmg — образ диска: открыть и перетащить BreezeCAD в «Программы». Файлы деталей и сборок открываются в BreezeCAD, в Finder видны их картинки.
           • BreezeCAD-macos.zip — обычная: распаковать и открыть BreezeCAD.app. Первый запуск — правой кнопкой → «Открыть»; на macOS 15+ — «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть».
           • BreezeCAD-beta-macos.zip — для бета-тестеров: внутри BreezeCAD.app и «ИНСТРУКЦИЯ для тестеров.txt»."
           if ! gh release view next-build >/dev/null 2>&1; then
@@ -621,7 +648,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           files=(BreezeCAD-windows.zip BreezeCAD-beta-windows.zip BreezeCAD-linux.tar.gz BreezeCAD-beta-linux.tar.gz
-                 BreezeCAD-macos.zip BreezeCAD-beta-macos.zip
+                 BreezeCAD-macos.zip BreezeCAD-macos.dmg BreezeCAD-beta-macos.zip
                  BreezeCAD-Setup.exe BreezeCAD-Setup-offline.exe setup-manifest.json
                  BreezeCAD-Setup-linux BreezeCAD-Setup-linux-offline setup-manifest-linux.json BreezeCAD-linux.zip)
           for f in "${files[@]}"; do test -s "release/$f" || { echo "::error::missing $f"; exit 1; }; done

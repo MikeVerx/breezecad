@@ -60,6 +60,9 @@ add_subdirectory(src)
 if(BZ_BUILD_INSTALLER)
     add_subdirectory(installer)
 endif()
+if(APPLE AND BZ_BUILD_APP)
+    add_subdirectory(installer/macos)
+endif()
 
 if(BZ_BUILD_MCP)   # a separate package, not a part of the program
     add_subdirectory(modules/mcp)

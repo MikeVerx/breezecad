@@ -3,6 +3,7 @@
 #include "app/CrashGuard.h"
 
 #include "app/Language.h"
+#include "platform/OpenFiles.h"
 #include "core/Monitor.h"
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
@@ -201,6 +202,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     glfwSetWindowSizeCallback(myWindow.Handle(), [](GLFWwindow* w, int, int) { OnAnyInput(w, Wake::Size); });
     glfwSetWindowFocusCallback(myWindow.Handle(), [](GLFWwindow* w, int) { OnAnyInput(w, Wake::Focus); });
     glfwSetWindowRefreshCallback(myWindow.Handle(), [](GLFWwindow* w) { OnAnyInput(w, Wake::Refresh); });
+    platform::ListenForOpenRequests();   // macOS: documents double-clicked in Finder
     glfwSetDropCallback(myWindow.Handle(), [](GLFWwindow* w, int count, const char** paths) {   // UTF-8 paths
         auto* tap = TapOf(w);
         if (!tap) return;
@@ -405,6 +407,7 @@ int Application::Run() {
             myFramesToDraw = std::max(myFramesToDraw, 3);
         }
         PollShotRequest();
+        for (std::filesystem::path& f : platform::TakeOpenRequests()) myInput.dropped.push_back(std::move(f));
         if (!myInput.dropped.empty()) {   // a module package or documents dragged in
             const std::vector<std::filesystem::path> files = std::move(myInput.dropped);
             myInput.dropped.clear();
