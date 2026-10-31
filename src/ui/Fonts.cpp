@@ -1,5 +1,7 @@
 #include "ui/Fonts.h"
 
+#include "core/I18n.h"
+
 #include "core/Log.h"
 
 #include <imgui.h>
@@ -113,9 +115,16 @@ bool Fonts::Load(const std::filesystem::path& assetsDir, float scale, const std:
         if (cjk.empty()) {
             log::Warn("No font with {} glyphs found: text in that language shows question marks", language);
         } else {
-            const ImWchar* ranges = language == "zh" ? atlas->GetGlyphRangesChineseSimplifiedCommon()
-                                  : language == "ja" ? atlas->GetGlyphRangesJapanese()
-                                                     : atlas->GetGlyphRangesKorean();
+            // The language's usual set plus every character its catalog uses.
+            static ImVector<ImWchar> built;
+            built.clear();
+            ImFontGlyphRangesBuilder builder;
+            builder.AddRanges(language == "zh" ? atlas->GetGlyphRangesChineseSimplifiedCommon()
+                              : language == "ja" ? atlas->GetGlyphRangesJapanese()
+                                                 : atlas->GetGlyphRangesKorean());
+            builder.AddText(i18n::AllTranslatedText().c_str());
+            builder.BuildRanges(&built);
+            const ImWchar* ranges = built.Data;
             const std::u8string path = cjk.u8string();
             const std::pair<ImFont*, float> targets[] = {{body, 13.0f}, {bodySmall, 12.0f}, {caption, 11.0f}, {medium, 13.0f},
                                                          {strong, 13.0f}, {title, 14.0f}, {display, 22.0f}};

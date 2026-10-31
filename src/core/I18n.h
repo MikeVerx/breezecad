@@ -42,6 +42,10 @@ std::vector<Language> Available(const std::filesystem::path& builtInDir, const s
 Status Use(const Language& language);
 /// The code of the language in use ("ru" at start).
 const std::string& Current();
+/// Every translation of the language in use, one after another: the fonts
+/// take their glyphs from it (Chinese "common" ranges miss rarer characters
+/// such as 钣 in 钣金, sheet metal).
+std::string AllTranslatedText();
 
 /// The language to start with when the user has not chosen one: the system's
 /// ("de", "uk"), Russian for a minimal system with no locale.

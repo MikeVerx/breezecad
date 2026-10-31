@@ -24,6 +24,8 @@ std::string SystemLanguage();
 
 void               UseLanguage(const std::string& code);
 const std::string& CurrentLanguage();
+/// Every text of the current language, one after another (its glyphs for the fonts).
+std::string AllText();
 
 /// The text of `key` in the current language (UTF-8; valid until UseLanguage).
 const char* Tr(std::string_view key);

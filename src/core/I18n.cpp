@@ -80,6 +80,16 @@ Catalog& Active() {
     return catalog;
 }
 
+} // namespace
+
+std::string AllTranslatedText() {
+    std::string out;
+    for (const auto& [key, value] : Active().strings) out += value;
+    return out;
+}
+
+namespace {
+
 /// The head of a catalog file: code and name, without reading the strings.
 std::optional<Language> ReadHead(const std::filesystem::path& file, bool builtIn) {
     std::ifstream in(file, std::ios::binary);

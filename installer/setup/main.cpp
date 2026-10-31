@@ -51,6 +51,7 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <span>
 #include <thread>
 
 #ifndef BZ_SETUP_VERSION
@@ -284,11 +285,18 @@ std::optional<fs::path> SystemFont(std::initializer_list<const wchar_t*> names) 
     // Noto Sans CJK holds all three; WenQuanYi is Chinese only.
     const std::vector<fs::path> dirs = {"/usr/share/fonts/opentype/noto", "/usr/share/fonts/noto-cjk", "/usr/share/fonts/google-noto-cjk",
                                         "/usr/share/fonts/truetype/noto", "/usr/share/fonts/noto", "/usr/share/fonts/truetype/wqy"};
+    // The names asked for are Windows' own; Linux has its own set. (A list
+    // assigned to the parameter here pointed at a temporary gone by the loop:
+    // garbage names, and the release build threw on them.)
     (void)names;
-    names = {L"NotoSansCJK-Regular.ttc", L"wqy-microhei.ttc", L"wqy-zenhei.ttc"};
+    static constexpr const wchar_t* linuxNames[] = {L"NotoSansCJK-Regular.ttc", L"wqy-microhei.ttc", L"wqy-zenhei.ttc"};
+    const std::span<const wchar_t* const> list = linuxNames;
+#endif
+#ifdef _WIN32
+    const std::initializer_list<const wchar_t*>& list = names;
 #endif
     for (const fs::path& d : dirs)
-        for (const wchar_t* n : names) {
+        for (const wchar_t* n : list) {
             const fs::path p = d / n;
             std::error_code ec;
             if (fs::exists(p, ec)) return p;
@@ -314,6 +322,16 @@ void BuildFonts() {
     if (lang == "zh") cjk = io.Fonts->GetGlyphRangesChineseSimplifiedCommon(), cjkFile = SystemFont({L"msyh.ttc", L"simsun.ttc"});
     if (lang == "ja") cjk = io.Fonts->GetGlyphRangesJapanese(), cjkFile = SystemFont({L"YuGothM.ttc", L"meiryo.ttc", L"msgothic.ttc"});
     if (lang == "ko") cjk = io.Fonts->GetGlyphRangesKorean(), cjkFile = SystemFont({L"malgun.ttf", L"gulim.ttc"});
+    // The usual set misses rarer characters the texts use (钣 of 钣金): those are added.
+    static ImVector<ImWchar> cjkBuilt;
+    if (cjk) {
+        ImFontGlyphRangesBuilder b;
+        b.AddRanges(cjk);
+        b.AddText(AllText().c_str());
+        cjkBuilt.clear();
+        b.BuildRanges(&cjkBuilt);
+        cjk = cjkBuilt.Data;
+    }
     static std::vector<std::uint8_t> cjkBytes, zh, ja, ko;
     if (cjkFile) cjkBytes = ReadFile(*cjkFile);
     if (zh.empty()) if (auto f = SystemFont({L"msyh.ttc", L"simsun.ttc"})) zh = ReadFile(*f);

@@ -90,6 +90,12 @@ void UseLanguage(const std::string& code) {
 
 const std::string& CurrentLanguage() { return S().code; }
 
+std::string AllText() {
+    std::string out;
+    for (const auto& [key, value] : S().current) out += value;
+    return out;
+}
+
 const char* Tr(std::string_view key) {
     const State& s = S();
     for (const Table* t : {&s.current, &s.english, &s.russian})
