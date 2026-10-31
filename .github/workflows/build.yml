@@ -32,6 +32,8 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
+    permissions:
+      contents: write   # the installer's pictures go to the pr-assets branch
     defaults:
       run:
         shell: msys2 {0}
@@ -156,6 +158,21 @@ jobs:
           mkdir -p shots/setup
           BZ_SETUP_SHOTS="$(cygpath -w "$PWD/shots/setup")" timeout 180 ./release/BreezeCAD-Setup.exe
           ls shots/setup
+      # The same pictures where people can look at them without downloading
+      # an archive: setup/ in the pr-assets branch (replaced every run).
+      - name: Installer screens to pr-assets
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          ls shots/setup/*.png > /dev/null 2>&1 || exit 0
+          git clone -q --depth 1 --branch pr-assets "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" pa
+          rm -rf pa/setup && mkdir -p pa/setup && cp shots/setup/*.png pa/setup/
+          cd pa
+          git add -A setup
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "setup screens: ${GITHUB_SHA::7} (${GITHUB_REF_NAME})" || exit 0
+          git push -q origin pr-assets
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         with:
