@@ -33,7 +33,10 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <unistd.h>
+#include <clocale>
 #include <cstdio>
+#include <langinfo.h>
+#include <string_view>
 #endif
 #include <miniz.h>
 #include <stb_image.h>
@@ -1905,6 +1908,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     LocalFree(argv);
 #else
 int main(int argc, char** argv) {
+    // Paths go between wide strings and the file system through the C
+    // library's multibyte conversion: with LANG unset (a bare session, a
+    // launcher) that is ASCII only, and the first Cyrillic name ("Рабочий
+    // стол") threw. UTF-8 whatever the session says.
+    std::setlocale(LC_ALL, "");
+    if (const char* cs = nl_langinfo(CODESET); !cs || std::string_view(cs) != "UTF-8")
+        for (const char* name : {"C.UTF-8", "C.utf8", "en_US.UTF-8"})
+            if (std::setlocale(LC_CTYPE, name)) break;
     std::vector<std::wstring> args;
     for (int i = 1; i < argc; ++i) args.push_back(Wide(argv[i]));
     if (args.size() >= 3 && args[0] == L"--thumbnail") return Thumbnail(argv[2], argv[3]);
