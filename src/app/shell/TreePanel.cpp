@@ -70,7 +70,8 @@ RowResult Row(AppContext& app, const char* id, const std::string& name, const Ro
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     RowResult r;
-    const float h = ui.S(30);
+    // Compact rows on a desktop; a finger needs the taller ones.
+    const float h = app.shell.mobile.phone ? ui.S(30) : ui.S(22);
     const ImVec2 p = ImGui::GetCursorScreenPos();
     ImGui::PushID(id);
     r.clicked = ImGui::InvisibleButton("##row", {width, h}, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
@@ -83,46 +84,47 @@ RowResult Row(AppContext& app, const char* id, const std::string& name, const Ro
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
     if (style.selected) {
-        dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.selectedRow), ui.S(6));
+        dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.selectedRow), ui.S(5));
         dl->AddRectFilled(p, {p.x + ui.S(2), p.y + h}, ui::ToU32(c.accent));
     } else if (r.hovered) {
-        dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.hoverRow), ui.S(6));
+        dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.hoverRow), ui.S(5));
     }
 
-    float x = p.x + ui.S(8) + ui.S(16) * static_cast<float>(style.depth);
+    const ImVec2 mouse = ImGui::GetMousePos();
+    // The eye in its own column at the very left, the same for every depth:
+    // open or crossed out, always shown, so what is hidden is seen at a glance.
+    const float eyeX = p.x + ui.S(4);
+    if (style.hideable) {
+        const float es = ui.S(14);
+        const bool overEye = r.hovered && mouse.x >= eyeX - ui.S(3) && mouse.x <= eyeX + es + ui.S(3);
+        ui.icons.Draw(dl, style.hidden ? "ui-eye-off" : "ui-eye", {eyeX, p.y + (h - es) / 2}, es,
+                      overEye ? c.text : style.hidden ? c.textDisabled : c.textMuted);
+        if (overEye) ui::ItemTooltip(ui, style.hidden ? Tr("Показать") : Tr("Скрыть"));
+        if (r.clicked && overEye) {
+            r.eyeClicked = true;
+            r.clicked = false;
+        }
+    }
+
+    float x = p.x + ui.S(22) + ui.S(14) * static_cast<float>(std::max(0, style.depth - 1));
     if (style.caret) {
         ui.icons.Draw(dl, style.open ? "ui-chevron-down" : "ui-chevron-right", {x, p.y + (h - ui.S(11)) / 2}, ui.S(11), c.textMuted);
-        const ImVec2 mouse = ImGui::GetMousePos();
-        if (r.clicked && mouse.x >= x - ui.S(4) && mouse.x <= x + ui.S(14)) {
+        if (r.clicked && mouse.x >= x - ui.S(3) && mouse.x <= x + ui.S(13)) {
             r.caretClicked = true;
             r.clicked = false;
         }
     }
-    x += ui.S(16);
+    x += ui.S(14);
     if (*style.icon) {
         ui.icons.Draw(dl, style.icon, {x, p.y + (h - ui.S(16)) / 2}, ui.S(16), {1, 1, 1, style.muted ? 0.45f : 1.0f});
-        x += ui.S(24);
+        x += ui.S(22);
     }
 
-    // Right side: the eye, status icon and meta text.
+    // Right side: the status icon and meta text.
     float right = p.x + width - ui.S(8);
-    if (style.hideable) {
-        right -= ui.S(16);
-        // Always there for a hidden item, so it can be found again; else on hover.
-        if (style.hidden || r.hovered)
-            ui.icons.Draw(dl, style.hidden ? "ui-eye-off" : "ui-eye", {right, p.y + (h - ui.S(15)) / 2}, ui.S(15),
-                          style.hidden ? c.textMuted : c.textSecondary);
-        const ImVec2 mouse = ImGui::GetMousePos();
-        if (r.clicked && mouse.x >= right - ui.S(4) && mouse.x <= right + ui.S(20)) {
-            r.eyeClicked = true;
-            r.clicked = false;
-        }
-        right -= ui.S(6);
-    }
     if (style.statusIcon) {
         right -= ui.S(16);
         ui.icons.Draw(dl, style.statusIcon, {right, p.y + (h - ui.S(15)) / 2}, ui.S(15), {1, 1, 1, 1});
-        const ImVec2 mouse = ImGui::GetMousePos();
         if (r.clicked && mouse.x >= right - ui.S(4) && mouse.x <= right + ui.S(20)) {
             r.statusClicked = true;
             r.clicked = false;
@@ -283,6 +285,8 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
     const float rowW = width - ui.S(12);
     ImGui::SetCursorPosX(ui.S(6));
     ImGui::BeginGroup();
+    // Rows packed close: the tree of a long part fits without scrolling.
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {ImGui::GetStyle().ItemSpacing.x, app.shell.mobile.phone ? ui.S(4) : ui.S(1)});
     ImGui::Dummy({0, ui.S(4)});
     app.shell.hoveredTreeItem = {};
 
@@ -351,7 +355,7 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         ImGui::PushID(static_cast<int>(f.id.value));
         if (app.shell.renaming == f.id) {
             // Inline rename: Enter or clicking away applies, Esc cancels.
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ui.S(40) + ui.S(16) * static_cast<float>(depth));
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ui.S(36) + ui.S(14) * static_cast<float>(std::max(0, depth - 1)));
             ui::TextField(ui, "##rename", app.shell.renameText, rowW - ui.S(48), nullptr, app.shell.renameFocus);
             app.shell.renameFocus = false;
             const bool escape = ImGui::IsKeyPressed(ImGuiKey_Escape);
@@ -459,6 +463,7 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
                                : Tr("Деталь пустая. Нажмите «Начать эскиз» на ленте (S) и выберите плоскость — с этого начинается любая деталь."));
         ImGui::PopTextWrapPos();
     }
+    ImGui::PopStyleVar();
     ImGui::EndGroup();
 }
 
@@ -528,6 +533,8 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
     const float rowW = width - ui.S(12);
     ImGui::SetCursorPosX(ui.S(6));
     ImGui::BeginGroup();
+    // Rows packed close: the tree of a long part fits without scrolling.
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {ImGui::GetStyle().ItemSpacing.x, app.shell.mobile.phone ? ui.S(4) : ui.S(1)});
     ImGui::Dummy({0, ui.S(4)});
     app.shell.hoveredTreeItem = {};
     {
@@ -559,6 +566,8 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
         style.icon = "tree-component";
         style.selected = st.selected == id;
         style.muted = !comp.visible;
+        style.hideable = true;
+        style.hidden = !comp.visible;
         style.caret = true;   // its origin and work geometry, its constraints
         style.open = app.shell.expanded.contains(id);
         if (const std::string problem = st.geometry.ProblemOf(id); !problem.empty()) {
@@ -580,7 +589,15 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
             else app.shell.expanded.insert(id);
         }
         if (r.clicked) st.selected = id;
-        if (r.doubleClicked && !picking) app.Later([&app, &session, id] { EditInPlace(app, session, id); });
+        if (r.eyeClicked)
+            app.Later([&st, id] {
+                if (assembly::Component* cc = st.assembly.FindComponent(id)) {
+                    st.Checkpoint(cc->visible ? N_("Скрыть") : N_("Показать"));
+                    cc->visible = !cc->visible;
+                    st.assembly.Touch();
+                }
+            });
+        if (r.doubleClicked && !picking && !r.eyeClicked) app.Later([&app, &session, id] { EditInPlace(app, session, id); });
         // The red mark of a part whose file is gone or broken: how to fix it.
         if (r.statusClicked) {
             st.selected = id;
@@ -784,6 +801,7 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
             ImGui::PopID();
         }
     }
+    ImGui::PopStyleVar();
     ImGui::EndGroup();
 }
 
