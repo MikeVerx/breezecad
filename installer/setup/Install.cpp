@@ -40,6 +40,7 @@ constexpr FileType kTypes[] = {
     {L".bza", L"BreezeCAD.Assembly", L"assembly.ico"},
     {L".bzmod", L"BreezeCAD.Module", L"module.ico"},
     {L".bzlib", L"BreezeCAD.Library", L"library.ico"},
+    {L".bzp", L"BreezeCAD.Project", L"project.ico"},
 };
 
 fs::path KnownFolder(REFKNOWNFOLDERID id) {
@@ -465,8 +466,8 @@ bool Register(const Choices& c, const std::string& version, std::uint64_t sizeBy
     // File types: every type is known to "Open with"; the chosen ones open in BreezeCAD by default.
     const std::wstring classes = L"Software\\Classes\\";
     const std::wstring command = Quoted(exe) + L" \"%1\"";
-    const bool chosen[] = {c.openParts, c.openAssemblies, c.openModules, c.openLibraries};
-    const std::wstring* typeNames[] = {&names.part, &names.assembly, &names.module, &names.library};
+    const bool chosen[] = {c.openParts, c.openAssemblies, c.openModules, c.openLibraries, c.openProjects};
+    const std::wstring* typeNames[] = {&names.part, &names.assembly, &names.module, &names.library, &names.project};
     for (std::size_t i = 0; i < std::size(kTypes); ++i) {
         const FileType& t = kTypes[i];
         const std::wstring prog = classes + t.progId;

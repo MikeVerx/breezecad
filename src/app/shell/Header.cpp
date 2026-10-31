@@ -67,6 +67,7 @@ void MainMenu(AppContext& app) {
         MenuAction(app, "file.exportStep");
         MenuAction(app, "file.exportStl");
         MenuAction(app, "file.export3mf");
+        if (const Session* t = app.workspace.ActiveTab(); t && t->assembly) MenuAction(app, "file.exportProject");
         ImGui::EndMenu();
     }
 #if defined(__ANDROID__)

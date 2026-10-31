@@ -124,6 +124,9 @@ jobs:
           if [ "$GITHUB_REF" = "refs/heads/main" ]; then tag="v$(echo "$label" | tr '[:upper:]' '[:lower:]')"; else tag=next-build; fi
           modules=()
           for m in build/windows-mingw/packages/*.bzmod; do modules+=(--module "$m"); cp "$m" release/; done
+          # Languages other than Russian and English: packs the installer downloads.
+          python3 scripts/i18n/make-packs.py release
+          for l in release/lang-*.zip; do [ -e "$l" ] && modules+=(--language "$l"); done
           python3 scripts/installer/make-manifest.py --version "$label" --tag "$tag" --program release/BreezeCAD-windows.zip \
             "${modules[@]}" -o release/setup-manifest.json
           cp build/windows-mingw/bin/BreezeCAD-Setup.exe release/
@@ -498,7 +501,7 @@ jobs:
                  BreezeCAD-Setup.exe BreezeCAD-Setup-offline.exe setup-manifest.json)
           for f in "${files[@]}"; do test -s "release/$f" || { echo "::error::missing $f"; exit 1; }; done
           # The modules the online installer downloads from this release.
-          for m in release/*.bzmod; do files+=("$(basename "$m")"); done
+          for m in release/*.bzmod release/lang-*.zip; do [ -e "$m" ] && files+=("$(basename "$m")"); done
           notes="Свежая сборка ветки next: коммит ${GITHUB_SHA::7}, $(date -u '+%Y-%m-%d %H:%M') UTC.
 
           Windows 10/11 (64-бит):
@@ -550,7 +553,7 @@ jobs:
                  BreezeCAD-macos.zip BreezeCAD-beta-macos.zip
                  BreezeCAD-Setup.exe BreezeCAD-Setup-offline.exe setup-manifest.json)
           for f in "${files[@]}"; do test -s "release/$f" || { echo "::error::missing $f"; exit 1; }; done
-          for m in release/*.bzmod; do files+=("$(basename "$m")"); done
+          for m in release/*.bzmod release/lang-*.zip; do [ -e "$m" ] && files+=("$(basename "$m")"); done
           number=$(sed -n '/^project(/,/)/s/.*VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt | head -1)
           suffix=$(sed -n 's/^set(BZ_VERSION_SUFFIX "\(.*\)")/\1/p' CMakeLists.txt | head -1)
           label="$number$suffix"                                   # 0.2.1-Beta

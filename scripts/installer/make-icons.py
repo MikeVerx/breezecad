@@ -25,6 +25,7 @@ KINDS = {
     "assembly": (".bza", (0x0F, 0x76, 0x6E, 255)),
     "module": (".bzmod", (0x6D, 0x28, 0xD9, 255)),
     "library": (".bzlib", (0xB4, 0x53, 0x09, 255)),
+    "project": (".bzp", (0xBE, 0x18, 0x5D, 255)),
 }
 
 

@@ -255,7 +255,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myScale = ChooseScale();
     myAppliedScaleSetting = mySettings.uiScale;
     progress(Tr("Шрифты и значки…"));
-    myFonts.Load(assets, myScale * framebufferScale);
+    myFonts.Load(assets, myScale * framebufferScale, i18n::Current(), LanguagePackDir());
     io.FontGlobalScale = 1.0f / framebufferScale;
     myIcons.SetDirectory(assets / "icons");
     myIcons.SetScale(framebufferScale);
@@ -282,7 +282,8 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
         progress(Trf("Открытие {}…", ToUtf8(file.filename())));
         // A module or a library opened from File Explorer installs; a document opens.
         const std::u8string ext = file.extension().u8string();
-        if (ext == u8".bzmod" || ext == u8".BZMOD" || ext == u8".bzlib" || ext == u8".BZLIB") OpenDropped(*myContext, file);
+        if (ext == u8".bzmod" || ext == u8".BZMOD" || ext == u8".bzlib" || ext == u8".BZLIB" || ext == u8".bzp" || ext == u8".BZP")
+            OpenDropped(*myContext, file);
         else myWorkspace.Open(file, myNotes, mySettings);
     }
     // Nothing asked for: the last file, if the user wants it (and it is still there).
@@ -627,7 +628,9 @@ void Application::ApplyScaleIfChanged() {
     const float density = winW > 0 && fbW > 0 ? static_cast<float>(fbW) / static_cast<float>(winW) : myFramebufferScale;
     const bool densityChanged = std::abs(density - myFramebufferScale) > 0.01f;
     const bool layoutChanged = myShell.mobile.phone != myScaledForPhone;
-    if (mySettings.uiScale == myAppliedScaleSetting && !densityChanged && !layoutChanged) return;
+    // Chinese, Japanese, Korean bring their own glyphs: a language switch builds the fonts again.
+    const bool languageChanged = myFonts.loadedLanguage != i18n::Current();
+    if (mySettings.uiScale == myAppliedScaleSetting && !densityChanged && !layoutChanged && !languageChanged) return;
     myScaledForPhone = myShell.mobile.phone;
     myAppliedScaleSetting = mySettings.uiScale;
     if (densityChanged) {
@@ -637,10 +640,10 @@ void Application::ApplyScaleIfChanged() {
         myIcons.SetScale(density);
     }
     const float scale = ChooseScale();
-    if (!densityChanged && std::abs(scale - myScale) < 1e-3f) return;
+    if (!densityChanged && !languageChanged && std::abs(scale - myScale) < 1e-3f) return;
     // Fonts are rasterised for one size: build them again, then the texture.
     myScale = scale;
-    myFonts.Load(myAssets, myScale * myFramebufferScale);
+    myFonts.Load(myAssets, myScale * myFramebufferScale, i18n::Current(), LanguagePackDir());
     ImGui_ImplOpenGL3_DestroyFontsTexture();
     ImGui_ImplOpenGL3_CreateFontsTexture();
     myUi->scale = myScale;

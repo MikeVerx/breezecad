@@ -363,6 +363,7 @@ void AssemblyRibbonImpl(AppContext& app, RibbonSink& r) {
     r.EndGroup();
 
     r.BeginGroup(N_("Экспорт"));
+    r.Large("file.exportProject", Tr("Проект\n.bzp"));
     r.BeginColumn();
     r.Small("file.exportStep", "STEP");
     r.Small("file.exportStl", "STL");

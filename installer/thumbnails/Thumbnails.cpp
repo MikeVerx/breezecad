@@ -38,7 +38,7 @@ namespace {
 constexpr CLSID kClsid = {0x6e7b4a2f, 0x3c1d, 0x4f8e, {0x9b, 0x5a, 0x0d, 0x2c, 0x7e, 0x91, 0xb4, 0xa3}};
 constexpr wchar_t kClsidText[] = L"{6E7B4A2F-3C1D-4F8E-9B5A-0D2C7E91B4A3}";
 constexpr wchar_t kThumbnailHandler[] = L"{e357fccd-a995-4576-b01f-234630154e96}";   // IThumbnailProvider
-constexpr const wchar_t* kExtensions[] = {L".bzc", L".bza"};
+constexpr const wchar_t* kExtensions[] = {L".bzc", L".bza", L".bzp"};
 constexpr std::uint64_t kLargestFile = 512ull << 20;   // past that Explorer gets the plain icon
 
 HMODULE           gModule = nullptr;

@@ -26,7 +26,7 @@ struct Choices {
     std::string              language = "ru";   ///< the program's interface language
     std::vector<std::string> modules;           ///< ids of the official modules to put in
     bool desktop = true, startMenu = true;
-    bool openParts = true, openAssemblies = true, openModules = true, openLibraries = false;
+    bool openParts = true, openAssemblies = true, openModules = true, openLibraries = false, openProjects = true;
 };
 
 /// A BreezeCAD put on this computer by the installer before.
@@ -87,7 +87,7 @@ void SetProgramLanguage(const std::string& code);
 
 /// Localised names of the four file types, for Explorer's "Type" column.
 struct TypeNames {
-    std::wstring part, assembly, module, library;
+    std::wstring part, assembly, module, library, project;
 };
 
 /// In the program's folder (elevated when the folder needs it): the marker

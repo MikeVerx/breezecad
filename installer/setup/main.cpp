@@ -650,7 +650,7 @@ void Install(Manifest m, Choices c, bool needsAdmin) {
     SetProgramLanguage(c.language);
 
     SetStatus(Tr("st.register"), 0.96f);
-    const TypeNames names{Wide(Tr("ft.part")), Wide(Tr("ft.asm")), Wide(Tr("ft.mod")), Wide(Tr("ft.lib"))};
+    const TypeNames names{Wide(Tr("ft.part")), Wide(Tr("ft.asm")), Wide(Tr("ft.mod")), Wide(Tr("ft.lib")), Wide(Tr("ft.prj"))};
     if (!Register(c, m.version, NeedBytes(m), names, error)) return Fail(Utf8(error));
     SetStatus(Tr("st.shortcuts"), 0.99f);
     MakeShortcuts(c, error);   // a missing shortcut is no reason to call the installation failed
@@ -1063,6 +1063,7 @@ void PageOptions() {
         Check("bza", (std::string(".bza   ") + Tr("t.asm")).c_str(), &W.choices.openAssemblies);
         Check("bzmod", (std::string(".bzmod   ") + Tr("t.mod")).c_str(), &W.choices.openModules, Tr("t.mod.sub"));
         Check("bzlib", (std::string(".bzlib   ") + Tr("t.lib")).c_str(), &W.choices.openLibraries);
+        Check("bzp", (std::string(".bzp   ") + Tr("t.prj")).c_str(), &W.choices.openProjects, Tr("t.prj.sub"));
         ImGui::EndTable();
     }
     EndContent();

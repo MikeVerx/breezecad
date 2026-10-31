@@ -15,6 +15,7 @@ add_executable(bz_tests
     assembly/AssemblyFileTests.cpp
     assembly/InventorConstraintsTests.cpp
     assembly/PartsBesideTests.cpp
+    assembly/ProjectPackTests.cpp
     assembly/SolverTests.cpp
     core/CrashCodeTests.cpp
     core/ExpressionTests.cpp
