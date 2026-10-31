@@ -33,7 +33,7 @@ class Recovery;
 class SketchEditor;
 struct OperationEditors;
 
-enum class LeftTab : unsigned char { Tree, Properties, Variables };
+enum class LeftTab : unsigned char { Tree, Properties, Variables, Mate };
 enum class RibbonTab : unsigned char { Model, Sketch, View };
 
 /// UI state of the window chrome that outlives a frame.

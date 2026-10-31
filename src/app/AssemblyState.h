@@ -78,6 +78,10 @@ public:
         /// "Переопределить": the picks replace the geometry (and type) of
         /// this constraint instead of making a new one.
         ObjectId                redefine;
+        /// All picked: the constraint is already in the assembly (the parts
+        /// moved, to be judged and tuned) until Применить / Готово keep it
+        /// or Отмена / Esc take it back.
+        ObjectId                preview;
     } creating;
 
     /// AutoDrop: a screw from the library waits for a click on a hole's rim.
@@ -121,6 +125,8 @@ public:
     /// Remembers the assembly as it is, before a change (one undo step).
     void Checkpoint(std::string label);
     bool Undo();
+    /// Undo that leaves nothing to redo: a trial (a constraint previewed) taken back.
+    bool Discard();
     bool Redo();
     bool CanUndo() const { return !myUndo.empty(); }
     bool CanRedo() const { return !myRedo.empty(); }

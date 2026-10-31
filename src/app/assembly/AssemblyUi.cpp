@@ -411,7 +411,7 @@ void Prompt(ui::Ui& ui, const ViewportFrame& vf, const char* text) {
 
 /// Value and options of a constraint (being made or chosen in the tree).
 /// Returns true when something changed (`before` is called first, once).
-bool ConstraintOptions(AppContext& app, assembly::Constraint& c, float width, const std::function<void()>& before) {
+bool ConstraintOptions(AppContext& app, assembly::Constraint& c, float width, const std::function<void()>& before, bool direction = true) {
     ui::Ui& ui = app.ui;
     bool changed = false;
     bool asked = false;
@@ -493,7 +493,7 @@ bool ConstraintOptions(AppContext& app, assembly::Constraint& c, float width, co
             if (assembly::IsJoint(c.type)) option = N_("Оси в одну сторону (не навстречу)");
             break;
     }
-    if (option) {
+    if (option && direction) {
         ui::FieldLabel(ui, Tr(option));
         const int v = ui::Segmented(ui, "con-flip", labels, c.flipped ? 1 : 0, 2, width);
         if (v != (c.flipped ? 1 : 0)) {
@@ -1012,6 +1012,7 @@ void StartConstraint(AppContext& app, assembly::ConstraintType type) {
     if (!s) return;
     StopEditing(app);
     AssemblyState& st = *s->assembly;
+    if (st.creating.preview) st.Discard();   // another constraint asked for: the trial one goes
     st.creating = {};
     st.newPart = {};
     st.creating.active = true;
@@ -1020,17 +1021,39 @@ void StartConstraint(AppContext& app, assembly::ConstraintType type) {
     if (type == assembly::ConstraintType::Gear) st.creating.constraint.flipped = true;   // external gears: opposite ways
     if (type == assembly::ConstraintType::Screw) st.creating.constraint.ratio = 2.0;     // a common lead, mm
     st.drag = {};
-    app.shell.leftTab = LeftTab::Tree;
+    app.shell.leftTab = LeftTab::Mate;
 }
 
 namespace {
 
-/// Makes (or, redefining, replaces) the constraint once all its picks are in.
-void FinishConstraint(AppContext& app, AssemblyState& st) {
+/// How many picks the constraint takes.
+int PicksNeeded(assembly::ConstraintType type) { return type == assembly::ConstraintType::Symmetry ? 3 : 2; }
+
+/// The trial constraint taken back (the parts return where they were).
+void DropPreview(AssemblyState& st) {
+    if (!st.creating.preview) return;
+    st.Discard();
+    st.creating.preview = {};
+}
+
+/// All picked: the constraint goes into the assembly at once, so the parts
+/// move and the direction and gap can be judged and tuned before it is kept.
+/// Called again after each change of the options: the same trial, updated.
+void ShowPreview(AppContext& app, AssemblyState& st) {
     auto& creating = st.creating;
     assembly::Constraint made = creating.constraint;
     if (assembly::IsJoint(made.type)) assembly::FitJoint(st.assembly, made);
     if (assembly::IsTransmission(made.type)) assembly::FitTransmission(st.assembly, made);
+    if (creating.preview) {
+        if (assembly::Constraint* shown = st.assembly.FindConstraint(creating.preview)) {
+            made.id = shown->id;
+            made.name = shown->name;
+            made.suppressed = shown->suppressed;
+            *shown = made;
+            st.assembly.Touch();
+        }
+        return;
+    }
     if (creating.redefine) {
         if (assembly::Constraint* old = st.assembly.FindConstraint(creating.redefine)) {
             st.Checkpoint(N_("Переопределение зависимости"));
@@ -1054,8 +1077,8 @@ void FinishConstraint(AppContext& app, AssemblyState& st) {
             }
             st.assembly.Touch();
             st.selected = id;
+            creating.preview = id;
         }
-        creating = {};
         return;
     }
     const auto fixed = [&](ObjectId c) { return st.assembly.IsFixed(c); };
@@ -1064,18 +1087,35 @@ void FinishConstraint(AppContext& app, AssemblyState& st) {
     st.Checkpoint(assembly::IsJoint(made.type) ? N_("Соединение") : N_("Зависимость"));
     const ObjectId id = st.assembly.AddConstraint(made).id;
     st.selected = id;
-    // Ready for the next one of the same kind, as in Inventor.
+    creating.preview = id;
+}
+
+} // namespace
+
+bool ApplyConstraint(AppContext& app, Session& session, bool close) {
+    (void)app;
+    AssemblyState& st = *session.assembly;
+    auto& creating = st.creating;
+    if (!creating.active || !creating.preview) return false;
+    // Kept as it is now; the next one of the same kind is ready, as in Inventor.
     const assembly::Constraint keep = creating.constraint;
+    const bool redefining = creating.redefine.IsValid();
     creating = {};
+    if (close || redefining) return true;
     creating.active = true;
     creating.constraint.type = keep.type;
     creating.constraint.value = keep.value;
     creating.constraint.flipped = keep.flipped;
     creating.constraint.ratio = keep.ratio;
     creating.constraint.limits = keep.limits;
+    return true;
 }
 
-} // namespace
+void CancelConstraint(Session& session) {
+    AssemblyState& st = *session.assembly;
+    DropPreview(st);
+    st.creating = {};
+}
 
 bool TakeConstraintPick(AppContext& app, Session& session, const assembly::GeometryRef& g) {
     AssemblyState& st = *session.assembly;
@@ -1086,6 +1126,17 @@ bool TakeConstraintPick(AppContext& app, Session& session, const assembly::Geome
     if (const char* why = Unfit(type, g, first, creating.picked)) {
         app.notes.Info(Tr(why));
         return true;
+    }
+    // All picked already: a new pick replaces the last one (a better face for the same constraint).
+    if (creating.picked >= PicksNeeded(type)) {
+        DropPreview(st);
+        creating.picked = PicksNeeded(type) - 1;
+        if (const char* why = Unfit(type, g, &creating.constraint.first, creating.picked)) {
+            app.notes.Info(Tr(why));
+            ShowPreview(app, st);
+            creating.picked = PicksNeeded(type);
+            return true;
+        }
     }
     if (creating.picked == 1 && first->component == g.component) {
         app.notes.Info(Tr("Вторую выберите на другом компоненте"));
@@ -1105,7 +1156,8 @@ bool TakeConstraintPick(AppContext& app, Session& session, const assembly::Geome
     } else {
         creating.constraint.third = g;
     }
-    FinishConstraint(app, st);
+    creating.picked = PicksNeeded(type);
+    ShowPreview(app, st);
     return true;
 }
 
@@ -1121,7 +1173,11 @@ bool TakeJointPick(AppContext& app, Session& session, ObjectId joint) {
         app.notes.Info(wantSlider ? Tr("Здесь нужно соединение «Ползун»") : Tr("Здесь нужно соединение «Вращение»"));
         return true;
     }
-    if (creating.picked == 0) {
+    if (creating.picked == 0 || creating.preview) {
+        if (creating.preview) {   // all picked: start over from the drive
+            DropPreview(st);
+            creating.picked = 0;
+        }
         creating.constraint.drive = joint;
         creating.picked = 1;
         return true;
@@ -1130,8 +1186,10 @@ bool TakeJointPick(AppContext& app, Session& session, ObjectId joint) {
         app.notes.Info(Tr("Выберите другое соединение"));
         return true;
     }
+    DropPreview(st);
     creating.constraint.driven = joint;
-    FinishConstraint(app, st);
+    creating.picked = 2;
+    ShowPreview(app, st);
     return true;
 }
 
@@ -1154,6 +1212,7 @@ void StartRedefine(AppContext& app, ObjectId constraint, std::optional<assembly:
     const assembly::Constraint* c = st.assembly.FindConstraint(constraint);
     if (!c) return;
     StopEditing(app);
+    if (st.creating.preview) st.Discard();
     st.creating = {};
     st.creating.active = true;
     st.creating.redefine = constraint;
@@ -1163,47 +1222,160 @@ void StartRedefine(AppContext& app, ObjectId constraint, std::optional<assembly:
     st.creating.constraint.second = {};
     st.creating.constraint.third = {};
     st.drag = {};
-    app.shell.leftTab = LeftTab::Tree;
+    app.shell.leftTab = LeftTab::Mate;
 }
 
 void DrawConstraintPanel(AppContext& app, Session& session, float width) {
     ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
     AssemblyState& st = *session.assembly;
     auto& creating = st.creating;
+    // Undone from the menu while shown: the picks are there, the trial is not.
+    if (creating.preview && !st.assembly.FindConstraint(creating.preview)) {
+        creating.preview = {};
+        creating.picked = std::max(0, creating.picked - 1);
+    }
+    const assembly::ConstraintType type = creating.constraint.type;
     {
         const ImVec2 p = ImGui::GetCursorScreenPos();
-        const float h = ui.S(40);
+        const float h = ui.S(48);
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        const std::string title = Tr(std::string(assembly::ConstraintTitle(creating.constraint.type)));
-        dl->AddText(ui.fonts.strong, ui.S(13), {p.x + ui.S(14), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(ui.C().text),
-                    title.c_str());
-        dl->AddLine({p.x, p.y + h - 1}, {p.x + width, p.y + h - 1}, ui::ToU32(ui.C().dividerSoft));
-        ImGui::Dummy({width, h});
+        ui.icons.Draw(dl, ConstraintIcon(type), {p.x + ui.S(14), p.y + (h - ui.S(22)) / 2}, ui.S(22), {1, 1, 1, 1});
+        const std::string title = Tr(std::string(assembly::ConstraintTitle(type)));
+        dl->AddText(ui.fonts.title, ui.S(14), {p.x + ui.S(46), p.y + (h - ui.S(14)) / 2 - ui.S(1)}, ui::ToU32(c.text), title.c_str());
+        ImGui::SetCursorScreenPos({p.x + width - ui.S(38), p.y + ui.S(9)});
+        if (ui::IconButton(ui, "##con-close", "ui-close", 30, 14, Tr("Отмена (Esc)"))) app.Later([&session] { CancelConstraint(session); });
+        ImGui::SetCursorScreenPos({p.x, p.y + h});
+        ui::Divider(ui, c.dividerSoft);
     }
     const float inner = width - ui.S(28);
     ImGui::SetCursorPos({ui.S(14), ImGui::GetCursorPosY() + ui.S(14)});
     ImGui::BeginGroup();
     if (creating.redefine)
         if (const assembly::Constraint* old = st.assembly.FindConstraint(creating.redefine))
-            LabelText(ui, Trf("Переопределение: {}", old->name), ui.C().accent);
+            LabelText(ui, Trf("Переопределение: {}", old->name), c.accent);
+
+    // The kind, switchable while picking (the picks stay when they suit it), as Inventor's Place Constraint.
+    static constexpr std::array<assembly::ConstraintType, 5> kinds{assembly::ConstraintType::Mate, assembly::ConstraintType::Angle,
+                                                                  assembly::ConstraintType::Tangent, assembly::ConstraintType::Insert,
+                                                                  assembly::ConstraintType::Symmetry};
+    if (std::find(kinds.begin(), kinds.end(), type) != kinds.end()) {
+        ui::FieldLabel(ui, Tr("Тип"));
+        const float bw = (inner - ui.S(4) * 4) / 5;
+        for (std::size_t i = 0; i < kinds.size(); ++i) {
+            if (i) ImGui::SameLine(0, ui.S(4));
+            const std::string tip = Tr(std::string(assembly::ConstraintTitle(kinds[i])));
+            ImGui::PushID(static_cast<int>(i));
+            if (ui::IconButton(ui, "##kind", ConstraintIcon(kinds[i]), bw / ui.S(1), 20, tip.c_str(), true, kinds[i] == type) &&
+                kinds[i] != type) {
+                const assembly::ConstraintType to = kinds[i];
+                app.Later([&app, &st, to] {
+                    auto& cr = st.creating;
+                    DropPreview(st);
+                    cr.constraint.type = to;
+                    cr.constraint.value = to == assembly::ConstraintType::Angle ? kPi / 2 : 0.0;
+                    cr.constraint.limits = {};
+                    // Picks kept as far as they suit the new kind.
+                    const int had = std::min(cr.picked, PicksNeeded(to));
+                    cr.picked = 0;
+                    if (had >= 1 && !Unfit(to, cr.constraint.first, nullptr, 0)) cr.picked = 1;
+                    if (had >= 2 && cr.picked == 1 && !Unfit(to, cr.constraint.second, &cr.constraint.first, 1)) cr.picked = 2;
+                    if (cr.picked >= PicksNeeded(to)) ShowPreview(app, st);
+                });
+            }
+            ImGui::PopID();
+        }
+        ImGui::Dummy({0, ui.S(8)});
+    }
+
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inner);
-    ImGui::PushStyleColor(ImGuiCol_Text, ui::ToU32(ui.C().textSecondary));
-    ImGui::TextUnformatted(Tr(PickPrompt(creating.constraint.type, creating.picked)));
+    ImGui::PushStyleColor(ImGuiCol_Text, ui::ToU32(c.textSecondary));
+    ImGui::TextUnformatted(creating.preview ? Tr("Детали встали, как будет. Проверьте направление и зазор, затем «Применить» или «Готово».")
+                                            : Tr(PickPrompt(type, creating.picked)));
     ImGui::PopStyleColor();
     ImGui::PopTextWrapPos();
-    ImGui::Dummy({0, ui.S(4)});
-    // What is picked so far.
-    const auto slot = [&](const char* label, const std::string& value) { LabelText(ui, Trf("{}: {}", Tr(label), value), ui.C().text); };
-    if (assembly::IsTransmission(creating.constraint.type)) {
-        if (creating.picked >= 1)
-            if (const assembly::Constraint* j = st.assembly.FindConstraint(creating.constraint.drive)) slot(N_("Ведущее"), j->name);
+    ImGui::Dummy({0, ui.S(6)});
+
+    // What is picked: a field per pick (the one waiting is outlined); ✕ picks it again.
+    const auto field = [&](int index, const char* label, const std::string& value) {
+        ui::FieldLabel(ui, Tr(label));
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float h = ui.S(30);
+        const bool waiting = creating.picked == index && !creating.preview;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(p, {p.x + inner, p.y + h}, ui::ToU32(c.field), ui.S(6));
+        dl->AddRect(p, {p.x + inner, p.y + h}, ui::ToU32(waiting ? c.accent : c.fieldBorder), ui.S(6), 0, waiting ? ui.S(2) : 1.0f);
+        const std::string text = value.empty() ? std::string(Tr("не выбрано")) : value;
+        const ImVec4 clip{p.x + ui.S(10), p.y, p.x + inner - ui.S(30), p.y + h};
+        dl->AddText(ui.fonts.body, ui.S(13), {p.x + ui.S(10), p.y + (h - ui.S(13)) / 2 - ui.S(1)},
+                    ui::ToU32(value.empty() ? c.textMuted : c.text), text.c_str(), nullptr, 0, &clip);
+        ImGui::Dummy({inner, h});
+        if (!value.empty()) {
+            ImGui::SetCursorScreenPos({p.x + inner - ui.S(28), p.y + ui.S(3)});
+            ImGui::PushID(index);
+            if (ui::IconButton(ui, "##again", "ui-close", 24, 12, Tr("Выбрать заново")))
+                app.Later([&st, index] {
+                    DropPreview(st);
+                    st.creating.picked = index;
+                });
+            ImGui::PopID();
+            ImGui::SetCursorScreenPos({p.x, p.y + h});
+        }
+        ImGui::Dummy({0, ui.S(6)});
+    };
+    if (assembly::IsTransmission(type)) {
+        const assembly::Constraint* drive = creating.picked >= 1 ? st.assembly.FindConstraint(creating.constraint.drive) : nullptr;
+        const assembly::Constraint* driven = creating.picked >= 2 ? st.assembly.FindConstraint(creating.constraint.driven) : nullptr;
+        field(0, N_("Ведущее"), drive ? drive->name : std::string());
+        field(1, N_("Ведомое"), driven ? driven->name : std::string());
     } else {
-        if (creating.picked >= 1) slot(N_("Первое"), PickTitle(st, creating.constraint.first));
-        if (creating.picked >= 2) slot(N_("Второе"), PickTitle(st, creating.constraint.second));
+        field(0, N_("Первое"), creating.picked >= 1 ? PickTitle(st, creating.constraint.first) : std::string());
+        field(1, N_("Второе"), creating.picked >= 2 ? PickTitle(st, creating.constraint.second) : std::string());
+        if (type == assembly::ConstraintType::Symmetry)
+            field(2, N_("Плоскость симметрии"), creating.picked >= 3 ? PickTitle(st, creating.constraint.third) : std::string());
     }
-    ImGui::Dummy({0, ui.S(10)});
-    ConstraintOptions(app, creating.constraint, inner, [] {});
-    if (ui::SecondaryButton(ui, "##con-cancel", Tr("Отмена"), "Esc", {inner, ui.S(32)})) creating = {};
+    ImGui::Dummy({0, ui.S(6)});
+
+    // Direction: the two ways the parts can meet, as pictures with words.
+    const char* ways[2] = {nullptr, nullptr};
+    switch (type) {
+        case assembly::ConstraintType::Mate:   ways[0] = N_("Навстречу"), ways[1] = N_("Заподлицо"); break;
+        case assembly::ConstraintType::Insert: ways[0] = N_("Навстречу"), ways[1] = N_("В одну сторону"); break;
+        case assembly::ConstraintType::Tangent: ways[0] = N_("Снаружи"), ways[1] = N_("Внутри"); break;
+        case assembly::ConstraintType::Symmetry: ways[0] = N_("Друг от друга"), ways[1] = N_("Друг на друга"); break;
+        default:
+            if (assembly::IsJoint(type) && type != assembly::ConstraintType::Ball) ways[0] = N_("Оси навстречу"), ways[1] = N_("Оси в одну сторону");
+            break;
+    }
+    bool changed = false;
+    if (ways[0]) {
+        ui::FieldLabel(ui, Tr("Направление"));
+        const std::array<const char*, 2> labels{Tr(ways[0]), Tr(ways[1])};
+        const int now = creating.constraint.flipped ? 1 : 0;
+        if (const int v = ui::Segmented(ui, "con-way", labels, now, 2, inner); v != now) {
+            creating.constraint.flipped = v == 1;
+            changed = true;
+        }
+        ImGui::Dummy({0, ui.S(10)});
+    }
+    // The rest of the options (gap, angle, limits, ratio); the direction is above.
+    {
+        const bool flipped = creating.constraint.flipped;
+        if (ConstraintOptions(app, creating.constraint, inner, [] {}, false)) changed = true;
+        creating.constraint.flipped = flipped;
+    }
+    if (changed && creating.preview) app.Later([&app, &st] { ShowPreview(app, st); });
+
+    // Применить keeps it and stays for the next; Готово keeps it and closes (Inventor's Apply / OK).
+    const float half = (inner - ui.S(8)) / 2;
+    const bool ready = creating.preview.IsValid();
+    if (ui::PrimaryButton(ui, "##con-apply", Tr("Применить"), "Enter", {half, ui.S(34)}, ready))
+        app.Later([&app, &session] { ApplyConstraint(app, session, false); });
+    ImGui::SameLine(0, ui.S(8));
+    if (ui::SecondaryButton(ui, "##con-done", Tr("Готово"), nullptr, {half, ui.S(34)}, ready))
+        app.Later([&app, &session] { ApplyConstraint(app, session, true); });
+    ImGui::Dummy({0, ui.S(4)});
+    if (ui::SecondaryButton(ui, "##con-cancel", Tr("Отмена"), "Esc", {inner, ui.S(32)})) app.Later([&session] { CancelConstraint(session); });
     ImGui::EndGroup();
     ImGui::Dummy({0, ui.S(12)});
 }
@@ -1239,7 +1411,8 @@ bool AssemblyEscape(AppContext& app, Session& session) {
         return true;
     }
     if (st.creating.active) {
-        // Back one step: the last pick, then the command.
+        // Back one step: the trial and the last pick, then the command.
+        if (st.creating.preview) DropPreview(st);
         if (st.creating.picked > 0) --st.creating.picked;
         else st.creating = {};
         return true;
@@ -1448,7 +1621,8 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
     }
     if (st.creating.active) {
         auto& creating = st.creating;
-        Prompt(ui, vf, Tr(PickPrompt(creating.constraint.type, creating.picked)));
+        Prompt(ui, vf, creating.preview ? Tr("Проверьте, как встали детали: Enter или щелчок колесом — применить, Esc — отмена")
+                                          : Tr(PickPrompt(creating.constraint.type, creating.picked)));
         if (vf.hovered && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             if (assembly::IsTransmission(creating.constraint.type)) {
                 // A click on a part takes its joint of the kind wanted.

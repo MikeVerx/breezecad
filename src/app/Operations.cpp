@@ -622,6 +622,8 @@ void EnterPressed(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;
     if (OperationEditor* open = app.ops.Active()) open->Done(app, *s);
+    // A previewed constraint: Enter (or a click of the wheel) is Применить.
+    else if (s->assembly && s->assembly->creating.preview) ApplyConstraint(app, *s, false);
 }
 
 void DeletePressed(AppContext& app) {

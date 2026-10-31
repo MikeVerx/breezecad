@@ -497,8 +497,8 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
     // A constraint or a new part being made: its panel on top, the tree under
     // it to pick origin planes and work geometry from (as Inventor's browser).
     const bool picking = st.creating.active || st.newPart.active;
-    if (st.creating.active) DrawConstraintPanel(app, session, width);
-    else if (st.newPart.active) DrawCreatePartPanel(app, session, width);
+    // A constraint has its own tab (LeftTab::Mate); the tree stays to pick planes from.
+    if (st.newPart.active) DrawCreatePartPanel(app, session, width);
     app.shell.hoveredElement = {};
     // Origin planes, axes and centre, then work planes, axes and points of a
     // component (or of the assembly itself), as rows under it.

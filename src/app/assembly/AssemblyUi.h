@@ -53,6 +53,12 @@ bool CanPattern(AppContext& app);
 /// The panel of the constraint being made (over the tree meanwhile: the
 /// tree stays below it to pick origin planes and work geometry from).
 void DrawConstraintPanel(AppContext& app, Session& session, float width);
+/// Keeps the previewed constraint (Применить; `close`: Готово, the tool ends).
+bool ApplyConstraint(AppContext& app, Session& session, bool close);
+/// Takes the previewed constraint back and ends the tool.
+void CancelConstraint(Session& session);
+/// The tree's icon of a constraint type.
+const char* ConstraintIcon(assembly::ConstraintType type);
 
 /// A pick for the constraint being made (from the view or the tree): the
 /// first, second or (symmetry) third geometry; the last one makes it.

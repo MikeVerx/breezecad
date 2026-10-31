@@ -161,6 +161,12 @@ bool AssemblyState::Undo() {
     return true;
 }
 
+bool AssemblyState::Discard() {
+    if (!Undo()) return false;
+    myRedo.pop_back();
+    return true;
+}
+
 bool AssemblyState::Redo() {
     if (myRedo.empty()) return false;
     myUndo.push_back({assembly::AssemblyToJson(assembly), myRedo.back().label});
