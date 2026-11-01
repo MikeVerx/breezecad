@@ -144,6 +144,11 @@ public:
     /// screen (the window's view is not touched). nullopt when the graphics
     /// cannot (no OpenGL context yet).
     std::optional<Image> Snapshot(const CameraState& camera, int width, int height);
+    /// The model alone looking along `direction`, fitted into a size x size
+    /// square with a transparent background (no planes, sketch marks,
+    /// section or background picture): the picture saved in documents for
+    /// the file manager. nullopt when there is nothing to draw.
+    std::optional<Image> Preview(Vec3 direction, Vec3 up, int size);
 
     /// Orbit about `pivot`, angles in radians: `pitch` around the screen's
     /// horizontal axis; `yaw` around the screen's vertical axis (free, as in
@@ -192,6 +197,17 @@ public:
     /// Makes the edges of the context pickable (projecting them into a
     /// sketch); off by default. Cheap to call every frame.
     void SetContextPicking(bool on);
+    /// Makes the faces of the context pickable (an extrusion up to another
+    /// part's face); off by default. Cheap to call every frame.
+    void SetContextFacePicking(bool on);
+    /// The flat context face under `pixel` (SetContextFacePicking on): which
+    /// body (the component) and the face, in the context's coordinates (the
+    /// edited part's). Nullopt over a curved face or nothing.
+    struct ContextFace {
+        ObjectId           body;
+        doc::FaceReference face;
+    };
+    std::optional<ContextFace> PickContextFace(Vec2 pixel);
     /// The context edge under `pixel` (SetContextPicking on): which body
     /// (its id: the component) and the edge, in the context's coordinates.
     struct ContextEdge {
@@ -199,6 +215,11 @@ public:
         doc::EdgeReference edge;
     };
     std::optional<ContextEdge> PickContextEdge(Vec2 pixel);
+    /// Every edge of the context face under `pixel` (SetContextFacePicking
+    /// on), as for the edited part's own face (PickFaceEdges): the whole
+    /// closed outline, holes included. Empty when the nearest thing is not a
+    /// context face (the edited part's own face is nearer, or nothing).
+    std::vector<ContextEdge> PickContextFaceEdges(Vec2 pixel);
 
     /// Outlines of a pattern's or mirror's sources (selection colour) and
     /// copies (hover colour) over the model while its panel is open;

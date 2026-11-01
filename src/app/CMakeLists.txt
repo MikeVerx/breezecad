@@ -7,6 +7,7 @@ set(BZ_APP_SOURCES
     Application.cpp
     AssemblyState.cpp
     Autosave.cpp
+    assembly/AssemblyIssues.cpp
     assembly/AssemblyUi.cpp
     assembly/InPlace.cpp
     Backgrounds.cpp
@@ -27,6 +28,7 @@ set(BZ_APP_SOURCES
     scripting/DocumentCommands.cpp
     scripting/PartCommands.cpp
     scripting/SketchCommands.cpp
+    scripting/SheetCommands.cpp
     scripting/SolidCommands.cpp
     scripting/TopologyCommands.cpp
     scripting/GenericCommands.cpp
@@ -45,12 +47,15 @@ set(BZ_APP_SOURCES
     features/SweepEditor.cpp
     features/ThreadEditor.cpp
     features/PointPick.cpp
+    features/DxfEditor.cpp
+    features/SheetMetalEditors.cpp
     features/ShellEditor.cpp
     features/WorkAxisEditor.cpp
     features/WorkPointEditor.cpp
     features/WorkPlaneEditor.cpp
     features/DragArrow.cpp
     features/ExtrudeEditor.cpp
+    features/ExtrudeDirection.cpp
     features/FeatureOperationEditor.cpp
     features/RevolveEditor.cpp
     features/SectionEditor.cpp
@@ -73,6 +78,7 @@ set(BZ_APP_SOURCES
     ShortcutPresets.cpp
     sketch/SketchEditor.cpp
     sketch/SketchOverlay.cpp
+    sketch/SketchRepair.cpp
     sketch/SketchText.cpp
     sketch/SketchPick.cpp
     sketch/SketchTools.cpp

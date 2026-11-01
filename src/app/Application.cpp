@@ -3,6 +3,7 @@
 #include "app/CrashGuard.h"
 
 #include "app/Language.h"
+#include "platform/OpenFiles.h"
 #include "core/Monitor.h"
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
@@ -18,6 +19,8 @@
 #include "core/Profile.h"
 #include "core/PathText.h"
 #include "kernel/TextGeometry.h"
+#include "render/Viewport.h"
+#include "ui/ViewCube.h"
 #include "platform/Paths.h"
 #include "platform/ProcessInfo.h"
 #include "platform/SystemTheme.h"
@@ -28,6 +31,7 @@
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 #include <lunasvg.h>
+#include <miniz.h>
 #if defined(__ANDROID__)
 #include "app/android/AndroidInput.h"
 #include "platform/Android.h"
@@ -53,6 +57,24 @@ ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(int keycode, int scancode);
 #endif
 
 namespace bz::app {
+namespace {
+
+/// The model on the screen as a PNG with transparency (empty when there is
+/// nothing to draw): saved into the document for the file manager's icons.
+std::vector<std::uint8_t> DocumentPreview(render::Viewport& viewport) {
+    const std::optional<Image> image = viewport.Preview(-ui::kHomeDirection, {0, 0, 1}, 512);
+    if (!image) return {};
+    std::size_t size = 0;
+    void* png = tdefl_write_image_to_png_file_in_memory(image->rgba.data(), image->width, image->height, 4, &size);
+    if (!png) return {};
+    const auto* bytes = static_cast<const std::uint8_t*>(png);
+    std::vector<std::uint8_t> out(bytes, bytes + size);
+    mz_free(png);
+    return out;
+}
+
+} // namespace
+
 namespace {
 
 /// Test hook (BZ_FAULT_TEST): "crash" — an access violation, "hang" — the
@@ -180,6 +202,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     glfwSetWindowSizeCallback(myWindow.Handle(), [](GLFWwindow* w, int, int) { OnAnyInput(w, Wake::Size); });
     glfwSetWindowFocusCallback(myWindow.Handle(), [](GLFWwindow* w, int) { OnAnyInput(w, Wake::Focus); });
     glfwSetWindowRefreshCallback(myWindow.Handle(), [](GLFWwindow* w) { OnAnyInput(w, Wake::Refresh); });
+    platform::ListenForOpenRequests();   // macOS: documents double-clicked in Finder
     glfwSetDropCallback(myWindow.Handle(), [](GLFWwindow* w, int count, const char** paths) {   // UTF-8 paths
         auto* tap = TapOf(w);
         if (!tap) return;
@@ -234,7 +257,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myScale = ChooseScale();
     myAppliedScaleSetting = mySettings.uiScale;
     progress(Tr("Шрифты и значки…"));
-    myFonts.Load(assets, myScale * framebufferScale);
+    myFonts.Load(assets, myScale * framebufferScale, i18n::Current(), LanguagePackDir());
     io.FontGlobalScale = 1.0f / framebufferScale;
     myIcons.SetDirectory(assets / "icons");
     myIcons.SetScale(framebufferScale);
@@ -251,6 +274,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     myContext = std::make_unique<AppContext>(AppContext{*myUi, mySettings, myWorkspace, myActions, myNotes, *myAutosave,
                                                         myViewport, mySketch, myOps, myShell, myDeferred, 0.0, {}, {}, {}});
     myContext->recovery = &myRecovery;
+    myWorkspace.previewMaker = [this] { return DocumentPreview(myViewport); };
     RegisterActions(*myContext);
     LoadStandardPacks(*myContext);
     StartModules();
@@ -258,7 +282,11 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
 
     for (const auto& file : files) {
         progress(Trf("Открытие {}…", ToUtf8(file.filename())));
-        myWorkspace.Open(file, myNotes, mySettings);
+        // A module or a library opened from File Explorer installs; a document opens.
+        const std::u8string ext = file.extension().u8string();
+        if (ext == u8".bzmod" || ext == u8".BZMOD" || ext == u8".bzlib" || ext == u8".BZLIB" || ext == u8".bzp" || ext == u8".BZP")
+            OpenDropped(*myContext, file);
+        else myWorkspace.Open(file, myNotes, mySettings);
     }
     // Nothing asked for: the last file, if the user wants it (and it is still there).
     if (files.empty() && mySettings.reopenLast && !mySettings.recentFiles.empty()) {
@@ -379,6 +407,7 @@ int Application::Run() {
             myFramesToDraw = std::max(myFramesToDraw, 3);
         }
         PollShotRequest();
+        for (std::filesystem::path& f : platform::TakeOpenRequests()) myInput.dropped.push_back(std::move(f));
         if (!myInput.dropped.empty()) {   // a module package or documents dragged in
             const std::vector<std::filesystem::path> files = std::move(myInput.dropped);
             myInput.dropped.clear();
@@ -432,6 +461,30 @@ int Application::Run() {
 }
 
 /// Modules from the folder next to the program (shipped) and from the user's
+/// Packages (.bzmod) put into the modules folder — by the installer, or by
+/// hand into the portable program's "module" folder — installed on start.
+/// Installing one is the person's consent, as in Settings → Modules.
+void Application::InstallDroppedModules(const std::filesystem::path& dir) {
+    std::error_code ec;
+    std::vector<std::filesystem::path> packages;
+    for (const auto& e : std::filesystem::directory_iterator(dir, ec))
+        if (e.is_regular_file(ec) && e.path().extension() == ".bzmod") packages.push_back(e.path());
+    std::sort(packages.begin(), packages.end());
+    for (const std::filesystem::path& p : packages) {
+        if (Expected<std::string> id = myModules->Install(p); id) {
+            std::filesystem::remove(p, ec);
+            const modules::ModuleEntry* m = myModules->Find(*id);
+            myNotes.Info(Trf("Модуль «{}» установлен", m ? m->manifest.name : *id));
+        } else {
+            // Kept aside, not tried again on every start.
+            std::filesystem::path aside = p;
+            aside += ".failed";
+            std::filesystem::rename(p, aside, ec);
+            myNotes.Error(Trf("Модуль {} не установлен: {}", ToUtf8(p.filename()), Tr(id.GetError().message)));
+        }
+    }
+}
+
 /// config folder (installed by the user); see src/modules/ModuleManager.h.
 void Application::StartModules() {
     const std::filesystem::path config = platform::ConfigDir();
@@ -444,8 +497,14 @@ void Application::StartModules() {
     modules::HostInfo host = modules::HostInfo::Detect();
     host.openGL            = myWindow.OpenGLVersion();
     myModules->Discover(platform::AssetsDir().parent_path() / "modules", host);
-    myModules->SetInstallDir(config / "modules");
-    myModules->Discover(config / "modules", host);
+    // The user's modules: next to a portable program ("module"), in the
+    // settings folder for an installed one; earlier versions kept them in
+    // the settings folder in any case, so that one is read too.
+    const std::filesystem::path own = platform::ModulesDir();
+    myModules->SetInstallDir(own);
+    myModules->Discover(own, host);
+    if (std::error_code ec; !std::filesystem::equivalent(own, config / "modules", ec)) myModules->Discover(config / "modules", host);
+    InstallDroppedModules(own);
     myModules->LoadAll();
     myContext->modules = myModules.get();
     if (const std::string& id = myModules->CrashedLastRun(); !id.empty()) {
@@ -572,7 +631,9 @@ void Application::ApplyScaleIfChanged() {
     const float density = winW > 0 && fbW > 0 ? static_cast<float>(fbW) / static_cast<float>(winW) : myFramebufferScale;
     const bool densityChanged = std::abs(density - myFramebufferScale) > 0.01f;
     const bool layoutChanged = myShell.mobile.phone != myScaledForPhone;
-    if (mySettings.uiScale == myAppliedScaleSetting && !densityChanged && !layoutChanged) return;
+    // Chinese, Japanese, Korean bring their own glyphs: a language switch builds the fonts again.
+    const bool languageChanged = myFonts.loadedLanguage != i18n::Current();
+    if (mySettings.uiScale == myAppliedScaleSetting && !densityChanged && !layoutChanged && !languageChanged) return;
     myScaledForPhone = myShell.mobile.phone;
     myAppliedScaleSetting = mySettings.uiScale;
     if (densityChanged) {
@@ -582,10 +643,10 @@ void Application::ApplyScaleIfChanged() {
         myIcons.SetScale(density);
     }
     const float scale = ChooseScale();
-    if (!densityChanged && std::abs(scale - myScale) < 1e-3f) return;
+    if (!densityChanged && !languageChanged && std::abs(scale - myScale) < 1e-3f) return;
     // Fonts are rasterised for one size: build them again, then the texture.
     myScale = scale;
-    myFonts.Load(myAssets, myScale * myFramebufferScale);
+    myFonts.Load(myAssets, myScale * myFramebufferScale, i18n::Current(), LanguagePackDir());
     ImGui_ImplOpenGL3_DestroyFontsTexture();
     ImGui_ImplOpenGL3_CreateFontsTexture();
     myUi->scale = myScale;

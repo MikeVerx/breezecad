@@ -264,6 +264,14 @@ void ModelRibbonImpl(RibbonSink& r) {
     r.EndColumn();
     r.EndGroup();
 
+    r.BeginGroup(N_("Листовой металл"));
+    r.Large("sheet.base", Tr("Лист"));
+    r.Large("sheet.flange", Tr("Отбор-\nтовка"));
+    r.Large("sheet.cut", Tr("Вырез"));
+    r.Large("sheet.flatPattern", Tr("Развёртка"));
+    r.Large("sheet.dxfEditor", Tr("Редактор\nDXF"));
+    r.EndGroup();
+
     r.BeginGroup(N_("Массив"));
     r.BeginColumn();
     r.Small("feature.patternRect");
@@ -355,6 +363,7 @@ void AssemblyRibbonImpl(AppContext& app, RibbonSink& r) {
     r.EndGroup();
 
     r.BeginGroup(N_("Экспорт"));
+    r.Large("file.exportProject", Tr("Проект\n.bzp"));
     r.BeginColumn();
     r.Small("file.exportStep", "STEP");
     r.Small("file.exportStl", "STL");
@@ -437,6 +446,7 @@ void SketchRibbonImpl(AppContext& app, RibbonSink& r, bool withFinish) {
     r.Icon("sketch.vertical", active(SketchTool::Vertical));
     r.Icon("sketch.fix", active(SketchTool::Fix));
     r.Icon("sketch.parallel", active(SketchTool::Parallel));
+    r.Icon("sketch.collinear", active(SketchTool::Collinear));
     r.Icon("sketch.perpendicular", active(SketchTool::Perpendicular));
     r.Icon("sketch.equal", active(SketchTool::Equal));
     r.Icon("sketch.midpoint", active(SketchTool::Midpoint));

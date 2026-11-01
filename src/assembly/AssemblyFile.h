@@ -6,6 +6,7 @@
 #include "core/Expected.h"
 
 #include <filesystem>
+#include <span>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -19,7 +20,8 @@ std::string        AssemblyToJson(const Assembly& assembly);
 /// `warnings`: non-fatal problems (unknown constraint types are skipped).
 Expected<Assembly> AssemblyFromJson(std::string_view json, std::vector<std::string>* warnings = nullptr);
 
-Status             SaveAssembly(const Assembly& assembly, const std::filesystem::path& path, std::string_view generator);
+Status             SaveAssembly(const Assembly& assembly, const std::filesystem::path& path, std::string_view generator,
+                                std::span<const std::uint8_t> preview = {});
 Expected<Assembly> LoadAssembly(const std::filesystem::path& path, std::vector<std::string>* warnings = nullptr);
 
 /// How a component refers to `part` from an assembly saved at `assemblyFile`:

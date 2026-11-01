@@ -1,3 +1,7 @@
+#include "platform/Launch.h"
+#include "assembly/AssemblyFile.h"
+#include "app/AssemblyState.h"
+#include "app/Operations.h"
 #include "app/viewport/ViewportPanel.h"
 #include "core/Monitor.h"
 
@@ -89,6 +93,7 @@ void ContextMenu(AppContext& app, Session& session) {
     if (!ImGui::BeginPopup("##viewport-menu")) return;
     const auto item = [&](const char* id) {
         const Action* a = app.actions.Find(id);
+        if (!a) return;   // a command a build does not have: no row, never a crash
         const std::string sc = ActionRegistry::ChordText(a->chord);
         if (ui::MenuItem(ui, a->Label(), sc.empty() ? nullptr : sc.c_str(), a->icon, false, a->IsEnabled())) {
             const std::string action = id;
@@ -107,14 +112,39 @@ void ContextMenu(AppContext& app, Session& session) {
         item("sketch.construction");
         item("sketch.centerline");
         item("edit.delete");
+    } else if (session.assembly) {
+        // The picked part's own commands first, then the assembly's.
+        AssemblyState& st = *session.assembly;
+        if (const assembly::Component* c = st.assembly.FindComponent(st.selected)) {
+            const std::filesystem::path file = assembly::ResolvePartPath(session.path, c->path);
+            if (ui::MenuItem(ui, Tr("Свойства детали"), nullptr, "ui-sliders")) app.shell.leftTab = LeftTab::Properties;
+            item("assembly.editInPlace");
+            if (ui::MenuItem(ui, Tr("Открыть в отдельной вкладке"), nullptr, "ui-open"))
+                app.Later([&app, file] { OpenDocument(app, file); });
+            if (ui::MenuItem(ui, Tr("Открыть в папке"), nullptr, "ui-folder") && !platform::ShowInFolder(file))
+                app.notes.Error(Tr("Не удалось открыть папку"));
+            item("assembly.ground");
+            ImGui::Separator();
+        }
+        item("assembly.place");
+        item("assembly.mate");
+        ImGui::Separator();
+        item("tools.measure");
+        item("view.section");
+        ImGui::Separator();
+        item("view.home");
+        item("view.fit");
     } else {
-        FaceSelectionMenu(app, session);
-        if (app.shell.nav.facePlane && ui::MenuItem(ui, Tr("Эскиз на этой грани"), nullptr, "sketch")) {
+        // Sketches first (the most frequent thing done with a flat face), then
+        // the look of the selected faces, then the rest.
+        if (app.shell.nav.facePlane && ui::MenuItem(ui, Tr("Эскиз на грани"), nullptr, "sketch")) {
             const doc::SketchPlacement placement{app.shell.nav.faceBody, *app.shell.nav.facePlane, true,
                                                  {app.shell.nav.facePlane->normal, app.shell.nav.pivot}};
             app.Later([&app, &session, placement] { app.sketch.CreateAndEdit(app, session, placement); });
         }
         item("sketch.start");
+        ImGui::Separator();
+        FaceSelectionMenu(app, session);
         item("feature.extrude");
         ImGui::Separator();
         item("tools.measure");
@@ -171,6 +201,8 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
             nav.zoomAt = mouse;
         } else if (button == ImGuiMouseButton_Right) {
             nav.button = -1;   // a right click not bound to a gesture: just the menu, on release
+        } else {
+            nav.button = -3;   // the wheel pressed with no gesture on it: only its click counts
         }
     }
     // In a sketch, a right click that ends a chain is not a menu click.
@@ -178,6 +210,25 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
     // The radial menu took this right press: its release opens nothing else.
     if (nav.button == -2) {
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Right)) nav.button = -1;
+        return false;
+    }
+    // A click of the wheel (pressed and released without moving) confirms, as
+    // Enter does — whatever Enter does at the moment: a typed value, the end
+    // of a chain, an operation, a constraint. KOMPAS-3D works this way.
+    const auto middleClick = [&] {
+        if (!app.settings.middleClickConfirms) return;
+        const ImVec2 d = ImGui::GetMouseDragDelta(ImGuiMouseButton_Middle, 0.0f);
+        if (std::abs(d.x) > 3.0f || std::abs(d.y) > 3.0f) return;
+        ImGuiIO& w = ImGui::GetIO();
+        w.AddKeyEvent(ImGuiKey_Enter, true);   // trickled: down this frame, up the next
+        w.AddKeyEvent(ImGuiKey_Enter, false);
+        mon::Action("view", "щелчок колесом");
+    };
+    if (nav.button == -3) {
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Middle)) {
+            nav.button = -1;
+            middleClick();
+        }
         return false;
     }
     if (nav.button < 0 && ImGui::IsMouseReleased(ImGuiMouseButton_Right) && sceneHovered && !busy && !sketchBusy &&
@@ -202,8 +253,7 @@ bool Navigate(AppContext& app, Session& session, const ViewportFrame& vf, bool s
             // A short right click: the context menu; a short middle click
             // confirms the operation, like in KOMPAS.
             if (!nav.moved && nav.button == ImGuiMouseButton_Right && !sketchBusy) ImGui::OpenPopup("##viewport-menu");
-            if (!nav.moved && nav.button == ImGuiMouseButton_Middle && app.ops.Active())
-                app.Later([&app, &session] { EnterPressed(app); });
+            if (!nav.moved && nav.button == ImGuiMouseButton_Middle) middleClick();
             nav.orbiting = nav.panning = nav.zooming = false;
             nav.button = -1;
         }
@@ -299,6 +349,9 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     }
     // A part edited in place: the edges of the parts around it can be projected too.
     app.viewport.SetContextPicking(projecting && session.host != nullptr);
+    // ... and their faces: for an extrusion "до грани" of another part, and
+    // for projecting a face's whole outline, as of the part's own face.
+    app.viewport.SetContextFacePicking(((operation && operation->PicksContextFaces()) || projecting) && session.host != nullptr);
     // Measuring makes vertices and edges pickable too.
     const bool measuring = app.shell.measuring && session.mode == EditMode::Model && !operation;
     app.viewport.SetMeasuring(measuring);
@@ -372,9 +425,12 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             break;
         }
     }
-    // The section bar sits over the model, under the context menu.
+    // The section bar sits over the model, under the context menu. The section
+    // stays on in a sketch and while a plane is picked for one: a sketch drawn
+    // inside a cut part is the very reason to cut it (it used to go off there).
     const bool modelMode = session.mode == EditMode::Model;
-    app.viewport.SetSection(modelMode ? SectionFrame(session, app.shell.section) : std::nullopt);
+    const bool sectionMode = SectionApplies(session.mode);
+    app.viewport.SetSection(sectionMode ? SectionFrame(session, app.shell.section) : std::nullopt);
     app.viewport.ShowInterferences(modelMode && app.shell.interference ? &session.model : nullptr);
     // A pattern or mirror being edited: its sources and copies outlined.
     {
@@ -382,7 +438,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
         const bool copying = op && (op == &app.ops.pattern || op == &app.ops.mirror);
         app.viewport.ShowCopyPreview(copying ? &session.model : nullptr, copying ? op->EditedFeature() : ObjectId{});
     }
-    if (modelMode) DrawSectionBar(app, session, vf);
+    if (sectionMode) DrawSectionBar(app, session, vf);
     if (measuring) DrawMeasure(app, session, vf);
     ContextMenu(app, session);
     DrawMarkingMenu(app, session);

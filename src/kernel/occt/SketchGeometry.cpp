@@ -12,6 +12,7 @@
 #include <BRepClass_FaceClassifier.hxx>
 #include <BRepTools.hxx>
 #include <BRepTools_WireExplorer.hxx>
+#include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
 #include <GCPnts_TangentialDeflection.hxx>
 #include <Geom_BSplineCurve.hxx>
@@ -25,6 +26,7 @@
 #include <TopExp_Explorer.hxx>
 #include <TopTools_HSequenceOfShape.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Iterator.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Wire.hxx>
 #include <format>
@@ -170,6 +172,44 @@ bool InsideEvenOdd(Vec2 p, const std::vector<std::vector<Vec2>>& polylines) {
     return inside;
 }
 
+/// The region without the curves that only lie in it and bound nothing: a
+/// loose line inside a closed outline, or one running in from it. The
+/// splitter keeps them in the face (as internal edges, or twice in a wire,
+/// once each way); swept, every one became a wall inside the solid — a seam
+/// on the body that fillets and projections then stumbled on.
+TopoDS_Face DropInnerEdges(const TopoDS_Face& face) {
+    const auto inner = [](const TopoDS_Shape& edge, const TopoDS_Shape& wire) {
+        if (edge.Orientation() != TopAbs_FORWARD && edge.Orientation() != TopAbs_REVERSED) return true;
+        int uses = 0;
+        for (TopoDS_Iterator it(wire, false, false); it.More(); it.Next()) uses += it.Value().IsSame(edge) ? 1 : 0;
+        return uses > 1;
+    };
+    bool any = false;
+    for (TopoDS_Iterator w(face, false, false); w.More() && !any; w.Next())
+        for (TopoDS_Iterator e(w.Value(), false, false); e.More() && !any; e.Next()) any = inner(e.Value(), w.Value());
+    if (!any) return face;
+
+    BRep_Builder builder;
+    TopoDS_Face out = TopoDS::Face(face.EmptyCopied());
+    for (TopoDS_Iterator w(face, false, false); w.More(); w.Next()) {
+        if (w.Value().ShapeType() != TopAbs_WIRE) continue;
+        TopoDS_Wire wire;
+        builder.MakeWire(wire);
+        int kept = 0;
+        for (TopoDS_Iterator e(w.Value(), false, false); e.More(); e.Next()) {
+            if (inner(e.Value(), w.Value())) continue;
+            builder.Add(wire, e.Value());
+            ++kept;
+        }
+        if (kept == 0) continue;   // a wire of loose lines only
+        wire.Closed(BRep_Tool::IsClosed(wire));
+        wire.Orientation(w.Value().Orientation());
+        wire.Location(w.Value().Location());
+        builder.Add(out, wire);
+    }
+    return out;
+}
+
 bool TouchesBox(const TopoDS_Face& face, const Frame& frame, double limit) {
     for (TopExp_Explorer it(face, TopAbs_VERTEX); it.More(); it.Next()) {
         const gp_Pnt p = BRep_Tool::Pnt(TopoDS::Vertex(it.Current()));
@@ -231,7 +271,7 @@ Expected<SketchProfile> BuildProfile(const doc::SketchFeature& feature) {
         std::vector<TopoDS_Edge>       seenEdges;
 
         for (TopExp_Explorer it(splitter.Shape(), TopAbs_FACE); it.More(); it.Next()) {
-            const TopoDS_Face face = TopoDS::Face(it.Current());
+            const TopoDS_Face face = DropInnerEdges(TopoDS::Face(it.Current()));
             if (TouchesBox(face, frame, half * 0.999)) continue;
 
             SketchRegion region;

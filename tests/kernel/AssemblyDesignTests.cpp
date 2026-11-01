@@ -474,3 +474,106 @@ TEST_CASE("context projections survive saving the part") {
     own->PruneProjections();
     CHECK(own->contextProjections.empty());
 }
+
+// --- extrusion up to another part's face (0.2.5: «выдавливание до» did not see them) ---
+
+TEST_CASE("a part extruded up to a face of its neighbour follows that face") {
+    Bench b;
+    // A post beside the plate, from its own XY up to the plate's top face (z = 10).
+    MemoryPart post;
+    auto& sk = test::AddSketch(post.doc);
+    test::AddRect(post.doc, sk, {0, 0}, {5, 5});
+    auto& ex = test::AddExtrude(post.doc, sk.id, "1");
+    const ObjectId postId = b.AddMemoryPart(post, "Стойка", {Rotation{}, {60, 0, 0}});
+    // As the extrude panel makes it: the face picked in the post's coordinates
+    // (the plate's top seen from the post), kept in the plate's own.
+    const doc::FaceReference seen{{0, 0, 1}, {-40, 20, 10}};   // the plate is 60 mm to the post's -X
+    ex.extent = doc::ExtentType::ToPlane;
+    doc::ContextPlane link;
+    link.assembly = "Узел";
+    link.component = b.plate;
+    link.face = {{0, 0, 1}, {20, 20, 10}};
+    link.plane = doc::PlaneFrame(seen);
+    link.componentName = "Плита:1";
+    ex.toContext = link;
+    post.doc.MarkChanged(1);
+    post.Rebuild();
+    REQUIRE(post.model.BoundingBox());
+    CHECK(post.model.BoundingBox()->max.z == Approx(10).epsilon(1e-6));
+
+    const std::string name = "Узел";
+    REQUIRE(kernel::HasContextProjections(post.doc, name));
+    CHECK(kernel::AdaptContextProjections(b.m, b.a, postId, post.doc, name).moved == 0);   // already there
+    const std::uint64_t key = kernel::ContextKey(b.m, b.a, postId, post.doc, name);
+
+    // The plate goes up 5 mm (the post stays): the post's top follows.
+    b.a.FindComponent(b.plate)->grounded = false;
+    b.a.FindComponent(postId)->grounded = true;
+    b.a.FindComponent(b.plate)->placement.translation.z = 5;
+    b.a.Touch();
+    b.m.Update(b.a, b.file);
+    CHECK(kernel::ContextKey(b.m, b.a, postId, post.doc, name) != key);
+    const kernel::AdaptResult r = kernel::AdaptContextProjections(b.m, b.a, postId, post.doc, name);
+    CHECK(r.moved == 1);
+    CHECK(r.lost == 0);
+    post.Rebuild();
+    CHECK(post.model.BoundingBox()->max.z == Approx(15).epsilon(1e-6));
+    // Nothing more to do when nothing changed.
+    CHECK(kernel::AdaptContextProjections(b.m, b.a, postId, post.doc, name).moved == 0);
+
+    // The plate itself gets thicker (its own extrusion 10 -> 18): the face moves with it.
+    MemoryPart plate{Plate(), {}};
+    plate.Rebuild();
+    b.m.UsePartInMemory(b.dir / "plate.bzc", &plate.doc, &plate.model);
+    auto* plateEx = dynamic_cast<doc::ExtrudeFeature*>(plate.doc.Features()[1].get());
+    REQUIRE(plateEx);
+    plateEx->distance.expression = "18";
+    plateEx->distance.value = 18;
+    plate.doc.MarkChanged(1);
+    plate.Rebuild();
+    b.m.Update(b.a, b.file);
+    CHECK(kernel::AdaptContextProjections(b.m, b.a, postId, post.doc, name).moved == 1);
+    post.Rebuild();
+    CHECK(post.model.BoundingBox()->max.z == Approx(23).epsilon(1e-6));
+
+    // Saved and opened on its own: it extrudes to where the face last was.
+    const std::filesystem::path alone = b.dir / "post-alone.bzc";
+    REQUIRE(doc::SaveBzc(post.doc, alone, "tests"));
+    Expected<doc::Document> loaded = doc::LoadBzc(alone);
+    REQUIRE(loaded);
+    auto* back = dynamic_cast<doc::ExtrudeFeature*>(loaded->Features()[1].get());
+    REQUIRE(back);
+    REQUIRE(back->toContext);
+    CHECK(back->toContext->component == b.plate);
+    CHECK(back->toContext->componentName == "Плита:1");
+    kernel::Model model;
+    model.Rebuild(*loaded);
+    REQUIRE(model.BoundingBox());
+    CHECK(model.BoundingBox()->max.z == Approx(23).epsilon(1e-6));
+
+    // The plate taken out of the assembly: the post keeps its height.
+    b.a.RemoveComponent(b.plate);
+    b.m.Update(b.a, b.file);
+    const kernel::AdaptResult gone = kernel::AdaptContextProjections(b.m, b.a, postId, post.doc, name);
+    CHECK(gone.moved == 0);
+    CHECK(gone.lost == 1);
+    post.Rebuild();
+    CHECK(post.model.BoundingBox()->max.z == Approx(23).epsilon(1e-6));
+}
+
+TEST_CASE("an extrusion up to a face is a link like a projection: a circle of them is refused") {
+    Bench b;
+    MemoryPart post;
+    auto& sk = test::AddSketch(post.doc);
+    test::AddRect(post.doc, sk, {0, 0}, {5, 5});
+    auto& ex = test::AddExtrude(post.doc, sk.id, "1");
+    const ObjectId postId = b.AddMemoryPart(post, "Стойка", {Rotation{}, {60, 0, 0}});
+    ex.extent = doc::ExtentType::ToPlane;
+    ex.toContext = doc::ContextPlane{"Узел", b.plate, {{0, 0, 1}, {20, 20, 10}}, doc::PlaneFrame({{0, 0, 1}, {-40, 20, 10}}), "Плита:1", true};
+    post.doc.MarkChanged(1);
+    post.Rebuild();
+    b.m.Update(b.a, b.file);
+    // The post follows the plate: the plate following the post would close the circle.
+    CHECK(kernel::WouldCycle(b.m, b.a, postId, b.plate, "Узел"));
+    CHECK_FALSE(kernel::WouldCycle(b.m, b.a, b.plate, postId, "Узел"));
+}

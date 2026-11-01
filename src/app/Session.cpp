@@ -155,14 +155,15 @@ std::uint64_t Session::ContentRevision() const {
     return assembly->assembly.Revision() + assembly->assembly.LookRevision() + parts;
 }
 
-Status Session::WriteFile(const std::filesystem::path& target, std::string_view generator) const {
-    if (!assembly) return doc::SaveBzc(doc, target, generator);
-    if (path == target) return assembly::SaveAssembly(assembly->assembly, target, generator);
+Status Session::WriteFile(const std::filesystem::path& target, std::string_view generator,
+                          std::span<const std::uint8_t> preview) const {
+    if (!assembly) return doc::SaveBzc(doc, target, generator, preview);
+    if (path == target) return assembly::SaveAssembly(assembly->assembly, target, generator, preview);
     Expected<assembly::Assembly> copy = assembly::AssemblyFromJson(assembly::AssemblyToJson(assembly->assembly));
     if (!copy) return copy.GetError();
     copy->look.pictures = assembly->assembly.look.pictures;   // not in the JSON
     assembly::RebasePaths(*copy, path, target);
-    return assembly::SaveAssembly(*copy, target, generator);
+    return assembly::SaveAssembly(*copy, target, generator, preview);
 }
 
 bool Session::IsModified() const {

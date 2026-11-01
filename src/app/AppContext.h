@@ -33,7 +33,7 @@ class Recovery;
 class SketchEditor;
 struct OperationEditors;
 
-enum class LeftTab : unsigned char { Tree, Properties, Variables };
+enum class LeftTab : unsigned char { Tree, Properties, Variables, Mate };
 enum class RibbonTab : unsigned char { Model, Sketch, View };
 
 /// UI state of the window chrome that outlives a frame.
@@ -77,6 +77,7 @@ struct ShellState {
     std::string        shortcutFilter;
     std::string        shortcutNote;             ///< "taken from …" after a reassignment
     bool               showMassProperties = false;   ///< the "МЦХ" window
+    bool               showFlatPattern = false;      ///< the «Развёртка» window (sheet metal)
     bool               showLibrary = false;          ///< the standard parts window ("Библиотека")
     /// "В библиотеку": the open part saved as an item of the user's library
     /// (SaveToLibrary.cpp). `variables` are the part's user variables, `use`
@@ -139,7 +140,9 @@ struct ShellState {
 
     /// The radial menu (see viewport/MarkingMenu).
     struct MarkingMenu {
-        bool   armed = false;   ///< left button pressed over the model, waiting to see if it is held
+        bool   armed = false;   ///< the button pressed over the model, waiting to see if it is held or moved
+        int    button = 1;      ///< ImGuiMouseButton_Right, or _Left with Shift
+        int    replaying = 0;   ///< frames of a Shift-click being given back (not a gesture)
         bool   open = false;
         bool   held = false;    ///< the press that opened it is still down
         ImVec2 pressAt{0, 0};

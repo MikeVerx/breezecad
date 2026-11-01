@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app/AssemblyState.h"
+#include "app/EditMode.h"
 #include "core/Expected.h"
 #include "document/Commands.h"
 #include "document/Document.h"
@@ -10,15 +11,12 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 
 namespace bz::app {
 
-enum class EditMode : unsigned char {
-    Model,       ///< the part with its tree
-    PickPlane,   ///< "Начать эскиз": waiting for a plane or a flat face
-    Sketch,      ///< editing a sketch
-};
+
 
 /// One open document with everything that belongs to it: the recipe,
 /// undo history, computed geometry, file, camera and editing state.
@@ -53,7 +51,9 @@ public:
     /// Writes the document to `target` (part or assembly). An assembly
     /// written elsewhere than its own file keeps pointing at the same
     /// parts (its relative paths are adjusted in the copy).
-    Status WriteFile(const std::filesystem::path& target, std::string_view generator) const;
+    /// `preview`: the model as a PNG for the file manager (empty: the file keeps its old one).
+    Status WriteFile(const std::filesystem::path& target, std::string_view generator,
+                     std::span<const std::uint8_t> preview = {}) const;
 
     std::filesystem::path path;        ///< empty until saved once
     std::string           untitledName; ///< "Деталь1" for documents never saved

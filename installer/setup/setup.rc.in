@@ -1,0 +1,45 @@
+// Generated from setup.rc.in by CMake (absolute paths for the resource compiler).
+#include <winver.h>
+
+APPICON ICON "@BZ_ROOT@/resources/app.ico"
+1 24 "@SETUP_DIR@/setup.manifest"
+
+FONT_REGULAR  RCDATA "@BZ_ROOT@/assets/fonts/IBMPlexSans-Regular.ttf"
+FONT_MEDIUM   RCDATA "@BZ_ROOT@/assets/fonts/IBMPlexSans-Medium.ttf"
+FONT_SEMIBOLD RCDATA "@BZ_ROOT@/assets/fonts/IBMPlexSans-SemiBold.ttf"
+FONT_MONO     RCDATA "@BZ_ROOT@/assets/fonts/IBMPlexMono-Regular.ttf"
+
+LIC_ru RCDATA "@SETUP_DIR@/license/ru.txt"
+LIC_en RCDATA "@SETUP_DIR@/license/en.txt"
+
+PAIN1 RCDATA "@SETUP_DIR@/pain/1.jpg"
+PAIN2 RCDATA "@SETUP_DIR@/pain/2.jpg"
+PAIN3 RCDATA "@SETUP_DIR@/pain/3.jpg"
+PAIN4 RCDATA "@SETUP_DIR@/pain/4.jpg"
+
+@SETUP_STRINGS@
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     @SETUP_VERSION_COMMAS@
+PRODUCTVERSION  @SETUP_VERSION_COMMAS@
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "BreezeCAD"
+            VALUE "FileDescription",  "BreezeCAD Setup"
+            VALUE "FileVersion",      "@BZ_VERSION_LABEL@"
+            VALUE "ProductName",      "BreezeCAD"
+            VALUE "ProductVersion",   "@BZ_VERSION_LABEL@"
+            VALUE "LegalCopyright",   "MPL 2.0"
+            VALUE "OriginalFilename", "BreezeCAD-Setup.exe"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

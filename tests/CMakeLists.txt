@@ -5,6 +5,8 @@ add_executable(bz_tests
     app/NewTemplatesTests.cpp
     app/SettingsTests.cpp
     app/GestureTests.cpp
+    app/SectionTests.cpp
+    app/ExtrudeDirectionTests.cpp
     # The app is an executable; its OCCT-free pieces are compiled in directly.
     ${PROJECT_SOURCE_DIR}/src/app/Format.cpp
     ${PROJECT_SOURCE_DIR}/src/app/NewTemplates.cpp
@@ -12,9 +14,12 @@ add_executable(bz_tests
     ${PROJECT_SOURCE_DIR}/src/app/sketch/DimensionLayout.cpp
     ${PROJECT_SOURCE_DIR}/src/app/Settings.cpp
     ${PROJECT_SOURCE_DIR}/src/app/mobile/Gestures.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/features/ExtrudeDirection.cpp
     assembly/AssemblyFileTests.cpp
     assembly/InventorConstraintsTests.cpp
     assembly/PartsBesideTests.cpp
+    assembly/ProjectPackTests.cpp
+    assembly/RotationAnglesTests.cpp
     assembly/SolverTests.cpp
     core/CrashCodeTests.cpp
     core/ExpressionTests.cpp
@@ -36,18 +41,22 @@ add_executable(bz_tests
     kernel/BracketTests.cpp
     kernel/CoilTests.cpp
     kernel/FilletTests.cpp
+    kernel/SeamTests.cpp
     kernel/HoleTests.cpp
     kernel/LoftTests.cpp
+    kernel/MaterialSideTests.cpp
     kernel/MeasureTests.cpp
     kernel/ExtrudeToFaceTests.cpp
     kernel/ExtrudeToCurvedTests.cpp
     kernel/ModelTests.cpp
     kernel/PatternTests.cpp
     kernel/ProjectionTests.cpp
+    kernel/ProjectionRepairTests.cpp
     kernel/RevolvedProjectionTests.cpp
     kernel/RevolveTests.cpp
     kernel/RevolveProjectedTests.cpp
     kernel/SectionTests.cpp
+    kernel/SheetMetalModelTests.cpp
     kernel/ShellTests.cpp
     kernel/StandardPartsTests.cpp
     kernel/SweepTests.cpp
@@ -57,17 +66,32 @@ add_executable(bz_tests
     kernel/WorkPlaneTests.cpp
     kernel/WorkPointTests.cpp
     modules/ModuleTests.cpp
+    sheetmetal/DxfTests.cpp
+    sheetmetal/SheetMetalTests.cpp
     sketch/FilletTests.cpp
     sketch/MirrorTests.cpp
     sketch/ClipboardTests.cpp
+    sketch/CollinearTests.cpp
     sketch/MoveTests.cpp
     sketch/OffsetTests.cpp
     sketch/ShapesTests.cpp
     sketch/SolverTests.cpp
     sketch/StressTests.cpp
     sketch/TrimTests.cpp)
-target_link_libraries(bz_tests PRIVATE bz::miniz bz::core bz::sketch bz::document bz::assembly bz::kernel bz::modules bz::doctest bz::json)
+target_link_libraries(bz_tests PRIVATE bz::miniz bz::core bz::sketch bz::document bz::assembly bz::kernel bz::sheetmetal bz::modules bz::doctest bz::json)
 add_dependencies(bz_tests bz_example_module bz_example_module_fail)
+if(TARGET bz_render AND NOT ANDROID)
+    # The assembly as the program runs it (solving, adaptivity, undo): its
+    # state and the part sessions in it, without a window.
+    target_sources(bz_tests PRIVATE app/AssemblyAdaptTests.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/AssemblyState.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/Session.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/sketch/SketchRepair.cpp
+        app/SketchSnapTests.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/sketch/SketchPick.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/sketch/SketchText.cpp)
+    target_link_libraries(bz_tests PRIVATE bz::render bz::ui bz::imgui glfw OpenGL::GL)
+endif()
 if(ANDROID)
     # The tests run on a phone or the emulator, not where they were built:
     # scripts/android/run-tests.sh copies the sources' data (assets, src,

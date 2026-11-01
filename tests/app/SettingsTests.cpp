@@ -109,3 +109,55 @@ TEST_CASE("Mobile settings: the gesture sets and sensitivity are saved") {
     CHECK(back.mobile.fingerPan == doctest::Approx(1.75));
     std::filesystem::remove_all(file.parent_path());
 }
+
+TEST_CASE("the last save folder is remembered") {
+    Settings s;
+    s.lastSaveFolder = std::filesystem::temp_directory_path() / PathFromUtf8("Проект кронштейна");
+    const auto file = WriteSettings("{}");
+    REQUIRE(s.Save(file));
+    CHECK(Settings::Load(file).lastSaveFolder == s.lastSaveFolder);
+}
+
+TEST_CASE("settings go to another computer whole, without what belongs to this one") {
+    Settings mine;
+    mine.theme = ThemeChoice::Dark;
+    mine.autosaveMinutes = 2;
+    mine.mousePreset = "inventor";
+    mine.mouse.invertWheel = true;
+    mine.touch.speed = 1.7;
+    mine.shortcuts = {{"view.home", "F6"}};
+    mine.language = "en";
+    mine.windowW = 1234;
+    mine.recentFiles = {"/home/misha/a.bzc"};
+    mine.lastSaveFolder = "/home/misha/projects";
+    mine.backgroundPicture = "/home/misha/sky.jpg";
+    const auto file = std::filesystem::temp_directory_path() / PathFromUtf8("bz-настройки-экспорт.json");
+    REQUIRE(mine.Export(file, "0.2.5-Beta"));
+    const std::string text = ReadText(file);
+    CHECK(text.find("a.bzc") == std::string::npos);        // recent files stay here
+    CHECK(text.find("/home/misha/projects") == std::string::npos);
+    CHECK(text.find("sky.jpg") == std::string::npos);
+
+    Settings theirs;
+    theirs.windowW = 800;
+    theirs.recentFiles = {"C:/work/b.bzc"};
+    theirs.lastSaveFolder = "C:/work";
+    const auto got = Settings::Import(file, theirs);
+    REQUIRE(got);
+    CHECK(got->theme == ThemeChoice::Dark);
+    CHECK(got->autosaveMinutes == 2);
+    CHECK(got->mousePreset == "inventor");
+    CHECK(got->mouse.invertWheel);
+    CHECK(got->touch.speed == doctest::Approx(1.7));
+    CHECK(got->language == "en");
+    REQUIRE(got->shortcuts.size() == 1);
+    CHECK(got->shortcuts[0].second == "F6");
+    CHECK(got->windowW == 800);                              // theirs
+    CHECK(got->recentFiles == theirs.recentFiles);
+    CHECK(got->lastSaveFolder == theirs.lastSaveFolder);
+
+    // Anything else is refused, not half-read.
+    CHECK_FALSE(Settings::Import(WriteSettings(R"({"theme":"dark"})"), theirs));   // a settings.json, not an export
+    CHECK_FALSE(Settings::Import(WriteSettings("not json"), theirs));
+    CHECK_FALSE(Settings::Import(std::filesystem::temp_directory_path() / "no-such-file.json", theirs));
+}

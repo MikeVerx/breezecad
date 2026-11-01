@@ -9,7 +9,9 @@ GLFW + OpenGL 3.3. Сборка — CMake presets (`linux-debug`, Windows — MS
 ```
 core      ← математика, единицы, выражения, лог, перевод (I18n)
 sketch    ← core            эскиз 2D: сущности, связи, решатель, операции правки
-document  ← core, sketch    дерево операций, параметры, команды undo, файл .bzc
+sheetmetal ← core           листовой металл без ядра: правила гиба, раскладка отбортовок, развёртка,
+                            DXF (чтение любого, запись R12 для AutoCAD), проверки для резки (ADR-0007)
+document  ← core, sketch, sheetmetal   дерево операций, параметры, команды undo, файл .bzc
 kernel    ← document, OCCT  перестроение модели (тела, регионы эскизов, экспорт)
 modules   ← kernel          модули: module.json (требования к железу), загрузка/отключение,
                             защита от падений, C-ABI `modules/bz_module.h`, пример `examples/modules/hello`;
@@ -82,6 +84,16 @@ Zip: `manifest.json` (версия формата) + `document.json` (дерев
 пакеты `.bzmod` (ZIP: папка модуля под одну систему), их ставит `ModuleManager::Install` в папку модулей
 настроек («Настройки → Модули» или перетаскиванием в окно), включает сразу, удаляет `Uninstall`. MCP-модуль
 для Claude — такой пакет (отдельный PR, `modules/mcp`).
+
+## Листовой металл (ADR-0007)
+Операции `sheetMetal` («Лист»), `sheetFlange` («Отбортовка»), `sheetCut` («Вырез») хранят только ввод.
+Модель листа (`sheet::Part`: основание 2D, отбортовки, вырезы, правила) живёт в `src/sheetmetal` без
+OCCT; `sheet::Solve` раскладывает отбортовки и считает положение каждого сгиба в координатах детали,
+`sheet::Flatten` — развёртку. Ядро (`kernel/occt/SheetMetal.cpp`) только строит тело из раскладки:
+призмы, секторы вращения, объединение, вырезы, проверка столкновений полок. Состояние листа после
+каждой листовой операции — `Model::SheetAt(id)` / `Model::Sheet(doc, base)`; окно «Развёртка» и
+«Редактор DXF» (`app/features/DxfEditor`) берут его оттуда. Команды: `sheet.*`, `dxf.*`
+(`app/scripting/SheetCommands.cpp`).
 
 ## Как добавить…
 - **Инструмент эскиза**: `SketchTool` (SketchEditor.h) → строка в `kTools`

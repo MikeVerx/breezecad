@@ -32,6 +32,8 @@ concurrency:
 jobs:
   windows:
     runs-on: windows-latest
+    permissions:
+      contents: write   # the installer's pictures go to the pr-assets branch
     defaults:
       run:
         shell: msys2 {0}
@@ -49,6 +51,7 @@ jobs:
             mingw-w64-x86_64-opencascade
             mingw-w64-x86_64-binutils
             mingw-w64-x86_64-gdb
+            mingw-w64-x86_64-python
             zip
       - name: Versions
         run: |
@@ -56,7 +59,9 @@ jobs:
           cmake --version | head -1
           grep -h "define OCC_VERSION_COMPLETE" /mingw64/include/opencascade/Standard_Version.hxx
       - name: Configure
-        run: OCCT_DIR=/mingw64/lib/cmake/opencascade cmake --preset windows-mingw -DBZ_BUILD_MCP=ON
+        # The online installer looks for its files in the release it belongs to:
+        # main → the latest numbered release, anything else → next-build.
+        run: OCCT_DIR=/mingw64/lib/cmake/opencascade cmake --preset windows-mingw -DBZ_BUILD_MCP=ON -DBZ_SETUP_CHANNEL=${{ github.ref == 'refs/heads/main' && 'latest' || 'next-build' }}
       - name: Build
         id: build
         run: cmake --build --preset windows-mingw 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
@@ -91,6 +96,11 @@ jobs:
           # No modules inside: they are separate packages (.bzmod) the user
           # installs in "Настройки → Модули".
           bash scripts/deploy-runtime.sh dist/BreezeCAD breezecad.exe /mingw64/bin
+          # File Explorer previews and file-type icons: registered by the
+          # installer, unused by the portable copy (a few hundred KB).
+          mkdir -p dist/BreezeCAD/shell
+          cp build/windows-mingw/bin/bz_thumbs.dll installer/icons/*.ico dist/BreezeCAD/shell/
+          cp LICENSE dist/BreezeCAD/
           # The testers' build: the same program in "program/", the flag that turns
           # on reports, the launcher and the instructions on top.
           beta=dist/beta/BreezeCAD-beta
@@ -105,6 +115,74 @@ jobs:
           mkdir -p release
           (cd dist && 7z a -tzip -bso0 ../release/BreezeCAD-windows.zip BreezeCAD)
           (cd dist/beta && 7z a -tzip -mcu=on -bso0 ../../release/BreezeCAD-beta-windows.zip BreezeCAD-beta)
+      - name: Installer (online, offline, manifest)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          number=$(sed -n '/^project(/,/)/s/.*VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt | head -1)
+          suffix=$(sed -n 's/^set(BZ_VERSION_SUFFIX "\(.*\)")/\1/p' CMakeLists.txt | head -1)
+          label="$number$suffix"
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then tag="v$(echo "$label" | tr '[:upper:]' '[:lower:]')"; else tag=next-build; fi
+          modules=()
+          for m in build/windows-mingw/packages/*.bzmod; do modules+=(--module "$m"); cp "$m" release/; done
+          # Languages other than Russian and English: packs the installer downloads.
+          python3 scripts/i18n/make-packs.py release
+          for l in release/lang-*.zip; do [ -e "$l" ] && modules+=(--language "$l"); done
+          python3 scripts/installer/make-manifest.py --version "$label" --tag "$tag" --program release/BreezeCAD-windows.zip \
+            "${modules[@]}" -o release/setup-manifest.json
+          cp build/windows-mingw/bin/BreezeCAD-Setup.exe release/
+          python3 scripts/installer/pack-offline.py release/BreezeCAD-Setup.exe release/setup-manifest.json release \
+            -o release/BreezeCAD-Setup-offline.exe
+          ls -la release
+      - name: Installer test (install, check, remove)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          set +e
+          target="$(cygpath -w "$RUNNER_TEMP")\\bz-install-test"
+          dir=$(cygpath -u "$target")
+          ./release/BreezeCAD-Setup-offline.exe --test-install "$target"
+          echo "installer: $(cat "$dir.result" 2>/dev/null)"
+          fail=0
+          for f in breezecad.exe uninstall.exe installed.json installed-files.txt shell/bz_thumbs.dll shell/part.ico; do
+            test -f "$dir/$f" || { echo "::error title=Installer::$f is missing after installation"; fail=1; }
+          done
+          reg.exe query 'HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\BreezeCAD' > /dev/null || { echo "::error title=Installer::no Apps & features entry"; fail=1; }
+          reg.exe query 'HKCU\Software\Classes\.bzc' > /dev/null || { echo "::error title=Installer::.bzc is not registered"; fail=1; }
+          ls "$(cygpath -u "$APPDATA")/BreezeCAD/modules/"*.bzmod > /dev/null 2>&1 || { echo "::error title=Installer::the modules were not put in place"; fail=1; }
+          cp "$dir/uninstall.exe" "$RUNNER_TEMP/bz-uninstall.exe"
+          "$RUNNER_TEMP/bz-uninstall.exe" --uninstall --from-temp --dir "$target" --quiet
+          test -e "$dir/breezecad.exe" && { echo "::error title=Installer::the program is still there after removal"; fail=1; }
+          reg.exe query 'HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\BreezeCAD' > /dev/null 2>&1 && { echo "::error title=Installer::the Apps & features entry stayed"; fail=1; }
+          [ $fail = 0 ] && echo "::notice title=Installer::installed, registered and removed cleanly"
+          exit $fail
+      - name: Installer screens
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        continue-on-error: true
+        run: |
+          mkdir -p shots/setup
+          BZ_SETUP_SHOTS="$(cygpath -w "$PWD/shots/setup")" timeout 180 ./release/BreezeCAD-Setup.exe
+          ls shots/setup
+      # The same pictures where people can look at them without downloading
+      # an archive: setup/ in the pr-assets branch (replaced every run).
+      - name: Installer screens to pr-assets
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          ls shots/setup/*.png > /dev/null 2>&1 || exit 0
+          git clone -q --depth 1 --branch pr-assets "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" pa
+          rm -rf pa/setup && mkdir -p pa/setup && cp shots/setup/*.png pa/setup/
+          cd pa
+          git add -A setup
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "setup screens: ${GITHUB_SHA::7} (${GITHUB_REF_NAME})" || exit 0
+          git push -q origin pr-assets
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        with:
+          name: setup-screens
+          path: shots/setup
+          if-no-files-found: warn
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         with:
@@ -160,6 +238,7 @@ jobs:
           create-args: >-
             cmake ninja gxx_linux-64=13 sysroot_linux-64=2.28
             occt=*=novtk* glfw libgl-devel xorg-libx11 xorg-libxi
+            xorg-libxrandr xorg-libxinerama xorg-libxcursor xorg-libxext xorg-xorgproto
           cache-environment: true
       - name: Versions
         run: |
@@ -167,7 +246,8 @@ jobs:
           occt=$(grep -h "define OCC_VERSION_COMPLETE" "$CONDA_PREFIX"/include/opencascade/Standard_Version.hxx | awk '{print $3}')
           echo "::notice title=Linux toolchain::$($CXX -dumpfullversion), OCCT $occt, GLFW $(grep -h 'define GLFW_VERSION_M' "$CONDA_PREFIX"/include/GLFW/glfw3.h | awk '{printf "%s.", $3}')"
       - name: Configure
-        run: cmake --preset linux-release -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DBZ_BUILD_MCP=ON
+        run: cmake --preset linux-release -DCMAKE_PREFIX_PATH="$CONDA_PREFIX" -DBZ_BUILD_MCP=ON -DBZ_SETUP_STATIC_GLFW=ON
+          -DBZ_SETUP_CHANNEL=${{ github.ref == 'refs/heads/main' && 'latest' || 'next-build' }}
       # Three at a time: with OCCT 8 headers four compilers at once ran the
       # runner out of memory, which killed the build without a message.
       - name: Build
@@ -204,6 +284,60 @@ jobs:
         run: |
           bash scripts/package-linux.sh build/linux-release/bin release
           bash scripts/package-linux.sh build/linux-release/bin release --beta
+      # The installer, as on Windows: online (downloads what is chosen) and
+      # offline (everything inside), from the same package as a ZIP.
+      - name: Installer (Linux)
+        id: installer
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        run: |
+          number=$(sed -n '/^project(/,/)/s/.*VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt | head -1)
+          suffix=$(sed -n 's/^set(BZ_VERSION_SUFFIX "\(.*\)")/\1/p' CMakeLists.txt | head -1)
+          label="$number$suffix"
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then tag="v$(echo "$label" | tr '[:upper:]' '[:lower:]')"; else tag=next-build; fi
+          mkdir -p setup-linux
+          python3 scripts/installer/tar2zip.py release/BreezeCAD-linux.tar.gz setup-linux/BreezeCAD-linux.zip
+          python3 scripts/i18n/make-packs.py setup-linux
+          args=()
+          for m in build/linux-release/packages/*.bzmod; do [ -e "$m" ] && args+=(--module "$m") && cp "$m" setup-linux/; done
+          for l in setup-linux/lang-*.zip; do [ -e "$l" ] && args+=(--language "$l"); done
+          python3 scripts/installer/make-manifest.py --version "$label" --tag "$tag" --program setup-linux/BreezeCAD-linux.zip \
+            "${args[@]}" -o setup-linux/setup-manifest-linux.json
+          cp build/linux-release/bin/BreezeCAD-Setup-linux release/
+          strip release/BreezeCAD-Setup-linux
+          python3 scripts/installer/pack-offline.py release/BreezeCAD-Setup-linux setup-linux/setup-manifest-linux.json setup-linux \
+            -o release/BreezeCAD-Setup-linux-offline
+          chmod +x release/BreezeCAD-Setup-linux release/BreezeCAD-Setup-linux-offline
+          cp setup-linux/setup-manifest-linux.json setup-linux/BreezeCAD-linux.zip release/
+          glibc=$(objdump -T release/BreezeCAD-Setup-linux | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)
+          echo "::notice title=Linux installer::$(du -h release/BreezeCAD-Setup-linux | cut -f1) online, $(du -h release/BreezeCAD-Setup-linux-offline | cut -f1) offline; needs $glibc; $(ldd release/BreezeCAD-Setup-linux | wc -l) libraries"
+          # The whole installation without the pages, into a fresh home.
+          export HOME=$(mktemp -d)
+          ./release/BreezeCAD-Setup-linux-offline --test-install "$HOME/.local/share/BreezeCAD/app"
+          test -x "$HOME/.local/share/BreezeCAD/app/breezecad" || { echo "::error title=Linux installer::the program is not there"; exit 1; }
+          test -f "$HOME/.local/share/applications/breezecad.desktop" || { echo "::error title=Linux installer::no menu entry"; exit 1; }
+          "$HOME/.local/share/BreezeCAD/app/breezecad-setup" --uninstall --quiet
+          test ! -e "$HOME/.local/share/BreezeCAD/app/breezecad" || { echo "::error title=Linux installer::removal left the program"; exit 1; }
+      - name: Pictures of the Linux installer
+        if: ${{ !cancelled() && steps.installer.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p shots/setup-linux
+          BZ_SETUP_SHOTS="$PWD/shots/setup-linux" timeout 180 xvfb-run -a -s "-screen 0 1600x1000x24" env -u LD_LIBRARY_PATH \
+            ./release/BreezeCAD-Setup-linux
+          echo "::notice title=Linux installer pages::$(ls shots/setup-linux | wc -l) pictures"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.installer.outcome == 'success' }}
+        with:
+          name: release-linux-setup
+          path: |
+            release/BreezeCAD-Setup-linux
+            release/BreezeCAD-Setup-linux-offline
+            release/setup-manifest-linux.json
+            release/BreezeCAD-linux.zip
+            setup-linux/lang-*.zip
+          compression-level: 0
+          retention-days: 3
       # Outside the build environment, from the unpacked archive: does it start?
       - name: Start check
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
@@ -339,6 +473,30 @@ jobs:
         run: |
           bash scripts/package-macos.sh build/macos/bin release
           bash scripts/package-macos.sh build/macos/bin release --beta
+      # Finder's side: the types are the app's, Quick Look draws the picture a
+      # part keeps inside (the thumbnail extension), the disk image mounts.
+      - name: File types, thumbnails and the disk image
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        continue-on-error: true
+        run: |
+          mkdir -p /tmp/ql shots && ditto -x -k release/BreezeCAD-macos.zip /tmp/ql
+          app=/tmp/ql/BreezeCAD.app
+          /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app"
+          pluginkit -a "$app/Contents/PlugIns/BreezeCADThumbnails.appex" || true
+          ext=$(pluginkit -m -p com.apple.quicklook.thumbnail -v 2>/dev/null | grep -i breezecad || true)
+          python3 - <<'PY'
+          import zipfile
+          z = zipfile.ZipFile("/tmp/ql/Пример.bzc", "w")
+          z.writestr("manifest.json", "{}")
+          z.write("installer/icons/png/part.png", "preview.png")
+          z.close()
+          PY
+          uti=$(mdls -name kMDItemContentType -raw /tmp/ql/Пример.bzc 2>/dev/null || true)
+          qlmanage -t -s 256 -o shots /tmp/ql/Пример.bzc > ql.log 2>&1 || true
+          thumb=$(ls shots/*.bzc.png 2>/dev/null | head -1)
+          hdiutil attach -nobrowse -readonly release/BreezeCAD-macos.dmg > dmg.log && mounted=yes || mounted=no
+          [ "$mounted" = yes ] && ls /Volumes/BreezeCAD > dmg-list.txt && hdiutil detach -quiet /Volumes/BreezeCAD
+          echo "::notice title=macOS Finder::type: ${uti:-?}; extension: ${ext:-not registered}; thumbnail: ${thumb:-none ($(tail -1 ql.log))}; dmg: $mounted ($(tr '\n' ' ' < dmg-list.txt 2>/dev/null)) $(du -h release/BreezeCAD-macos.dmg | cut -f1)"
       # From the unpacked zip, with Homebrew's libraries moved away: does the
       # app start on its own?
       - name: Start check
@@ -370,7 +528,9 @@ jobs:
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         with:
           name: BreezeCAD-macos
-          path: release/BreezeCAD-macos.zip
+          path: |
+            release/BreezeCAD-macos.zip
+            release/BreezeCAD-macos.dmg
           compression-level: 0
           retention-days: 30
       - uses: actions/upload-artifact@v4
@@ -410,6 +570,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: BreezeCAD-beta-linux, path: release }
       - uses: actions/download-artifact@v4
+        with: { name: release-linux-setup, path: release-linux }
+      - name: Linux installer files
+        run: |
+          cp release-linux/release/* release/
+          chmod +x release/BreezeCAD-Setup-linux release/BreezeCAD-Setup-linux-offline
+      - uses: actions/download-artifact@v4
         with: { name: BreezeCAD-macos, path: release }
       - uses: actions/download-artifact@v4
         with: { name: BreezeCAD-beta-macos, path: release }
@@ -419,19 +585,28 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           files=(BreezeCAD-windows.zip BreezeCAD-beta-windows.zip BreezeCAD-linux.tar.gz BreezeCAD-beta-linux.tar.gz
-                 BreezeCAD-macos.zip BreezeCAD-beta-macos.zip)
+                 BreezeCAD-macos.zip BreezeCAD-macos.dmg BreezeCAD-beta-macos.zip
+                 BreezeCAD-Setup.exe BreezeCAD-Setup-offline.exe setup-manifest.json
+                 BreezeCAD-Setup-linux BreezeCAD-Setup-linux-offline setup-manifest-linux.json BreezeCAD-linux.zip)
           for f in "${files[@]}"; do test -s "release/$f" || { echo "::error::missing $f"; exit 1; }; done
+          # The modules the online installer downloads from this release.
+          for m in release/*.bzmod release/lang-*.zip; do [ -e "$m" ] && files+=("$(basename "$m")"); done
           notes="Свежая сборка ветки next: коммит ${GITHUB_SHA::7}, $(date -u '+%Y-%m-%d %H:%M') UTC.
 
           Windows 10/11 (64-бит):
-          • BreezeCAD-windows.zip — обычная: распаковать и запустить BreezeCAD/breezecad.exe.
+          • BreezeCAD-Setup.exe — установщик: скачивает программу и выбранные модули, регистрирует файлы и превью в Проводнике, обновляет установленную версию.
+          • BreezeCAD-Setup-offline.exe — тот же установщик со всем внутри, сеть не нужна.
+          • BreezeCAD-windows.zip — без установки: распаковать и запустить BreezeCAD/breezecad.exe.
           • BreezeCAD-beta-windows.zip — для бета-тестеров: с отчётами об ошибках, внутри «ИНСТРУКЦИЯ для тестеров.txt».
 
           Linux (x86_64; Ubuntu 20.04+, Debian 10+, Fedora и другие не старше 2019 года):
+          • BreezeCAD-Setup-linux — установщик: скачивает программу и выбранное, добавляет её в меню, типы файлов и превью (chmod +x и запустить).
+          • BreezeCAD-Setup-linux-offline — тот же установщик со всем внутри.
           • BreezeCAD-linux.tar.gz — обычная: распаковать и запустить BreezeCAD/breezecad.
           • BreezeCAD-beta-linux.tar.gz — для бета-тестеров: внутри «Запустить BreezeCAD.sh» и «ИНСТРУКЦИЯ для тестеров.txt».
 
           macOS 14+ на процессорах Apple (M1 и новее):
+          • BreezeCAD-macos.dmg — образ диска: открыть и перетащить BreezeCAD в «Программы». Файлы деталей и сборок открываются в BreezeCAD, в Finder видны их картинки.
           • BreezeCAD-macos.zip — обычная: распаковать и открыть BreezeCAD.app. Первый запуск — правой кнопкой → «Открыть»; на macOS 15+ — «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть».
           • BreezeCAD-beta-macos.zip — для бета-тестеров: внутри BreezeCAD.app и «ИНСТРУКЦИЯ для тестеров.txt»."
           if ! gh release view next-build >/dev/null 2>&1; then
@@ -458,6 +633,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: BreezeCAD-beta-linux, path: release }
       - uses: actions/download-artifact@v4
+        with: { name: release-linux-setup, path: release-linux }
+      - name: Linux installer files
+        run: |
+          cp release-linux/release/* release/
+          chmod +x release/BreezeCAD-Setup-linux release/BreezeCAD-Setup-linux-offline
+      - uses: actions/download-artifact@v4
         with: { name: BreezeCAD-macos, path: release }
       - uses: actions/download-artifact@v4
         with: { name: BreezeCAD-beta-macos, path: release }
@@ -467,8 +648,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           files=(BreezeCAD-windows.zip BreezeCAD-beta-windows.zip BreezeCAD-linux.tar.gz BreezeCAD-beta-linux.tar.gz
-                 BreezeCAD-macos.zip BreezeCAD-beta-macos.zip)
+                 BreezeCAD-macos.zip BreezeCAD-macos.dmg BreezeCAD-beta-macos.zip
+                 BreezeCAD-Setup.exe BreezeCAD-Setup-offline.exe setup-manifest.json
+                 BreezeCAD-Setup-linux BreezeCAD-Setup-linux-offline setup-manifest-linux.json BreezeCAD-linux.zip)
           for f in "${files[@]}"; do test -s "release/$f" || { echo "::error::missing $f"; exit 1; }; done
+          for m in release/*.bzmod release/lang-*.zip; do [ -e "$m" ] && files+=("$(basename "$m")"); done
           number=$(sed -n '/^project(/,/)/s/.*VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt | head -1)
           suffix=$(sed -n 's/^set(BZ_VERSION_SUFFIX "\(.*\)")/\1/p' CMakeLists.txt | head -1)
           label="$number$suffix"                                   # 0.2.1-Beta

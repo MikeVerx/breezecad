@@ -4,6 +4,7 @@
 // distance and taper.
 
 #include "app/features/DragArrow.h"
+#include "app/features/ExtrudeDirection.h"
 #include "app/features/SketchOperationEditor.h"
 #include "core/I18n.h"
 #include "document/ExtrudeFeature.h"
@@ -17,6 +18,7 @@ public:
     std::string Hint() const override;
     /// Choosing the face "до": faces under the cursor light up.
     bool        PicksOriginal() const override { return myPickTarget; }
+    bool        PicksContextFaces() const override { return myPickTarget; }
 
 protected:
     const char* Icon() const override { return "tree-extrude"; }
@@ -26,6 +28,8 @@ protected:
     void CarryOver(const doc::SketchSolidFeature& previous, doc::SketchSolidFeature& next) const override;
     /// The length arrow: drawn over the model, dragged to change the distance.
     bool PickInViewport(AppContext& app, Session& session, doc::SketchSolidFeature& feature, const SketchView& view) override;
+    /// «Вырез»: into the body; back from it: as it was (ExtrudeAutoDirection).
+    void OperationChanged(Session& session, doc::SketchSolidFeature& feature, doc::BooleanOp before) override;
 
 private:
     DragArrow   myArrow;
@@ -34,6 +38,7 @@ private:
     bool        myPickTarget = false;   ///< clicks in the view choose the plane "до", not profiles
     std::string myDistance;
     std::string myTaper;
+    ExtrudeAutoDirection myAutoDirection;
 };
 
 } // namespace bz::app

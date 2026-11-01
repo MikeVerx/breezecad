@@ -17,6 +17,8 @@ namespace {
 /// weighed alike (a degree at 100 mm is about 1.7 mm).
 constexpr double kScale = 100.0;
 constexpr double kFailed = 1e-4;   ///< mm: a constraint further off than this does not hold
+constexpr double kPullBack = 1e-3;  ///< largest damping that also pulls the free directions back to the start
+constexpr double kMaxStep = 200.0;  ///< mm (rotations at kScale): the longest step of one iteration
 
 struct WorldGeometry {
     GeometryKind kind;
@@ -748,15 +750,36 @@ double SolveSystem(System& s, const SolveOptions& options, int& iterations) {
         for (int tries = 0; tries < 12 && !improved; ++tries) {
             std::vector<double> dy;
             bool solved;
+            // The damping also pulls back towards the start: the step solves
+            // (JᵀJ + λD) (y + dy) = JᵀJ y - Jᵀf, so where the constraints
+            // leave a part free (sliding along an axis, turning about it)
+            // it goes back to where it was, not drifts on step by step —
+            // the solution nearest the start, as a user expects. Heavily
+            // damped (steps refused) the pull fades, or it would undo the
+            // progress made and stall.
+            std::vector<double> rhs = jtf;
+            for (std::size_t p = 0; p < n; ++p) {
+                const double diag = dense ? jtj[p][p] : blocks.At(p / 6, p / 6)[(p % 6) * 6 + p % 6];
+                rhs[p] -= std::min(lambda, kPullBack) * (1.0 + diag) * y[p];
+            }
             if (dense) {
                 Matrix damped = jtj;
                 for (std::size_t p = 0; p < n; ++p) damped[p][p] += lambda * (1.0 + jtj[p][p]);
-                solved = SolveSpd(damped, jtf, dy);
+                solved = SolveSpd(damped, rhs, dy);
             } else {
-                solved = SolveBlocks(blocks, lambda, jtf, dy);
+                solved = SolveBlocks(blocks, lambda, rhs, dy);
             }
             if (!solved) {
                 lambda *= 10;
+                continue;
+            }
+            // A trust region: a step much longer than the parts are apart
+            // comes from a nearly flat direction (an axis almost along a
+            // plane, two almost parallel faces) and would throw the part
+            // metres away for a solution a small turn reaches. Damping more
+            // bends the step towards that turn.
+            if (Norm(dy) > kMaxStep) {
+                lambda *= 8;
                 continue;
             }
             std::vector<double> y1 = y;
@@ -979,9 +1002,42 @@ SolveResult Solve(Assembly& a, const SolveOptions& options) {
             const auto ok = [](Vec3 v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z) && v.Length() < 1e8; };
             return ok(p.translation) && ok(p.rotation.col[0]) && ok(p.rotation.col[1]) && ok(p.rotation.col[2]);
         };
-        if (!std::ranges::all_of(s.free, [&](ObjectId id) { return finite(a.FindComponent(id)->placement); })) {
+        bool revert = !std::ranges::all_of(s.free, [&](ObjectId id) { return finite(a.FindComponent(id)->placement); });
+        // Constraints that cannot all hold: the solve finds the least bad
+        // compromise, and that compromise often lies far away (two axes that
+        // cannot meet "meet" better and better the further a part slides; a
+        // 5 cm coupling went 8 m). It is taken only when it really helps and
+        // stays near: else the parts stay, the constraints show as not holding.
+        // Solving again from a compromise moves nothing (it used to creep on
+        // with every repaint).
+        double startErr = std::numeric_limits<double>::infinity();
+        if (!revert && err > options.tolerance * 10 && pulled == s.index.end()) {
+            startErr = Norm(s.F(std::vector<double>(s.Unknowns(), 0.0)));
+            double scale = 0.0;   // how big the group is: its parts' origins and the geometry it ties
+            std::vector<Vec3> points;
+            for (const Placement& p : before) points.push_back(p.translation);
+            for (const Constraint* c : s.active)
+                for (const GeometryRef* g : {&c->first, &c->second}) {
+                    // Where it was before this solve (the free ones have moved by now).
+                    const auto at = s.index.find(g->component);
+                    if (at != s.index.end()) points.push_back(before[at->second].Point(g->origin));
+                    else if (const Component* owner = a.FindComponent(g->component)) points.push_back(owner->placement.Point(g->origin));
+                }
+            for (const Vec3& p : points)
+                for (const Vec3& q : points) scale = std::max(scale, (p - q).Length());
+            double farthest = 0.0;
+            for (std::size_t i = 0; i < s.free.size(); ++i)
+                farthest = std::max(farthest, (a.FindComponent(s.free[i])->placement.translation - before[i].translation).Length());
+            const bool helps = err < 0.9 * startErr;
+            const bool closeBy = farthest <= std::max(100.0, 2.0 * scale);
+            // A part the others are drawn from stays: they would follow it
+            // to the compromise, and their sketches with them.
+            const bool leads = std::ranges::any_of(s.free, [&](ObjectId id) { return a.FindComponent(id)->leads; });
+            revert = !helps || !closeBy || leads;
+        }
+        if (revert) {
             for (std::size_t i = 0; i < s.free.size(); ++i) a.FindComponent(s.free[i])->placement = before[i];
-            err = std::numeric_limits<double>::infinity();
+            err = startErr;
         }
         total += err * err;
         for (std::size_t i = 0; i < s.free.size(); ++i) {
@@ -1019,7 +1075,7 @@ void Analyze(Assembly& a) {
 std::unordered_map<ObjectId, Freedom> AnalyzeFreedom(const Assembly& a) {
     std::unordered_map<ObjectId, Freedom> out;
     auto& mutableAssembly = const_cast<Assembly&>(a);   // the systems only read it here
-    for (const Component& c : a.components) out[c.id] = c.grounded ? Freedom{0, 0} : Freedom{3, 3};
+    for (const Component& c : a.components) out[c.id] = a.IsFixed(c.id) ? Freedom{0, 0} : Freedom{3, 3};
     for (System& s : MakeSystems(mutableAssembly, {})) {
         if (s.free.empty()) continue;
         s.limits = false;

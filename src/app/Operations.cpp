@@ -1,4 +1,7 @@
+#include "core/Version.h"
+#include "assembly/ProjectPack.h"
 #include "app/Operations.h"
+#include "app/features/SheetMetalEditors.h"
 
 #include "app/Format.h"
 #include "app/features/OperationEditors.h"
@@ -111,6 +114,7 @@ void OpenDropped(AppContext& app, const std::filesystem::path& file) {
     for (char8_t& ch : ext)
         if (ch >= u8'A' && ch <= u8'Z') ch = static_cast<char8_t>(ch - u8'A' + u8'a');
     if (ext == u8".bzmod" || ext == u8".zip") InstallModule(app, file);
+    else if (ext == u8".bzp") OpenProject(app, file);
     else if (ext == u8".bzlib") InstallStandardPack(app, file);
     else OpenDocument(app, file);
 }
@@ -125,11 +129,84 @@ void OpenDocument(AppContext& app, std::optional<std::filesystem::path> file) {
             app.notes.Error(problem);
             return;
         }
-        file = platform::ShowOpenDialog(Tr("Открыть документ"), {{Tr("Документ BreezeCAD"), doc::DocumentTypeRegistry::Default().OpenPatterns()}}, folder);
+        file = platform::ShowOpenDialog(Tr("Открыть документ"),
+                                        {{Tr("Документ BreezeCAD"), doc::DocumentTypeRegistry::Default().OpenPatterns() + " *.bzp"},
+                                         {Tr("Проект BreezeCAD"), "*.bzp"}},
+                                        folder);
         if (!file) return;
+    }
+    if (std::u8string ext = file->extension().u8string(); ext == u8".bzp" || ext == u8".BZP") {
+        OpenProject(app, *file);
+        return;
     }
     EndEditing(app);
     app.workspace.Open(*file, app.notes, app.settings);
+}
+
+void ExportProject(AppContext& app) {
+    Session* s = app.workspace.ActiveTab();
+    if (!s || !s->assembly) return;
+    app.ops.Commit(app, *s);
+    // The project is made from the files as saved: unsaved changes are saved first.
+    if (s->path.empty() || s->IsModified()) {
+        if (!app.workspace.Save(*s, false, app.notes, app.settings)) return;
+        app.autosave.Discard(*s);
+    }
+    if (const std::string problem = platform::FileDialogProblem(); !problem.empty()) {
+        app.notes.Error(problem);
+        return;
+    }
+    const std::filesystem::path suggested = s->path.parent_path() / PathFromUtf8(ToUtf8(s->path.stem()) + ".bzp");
+    const auto file = platform::ShowSaveDialog(Tr("Экспорт проекта"), suggested, {{Tr("Проект BreezeCAD"), "*.bzp"}}, ".bzp");
+    if (!file) return;
+    const Expected<assembly::PackReport> r = assembly::PackProject(s->path, *file, Version());
+    if (!r) {
+        app.notes.Error(Trf("Проект не сохранён: {}", Tr(r.GetError().message)));
+        return;
+    }
+    if (!platform::FileWritten(*file)) {
+        app.notes.Error(Tr("Не удалось записать файл в выбранную папку"));
+        return;
+    }
+    app.notes.Success(Trf("Проект сохранён: сборка и деталей {} в одном файле «{}»", r->parts, ToUtf8(file->filename())));
+    if (!r->missing.empty()) {
+        std::string names;
+        for (const std::string& n : r->missing) names += (names.empty() ? "" : ", ") + n;
+        app.notes.Error(Trf("Без файлов (их нет на диске): {}", names));
+    }
+}
+
+void OpenProject(AppContext& app, const std::filesystem::path& file) {
+    const Expected<assembly::ProjectManifest> m = assembly::ReadProject(file);
+    if (!m) {
+        app.notes.Error(Tr(m.GetError().message));
+        return;
+    }
+    // Where the project will live from now on: chosen once, then an ordinary folder.
+    std::filesystem::path start = platform::DocumentsDir();
+    std::error_code ec;
+    if (!app.settings.lastSaveFolder.empty() && std::filesystem::is_directory(app.settings.lastSaveFolder, ec)) start = app.settings.lastSaveFolder;
+    std::filesystem::path folder;
+    if (const auto chosen = platform::ShowFolderDialog(Trf("Куда распаковать проект «{}»", m->name), start)) folder = *chosen;
+#if defined(__ANDROID__)
+    else folder = start;   // no folder window on the phone: the projects folder
+#else
+    else return;
+#endif
+    // A folder with something in it gets a folder of the project's own name.
+    const std::string name = m->name.empty() ? ToUtf8(file.stem()) : m->name;
+    const bool empty = std::filesystem::is_directory(folder, ec) && std::filesystem::directory_iterator(folder, ec) == std::filesystem::directory_iterator();
+    std::filesystem::path target = folder;
+    if (!empty && ToUtf8(folder.filename()) != name) target /= PathFromUtf8(name);
+    const Expected<std::filesystem::path> main = assembly::UnpackProject(file, target);
+    if (!main) {
+        app.notes.Error(Trf("Проект не распакован: {}", Tr(main.GetError().message)));
+        return;
+    }
+    app.settings.lastSaveFolder = target;
+    app.notes.Success(Trf("Проект «{}» распакован в {}", name, ToUtf8(target)));
+    EndEditing(app);
+    app.workspace.Open(*main, app.notes, app.settings);
 }
 
 void SaveDocument(AppContext& app, bool saveAs) {
@@ -303,6 +380,31 @@ void StartShell(AppContext& app) {
     if (!s) return;
     app.ops.Close(app, *s);
     app.ops.shell.StartNew(app, *s);
+}
+
+void StartSheet(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.sheet.StartNew(app, *s);
+}
+
+void StartFlange(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    app.ops.flange.StartNew(app, *s);
+}
+
+void StartSheetCut(AppContext& app) {
+    Session* s = app.Doc();
+    if (!s) return;
+    app.ops.Close(app, *s);
+    if (!LastSheet(s->doc)) {
+        app.notes.Info(Tr("Сначала сделайте лист: эскиз с замкнутым контуром и «Лист»"));
+        return;
+    }
+    app.ops.sheetCut.StartNew(app, *s);
 }
 
 void StartHole(AppContext& app) {
@@ -520,6 +622,8 @@ void EnterPressed(AppContext& app) {
     Session* s = app.Doc();
     if (!s) return;
     if (OperationEditor* open = app.ops.Active()) open->Done(app, *s);
+    // A previewed constraint: Enter (or a click of the wheel) is Применить.
+    else if (s->assembly && s->assembly->creating.preview) ApplyConstraint(app, *s, false);
 }
 
 void DeletePressed(AppContext& app) {

@@ -120,6 +120,12 @@ int main(int argc, char** argv) {
             }
         } else if (!strcmp(c, "mousedown") || !strcmp(c, "mouseup")) {
             XTestFakeButtonEvent(d, (unsigned)atoi(argv[i++]), c[5] == 'd', CurrentTime);
+        } else if ((!strcmp(c, "keydown") || !strcmp(c, "keyup")) && i < argc) {
+            /* A key held across other commands (Shift + drag). */
+            KeySym ks = Sym(argv[i++]);
+            KeyCode kc = XKeysymToKeycode(d, ks);
+            if (kc) XTestFakeKeyEvent(d, kc, c[3] == 'd', CurrentTime);
+            XFlush(d);
         } else if (!strcmp(c, "key")) {
             while (i < argc && argv[i][0] != '\0' && strcmp(argv[i], "--") != 0) {
                 if (argv[i][0] == '-') { i += 2; continue; }   /* --delay N etc. */

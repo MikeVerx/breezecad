@@ -32,6 +32,10 @@ std::filesystem::path StandardPackDir();
 /// A file dropped on the window: a module package is installed, a pack of
 /// standard parts added to the library, anything else opened as a document.
 void OpenDropped(AppContext& app, const std::filesystem::path& file);
+/// The assembly in front with all its parts into one .bzp (saved first).
+void ExportProject(AppContext& app);
+/// A .bzp: asks where it goes, unpacks it there and opens its assembly.
+void OpenProject(AppContext& app, const std::filesystem::path& file);
 void ExportDocument(AppContext& app, ExportFormat format);
 /// Closes a tab; asks about unsaved changes first.
 void RequestClose(AppContext& app, int index);
@@ -50,6 +54,9 @@ void StartRevolve(AppContext& app);
 void StartFillet(AppContext& app);
 void StartChamfer(AppContext& app);
 void StartShell(AppContext& app);
+void StartSheet(AppContext& app);
+void StartFlange(AppContext& app);
+void StartSheetCut(AppContext& app);
 void StartWorkPoint(AppContext& app);
 /// Builds a standard part (doc::parts) and opens it as a new document;
 /// reports what went wrong otherwise. True on success.

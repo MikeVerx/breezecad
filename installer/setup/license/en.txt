@@ -1,0 +1,26 @@
+BreezeCAD · license agreement · revision of 31.10.2026
+
+# 1. License
+BreezeCAD is free open-source software distributed under the Mozilla Public License 2.0 (MPL 2.0). You may install it at no cost, use it, including commercially, copy it and share it. Modified BreezeCAD source files must stay under MPL 2.0 when distributed. The full text is in the program folder (the LICENSE file) and at mozilla.org/MPL/2.0.
+
+# 2. Third-party components
+The program includes components by other authors, each under its own license: Open CASCADE Technology (LGPL 2.1 with exception), Dear ImGui, GLFW, nlohmann/json, miniz, LunaSVG, portable-file-dialogs (MIT/zlib), stb (public domain), IBM Plex fonts (SIL OFL 1.1). Their license texts are in the program folder.
+
+# 3. Independent development
+BreezeCAD was built using a clean-room approach: from scratch, without the source code, files, assets, documentation or other materials of any other CAD system, and it is not a copy of any existing program. Other programs are named only to describe familiar control schemes; their trademarks belong to their owners.
+
+# 4. Your data
+The program works offline and does not collect, store or send information about you, your parts, assemblies or usage statistics. No ads, no analytics.
+
+A crash report is created on your device and sent to the developers only if you decide so. It contains only the program log and the device configuration: operating system, processor, graphics card, memory size, driver versions. Model files are never included.
+
+Only the online installer goes online, and only to download the components you chose from GitHub.
+
+# 5. Modules
+Third-party modules come under their own licenses and may be paid. The modules this installer offers are official.
+
+# 6. No warranty
+The program is provided "as is", without warranty of any kind (MPL 2.0 sections 6 and 7). This is a beta: check geometry and calculations before manufacturing parts. The authors are not liable for any damage arising from its use.
+
+# 7. Contact
+Questions and bug reports: the Issues section at github.com/MikeVerx/breezecad and the group vk.ru/breezecad.

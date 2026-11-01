@@ -26,6 +26,8 @@ struct ComponentProperties {
     std::string name;          ///< "Кронштейн"; empty: taken from the part
     std::string material;      ///< empty: taken from the part
     int         quantity = 1;  ///< how many this entry counts for (a parts list may group equal ones)
+    std::string position;      ///< item number in the parts list ("3"); empty: numbered in order
+    std::string note;          ///< the parts list's "Примечание"
 
     bool operator==(const ComponentProperties&) const = default;
 };
@@ -44,6 +46,15 @@ struct Component {
     ComponentProperties properties;
     bool                grounded = false;   ///< "Закреплён": never moved by constraints or dragging
     bool                visible  = true;
+    /// Drawn by projections from other parts of this assembly: fixed like a
+    /// grounded one (moved, it would redraw itself and pull the others round
+    /// in a loop). Set by the program each update, not saved.
+    bool                follower = false;
+    /// Other parts of this assembly are drawn from it (their projections take
+    /// its edges): constraints that cannot all hold leave it where it is
+    /// instead of moving it to the least bad compromise — those parts would
+    /// follow it there and their sketches go off. Set each update, not saved.
+    bool                leads = false;
 };
 
 /// Geometry of a part that a constraint ties, in the part's coordinates.
@@ -273,7 +284,7 @@ public:
     bool Exists(ObjectId component) const { return component == kAssemblyOrigin || FindComponent(component); }
     /// Where `component` is (the origin: at the origin).
     Placement PlacementOf(ObjectId component) const;
-    /// Never moved by the solver: grounded, or the origin.
+    /// Never moved by the solver: grounded, a follower, or the origin.
     bool IsFixed(ObjectId component) const;
     /// "Начало координат" or the component's tree name.
     std::string NameOf(ObjectId component) const;

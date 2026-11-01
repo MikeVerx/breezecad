@@ -21,6 +21,7 @@
 #include "sketch/Trim.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <array>
 #include <cmath>
 #include <span>
@@ -196,6 +197,10 @@ std::optional<sketch::Constraint> ConstraintFromPicks(SketchTool tool, const ske
             if (k0 == EntityKind::Line && k1 == EntityKind::Line)
                 return Make(tool == SketchTool::Parallel ? ConstraintType::Parallel : ConstraintType::Perpendicular, a, b);
             return std::nullopt;
+        case SketchTool::Collinear:
+            if (picks.size() < 2) { needMore = k0 == EntityKind::Line; return std::nullopt; }
+            if (k0 == EntityKind::Line && k1 == EntityKind::Line && a != b) return Make(ConstraintType::Collinear, a, b);
+            return std::nullopt;
         case SketchTool::Equal:
             if (picks.size() < 2) { needMore = IsCurve(k0); return std::nullopt; }
             if ((k0 == EntityKind::Line && k1 == EntityKind::Line) || (IsRound(k0) && IsRound(k1)))
@@ -209,8 +214,8 @@ std::optional<sketch::Constraint> ConstraintFromPicks(SketchTool tool, const ske
             return std::nullopt;
         case SketchTool::Midpoint:
             if (picks.size() < 2) { needMore = k0 == EntityKind::Point || k0 == EntityKind::Line; return std::nullopt; }
-            if (k0 == EntityKind::Point && k1 == EntityKind::Line) return Make(ConstraintType::Midpoint, a, b);
-            if (k0 == EntityKind::Line && k1 == EntityKind::Point) return Make(ConstraintType::Midpoint, b, a);
+            if (k0 == EntityKind::Point && (k1 == EntityKind::Line || k1 == EntityKind::Arc)) return Make(ConstraintType::Midpoint, a, b);
+            if ((k0 == EntityKind::Line || k0 == EntityKind::Arc) && k1 == EntityKind::Point) return Make(ConstraintType::Midpoint, b, a);
             return std::nullopt;
         case SketchTool::Concentric:
             if (picks.size() < 2) { needMore = IsRound(k0); return std::nullopt; }
@@ -279,8 +284,10 @@ std::optional<sketch::Constraint> DimensionFromPicks(const sketch::Sketch& sk, c
 } // namespace
 
 SketchEditor::PointRef SketchEditor::RefFromSnap(const Snap& snap) const {
+    const bool cross = snap.kind == SnapKind::Intersection;
     return {snap.kind == SnapKind::Point ? snap.point : ObjectId{}, snap.pos,
-            snap.kind == SnapKind::Curve ? snap.curve : ObjectId{}, snap.kind == SnapKind::Midpoint ? snap.curve : ObjectId{}};
+            snap.kind == SnapKind::Curve || cross ? snap.curve : ObjectId{}, snap.kind == SnapKind::Midpoint ? snap.curve : ObjectId{},
+            cross ? snap.curve2 : ObjectId{}};
 }
 
 ObjectId SketchEditor::Resolve(doc::Document& doc, sketch::Sketch& sk, const PointRef& ref) {
@@ -288,7 +295,9 @@ ObjectId SketchEditor::Resolve(doc::Document& doc, sketch::Sketch& sk, const Poi
     const ObjectId id = sk.AddPoint(doc.Ids(), ref.pos);
     if (ref.onCurve && sk.KindOf(ref.onCurve) != EntityKind::None)
         sk.AddConstraint(doc.Ids(), Make(ConstraintType::PointOnCurve, id, ref.onCurve));
-    if (ref.midOf && sk.KindOf(ref.midOf) == EntityKind::Line)
+    if (ref.onCurve2 && sk.KindOf(ref.onCurve2) != EntityKind::None)
+        sk.AddConstraint(doc.Ids(), Make(ConstraintType::PointOnCurve, id, ref.onCurve2));
+    if (ref.midOf && (sk.KindOf(ref.midOf) == EntityKind::Line || sk.KindOf(ref.midOf) == EntityKind::Arc))
         sk.AddConstraint(doc.Ids(), Make(ConstraintType::Midpoint, id, ref.midOf));
     return id;
 }
@@ -304,9 +313,23 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
         options.fromPoint = myClicks.back().id;
         options.fromCurve = myClicks.back().onCurve;
         options.ortho = app.settings.orthoMode;
+        options.reference = myInferLine;
     }
     mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
+    // A line the cursor rests on becomes the reference for parallel / square
+    // directions (as in Inventor), until the tool changes.
+    if (myTool == SketchTool::Line && mySnap.kind == SnapKind::Curve && f->sketch.FindLine(mySnap.curve) &&
+        (myClicks.empty() || mySnap.curve != myClicks.back().onCurve))
+        myInferLine = mySnap.curve;
     TrackArcSweep(mySnap.pos);
+    myLastAim = mySnap.pos;
+    // Sizes typed before the first click make the whole shape: it hangs on
+    // the cursor by its base point until a click puts it down.
+    if (myClicks.empty() && TypedShapeComplete(session.doc.units)) {
+        myClicks.push_back(RefFromSnap(mySnap));
+        myFloating = true;
+        mySnap.pos = mySnap.pos + Vec2{1e-6, 1e-6};   // up and right of the base point
+    }
     // A typed size wins over snapping: the point lands where the size says.
     if (ApplyTypedSizes(session.doc.units, mySnap.pos)) {
         const Vec2 pos = mySnap.pos;
@@ -317,9 +340,35 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
     myMmPerPixel = view.MmPerPixel();
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && view.vf.hovered) {
+        myFloating = false;   // its base point is a real click now
         myClicks.push_back(RefFromSnap(mySnap));
         FinishDrawingStep(app, session, mySnap);
     }
+}
+
+bool SketchEditor::TypedShapeComplete(const UnitSystem& units) const {
+    const auto length = [&](const std::string& text) { return TypedValue(text, Quantity::Length, units); };
+    switch (myTool) {
+        case SketchTool::Rectangle:
+            if (myOptions.rectangle == RectangleMode::Polygon) return length(myOptions.size).has_value();
+            return (myOptions.rectangle == RectangleMode::Corners || myOptions.rectangle == RectangleMode::Centre) &&
+                   length(myOptions.width) && length(myOptions.height);
+        case SketchTool::Circle: return myOptions.circle == CircleMode::CentreRadius && length(myOptions.size);
+        default: return false;
+    }
+}
+
+bool SketchEditor::CommitTyped(AppContext& app, Session& session) {
+    const bool drawing = myTool == SketchTool::Line || myTool == SketchTool::Rectangle || myTool == SketchTool::Circle ||
+                         myTool == SketchTool::Arc;
+    if (!drawing || myClicks.empty() || myFloating || !Active(session)) return false;
+    Vec2 pos = myLastAim;
+    if (!ApplyTypedSizes(session.doc.units, pos)) return false;
+    Snap at;
+    at.pos = pos;
+    myClicks.push_back(RefFromSnap(at));
+    FinishDrawingStep(app, session, at);
+    return true;
 }
 
 void SketchEditor::HandleProject(AppContext& app, Session& session, const SketchView& view) {
@@ -345,41 +394,61 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
     };
     // A part edited in place: an edge of another part of the assembly (the
     // faded ones around it). Linked, it follows that part — adaptivity.
-    std::optional<kernel::ProjectedCurve> fromContext;
-    std::optional<doc::ContextProjection> contextLink;
-    if (!pickedEdge && session.host && session.host->assembly) {
-        if (const std::optional<render::Viewport::ContextEdge> ce = app.viewport.PickContextEdge(pixel)) {
-            AssemblyState& st = *session.host->assembly;
-            const ObjectId target = session.inPlaceOf;
-            const std::string name = session.host->ContextName();
-            if (kernel::WouldCycle(st.geometry, st.assembly, ce->body, target, name)) {
-                app.notes.Info(Tr("Эта деталь сама следует за той, что правится: проекция замкнула бы их друг на друга"));
-                return;
-            }
-            const std::optional<doc::EdgeReference> source = st.geometry.SourceEdge(st.assembly, target, ce->body, ce->edge);
+    // An edge of it, or — clicked on a face — the face's whole outline, as
+    // for the part's own face.
+    struct FromContext {
+        kernel::ProjectedCurve  curve;
+        doc::ContextProjection  link;
+    };
+    std::vector<FromContext> fromContext;
+    const bool inAssembly = session.host && session.host->assembly;
+    // Projects the picked edges of another part; false when the click ends
+    // here (a note said why). A single edge that fails says so; of a face's
+    // outline the edges that do not project (seen end-on) are left out.
+    const auto projectContext = [&](const std::vector<render::Viewport::ContextEdge>& picked) {
+        if (picked.empty()) return true;
+        AssemblyState& st = *session.host->assembly;
+        const ObjectId target = session.inPlaceOf;
+        const std::string name = session.host->ContextName();
+        if (kernel::WouldCycle(st.geometry, st.assembly, picked.front().body, target, name)) {
+            app.notes.Info(Tr("Эта деталь сама следует за той, что правится: проекция замкнула бы их друг на друга"));
+            return false;
+        }
+        std::string failure;
+        for (const render::Viewport::ContextEdge& ce : picked) {
+            const std::optional<doc::EdgeReference> source = st.geometry.SourceEdge(st.assembly, target, ce.body, ce.edge);
             if (!source) {
-                app.notes.Info(Tr("Ребро другой детали не найдено"));
-                return;
+                failure = Tr("Ребро другой детали не найдено");
+                continue;
             }
-            doc::ContextProjection link{name, ce->body, *source, {}, true};
+            doc::ContextProjection link{name, ce.body, *source, {}, true};
             const Expected<kernel::ProjectedCurve> pc = st.geometry.ProjectSourceEdge(st.assembly, target, link, f->placement.frame);
             if (!pc) {
-                app.notes.Info(Tr(pc.GetError().message));
-                return;
+                failure = Tr(pc.GetError().message);
+                continue;
             }
-            fromContext = *pc;
-            contextLink = std::move(link);
+            fromContext.push_back({*pc, std::move(link)});
         }
+        if (fromContext.empty() && !failure.empty()) {
+            app.notes.Info(failure);
+            return false;
+        }
+        return true;
+    };
+    if (!pickedEdge && inAssembly) {
+        if (const std::optional<render::Viewport::ContextEdge> ce = app.viewport.PickContextEdge(pixel))
+            if (!projectContext({*ce})) return;
     }
     // An edge that does not project on its own (a circle of a turned part
     // seen from the side) is taken as a click on the body of revolution.
     if (pickedEdge && !session.model.ProjectEdge(*pickedEdge, f->placement.frame, static_cast<std::size_t>(index))) tryRevolved();
-    if (!pickedEdge && !fromContext) {
+    if (!pickedEdge && fromContext.empty()) {
         tryRevolved();
         if (!revolved) edges = app.viewport.PickFaceEdges(pixel);
+        if (!revolved && edges.empty() && inAssembly && !projectContext(app.viewport.PickContextFaceEdges(pixel))) return;
     }
     if (revolved) edges.clear();
-    if (edges.empty() && !revolved && !fromContext) {
+    if (edges.empty() && !revolved && fromContext.empty()) {
         // A body of revolution that could not be projected says why (it
         // used to end here in silence: "the click did nothing").
         if (!revolvedProblem.empty()) app.notes.Info(Tr(revolvedProblem));
@@ -511,15 +580,14 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
         return true;
     };
     std::string problem;
-    if (fromContext) {
-        if (place(*fromContext, nullptr, false)) {
-            ++added;
-            // Linked: it follows the other part (fixed for the solver, moved
-            // by the assembly); independent: ordinary geometry held in place.
-            if (myOptions.projectLinked && contextLink) {
-                contextLink->curve = lastCurve;
-                f->contextProjections.push_back(*contextLink);
-            }
+    for (FromContext& c : fromContext) {
+        if (!place(c.curve, nullptr, false)) continue;
+        ++added;
+        // Linked: it follows the other part (fixed for the solver, moved by
+        // the assembly); independent: ordinary geometry held in place.
+        if (myOptions.projectLinked) {
+            c.link.curve = lastCurve;
+            f->contextProjections.push_back(c.link);
         }
     }
     for (const doc::EdgeReference& edge : edges) {
@@ -560,10 +628,10 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
     }
     if (!problem.empty()) app.notes.Info(Trf("Часть рёбер не спроецирована: {}", Tr(problem)));
     session.doc.MarkChanged(static_cast<std::size_t>(index));
-    session.CommitInPlaceEdit(std::move(before), fromContext       ? Tr("Проецирование из другой детали")
-                                                 : revolved         ? Tr("Проецирование тела вращения")
-                                                 : edges.size() > 1 ? Tr("Проецирование грани")
-                                                                    : Tr("Проецирование геометрии"));
+    session.CommitInPlaceEdit(std::move(before), !fromContext.empty() ? Tr("Проецирование из другой детали")
+                                                 : revolved            ? Tr("Проецирование тела вращения")
+                                                 : edges.size() > 1    ? Tr("Проецирование грани")
+                                                                       : Tr("Проецирование геометрии"));
 }
 
 std::size_t SketchEditor::ClicksNeeded() const {
@@ -764,9 +832,14 @@ void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchVie
             for (int guard = 0, again = 1; again && guard < 200; ++guard) {
                 again = 0;
                 std::vector<ObjectId> curves;
+                // The sketch's own curves first: where a line was drawn over a
+                // model edge, the fence cuts the line, not the edge.
                 for (const auto& l : trial.lines) if (!l.projected) curves.push_back(l.id);
                 for (const auto& c : trial.circles) if (!c.projected) curves.push_back(c.id);
                 for (const auto& a : trial.arcs) if (!a.projected) curves.push_back(a.id);
+                for (const auto& l : trial.lines) if (l.projected) curves.push_back(l.id);
+                for (const auto& c : trial.circles) if (c.projected) curves.push_back(c.id);
+                for (const auto& a : trial.arcs) if (a.projected) curves.push_back(a.id);
                 for (const auto& s : trial.splines) curves.push_back(s.id);
                 for (const auto& e : trial.ellipses) curves.push_back(e.id);
                 for (const ObjectId id : curves) {
@@ -796,13 +869,24 @@ void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchVie
     if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) myFence.clear();
     const bool onCurve = myHover && IsAnyCurve(myHover.kind);
     if (!onCurve || !myCursor) return;
-    // Projected geometry belongs to the model.
     const sketch::Sketch& sk = f->sketch;
-    const sketch::Line* line = sk.FindLine(myHover.id);
-    const sketch::Circle* circle = sk.FindCircle(myHover.id);
-    const sketch::Arc* arc = sk.FindArc(myHover.id);
-    if ((line && line->projected) || (circle && circle->projected) || (arc && arc->projected)) return;
-    const std::optional<sketch::TrimSpan> span = sketch::FindTrimSpan(f->sketch, myHover.id, *myCursor);
+    const auto isProjected = [&](ObjectId id) {
+        const sketch::Line* line = sk.FindLine(id);
+        const sketch::Circle* circle = sk.FindCircle(id);
+        const sketch::Arc* arc = sk.FindArc(id);
+        return (line && line->projected) || (circle && circle->projected) || (arc && arc->projected);
+    };
+    // A sketch line drawn over a model edge: the line is what is meant, not
+    // the edge under it (the edge was found first and nothing happened).
+    ObjectId target = myHover.id;
+    if (isProjected(target)) {
+        const SketchHit other = HitTest(sk, view, ImGui::GetMousePos(), session.doc.units, target);
+        if (other && IsAnyCurve(other.kind) && !isProjected(other.id)) target = other.id;
+    }
+    // Projected model geometry can be cut too (it was refused without a word):
+    // what is left stays in place and no longer follows the model.
+    const bool cuttingProjection = isProjected(target);
+    const std::optional<sketch::TrimSpan> span = sketch::FindTrimSpan(f->sketch, target, *myCursor);
     if (!span) return;
 
     // The piece that would go: thick and dashed in the warning colour.
@@ -823,6 +907,7 @@ void SketchEditor::HandleTrim(AppContext& app, Session& session, const SketchVie
     f->PruneProjections();
     session.doc.MarkChanged(static_cast<std::size_t>(session.doc.IndexOf(f->id)));
     session.CommitInPlaceEdit(std::move(before), Tr("Обрезка"));
+    if (cuttingProjection) app.notes.Info(Tr("Обрезанная проекция осталась на месте, но за моделью больше не следует"));
 }
 
 void SketchEditor::HandleExtend(AppContext& app, Session& session, const SketchView& view) {
@@ -1499,6 +1584,12 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
                 if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
             } else if (snap.perpendicularTo && sk.FindLine(snap.perpendicularTo)) {
                 const sketch::Constraint c = Make(ConstraintType::Perpendicular, snap.perpendicularTo, line);
+                if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
+            } else if (snap.parallelTo && sk.FindLine(snap.parallelTo)) {
+                const sketch::Constraint c = Make(ConstraintType::Parallel, snap.parallelTo, line);
+                if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
+            } else if (snap.tangentTo && sk.KindOf(snap.tangentTo) != EntityKind::None) {
+                const sketch::Constraint c = Make(ConstraintType::Tangent, line, snap.tangentTo);
                 if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
             }
             dims.push_back({Make(ConstraintType::Length, line), myOptions.length, {}});

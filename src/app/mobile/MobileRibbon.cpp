@@ -343,7 +343,7 @@ const std::vector<PhoneGroup>& PhoneGroups(AppContext& app, Session& session) {
         {N_("Основное"), {"sketch.dimension", "sketch.arrangeDimensions", "sketch.project", "sketch.projectFixed"}},
         {N_("Создать"), {"sketch.line", "sketch.circle", "sketch.arc", "sketch.rectangle", "sketch.point", "sketch.spline", "sketch.text"}},
         {N_("Зависимости"),
-         {"sketch.coincident", "sketch.horizontal", "sketch.vertical", "sketch.fix", "sketch.parallel", "sketch.perpendicular", "sketch.equal",
+         {"sketch.coincident", "sketch.horizontal", "sketch.vertical", "sketch.fix", "sketch.parallel", "sketch.collinear", "sketch.perpendicular", "sketch.equal",
           "sketch.midpoint", "sketch.tangent", "sketch.concentric", "sketch.symmetric", "sketch.showConstraints", "sketch.hideConstraints"},
          true},
         {N_("Изменить"),

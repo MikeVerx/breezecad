@@ -77,7 +77,7 @@ std::vector<ObjectId> EntitiesInBox(const sketch::Sketch& sk, const SketchView& 
 
 namespace {
 
-constexpr std::array<SketchToolInfo, 33> kTools{{
+constexpr std::array<SketchToolInfo, 34> kTools{{
     {SketchTool::Select, N_("Выбор"), "ui-check", N_("Выберите или перетащите элементы эскиза")},
     {SketchTool::Line, N_("Отрезок"), "sk-line", N_("Укажите начальную точку отрезка")},
     {SketchTool::Rectangle, N_("Прямоугольник"), "sk-rectangle", N_("Укажите первый угол прямоугольника")},
@@ -104,6 +104,7 @@ constexpr std::array<SketchToolInfo, 33> kTools{{
     {SketchTool::Horizontal, N_("Горизонтальность"), "c-horizontal", N_("Выберите отрезок или две точки")},
     {SketchTool::Vertical, N_("Вертикальность"), "c-vertical", N_("Выберите отрезок или две точки")},
     {SketchTool::Parallel, N_("Параллельность"), "c-parallel", N_("Выберите два отрезка")},
+    {SketchTool::Collinear, N_("На одной прямой"), "c-collinear", N_("Выберите два отрезка: второй встанет на прямую первого")},
     {SketchTool::Perpendicular, N_("Перпендикулярность"), "c-perpendicular", N_("Выберите два отрезка")},
     {SketchTool::Equal, N_("Равенство"), "c-equal", N_("Выберите два отрезка или две окружности")},
     {SketchTool::Tangent, N_("Касательность"), "c-tangent", N_("Выберите кривую и окружность или дугу")},
@@ -260,6 +261,7 @@ void SketchEditor::KeepSketchInView(AppContext& app, Session& session) {
 void SketchEditor::SetTool(AppContext& app, Session& session, SketchTool tool) {
     myClicks.clear();
     myPicks.clear();
+    myInferLine = {};
     myOffsetCurve = {};
     myFieldSeed.clear();
     myFocusField = mySeedField = -1;
@@ -496,6 +498,12 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
 
     myClickUsed = false;
     if (myEditDimension) HandleInlineEdit(app, session, view);
+    // Enter (or a click of the wheel) after typing a size puts the point the
+    // size gives — no click needed, wherever the mouse is (on the panel too).
+    else if ((ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) &&
+             CommitTyped(app, session)) {
+        mySeedField = -1;
+    }
     if (myClickUsed || (!vf.hovered && !myDragging)) return;
 
     // The clipboard takes the clicks while its base point is picked or a copy is placed.
@@ -545,6 +553,11 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
         default:                    HandleConstraint(app, session, view); break;
     }
     if (doc::SketchFeature* still = Active(session)) DrawPreview(app, view, still->sketch, session.doc.units);
+    // The floating shape's base point was only for this frame's picture.
+    if (myFloating) {
+        if (!myClicks.empty()) myClicks.pop_back();
+        myFloating = false;
+    }
 }
 
 void SketchEditor::HandleSelect(AppContext& app, Session& session, const SketchView& view) {

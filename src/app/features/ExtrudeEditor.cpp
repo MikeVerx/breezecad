@@ -1,4 +1,6 @@
 #include "app/features/ExtrudeEditor.h"
+#include "kernel/ContextProjection.h"
+#include "app/AssemblyState.h"
 #include "app/features/ToolChoice.h"
 
 #include "app/Format.h"
@@ -36,6 +38,7 @@ void ExtrudeEditor::LoadTexts(const doc::Feature& feature) {
     myDistance = f.distance.expression;
     myTaper = f.taper.expression;
     myDistance2 = f.distance2.expression;
+    myAutoDirection.Reset();
 }
 
 void ExtrudeEditor::CarryOver(const doc::SketchSolidFeature& previous, doc::SketchSolidFeature& next) const {
@@ -59,20 +62,53 @@ bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::Sketc
         if (index < 0) return false;
         app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::Faces);
         const Vec2 at = view.vf.ToLocal(ImGui::GetMousePos());
-        if (view.vf.hovered && app.viewport.OriginalUnder(at)) {
+        // Another part's face nearer than this part's own (edited in an assembly): that one.
+        const bool contextNearer = session.host && session.host->assembly && view.vf.hovered && app.viewport.PickContextFace(at);
+        if (!contextNearer && view.vf.hovered && app.viewport.OriginalUnder(at)) {
             const std::optional<doc::FaceReference> face = app.viewport.PickFace(at, true);
             if (face && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
                 f.toFace = *face;
                 f.toPlane = {};
+                f.toContext.reset();
                 myPickTarget = false;
                 Changed(session);
             }
             return true;
         }
+        // A part edited in an assembly: a flat face of another part (KOMPAS's
+        // and Inventor's "до поверхности" in place). It follows that face.
+        if (session.host && session.host->assembly && view.vf.hovered)
+            if (const auto ctx = app.viewport.PickContextFace(at)) {
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                    AssemblyState& st = *session.host->assembly;
+                    const ObjectId target = session.inPlaceOf;
+                    const std::string name = session.host->ContextName();
+                    if (kernel::WouldCycle(st.geometry, st.assembly, ctx->body, target, name)) {
+                        app.notes.Info(Tr("Та деталь сама следует за этой: выдавливание до её грани замкнуло бы их друг на друга"));
+                        return true;
+                    }
+                    // The face in the other part's own coordinates (what stays true when it moves).
+                    const assembly::Placement relative = st.assembly.PlacementOf(target).Inverse() * st.assembly.PlacementOf(ctx->body);
+                    const assembly::Placement back = relative.Inverse();
+                    doc::ContextPlane link;
+                    link.assembly = name;
+                    link.component = ctx->body;
+                    link.face = doc::FaceReference{back.Direction(ctx->face.normal), back.Point(ctx->face.point)};
+                    link.plane = doc::PlaneFrame(ctx->face);
+                    if (const assembly::Component* c = st.assembly.FindComponent(ctx->body)) link.componentName = c->name;
+                    f.toContext = std::move(link);
+                    f.toFace = {};
+                    f.toPlane = {};
+                    myPickTarget = false;
+                    Changed(session);
+                }
+                return true;
+            }
         const ObjectId before = f.toPlane;
         PickPlane(app, session, f.toPlane, view.vf);
         if (f.toPlane != before) {
             f.toFace = {};
+            f.toContext.reset();
             myPickTarget = false;
         }
         return true;
@@ -109,6 +145,7 @@ bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::Sketc
         // Dragged past the sketch plane: the other direction.
         if (*along < 0 && !symmetric && !asymmetric) {
             f.reversed = !f.reversed;
+            myAutoDirection.UserChanged();
             *along = -*along;
             myArrow.Flipped();
         }
@@ -118,6 +155,18 @@ bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::Sketc
         Changed(session);
     }
     return myArrow.Hot();
+}
+
+void ExtrudeEditor::OperationChanged(Session& session, doc::SketchSolidFeature& feature, BooleanOp before) {
+    auto& f = static_cast<doc::ExtrudeFeature&>(feature);
+    // Both ways at once, or up to a plane: the direction is not a side to turn.
+    if (f.extent != ExtentType::Distance && f.extent != ExtentType::ThroughAll) return;
+    int side = 0;
+    const int index = session.doc.IndexOf(f.id);
+    const doc::SketchFeature* sketch = dynamic_cast<const doc::SketchFeature*>(session.doc.Find(f.sketch));
+    if (f.operation == BooleanOp::Cut && index > 0 && sketch)
+        side = session.model.MaterialSide(sketch->placement.frame, ProfileSamples(session, f), static_cast<std::size_t>(index));
+    f.reversed = myAutoDirection.OnOperation(before, f.operation, f.reversed, side);
 }
 
 void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSolidFeature& feature, float width) {
@@ -141,6 +190,7 @@ void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
         const int chosen = ToolChoice(app, "dir", N_("Направление"), dirs, current, width);
         if (chosen != current) {
             const bool both = f.extent == ExtentType::Symmetric || f.extent == ExtentType::Asymmetric;
+            myAutoDirection.UserChanged();
             if (chosen <= 1) {
                 f.reversed = chosen == 1;
                 if (both) f.extent = ExtentType::Distance;
@@ -152,6 +202,7 @@ void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
         }
         if (f.extent == ExtentType::Asymmetric && ui::LinkButton(ui, "##flip", Tr("Поменять стороны"))) {
             f.reversed = !f.reversed;
+            myAutoDirection.UserChanged();
             Changed(session);
         }
     }
@@ -179,14 +230,19 @@ void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
             target = Tr("Плоскость XZ");
         } else if (f.toPlane == doc::origin::kPlaneYZ) {
             target = Tr("Плоскость YZ");
+        } else if (f.toContext) {
+            target = f.toContext->componentName.empty() ? std::string(Tr("грань другой детали"))
+                                                        : Trf("грань «{}»", f.toContext->componentName);
         } else if (const doc::Feature* p = f.toPlane ? session.doc.Find(f.toPlane) : nullptr) {
             target = p->name;
         } else if (f.toFace.IsSet()) {
             target = f.toFace.curved ? Tr("кривая грань") : Tr("плоская грань");
         }
         if (PickChip(ui, "##to", Tr("До"), target, myPickTarget, width)) myPickTarget = true;
-        Caption(app, Tr("Щёлкните плоскость или грань тела, плоскую или кривую: конец выдавливания примет её форму. "
-                        "Если грань меньше выдавливания, её поверхность продолжится за края."),
+        Caption(app, session.host ? Tr("Щёлкните плоскость или грань — этой детали или плоскую грань другой детали сборки: "
+                                       "тогда выдавливание будет следовать за ней.")
+                                  : Tr("Щёлкните плоскость или грань тела, плоскую или кривую: конец выдавливания примет её форму. "
+                                       "Если грань меньше выдавливания, её поверхность продолжится за края."),
                 width);
     }
     Gap(app);

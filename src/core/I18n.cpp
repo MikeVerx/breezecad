@@ -1,5 +1,7 @@
 #include "core/I18n.h"
 
+#include <cctype>
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -77,6 +79,16 @@ Catalog& Active() {
     static Catalog catalog;
     return catalog;
 }
+
+} // namespace
+
+std::string AllTranslatedText() {
+    std::string out;
+    for (const auto& [key, value] : Active().strings) out += value;
+    return out;
+}
+
+namespace {
 
 /// The head of a catalog file: code and name, without reading the strings.
 std::optional<Language> ReadHead(const std::filesystem::path& file, bool builtIn) {
@@ -166,10 +178,19 @@ std::string SystemDefault() {
         }
     tag = tag.substr(0, tag.find_first_of("_.@"));
 #endif
-    for (const char* code : {"ru", "uk", "be", "kk"})
-        if (tag == code) return "ru";
+    for (char& ch : tag) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
     // An unset or "C" locale on Linux is usually a minimal system, not a choice.
-    if (tag.empty() || tag == "C" || tag == "POSIX") return "ru";
+    if (tag.empty() || tag == "c" || tag == "posix") return "ru";
+    // The system's own language when the program has it (built in or as a pack):
+    // the caller falls back by FallbackFor() when it is not installed.
+    return tag;
+}
+
+std::string FallbackFor(const std::string& code) {
+    // Ukrainian, Belarusian and Kazakh speakers read Russian more readily than
+    // English; everyone else gets English.
+    for (const char* c : {"ru", "uk", "be", "kk"})
+        if (code == c) return "ru";
     return "en";
 }
 

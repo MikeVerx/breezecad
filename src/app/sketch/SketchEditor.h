@@ -26,6 +26,7 @@ namespace bz::app {
 enum class SketchTool : unsigned char {
     Select, Line, Rectangle, Circle, Arc, Point, Spline, Text, Project, Trim, Extend, Split, Fillet, Offset, Move, Rotate, Copy, Scale, Mirror, PatternRect, PatternCircular, Dimension,
     Coincident, Horizontal, Vertical, Parallel, Perpendicular, Equal, Tangent, Fix, Midpoint, Concentric, Symmetric,
+    Collinear,
 };
 
 /// Ways to draw with one tool, chosen in the tool panel.
@@ -232,11 +233,17 @@ private:
         ObjectId id;
         Vec2     pos;
         ObjectId onCurve;
-        ObjectId midOf;   ///< a line whose midpoint this is
+        ObjectId midOf;   ///< a line or arc whose midpoint this is
+        ObjectId onCurve2;   ///< a second curve (a point where two curves cross)
     };
     PointRef RefFromSnap(const Snap& snap) const;
     ObjectId Resolve(doc::Document& doc, sketch::Sketch& sk, const PointRef& ref);
     void FinishDrawingStep(AppContext& app, Session& session, const Snap& snap);
+    /// Whether the typed sizes alone make the whole shape (no second click needed).
+    bool TypedShapeComplete(const UnitSystem& units) const;
+    /// Enter: the point the typed sizes put the next click at, placed. False
+    /// when there is nothing typed to place (Enter then means what it always did).
+    bool CommitTyped(AppContext& app, Session& session);
     /// Clicks the active tool needs, in its current mode.
     std::size_t ClicksNeeded() const;
     /// Дуга: follows the cursor round the centre (myArcSweep).
@@ -276,6 +283,11 @@ private:
     double                myMmPerPixel = 0.1;   ///< of the last frame, to place automatic dimension labels
     bool                  myAutoArrange = false;   ///< SetAutoArrange
     std::vector<PointRef> myClicks;
+    /// The shape fully sized by typed values before its first click: it rides
+    /// on the cursor (myClicks holds the cursor as its base point for one
+    /// frame, taken back unless that frame's click places it).
+    bool                  myFloating = false;
+    Vec2                  myLastAim{};   ///< where the cursor last was in the view: Enter typed in the panel aims there
     /// Дуга (центр, начало, конец): the angle the cursor has gone round the
     /// centre since the start was clicked, signed (counter-clockwise > 0).
     /// The arc follows the cursor's way round, past half a turn too.
@@ -286,6 +298,7 @@ private:
     /// line that ends where the chain began closes it, and the chain stops.
     ObjectId myChainStart, myChainEnd;
     Snap                  mySnap;
+    ObjectId              myInferLine;   ///< a line the cursor rested on this command (parallel / square to it)
     std::optional<Vec2>   myCursor;
 
     /// Constraints whose glyphs show when not all are shown: those of the

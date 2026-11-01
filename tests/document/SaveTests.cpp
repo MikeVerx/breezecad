@@ -117,3 +117,27 @@ TEST_CASE("many saves in a row, each one opens") {
     CHECK(files == 1);   // no temporary files left behind
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("the picture for the file manager is kept in the file and survives a save without one") {
+    const auto dir = Folder("bz-preview-тест");
+    const auto file = dir / PathFromUtf8("Деталь с картинкой.bzc");
+    const std::vector<std::uint8_t> png = {0x89, 'P', 'N', 'G', 1, 2, 3, 4};
+
+    REQUIRE(doc::SaveBzc(Part(1), file, "test", png));
+    auto read = doc::ReadBzcPreview(file);
+    REQUIRE(read);
+    CHECK(*read == png);
+    CHECK(doc::LoadBzc(file));   // the extra entry does not bother the reader
+
+    // Written while another document is on the screen: no new picture, the old one stays.
+    REQUIRE(doc::SaveBzc(Part(2), file, "test"));
+    read = doc::ReadBzcPreview(file);
+    REQUIRE(read);
+    CHECK(*read == png);
+
+    const auto bare = dir / "bare.bzc";
+    REQUIRE(doc::SaveBzc(Part(1), bare, "test"));
+    CHECK_FALSE(doc::ReadBzcPreview(bare));
+    CHECK_FALSE(doc::ReadBzcPreview(dir / "missing.bzc"));
+    std::filesystem::remove_all(dir);
+}

@@ -62,6 +62,9 @@ struct Model::Impl {
         std::vector<TopoDS_Shape> sources, copies;
     };
     std::unordered_map<ObjectId, CopyPreview> copyPreviews;
+
+    /// Sheet metal: the part as it is right after each «Лист» or «Отбортовка», by feature id.
+    std::unordered_map<ObjectId, SheetInfo> sheets;
 };
 
 } // namespace bz::kernel

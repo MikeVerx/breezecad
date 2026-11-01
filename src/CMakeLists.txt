@@ -3,6 +3,7 @@
 #
 #   core      — ids, units, expressions, logging           (no dependencies)
 #   sketch    — 2D sketch model and constraint solver       (core)
+#   sheetmetal — bend rules, flat patterns, DXF              (core)
 #   document  — features, parameters, undo, .bzc format     (core, sketch)
 #   assembly  — components, constraints and their solver    (document)
 #   kernel    — builds solids from a document with OCCT     (document, assembly)
@@ -13,6 +14,7 @@
 
 add_subdirectory(core)
 add_subdirectory(sketch)
+add_subdirectory(sheetmetal)
 add_subdirectory(document)
 add_subdirectory(assembly)
 add_subdirectory(kernel)

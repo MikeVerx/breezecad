@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <string>
 
 struct ImFont;
 
@@ -21,7 +22,11 @@ struct Fonts {
 
     /// Loads fonts from `assets/fonts` at the given UI scale. Replaces the
     /// ImGui font atlas; call before the first frame or when the scale changes.
-    bool Load(const std::filesystem::path& assetsDir, float scale);
+    /// `language`: Chinese, Japanese and Korean get their glyphs merged from the
+    /// pack's font (`languagePacks`/<code>.ttf) or the system's.
+    bool Load(const std::filesystem::path& assetsDir, float scale, const std::string& language = {},
+              const std::filesystem::path& languagePacks = {});
+    std::string loadedLanguage;
 };
 
 } // namespace bz::ui

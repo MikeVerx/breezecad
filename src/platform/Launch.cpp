@@ -72,4 +72,34 @@ bool OpenFolder(const std::filesystem::path& folder) {
 #endif
 }
 
+bool ShowInFolder(const std::filesystem::path& file) {
+    std::error_code ec;
+    if (!std::filesystem::exists(file, ec)) return OpenFolder(file.parent_path());
+#if defined(__ANDROID__)
+    return false;
+#elif defined(_WIN32)
+    // Explorer with the file selected.
+    const std::wstring args = L"/select,\"" + file.wstring() + L"\"";
+    const auto result = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL));
+    return result > 32;
+#elif defined(__APPLE__)
+    // Finder with the file selected (open -R).
+    const pid_t child = fork();
+    if (child < 0) return false;
+    if (child == 0) {
+        if (fork() == 0) {
+            execlp("open", "open", "-R", file.string().c_str(), static_cast<char*>(nullptr));
+            _exit(127);
+        }
+        _exit(0);
+    }
+    int status = 0;
+    waitpid(child, &status, 0);
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+#else
+    // File managers differ in selecting a file; its folder opens everywhere.
+    return OpenFolder(file.parent_path());
+#endif
+}
+
 } // namespace bz::platform

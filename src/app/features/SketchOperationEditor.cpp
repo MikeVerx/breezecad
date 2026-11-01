@@ -76,6 +76,20 @@ doc::SketchSolidFeature* SketchOperationEditor::Feature(Session& session) const 
     return dynamic_cast<doc::SketchSolidFeature*>(Edited(session));
 }
 
+std::vector<Vec2> SketchOperationEditor::ProfileSamples(const Session& session, const doc::SketchSolidFeature& f) {
+    std::vector<Vec2> samples;
+    const auto* regions = session.model.Regions(f.sketch);
+    if (!regions) return samples;
+    if (f.profiles.automatic) {
+        for (const auto& r : *regions)
+            if (r.automatic) samples.push_back(r.sample);
+    } else {
+        for (const Vec2 p : f.profiles.regions)
+            if (const int r = RegionOf(*regions, p); r >= 0) samples.push_back((*regions)[static_cast<std::size_t>(r)].sample);
+    }
+    return samples;
+}
+
 std::optional<Vec2> SketchOperationEditor::ProfileMiddle(const Session& session, const doc::SketchSolidFeature& f) {
     const auto* regions = session.model.Regions(f.sketch);
     if (!regions) return std::nullopt;
@@ -279,9 +293,11 @@ void SketchOperationEditor::DrawBody(AppContext& app, Session& session, doc::Fea
                                                     {"op-new", N_("Новое тело")}}};
     static constexpr std::array<BooleanOp, 4> order{BooleanOp::Join, BooleanOp::Cut, BooleanOp::Intersect, BooleanOp::NewBody};
     const int current = static_cast<int>(std::find(order.begin(), order.end(), f.operation) - order.begin());
-    const int chosen = ToolChoice(app, "op", N_("Операция"), ops, current, width, bodyBefore ? 0 : 0b0111);
+    const int chosen = ShowsOperation() ? ToolChoice(app, "op", N_("Операция"), ops, current, width, bodyBefore ? 0 : 0b0111) : current;
     if (chosen != current) {
+        const BooleanOp before = f.operation;
         f.operation = order[static_cast<std::size_t>(chosen)];
+        OperationChanged(session, f, before);
         Changed(session);
     }
     DrawProfileSection(app, session, f, width);
