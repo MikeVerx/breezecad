@@ -38,6 +38,7 @@ void ExtrudeEditor::LoadTexts(const doc::Feature& feature) {
     myDistance = f.distance.expression;
     myTaper = f.taper.expression;
     myDistance2 = f.distance2.expression;
+    myAutoDirection.Reset();
 }
 
 void ExtrudeEditor::CarryOver(const doc::SketchSolidFeature& previous, doc::SketchSolidFeature& next) const {
@@ -144,6 +145,7 @@ bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::Sketc
         // Dragged past the sketch plane: the other direction.
         if (*along < 0 && !symmetric && !asymmetric) {
             f.reversed = !f.reversed;
+            myAutoDirection.UserChanged();
             *along = -*along;
             myArrow.Flipped();
         }
@@ -153,6 +155,18 @@ bool ExtrudeEditor::PickInViewport(AppContext& app, Session& session, doc::Sketc
         Changed(session);
     }
     return myArrow.Hot();
+}
+
+void ExtrudeEditor::OperationChanged(Session& session, doc::SketchSolidFeature& feature, BooleanOp before) {
+    auto& f = static_cast<doc::ExtrudeFeature&>(feature);
+    // Both ways at once, or up to a plane: the direction is not a side to turn.
+    if (f.extent != ExtentType::Distance && f.extent != ExtentType::ThroughAll) return;
+    int side = 0;
+    const int index = session.doc.IndexOf(f.id);
+    const doc::SketchFeature* sketch = dynamic_cast<const doc::SketchFeature*>(session.doc.Find(f.sketch));
+    if (f.operation == BooleanOp::Cut && index > 0 && sketch)
+        side = session.model.MaterialSide(sketch->placement.frame, ProfileSamples(session, f), static_cast<std::size_t>(index));
+    f.reversed = myAutoDirection.OnOperation(before, f.operation, f.reversed, side);
 }
 
 void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSolidFeature& feature, float width) {
@@ -176,6 +190,7 @@ void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
         const int chosen = ToolChoice(app, "dir", N_("Направление"), dirs, current, width);
         if (chosen != current) {
             const bool both = f.extent == ExtentType::Symmetric || f.extent == ExtentType::Asymmetric;
+            myAutoDirection.UserChanged();
             if (chosen <= 1) {
                 f.reversed = chosen == 1;
                 if (both) f.extent = ExtentType::Distance;
@@ -187,6 +202,7 @@ void ExtrudeEditor::DrawOptions(AppContext& app, Session& session, doc::SketchSo
         }
         if (f.extent == ExtentType::Asymmetric && ui::LinkButton(ui, "##flip", Tr("Поменять стороны"))) {
             f.reversed = !f.reversed;
+            myAutoDirection.UserChanged();
             Changed(session);
         }
     }

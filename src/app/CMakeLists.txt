@@ -55,6 +55,7 @@ set(BZ_APP_SOURCES
     features/WorkPlaneEditor.cpp
     features/DragArrow.cpp
     features/ExtrudeEditor.cpp
+    features/ExtrudeDirection.cpp
     features/FeatureOperationEditor.cpp
     features/RevolveEditor.cpp
     features/SectionEditor.cpp

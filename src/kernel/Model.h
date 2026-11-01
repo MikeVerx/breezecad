@@ -149,6 +149,11 @@ public:
     /// The body of revolution with the face `face` (of the body before
     /// feature `featureIndex`) on `plane`: axis, outline and cut by the plane.
     Expected<RevolvedProjection> ProjectRevolved(const doc::FaceReference& face, const Frame& plane, std::size_t featureIndex) const;
+    /// Which side of `frame` the bodies before feature number `featureIndex`
+    /// lie on, looking along its normal from `samples` (sketch points inside
+    /// a profile): +1 along the normal, -1 against it, 0 on both sides or
+    /// on neither (where a «Вырез» should go by itself).
+    int MaterialSide(const Frame& frame, const std::vector<Vec2>& samples, std::size_t featureIndex) const;
 
     /// The sheet metal part of the «Лист» `base` after its last active
     /// operation in `doc`; nullopt when it was not built.

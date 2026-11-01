@@ -46,6 +46,7 @@
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepClass3d_SolidClassifier.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
@@ -1565,6 +1566,39 @@ Expected<RevolvedProjection> Model::ProjectRevolved(const doc::FaceReference& fa
     const std::optional<TopoDS_Face> found = occt::ResolveAnyFace(body, face);
     if (!found) return Error{"Грань не найдена"};
     return occt::ProjectRevolved(body, *found, plane);
+}
+
+int Model::MaterialSide(const Frame& frame, const std::vector<Vec2>& samples, std::size_t featureIndex) const {
+    const auto& after = myImpl->bodiesAfter;
+    if (featureIndex == 0 || featureIndex > after.size() || after[featureIndex - 1].empty() || samples.empty()) return 0;
+    const std::vector<Body>& bodies = after[featureIndex - 1];
+    Bnd_Box box;
+    for (const Body& b : bodies) BRepBndLib::Add(b.shape, box);
+    if (box.IsVoid()) return 0;
+    // Far enough to reach the bodies from a plane beside them (an offset work plane).
+    const double reach = 2 * std::sqrt(box.SquareExtent()) + 1;
+    std::vector<std::unique_ptr<BRepClass3d_SolidClassifier>> classifiers;
+    for (const Body& b : bodies) classifiers.push_back(std::make_unique<BRepClass3d_SolidClassifier>(b.shape));
+    const auto inside = [&](Vec3 p) {
+        for (auto& c : classifiers) {
+            c->Perform(gp_Pnt(p.x, p.y, p.z), 1e-7);
+            if (c->State() == TopAbs_IN) return true;
+        }
+        return false;
+    };
+    // Each sample votes for the side where material starts nearer; at the
+    // same distance on both sides (the plane runs through the body) for neither.
+    int votes = 0;
+    for (const Vec2 s : samples) {
+        const Vec3 at = frame.ToWorld(s);
+        for (double step = 0.01; step < reach * 4; step *= 4) {
+            const double d = std::min(step, reach);
+            const bool up = inside(at + frame.normal * d), down = inside(at - frame.normal * d);
+            if (up != down) votes += up ? 1 : -1;
+            if (up || down || d >= reach) break;
+        }
+    }
+    return votes > 0 ? 1 : votes < 0 ? -1 : 0;
 }
 
 std::optional<SheetInfo> Model::Sheet(const doc::Document& doc, ObjectId base) const {
