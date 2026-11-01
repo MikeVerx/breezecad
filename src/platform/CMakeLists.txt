@@ -7,6 +7,7 @@ if(ANDROID)
     add_library(bz_platform STATIC
         Android.cpp
         FileDialogs_android.cpp
+        OpenFiles.cpp
         Launch.cpp
         Paths.cpp
         Process.cpp
