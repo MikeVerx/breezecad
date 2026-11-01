@@ -6,7 +6,7 @@
 //   the menu         ~/.local/share/applications/breezecad.desktop
 //   file types       ~/.local/share/mime/packages/breezecad.xml (+ icons, the defaults)
 //   previews         ~/.local/share/thumbnailers/breezecad.thumbnailer
-//   settings         ~/.config/BreezeCAD (the program's own, as it reads them)
+//   settings         ~/.config/breezecad (the program's own, as it reads them)
 //
 // Everything is the person's own; a folder they cannot write to (/opt) takes
 // pkexec for the copying only, as Windows takes its administrator prompt.
@@ -244,9 +244,11 @@ std::optional<Installed> FindInstalled() {
 fs::path DefaultDir() { return DataHome() / "BreezeCAD" / "app"; }
 
 fs::path ConfigDir() {
-    // As the program has it (platform::ConfigDir): $XDG_CONFIG_HOME/BreezeCAD.
+    // As the program has it (platform::ConfigDir): $XDG_CONFIG_HOME/breezecad,
+    // lower case on Linux (it was "BreezeCAD" here: the language, modules and
+    // settings went to a folder the program never reads).
     const fs::path x = Env("XDG_CONFIG_HOME");
-    return (x.is_absolute() ? x : Home() / ".config") / "BreezeCAD";
+    return (x.is_absolute() ? x : Home() / ".config") / "breezecad";
 }
 
 PathCheck CheckPath(const std::wstring& raw, std::uint64_t needBytes) {
