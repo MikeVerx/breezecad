@@ -211,7 +211,14 @@ private:
     /// Adaptivity: per part file, what its projections depended on when it
     /// last followed them, and whether it has any (by its geometry generation).
     std::unordered_map<std::string, std::uint64_t> myAdaptKeys;
-    std::unordered_map<std::string, std::pair<std::uint64_t, bool>> myHasContext;
+    struct ContextInfo {
+        std::uint64_t         generation = 0;
+        bool                  has = false;
+        std::vector<ObjectId> sources;   ///< the components it is drawn from
+    };
+    std::unordered_map<std::string, ContextInfo> myHasContext;
+    /// Whether a part has projections from here, and from where: looked at once per version of it.
+    const ContextInfo& ContextOf(const std::string& key, ObjectId component, const doc::Document& part, std::string_view name);
     /// Parts with projections follow their sources; true when one changed.
     bool Adapt(const std::filesystem::path& file, std::string_view name);
     /// Rounds of following since the last action: parts that follow each

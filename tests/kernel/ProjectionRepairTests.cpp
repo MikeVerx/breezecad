@@ -126,15 +126,12 @@ TEST_CASE("сломанная проекция: ребро пропало выш
         AddCircle(c.d, *c.base, {0, 0}, 12);
         c.d.MarkChanged(0);
         c.model.Rebuild(c.d);
-        // Found again (by where it was) or still lost: either way the state is told truly.
-        if (c.sk->lostProjections.empty()) {
-            CHECK_FALSE(c.sk->HasBrokenProjections());
-            CHECK_FALSE(c.sk->beforeBreak);
-            CHECK(c.sk->status.state == FeatureState::Ok);
-        } else {
-            CHECK(c.sk->HasBrokenProjections());
-            CHECK(c.sk->beforeBreak);
-        }
+        // Found again: whole again, the snapshot forgotten.
+        CHECK(c.sk->lostProjections.empty());
+        CHECK_FALSE(c.sk->HasBrokenProjections());
+        CHECK_FALSE(c.sk->beforeBreak);
+        CHECK(c.sk->status.state == FeatureState::Ok);
+        CHECK(c.sk->sketch.RadiusOf(c.circle) == Approx(12.0));
     }
 }
 

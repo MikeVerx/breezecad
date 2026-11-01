@@ -163,6 +163,20 @@ bool HasContextProjections(const doc::Document& doc, std::string_view assembly) 
     return false;
 }
 
+std::vector<ObjectId> ContextSources(const doc::Document& doc, std::string_view assembly) {
+    std::vector<ObjectId> out;
+    const auto add = [&](ObjectId c) {
+        if (std::find(out.begin(), out.end(), c) == out.end()) out.push_back(c);
+    };
+    for (const auto& f : doc.Features()) {
+        if (const doc::ContextPlane* t = ContextTargetOf(*f, assembly)) add(t->component);
+        if (const auto* sk = dynamic_cast<const doc::SketchFeature*>(f.get()))
+            for (const doc::ContextProjection& p : sk->contextProjections)
+                if (Matches(p, assembly)) add(p.component);
+    }
+    return out;
+}
+
 std::uint64_t ContextKey(const AssemblyModel& geometry, const assembly::Assembly& a, ObjectId target, const doc::Document& doc,
                          std::string_view assembly) {
     std::uint64_t h = 1469598103934665603ull;

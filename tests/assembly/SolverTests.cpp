@@ -425,3 +425,27 @@ TEST_CASE("a part drawn by its neighbours (a follower) is never moved by constra
     CHECK(t.a.constraints[0].state == ConstraintState::Satisfied);
     CHECK(AnalyzeFreedom(t.a).at(t.part).Total() == 0);
 }
+
+TEST_CASE("a part others are drawn from (it leads) is not moved to a compromise of impossible constraints") {
+    // Its left face against the base's right, its right face against the
+    // base's left: it cannot be on both sides. A plain part goes to the least
+    // bad place between; one the others are drawn from stays where it is.
+    for (const bool leads : {false, true}) {
+        CAPTURE(leads);
+        Assembly a;
+        const ObjectId base = a.AddComponent("base.bzc", "Основание").id;   // 0..60 along X, grounded
+        const ObjectId part = a.AddComponent("part.bzc", "Сосед", {Rotation{}, {60, 0, 0}}).id;   // 0..40 of its own
+        a.FindComponent(part)->leads = leads;
+        a.AddConstraint(Make(ConstraintType::Mate, Plane(base, {60, 20, 5}, {1, 0, 0}), Plane(part, {0, 20, 5}, {-1, 0, 0})));
+        a.AddConstraint(Make(ConstraintType::Mate, Plane(base, {0, 20, 5}, {-1, 0, 0}), Plane(part, {40, 20, 5}, {1, 0, 0})));
+        const std::vector<Placement> start = Placements(a);
+        Solve(a);
+        if (leads) {
+            CHECK(FarthestMove(a, start) < 1e-9);
+            CHECK(a.constraints[0].state == ConstraintState::Satisfied);
+            CHECK(a.constraints[1].state == ConstraintState::Failed);
+        } else {
+            CHECK(FarthestMove(a, start) > 1.0);   // the compromise, as before
+        }
+    }
+}

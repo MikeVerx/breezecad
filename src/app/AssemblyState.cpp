@@ -85,19 +85,37 @@ void AssemblyState::RememberPartBefore(const std::filesystem::path& file, std::s
     before.emplace_back(file, std::move(json));
 }
 
+const AssemblyState::ContextInfo& AssemblyState::ContextOf(const std::string& key, ObjectId component, const doc::Document& part,
+                                                           std::string_view name) {
+    const std::uint64_t generation = geometry.PartGenerationOf(component);
+    ContextInfo& info = myHasContext[key];
+    if (info.generation != generation || generation == 0) {
+        info.generation = generation;
+        info.has = kernel::HasContextProjections(part, name);
+        info.sources = info.has ? kernel::ContextSources(part, name) : std::vector<ObjectId>{};
+    }
+    return info;
+}
+
 void AssemblyState::MarkFollowers(const std::filesystem::path& file, std::string_view name) {
+    // Who is drawn from whom: a part with projections from here follows its
+    // sources (it stays fixed); its sources lead (an impossible set of
+    // constraints does not move them to a compromise the follower would chase).
+    std::unordered_map<ObjectId, bool> follows, leads;
+    for (const assembly::Component& c : assembly.components) {
+        const doc::Document* part = name.empty() ? nullptr : geometry.PartOf(c.id);
+        if (!part) continue;
+        const ContextInfo& info = ContextOf(ToUtf8(assembly::ResolvePartPath(file, c.path)), c.id, *part, name);
+        if (!info.has) continue;
+        follows[c.id] = true;
+        for (ObjectId s : info.sources) leads[s] = true;
+    }
     bool changed = false;
     for (assembly::Component& c : assembly.components) {
-        bool follows = false;
-        if (const doc::Document* part = name.empty() ? nullptr : geometry.PartOf(c.id)) {
-            const std::string key = ToUtf8(assembly::ResolvePartPath(file, c.path));
-            const std::uint64_t generation = geometry.PartGenerationOf(c.id);
-            auto& has = myHasContext[key];
-            if (has.first != generation || generation == 0) has = {generation, kernel::HasContextProjections(*part, name)};
-            follows = has.second;
-        }
-        if (c.follower != follows) {
-            c.follower = follows;
+        const bool f = follows.count(c.id) > 0, l = leads.count(c.id) > 0;
+        if (c.follower != f || c.leads != l) {
+            c.follower = f;
+            c.leads = l;
             changed = true;
         }
     }
@@ -281,11 +299,7 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
         if (!part) continue;
         const std::filesystem::path partFile = assembly::ResolvePartPath(file, c.path);
         const std::string key = ToUtf8(partFile);
-        // Whether it has projections from here: looked at once per version of the part.
-        const std::uint64_t generation = geometry.PartGenerationOf(c.id);
-        auto& has = myHasContext[key];
-        if (has.first != generation || generation == 0) has = {generation, kernel::HasContextProjections(*part, name)};
-        if (!has.second || std::find(done.begin(), done.end(), key) != done.end()) continue;
+        if (!ContextOf(key, c.id, *part, name).has || std::find(done.begin(), done.end(), key) != done.end()) continue;
         done.push_back(key);   // one component per part: they all show the same part
         const std::uint64_t now = kernel::ContextKey(geometry, assembly, c.id, *part, name);
         if (const auto known = myAdaptKeys.find(key); known != myAdaptKeys.end() && known->second == now) continue;

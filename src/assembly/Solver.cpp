@@ -1007,7 +1007,10 @@ SolveResult Solve(Assembly& a, const SolveOptions& options) {
                 farthest = std::max(farthest, (a.FindComponent(s.free[i])->placement.translation - before[i].translation).Length());
             const bool helps = err < 0.9 * startErr;
             const bool closeBy = farthest <= std::max(100.0, 2.0 * scale);
-            revert = !helps || !closeBy;
+            // A part the others are drawn from stays: they would follow it
+            // to the compromise, and their sketches with them.
+            const bool leads = std::ranges::any_of(s.free, [&](ObjectId id) { return a.FindComponent(id)->leads; });
+            revert = !helps || !closeBy || leads;
         }
         if (revert) {
             for (std::size_t i = 0; i < s.free.size(); ++i) a.FindComponent(s.free[i])->placement = before[i];

@@ -14,11 +14,16 @@
 
 #include <cstdint>
 #include <string_view>
+#include <vector>
 
 namespace bz::kernel {
 
 /// `doc` has adaptive projections made in the assembly named `assembly`.
 bool HasContextProjections(const doc::Document& doc, std::string_view assembly);
+
+/// The components those projections (and extrusions up to a face) take
+/// their edges and faces from.
+std::vector<ObjectId> ContextSources(const doc::Document& doc, std::string_view assembly);
 
 /// What those projections of the part of `target` depend on, as one number:
 /// each source part's geometry, where it stands relative to `target`, and

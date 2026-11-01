@@ -50,6 +50,11 @@ struct Component {
     /// grounded one (moved, it would redraw itself and pull the others round
     /// in a loop). Set by the program each update, not saved.
     bool                follower = false;
+    /// Other parts of this assembly are drawn from it (their projections take
+    /// its edges): constraints that cannot all hold leave it where it is
+    /// instead of moving it to the least bad compromise — those parts would
+    /// follow it there and their sketches go off. Set each update, not saved.
+    bool                leads = false;
 };
 
 /// Geometry of a part that a constraint ties, in the part's coordinates.
