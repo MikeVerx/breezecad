@@ -478,6 +478,7 @@ jobs:
       - name: File types, thumbnails and the disk image
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 5   # Quick Look / mdls hung for hours on macos-15
         run: |
           mkdir -p /tmp/ql shots && ditto -x -k release/BreezeCAD-macos.zip /tmp/ql
           app=/tmp/ql/BreezeCAD.app
@@ -502,6 +503,7 @@ jobs:
       - name: Start check
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 5
         run: |
           mkdir -p /tmp/start shots && ditto -x -k release/BreezeCAD-macos.zip /tmp/start
           cellar="$(brew --prefix)/Cellar"
