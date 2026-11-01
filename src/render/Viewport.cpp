@@ -1571,6 +1571,30 @@ std::optional<Viewport::ContextEdge> Viewport::PickContextEdge(Vec2 pixel) {
     return std::nullopt;
 }
 
+std::vector<Viewport::ContextEdge> Viewport::PickContextFaceEdges(Vec2 pixel) {
+    Impl& m = *myImpl;
+    const Impl::Context& c = m.surroundings;
+    std::vector<ContextEdge> out;
+    if (!c.facePicking || c.shapes.empty()) return out;
+    const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
+    const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
+    const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
+    selector->Pick(px, py, m.view);
+    if (selector->NbPicked() < 1) return out;
+    // Only when the nearest thing is a face of another part (an edge nearby,
+    // or the edited part's own face in front, wins).
+    const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(1));
+    if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_FACE) return out;
+    for (std::size_t b = 0; b < c.shapes.size(); ++b) {
+        if (owner->Selectable() != c.shapes[b]) continue;
+        TopTools_IndexedMapOfShape edges;
+        TopExp::MapShapes(owner->Shape(), TopAbs_EDGE, edges);
+        for (int i = 1; i <= edges.Extent(); ++i)
+            out.push_back(ContextEdge{c.ids[b], kernel::occt::DescribeEdge(TopoDS::Edge(edges(i)), c.bodies[b])});
+    }
+    return out;
+}
+
 void Viewport::ShowCopyPreview(const kernel::Model* model, ObjectId feature) {
     Impl& m = *myImpl;
     const std::uint64_t revision = model ? model->Revision() + 1 : 0;

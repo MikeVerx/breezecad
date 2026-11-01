@@ -349,8 +349,9 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     }
     // A part edited in place: the edges of the parts around it can be projected too.
     app.viewport.SetContextPicking(projecting && session.host != nullptr);
-    // ... and their faces, for an extrusion "до грани" of another part.
-    app.viewport.SetContextFacePicking(operation && operation->PicksContextFaces() && session.host != nullptr);
+    // ... and their faces: for an extrusion "до грани" of another part, and
+    // for projecting a face's whole outline, as of the part's own face.
+    app.viewport.SetContextFacePicking(((operation && operation->PicksContextFaces()) || projecting) && session.host != nullptr);
     // Measuring makes vertices and edges pickable too.
     const bool measuring = app.shell.measuring && session.mode == EditMode::Model && !operation;
     app.viewport.SetMeasuring(measuring);

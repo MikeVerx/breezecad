@@ -215,6 +215,11 @@ public:
         doc::EdgeReference edge;
     };
     std::optional<ContextEdge> PickContextEdge(Vec2 pixel);
+    /// Every edge of the context face under `pixel` (SetContextFacePicking
+    /// on), as for the edited part's own face (PickFaceEdges): the whole
+    /// closed outline, holes included. Empty when the nearest thing is not a
+    /// context face (the edited part's own face is nearer, or nothing).
+    std::vector<ContextEdge> PickContextFaceEdges(Vec2 pixel);
 
     /// Outlines of a pattern's or mirror's sources (selection colour) and
     /// copies (hover colour) over the model while its panel is open;

@@ -384,41 +384,61 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
     };
     // A part edited in place: an edge of another part of the assembly (the
     // faded ones around it). Linked, it follows that part — adaptivity.
-    std::optional<kernel::ProjectedCurve> fromContext;
-    std::optional<doc::ContextProjection> contextLink;
-    if (!pickedEdge && session.host && session.host->assembly) {
-        if (const std::optional<render::Viewport::ContextEdge> ce = app.viewport.PickContextEdge(pixel)) {
-            AssemblyState& st = *session.host->assembly;
-            const ObjectId target = session.inPlaceOf;
-            const std::string name = session.host->ContextName();
-            if (kernel::WouldCycle(st.geometry, st.assembly, ce->body, target, name)) {
-                app.notes.Info(Tr("Эта деталь сама следует за той, что правится: проекция замкнула бы их друг на друга"));
-                return;
-            }
-            const std::optional<doc::EdgeReference> source = st.geometry.SourceEdge(st.assembly, target, ce->body, ce->edge);
+    // An edge of it, or — clicked on a face — the face's whole outline, as
+    // for the part's own face.
+    struct FromContext {
+        kernel::ProjectedCurve  curve;
+        doc::ContextProjection  link;
+    };
+    std::vector<FromContext> fromContext;
+    const bool inAssembly = session.host && session.host->assembly;
+    // Projects the picked edges of another part; false when the click ends
+    // here (a note said why). A single edge that fails says so; of a face's
+    // outline the edges that do not project (seen end-on) are left out.
+    const auto projectContext = [&](const std::vector<render::Viewport::ContextEdge>& picked) {
+        if (picked.empty()) return true;
+        AssemblyState& st = *session.host->assembly;
+        const ObjectId target = session.inPlaceOf;
+        const std::string name = session.host->ContextName();
+        if (kernel::WouldCycle(st.geometry, st.assembly, picked.front().body, target, name)) {
+            app.notes.Info(Tr("Эта деталь сама следует за той, что правится: проекция замкнула бы их друг на друга"));
+            return false;
+        }
+        std::string failure;
+        for (const render::Viewport::ContextEdge& ce : picked) {
+            const std::optional<doc::EdgeReference> source = st.geometry.SourceEdge(st.assembly, target, ce.body, ce.edge);
             if (!source) {
-                app.notes.Info(Tr("Ребро другой детали не найдено"));
-                return;
+                failure = Tr("Ребро другой детали не найдено");
+                continue;
             }
-            doc::ContextProjection link{name, ce->body, *source, {}, true};
+            doc::ContextProjection link{name, ce.body, *source, {}, true};
             const Expected<kernel::ProjectedCurve> pc = st.geometry.ProjectSourceEdge(st.assembly, target, link, f->placement.frame);
             if (!pc) {
-                app.notes.Info(Tr(pc.GetError().message));
-                return;
+                failure = Tr(pc.GetError().message);
+                continue;
             }
-            fromContext = *pc;
-            contextLink = std::move(link);
+            fromContext.push_back({*pc, std::move(link)});
         }
+        if (fromContext.empty() && !failure.empty()) {
+            app.notes.Info(failure);
+            return false;
+        }
+        return true;
+    };
+    if (!pickedEdge && inAssembly) {
+        if (const std::optional<render::Viewport::ContextEdge> ce = app.viewport.PickContextEdge(pixel))
+            if (!projectContext({*ce})) return;
     }
     // An edge that does not project on its own (a circle of a turned part
     // seen from the side) is taken as a click on the body of revolution.
     if (pickedEdge && !session.model.ProjectEdge(*pickedEdge, f->placement.frame, static_cast<std::size_t>(index))) tryRevolved();
-    if (!pickedEdge && !fromContext) {
+    if (!pickedEdge && fromContext.empty()) {
         tryRevolved();
         if (!revolved) edges = app.viewport.PickFaceEdges(pixel);
+        if (!revolved && edges.empty() && inAssembly && !projectContext(app.viewport.PickContextFaceEdges(pixel))) return;
     }
     if (revolved) edges.clear();
-    if (edges.empty() && !revolved && !fromContext) {
+    if (edges.empty() && !revolved && fromContext.empty()) {
         // A body of revolution that could not be projected says why (it
         // used to end here in silence: "the click did nothing").
         if (!revolvedProblem.empty()) app.notes.Info(Tr(revolvedProblem));
@@ -550,15 +570,14 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
         return true;
     };
     std::string problem;
-    if (fromContext) {
-        if (place(*fromContext, nullptr, false)) {
-            ++added;
-            // Linked: it follows the other part (fixed for the solver, moved
-            // by the assembly); independent: ordinary geometry held in place.
-            if (myOptions.projectLinked && contextLink) {
-                contextLink->curve = lastCurve;
-                f->contextProjections.push_back(*contextLink);
-            }
+    for (FromContext& c : fromContext) {
+        if (!place(c.curve, nullptr, false)) continue;
+        ++added;
+        // Linked: it follows the other part (fixed for the solver, moved by
+        // the assembly); independent: ordinary geometry held in place.
+        if (myOptions.projectLinked) {
+            c.link.curve = lastCurve;
+            f->contextProjections.push_back(c.link);
         }
     }
     for (const doc::EdgeReference& edge : edges) {
@@ -599,10 +618,10 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
     }
     if (!problem.empty()) app.notes.Info(Trf("Часть рёбер не спроецирована: {}", Tr(problem)));
     session.doc.MarkChanged(static_cast<std::size_t>(index));
-    session.CommitInPlaceEdit(std::move(before), fromContext       ? Tr("Проецирование из другой детали")
-                                                 : revolved         ? Tr("Проецирование тела вращения")
-                                                 : edges.size() > 1 ? Tr("Проецирование грани")
-                                                                    : Tr("Проецирование геометрии"));
+    session.CommitInPlaceEdit(std::move(before), !fromContext.empty() ? Tr("Проецирование из другой детали")
+                                                 : revolved            ? Tr("Проецирование тела вращения")
+                                                 : edges.size() > 1    ? Tr("Проецирование грани")
+                                                                       : Tr("Проецирование геометрии"));
 }
 
 std::size_t SketchEditor::ClicksNeeded() const {
