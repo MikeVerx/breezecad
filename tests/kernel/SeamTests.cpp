@@ -194,3 +194,18 @@ TEST_CASE("шов: проекция слитой грани — одна лин�
     }
     CHECK(lines == 4);
 }
+
+TEST_CASE("шов: отрезок от стороны внутрь контура не оставляет линии на теле") {
+    doc::Document d;
+    auto& sk = AddSketch(d);
+    AddRect(d, sk, {-60, -40}, {60, 40});
+    auto& s = sk.sketch;
+    s.AddLine(d.Ids(), s.AddPoint(d.Ids(), {0, -40}), s.AddPoint(d.Ids(), {0, 10}));
+    auto& ex = AddExtrude(d, sk.id, "30");
+    kernel::Model model;
+    model.Rebuild(d);
+    REQUIRE(ex.status.state == FeatureState::Ok);
+    CHECK(model.Volume() == doctest::Approx(kBox).epsilon(1e-6));
+    CHECK(Count(model, TopAbs_FACE) == 6);
+    CHECK(Count(model, TopAbs_EDGE) == 12);
+}
