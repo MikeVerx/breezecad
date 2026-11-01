@@ -78,8 +78,12 @@ done
 # library with a repeated LC_RPATH ("duplicate LC_RPATH") — the app did not start.
 for f in "${binaries[@]}"; do
     otool -l "$f" | awk '/LC_RPATH/ {getline; getline; print $2}' | sort | uniq -d | while read -r rp; do
-        n=$(otool -l "$f" | awk '/LC_RPATH/ {getline; getline; print $2}' | grep -cxF "$rp")
-        for _ in $(seq 2 "$n"); do install_name_tool -delete_rpath "$rp" "$f"; done
+        # delete_rpath removes one entry (or, in some versions, all): delete
+        # until none is left, then put it back once.
+        while otool -l "$f" | awk '/LC_RPATH/ {getline; getline; print $2}' | grep -qxF "$rp"; do
+            install_name_tool -delete_rpath "$rp" "$f"
+        done
+        install_name_tool -add_rpath "$rp" "$f"
     done
 done
 # Nothing may still point outside the bundle and the system.
