@@ -78,6 +78,7 @@ set(BZ_APP_SOURCES
     ShortcutPresets.cpp
     sketch/SketchEditor.cpp
     sketch/SketchOverlay.cpp
+    sketch/SketchRepair.cpp
     sketch/SketchText.cpp
     sketch/SketchPick.cpp
     sketch/SketchTools.cpp

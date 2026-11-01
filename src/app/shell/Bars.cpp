@@ -5,6 +5,7 @@
 #include "app/features/OperationEditors.h"
 #include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
+#include "app/sketch/SketchRepair.h"
 #include "core/I18n.h"
 #include "kernel/Model.h"
 #include "document/SketchFeature.h"
@@ -170,6 +171,21 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
             if (dof == 0) rightText(Tr("Эскиз полностью определён"), c.success);
             else if (dof > 0) rightText(Trf("Степеней свободы: {}", dof), c.textSecondary);
             else rightText(Tr("Ограничения противоречат"), c.danger);
+            // Its projections broke: a red "!" that offers to restore it.
+            if (sk->HasBrokenProjections()) {
+                const std::string label = std::string("! ") + Tr("Проекция сломана");
+                const float w = font->CalcTextSizeA(fs, FLT_MAX, 0, label.c_str()).x;
+                right -= w;
+                ImGui::SetCursorScreenPos({right, pos.y});
+                if (ImGui::InvisibleButton("##broken-projection", {w, h})) ImGui::OpenPopup(kSketchRepairPopup);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                    ui::ItemTooltip(ui, Tr("Проекция потеряла своё ребро или не сходится с эскизом после изменений выше по дереву"));
+                }
+                dl->AddText(font, fs, {right, ty}, ui::ToU32(c.danger), label.c_str());
+                right -= ui.S(18);
+                SketchRepairMenu(app, *s, sk->id);
+            }
         }
         if (const auto cursor = app.sketch.Cursor()) {
             const std::string coords = "X " + FormatValue(cursor->x, Quantity::Length, s->doc.units, 2) + "   Y " +

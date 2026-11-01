@@ -31,6 +31,7 @@
 #include "document/WorkPlaneFeature.h"
 #include "app/assembly/AssemblyUi.h"
 #include "app/assembly/InPlace.h"
+#include "app/sketch/SketchRepair.h"
 #include "assembly/AssemblyFile.h"
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
@@ -351,6 +352,14 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
         if (f.status.state == doc::FeatureState::Error) style.statusIcon = "status-error";
         if (f.status.state == doc::FeatureState::Warning) style.statusIcon = "status-warning";
         style.statusText = Tr(f.status.message);
+        // A sketch whose projections broke (in the assembly too, where the
+        // part itself may have rebuilt fine): the "!" offers to restore it.
+        const auto* sketchFeature = dynamic_cast<const doc::SketchFeature*>(&f);
+        const bool repairable = sketchFeature && (!sketchFeature->projections.empty() || !sketchFeature->contextProjections.empty());
+        if (sketchFeature && f.status.state == doc::FeatureState::Ok && sketchFeature->HasBrokenProjections()) {
+            style.statusIcon = "status-warning";
+            style.statusText = Tr("Проекция потеряла своё ребро или не сходится с эскизом после изменений выше по дереву");
+        }
         style.hideable = Hideable(session, f);
         style.hidden = f.hidden;
 
@@ -391,6 +400,11 @@ void DrawTreePanel(AppContext& app, Session& session, float width) {
             else app.shell.expanded.insert(f.id);
         }
         if (r.clicked) session.selectedFeature = f.id;
+        if (r.statusClicked && repairable) {
+            session.selectedFeature = f.id;
+            ImGui::OpenPopup(kSketchRepairPopup);
+        }
+        if (repairable) SketchRepairMenu(app, session, f.id);
         if (r.eyeClicked) {
             const ObjectId id = f.id;
             app.Later([&session, id] { ToggleHidden(session, id); });

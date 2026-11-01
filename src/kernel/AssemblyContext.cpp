@@ -230,14 +230,18 @@ AdaptResult AdaptContextProjections(const AssemblyModel& geometry, const assembl
             continue;
         }
         auto* sk = dynamic_cast<doc::SketchFeature*>(doc.Features()[i].get());
-        if (!sk) continue;
+        if (!sk || sk->contextProjections.empty()) continue;
+        const bool wasBroken = sk->HasBrokenProjections();
+        const sketch::Sketch before = sk->sketch;
+        sk->lostContextProjections.clear();
         bool moved = false;
         for (doc::ContextProjection& p : sk->contextProjections) {
             if (!Matches(p, assembly)) continue;
             doc::EdgeReference found = p.edge;
             const Expected<ProjectedCurve> now = geometry.ProjectSourceEdge(a, target, p, sk->placement.frame, &found);
             if (!now) {
-                ++result.lost;   // the curve stays where it was
+                ++result.lost;   // the curve stays where it was, drawn red
+                sk->lostContextProjections.insert(p.curve);
                 continue;
             }
             if (CurveMatches(sk->sketch, p.curve, *now, 1e-7)) continue;
@@ -247,11 +251,12 @@ AdaptResult AdaptContextProjections(const AssemblyModel& geometry, const assembl
                 ++result.moved;
             } else {
                 ++result.lost;   // projects as another kind of curve now
+                sk->lostContextProjections.insert(p.curve);
             }
         }
-        if (!moved) continue;
-        doc::SolveSketch(*sk);   // what is tied to the curves follows them
-        first = std::min(first, i);
+        if (moved) doc::SolveSketch(*sk);   // what is tied to the curves follows them
+        sk->NoteProjectionsUpdated(before, wasBroken);
+        if (moved) first = std::min(first, i);
     }
     if (first != static_cast<std::size_t>(-1)) doc.MarkChanged(first);
     return result;

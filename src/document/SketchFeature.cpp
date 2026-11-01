@@ -88,6 +88,65 @@ void SketchFeature::PruneProjections() {
                   [&](const ContextProjection& p) { return sketch.KindOf(p.curve) == sketch::EntityKind::None; });
 }
 
+std::unordered_set<ObjectId> SketchFeature::BrokenProjections() const {
+    std::unordered_set<ObjectId> out = lostProjections;
+    out.insert(lostContextProjections.begin(), lostContextProjections.end());
+    if (analysis.failing.empty() || (projections.empty() && contextProjections.empty())) return out;
+    // A constraint that fails on a projected curve or on one of its points:
+    // the curve came where its edge projects now and the sketch cannot follow.
+    const auto failsOn = [&](ObjectId entity) {
+        for (ObjectId f : analysis.failing)
+            if (const sketch::Constraint* c = sketch.FindConstraint(f); c && c->References(entity)) return true;
+        return false;
+    };
+    const auto check = [&](ObjectId curve) {
+        if (out.count(curve)) return;
+        bool fails = failsOn(curve);
+        if (const sketch::Line* l = sketch.FindLine(curve)) fails = fails || failsOn(l->start) || failsOn(l->end);
+        else if (const sketch::Circle* c = sketch.FindCircle(curve)) fails = fails || failsOn(c->center);
+        else if (const sketch::Arc* a = sketch.FindArc(curve)) fails = fails || failsOn(a->center) || failsOn(a->start) || failsOn(a->end);
+        if (fails) out.insert(curve);
+    };
+    for (const Projection& p : projections) check(p.curve);
+    for (const ContextProjection& p : contextProjections) check(p.curve);
+    return out;
+}
+
+void SketchFeature::NoteProjectionsUpdated(const sketch::Sketch& before, bool wasBroken) {
+    if (!HasBrokenProjections()) beforeBreak.reset();          // all well again: nothing to come back to
+    else if (!wasBroken && !beforeBreak) beforeBreak = before;   // it broke just now: the sketch from before
+}
+
+bool SketchFeature::RestoreBeforeBreak(IdGenerator& ids) {
+    if (projections.empty() && contextProjections.empty()) return false;
+    if (beforeBreak) sketch = std::move(*beforeBreak);
+    beforeBreak.reset();
+    // Unlinked: ordinary geometry, held where it is (the points of what was
+    // projected are fixed; a circle keeps its radius until dimensioned).
+    std::vector<ObjectId> held;
+    for (sketch::Point& p : sketch.points)
+        if (p.projected) {
+            p.projected = false;
+            held.push_back(p.id);
+        }
+    for (sketch::Line& l : sketch.lines) l.projected = false;
+    for (sketch::Circle& c : sketch.circles) c.projected = false;
+    for (sketch::Arc& a : sketch.arcs) a.projected = false;
+    for (ObjectId p : held) {
+        sketch::Constraint fix;
+        fix.type = sketch::ConstraintType::Fix;
+        fix.refs = {p, {}, {}};
+        fix.fixedAt = sketch.PositionOf(p);
+        sketch.AddConstraint(ids, fix);
+    }
+    projections.clear();
+    contextProjections.clear();
+    lostProjections.clear();
+    lostContextProjections.clear();
+    analysis = {};
+    return true;
+}
+
 void SketchFeature::SaveFields(Json& out) const {
     out["placement"] = Json{{"support", ToJson(placement.support)},
                             {"frame", ToJson(placement.frame)},

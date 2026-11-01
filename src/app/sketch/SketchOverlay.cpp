@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <span>
+#include <unordered_set>
 
 namespace bz::app {
 namespace {
@@ -337,11 +338,25 @@ void DrawSketch(ui::Ui& ui, ImDrawList* dl, const doc::SketchFeature& feature, c
                 return true;
         return false;
     };
+    // Projections that lost their edge or no longer agree with the sketch:
+    // red, as Inventor draws them, the points on them too, shown or edited.
+    std::unordered_set<ObjectId> broken = feature.BrokenProjections();
+    if (!broken.empty()) {
+        for (const auto& l : sk.lines)
+            if (broken.count(l.id)) broken.insert({l.start, l.end});
+        for (const auto& ci : sk.circles)
+            if (broken.count(ci.id)) broken.insert(ci.center);
+        for (const auto& a : sk.arcs)
+            if (broken.count(a.id)) broken.insert({a.center, a.start, a.end});
+    }
     const auto curveColor = [&](ObjectId id, bool construction, bool projected) -> Color {
-        if (style.passive) return construction ? c.sketchConstruction.WithAlpha(0.45f) : c.sketchFree.WithAlpha(0.6f);
+        if (style.passive) {
+            if (projected && broken.count(id)) return c.danger.WithAlpha(0.85f);
+            return construction ? c.sketchConstruction.WithAlpha(0.45f) : c.sketchFree.WithAlpha(0.6f);
+        }
         if (Contains(style.selection, id) || Contains(style.picked, id)) return c.sketchSelected;
         if (style.hover == id) return c.sketchHover;
-        if (failing(id)) return c.danger;
+        if (failing(id) || (projected && broken.count(id))) return c.danger;
         if (projected) return c.sketchProjected;   // held by the model, as in Inventor
         if (construction) return c.sketchConstruction;
         return defined(id) ? c.sketchDefined : c.sketchFree;

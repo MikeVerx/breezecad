@@ -4,6 +4,7 @@
 #include <Standard_Version.hxx>
 
 #include "core/FaultGuard.h"
+#include "core/I18n.h"
 #include "core/Log.h"
 #include "document/CoilFeature.h"
 #include "document/SectionFeature.h"
@@ -870,9 +871,16 @@ bool PlaceProjected(sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& pc
 /// Projected model edges follow the model: each is found again on the most
 /// recent body and its curve moved, then the sketch is solved again so what
 /// is constrained to them follows too. Returns false when an edge is lost
-/// (its curve then stays where it was).
+/// (its curve then stays where it was). The lost curves are kept on the
+/// sketch (lostProjections), with the sketch as it was before they broke.
 bool UpdateProjections(doc::SketchFeature& sk, const std::vector<Body>& bodies) {
-    if (sk.projections.empty()) return true;
+    if (sk.projections.empty()) {
+        sk.lostProjections.clear();
+        return true;
+    }
+    const bool wasBroken = sk.HasBrokenProjections();
+    const sketch::Sketch before = sk.sketch;
+    sk.lostProjections.clear();
     bool allFound = true;
     // All edges found in one pass: describing the body's edges is the costly part.
     std::vector<doc::EdgeReference> refs;
@@ -884,9 +892,13 @@ bool UpdateProjections(doc::SketchFeature& sk, const std::vector<Body>& bodies) 
         const std::optional<TopoDS_Edge>& edge = edges[i];
         const Expected<ProjectedCurve> projected =
             edge ? occt::ProjectEdge(*edge, sk.placement.frame) : Expected<ProjectedCurve>(Error{"ребро не найдено"});
-        allFound = projected && PlaceProjected(sk.sketch, p.curve, *projected) && allFound;
+        if (!projected || !PlaceProjected(sk.sketch, p.curve, *projected)) {
+            sk.lostProjections.insert(p.curve);
+            allFound = false;
+        }
     }
     doc::SolveSketch(sk);
+    sk.NoteProjectionsUpdated(before, wasBroken);
     return allFound;
 }
 
@@ -1234,6 +1246,10 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                     sk->status = {FeatureState::Warning, "Грань эскиза не найдена: эскиз остался на прежнем месте"};
                 if (!projectedFound && sk->status.state == FeatureState::Ok)
                     sk->status = {FeatureState::Warning, "Часть проецированных рёбер не найдена: они остались на прежнем месте"};
+                // Edges of other parts lost in the assembly, or constraints on a
+                // projection that no longer hold: the projection is broken too.
+                if (sk->status.state == FeatureState::Ok && sk->HasBrokenProjections())
+                    sk->status = {FeatureState::Warning, N_("Проекция потеряла своё ребро или не сходится с эскизом после изменений выше по дереву")};
             } else if (auto* ex = dynamic_cast<doc::ExtrudeFeature*>(&f)) {
                 ApplySketchSolid(*ex, impl, bodies, ex->status, doc,
                                  [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature&, const Frame& frame) {

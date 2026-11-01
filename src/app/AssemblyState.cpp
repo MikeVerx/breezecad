@@ -300,16 +300,19 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
         } else {
             // Read from its file: tried on a copy first. Only when something
             // really moves does the part become an edit in memory (saved with
-            // the assembly) — opening an assembly that is up to date changes nothing.
+            // the assembly) — opening an assembly that is up to date changes
+            // nothing. A broken projection takes it into memory too (unchanged,
+            // nothing to save): that is where its curves are drawn red.
             doc::Document copy = part->Clone();
             before = doc::DocumentToJson(copy);
             r = kernel::AdaptContextProjections(geometry, assembly, c.id, copy, name);
-            if (r.changed()) {
+            if (r.changed() || r.lost > 0) {
                 auto session = std::make_unique<Session>();
                 session->doc = std::move(copy);
                 session->path = partFile;
                 parts.push_back({partFile, std::move(session), false});
                 edit = &parts.back();
+                if (!r.changed()) edit->session->RebuildNow();   // shown as it was, from memory now
                 geometry.UsePartInMemory(partFile, &edit->session->doc, &edit->session->model);
             }
         }
