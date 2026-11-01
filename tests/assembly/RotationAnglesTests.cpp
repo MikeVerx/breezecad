@@ -55,6 +55,12 @@ TEST_CASE("положение компонента: углы поворота в
             CHECK(Same(Rotation::FromAnglesXYZ(a), r, 1e-7));
         }
     }
+    SUBCASE("перевёрнутая деталь — 180°, а не −180° (так и показано в панели)") {
+        const Vec3 a = Rotation::AxisAngle({1, 0, 0}, kPi).AnglesXYZ() * (1 / kDeg);
+        CHECK(a.x == doctest::Approx(180));
+        const Vec3 z = Rotation::AxisAngle({0, 0, 1}, -kPi).AnglesXYZ() * (1 / kDeg);
+        CHECK(z.z == doctest::Approx(180));
+    }
     SUBCASE("поворот после трёх «на 90°» читается углами и собирается обратно") {
         Rotation r = Rotation::AxisAngle({1, 0, 0}, kPi / 2);
         r = Rotation::AxisAngle({0, 0, 1}, kPi / 2) * r;
