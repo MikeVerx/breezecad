@@ -73,6 +73,15 @@ for f in "${binaries[@]}"; do
         case "$rp" in /opt/homebrew/*|/usr/local/*) install_name_tool -delete_rpath "$rp" "$f" 2>/dev/null ;; esac
     done
 done
+# Each search path once: dylibbundler adds @executable_path/../Frameworks/ to
+# libraries that already have it, and the dyld of macOS 15 refuses to load a
+# library with a repeated LC_RPATH ("duplicate LC_RPATH") — the app did not start.
+for f in "${binaries[@]}"; do
+    otool -l "$f" | awk '/LC_RPATH/ {getline; getline; print $2}' | sort | uniq -d | while read -r rp; do
+        n=$(otool -l "$f" | awk '/LC_RPATH/ {getline; getline; print $2}' | grep -cxF "$rp")
+        for _ in $(seq 2 "$n"); do install_name_tool -delete_rpath "$rp" "$f"; done
+    done
+done
 # Nothing may still point outside the bundle and the system.
 bad=$(for f in "${binaries[@]}"; do otool -L "$f" | tail -n +2 | awk '{print $1}' \
         | grep -vE '^(/usr/lib/|/System/Library/|@executable_path/\.\./Frameworks/)' | sed "s|^|$(basename "$f"): |"; done || true)
