@@ -20,7 +20,7 @@ apt-get install -y libocct-*-dev libtbb-dev libglfw3-dev libxi-dev libgl1-mesa-d
 cmake --preset linux-debug && cmake --build --preset linux-debug -- -k 0 2>&1 | grep -E "error|warning:"
 ./build/linux-debug/bin/bz_tests 2>&1 | tail -1
 ```
-Сборки Windows и macOS — только CI (MSYS2 + OCCT 8; Homebrew + OCCT 7.9 на `macos-14`, arm64).
+Сборки Windows и macOS — только CI (MSYS2 + OCCT 8; Homebrew + OCCT 7.9 на `macos-15`, arm64).
 `next-build` — шесть файлов: `BreezeCAD-{windows,linux,macos}` и `BreezeCAD-beta-{windows,linux,macos}`
 (.zip, Linux — .tar.gz), например
 https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-windows.zip
@@ -332,7 +332,7 @@ WORKLOG 2026-10-11). Остаток пункта:
   нет (тесты FaultGuard на Windows пропущены). Причина не найдена.
 
 ## 3в. Три системы и тачпад (2026-10-12, ветка feat/macos, PR #7)
-- **macOS**: только Apple Silicon (arm64), macOS 14+ (бутылки Homebrew на `macos-14` собраны под 14).
+- **macOS**: только Apple Silicon (arm64), macOS 15+ (бутылки Homebrew на `macos-15` собраны под 15; `macos-14` GitHub убрал 2.11.2026).
   `scripts/package-macos.sh`: `.app` из `build/macos/bin`, dylib Homebrew → `Contents/Frameworks`
   (dylibbundler, ссылки `@executable_path/../Frameworks`, проверка — ничего вне бандла и системы),
   подпись ad hoc изнутри наружу. Платная подпись — `MACOS_SIGN_IDENTITY` (+ hardened runtime,

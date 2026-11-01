@@ -446,8 +446,8 @@ jobs:
 
   macos:
     # Apple Silicon only (arm64); Homebrew's bottles here are built for
-    # macOS 14, which is the oldest system the app supports.
-    runs-on: macos-14
+    # macOS 15, which is the oldest system the app supports (macos-14 retired 2.11.2026).
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Dependencies
@@ -478,6 +478,7 @@ jobs:
       - name: File types, thumbnails and the disk image
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 5   # Quick Look / mdls hung for hours on macos-15
         run: |
           mkdir -p /tmp/ql shots && ditto -x -k release/BreezeCAD-macos.zip /tmp/ql
           app=/tmp/ql/BreezeCAD.app
@@ -502,6 +503,7 @@ jobs:
       - name: Start check
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 5
         run: |
           mkdir -p /tmp/start shots && ditto -x -k release/BreezeCAD-macos.zip /tmp/start
           cellar="$(brew --prefix)/Cellar"
@@ -605,7 +607,7 @@ jobs:
           • BreezeCAD-linux.tar.gz — обычная: распаковать и запустить BreezeCAD/breezecad.
           • BreezeCAD-beta-linux.tar.gz — для бета-тестеров: внутри «Запустить BreezeCAD.sh» и «ИНСТРУКЦИЯ для тестеров.txt».
 
-          macOS 14+ на процессорах Apple (M1 и новее):
+          macOS 15+ на процессорах Apple (M1 и новее):
           • BreezeCAD-macos.dmg — образ диска: открыть и перетащить BreezeCAD в «Программы». Файлы деталей и сборок открываются в BreezeCAD, в Finder видны их картинки.
           • BreezeCAD-macos.zip — обычная: распаковать и открыть BreezeCAD.app. Первый запуск — правой кнопкой → «Открыть»; на macOS 15+ — «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть».
           • BreezeCAD-beta-macos.zip — для бета-тестеров: внутри BreezeCAD.app и «ИНСТРУКЦИЯ для тестеров.txt»."

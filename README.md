@@ -91,7 +91,7 @@ Unpack and run — nothing to install.
 | System | Download | Status |
 | --- | --- | --- |
 | Windows 10/11, 64-bit | [BreezeCAD-windows.zip](https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-windows.zip) | main platform, in beta test |
-| macOS 14+ on Apple silicon (M1 and newer) | [BreezeCAD-macos.zip](https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-macos.zip) | new: built and tested in CI, first runs on real Macs now |
+| macOS 15+ on Apple silicon (M1 and newer) | [BreezeCAD-macos.zip](https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-macos.zip) | new: built and tested in CI, first runs on real Macs now |
 | Linux x86_64 (Ubuntu 20.04+, Debian 10+, Fedora and other distributions from 2019 on) | [BreezeCAD-linux.tar.gz](https://github.com/MikeVerx/breezecad/releases/download/next-build/BreezeCAD-linux.tar.gz) | built, tested and started in CI |
 | Android 9+, ARM 64-bit (phones and tablets) | [BreezeCAD-android.apk](https://github.com/MikeVerx/breezecad/releases/download/android-build/BreezeCAD-android.apk) | beta: stability checked on a OnePlus Nord CE5 (over 60 fps) — ready for new challenges |
 
