@@ -88,7 +88,7 @@ Placement Assembly::PlacementOf(ObjectId component) const {
 bool Assembly::IsFixed(ObjectId component) const {
     if (component == kAssemblyOrigin) return true;
     const Component* c = FindComponent(component);
-    return !c || c->grounded;
+    return !c || c->grounded || c->follower;
 }
 
 std::string Assembly::NameOf(ObjectId component) const {

@@ -284,6 +284,35 @@ void DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             }
             y += ui.S(40);
         }
+        // A constraint being placed: its own tab, on top of the others while it lasts.
+        if (session.assembly && session.assembly->creating.active && !app.ops.Active()) {
+            y += ui.S(4);
+            dl->AddLine({pos.x + ui.S(10), y - ui.S(2)}, {pos.x + railW - ui.S(10), y - ui.S(2)}, ui::ToU32(c.dividerSoft));
+            ImGui::SetCursorScreenPos({pos.x + (railW - ui.S(36)) / 2, y + ui.S(4)});
+            const std::string tip = Tr(std::string(assembly::ConstraintTitle(session.assembly->creating.constraint.type)));
+            if (ui::IconButton(ui, "##rail-mate", ConstraintIcon(session.assembly->creating.constraint.type), 36, 20, tip.c_str(), true,
+                               app.shell.leftTab == LeftTab::Mate))
+                app.shell.leftTab = LeftTab::Mate;
+            y += ui.S(44);
+        }
+        // A part picked in the assembly: its data one click away (it appears
+        // with the selection and goes with it).
+        if (session.assembly && !app.ops.Active())
+            if (const assembly::Component* picked = session.assembly->assembly.FindComponent(session.assembly->selected)) {
+                y += ui.S(4);
+                dl->AddLine({pos.x + ui.S(10), y - ui.S(2)}, {pos.x + railW - ui.S(10), y - ui.S(2)}, ui::ToU32(c.dividerSoft));
+                ImGui::SetCursorScreenPos({pos.x + (railW - ui.S(36)) / 2, y + ui.S(4)});
+                const bool active = app.shell.leftTab == LeftTab::Properties;
+                const std::string tip = Trf("Данные детали «{}»", picked->name);
+                if (ui::IconButton(ui, "##rail-part", "ui-info", 36, 20, tip.c_str(), true, active)) {
+                    app.shell.measuring = false;
+                    app.shell.leftTab = LeftTab::Properties;
+                }
+                if (!active) {   // a dot: something new to look at
+                    const ImVec2 dot{pos.x + (railW + ui.S(36)) / 2 - ui.S(5), y + ui.S(9)};
+                    dl->AddCircleFilled(dot, ui.S(3.5f), ui::ToU32(c.accent));
+                }
+            }
         EndArea();
     }
 
@@ -305,6 +334,13 @@ void DrawLeftArea(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
             case LeftTab::Tree:       DrawTreePanel(app, session, width); break;
             case LeftTab::Properties: DrawPropertiesPanel(app, session, width); break;
             case LeftTab::Variables:  DrawVariablesPanel(app, session, width); break;
+            case LeftTab::Mate:
+                if (session.assembly && session.assembly->creating.active) DrawConstraintPanel(app, session, width);
+                else {
+                    app.shell.leftTab = LeftTab::Tree;   // the tool ended: back to the tree
+                    DrawTreePanel(app, session, width);
+                }
+                break;
         }
     }
     EndArea();

@@ -40,11 +40,18 @@ protected:
     /// Viewport picking before regions (revolve picks its axis). Returns
     /// true when it consumed the click.
     virtual bool PickInViewport(AppContext& app, Session& session, doc::SketchSolidFeature& feature, const SketchView& view);
+    /// The user switched "Операция" from `before` to feature.operation
+    /// (an extrusion's «Вырез» turns into the body).
+    virtual void OperationChanged(Session& session, doc::SketchSolidFeature& feature, doc::BooleanOp before) {
+        (void)session, (void)feature, (void)before;
+    }
 
     doc::SketchSolidFeature* Feature(Session& session) const;
     /// Middle of the chosen profile regions, sketch coordinates (nullopt:
     /// nothing chosen). Where drag handles start.
     static std::optional<Vec2> ProfileMiddle(const Session& session, const doc::SketchSolidFeature& f);
+    /// A point inside each chosen profile region, sketch coordinates.
+    static std::vector<Vec2> ProfileSamples(const Session& session, const doc::SketchSolidFeature& f);
 
 private:
     void DrawBody(AppContext& app, Session& session, doc::Feature& feature, float width) final;

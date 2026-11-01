@@ -128,4 +128,6 @@ bool FileWritten(const fs::path& file) {
     return android::WriteBack(file);
 }
 
+std::optional<std::filesystem::path> ShowFolderDialog(const std::string&, const std::filesystem::path&) { return std::nullopt; }
+
 } // namespace bz::platform

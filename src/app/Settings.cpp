@@ -59,7 +59,18 @@ Settings FromJson(const nlohmann::json& j) {
     s.orbitSpeed      = std::clamp(j.value("orbitSpeed", s.orbitSpeed), 0.25, 4.0);
     s.invertOrbit     = j.value("invertOrbit", s.invertOrbit);
     s.turntableOrbit  = j.value("turntableOrbit", s.turntableOrbit);
+    s.middleClickConfirms = j.value("middleClickConfirms", s.middleClickConfirms);
     s.flickGestures   = j.value("flickGestures", s.flickGestures);
+    if (const auto h = j.find("hotMenu"); h != j.end() && h->is_object()) {
+        s.hotMenu.trigger = std::clamp(h->value("trigger", 0), 0, 3);
+        const auto slots = [&](const char* key, std::vector<std::string>& to) {
+            if (const auto a = h->find(key); a != h->end() && a->is_array() && a->size() == 8)
+                for (const auto& id : *a) to.push_back(id.is_string() ? id.get<std::string>() : std::string());
+        };
+        slots("sketch", s.hotMenu.sketch);
+        slots("part", s.hotMenu.part);
+        slots("assembly", s.hotMenu.assembly);
+    }
     s.autosaveMinutes = std::clamp(j.value("autosaveMinutes", s.autosaveMinutes), 0, 120);
     s.gridSnap        = j.value("gridSnap", s.gridSnap);
     s.pointSnap       = j.value("pointSnap", s.pointSnap);
@@ -181,6 +192,7 @@ Settings FromJson(const nlohmann::json& j) {
         if (chord.is_string()) s.shortcuts.emplace_back(id, chord.get<std::string>());
     for (const auto& r : j.value("recentFiles", nlohmann::json::array()))
         if (r.is_string()) s.recentFiles.push_back(PathFromUtf8(r.get<std::string>()));
+    s.lastSaveFolder = PathFromUtf8(j.value("lastSaveFolder", std::string{}));
     return s;
 }
 
@@ -215,7 +227,7 @@ nlohmann::json GestureSetJson(const FingerGestures& g) {
 }
 } // namespace
 
-bool Settings::Save(const std::filesystem::path& file) const {
+nlohmann::json Settings::ToJson() const {
     nlohmann::json recent = nlohmann::json::array();
     for (const auto& r : recentFiles) recent.push_back(ToUtf8(r));
     const nlohmann::json j{
@@ -243,7 +255,9 @@ bool Settings::Save(const std::filesystem::path& file) const {
         {"orbitSpeed", orbitSpeed},
         {"invertOrbit", invertOrbit},
         {"turntableOrbit", turntableOrbit},
+        {"middleClickConfirms", middleClickConfirms},
         {"flickGestures", flickGestures},
+        {"hotMenu", {{"trigger", hotMenu.trigger}, {"sketch", hotMenu.sketch}, {"part", hotMenu.part}, {"assembly", hotMenu.assembly}}},
         {"language", language},
         {"window", {{"x", windowX}, {"y", windowY}, {"width", windowW}, {"height", windowH}, {"maximized", windowMaximized}}},
         {"shortcuts", ShortcutsJson(shortcuts)},
@@ -296,10 +310,66 @@ bool Settings::Save(const std::filesystem::path& file) const {
                     {"projectsFolderName", mobile.projectsFolderName}}},
         {"shortcutsCustom", shortcutsCustom},
         {"recentFiles", recent},
+        {"lastSaveFolder", ToUtf8(lastSaveFolder)},
     };
+    return j;
+}
+
+bool Settings::Save(const std::filesystem::path& file) const {
+    std::ofstream out(file, std::ios::trunc);
+    out << ToJson().dump(2);
+    return static_cast<bool>(out);
+}
+
+namespace {
+constexpr const char* kExportMark = "breezecadSettings";
+
+/// What belongs to this computer, not to the person: never carried over.
+void KeepLocal(Settings& to, const Settings& from) {
+    to.windowX = from.windowX;
+    to.windowY = from.windowY;
+    to.windowW = from.windowW;
+    to.windowH = from.windowH;
+    to.windowMaximized = from.windowMaximized;
+    to.recentFiles = from.recentFiles;
+    to.lastSaveFolder = from.lastSaveFolder;
+    to.backgroundPicture = from.backgroundPicture;   // a file on this disk
+    to.mobile.projectsFolderName = from.mobile.projectsFolderName;
+    to.mobile.askedNotifications = from.mobile.askedNotifications;
+    to.mobile.firstStartDone = from.mobile.firstStartDone;
+}
+} // namespace
+
+bool Settings::Export(const std::filesystem::path& file, std::string_view version) const {
+    nlohmann::json j = ToJson();
+    for (const char* local : {"window", "recentFiles", "lastSaveFolder", "backgroundPicture"}) j.erase(local);
+    if (auto m = j.find("mobile"); m != j.end())
+        for (const char* local : {"projectsFolderName", "askedNotifications", "firstStartDone"}) m->erase(local);
+    j[kExportMark] = 1;
+    j["exportedBy"] = std::string(version);
     std::ofstream out(file, std::ios::trunc);
     out << j.dump(2);
     return static_cast<bool>(out);
+}
+
+Expected<Settings> Settings::Import(const std::filesystem::path& file, const Settings& current) {
+    std::ifstream in(file);
+    if (!in) return Error{"Не удалось прочитать файл настроек"};
+    nlohmann::json j;
+    try {
+        in >> j;
+    } catch (const nlohmann::json::exception&) {
+        return Error{"Это не файл настроек BreezeCAD: файл повреждён"};
+    }
+    if (!j.is_object() || !j.contains(kExportMark)) return Error{"Это не файл настроек BreezeCAD"};
+    Settings s;
+    try {
+        s = FromJson(j);
+    } catch (const nlohmann::json::exception&) {
+        return Error{"Файл настроек повреждён"};
+    }
+    KeepLocal(s, current);
+    return s;
 }
 
 } // namespace bz::app

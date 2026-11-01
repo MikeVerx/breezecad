@@ -20,6 +20,20 @@ std::filesystem::path ExecutableDir();
 /// Linux $XDG_CONFIG_HOME/breezecad.
 std::filesystem::path ConfigDir();
 
+/// Whether this copy was put here by the installer (Windows: installed.json
+/// next to the program). An installed copy keeps modules and languages in
+/// ConfigDir(); a portable one (unpacked from the archive) next to itself.
+bool InstalledCopy();
+
+/// The user's modules: "module" next to a portable program (Windows, Linux),
+/// else ConfigDir()/modules. Packages (.bzmod) dropped there are installed
+/// on start. Created on demand.
+std::filesystem::path ModulesDir();
+
+/// The user's language packs: "language" next to a portable program, else
+/// ConfigDir()/lang. Created on demand.
+std::filesystem::path LanguagesDir();
+
 /// Where autosave copies live (inside ConfigDir()).
 std::filesystem::path AutosaveDir();
 

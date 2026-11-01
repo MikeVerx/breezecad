@@ -8,7 +8,7 @@
 
 namespace bz::app {
 
-std::filesystem::path LanguagePackDir() { return platform::ConfigDir() / "lang"; }
+std::filesystem::path LanguagePackDir() { return platform::LanguagesDir(); }
 
 std::vector<i18n::Language> AvailableLanguages() {
     return i18n::Available(platform::AssetsDir() / "lang", LanguagePackDir());
@@ -17,8 +17,12 @@ std::vector<i18n::Language> AvailableLanguages() {
 std::string ApplyLanguage(const Settings& settings) {
     const std::string wanted = settings.language.empty() ? i18n::SystemDefault() : settings.language;
     const std::vector<i18n::Language> all = AvailableLanguages();
-    const auto it = std::find_if(all.begin(), all.end(), [&](const i18n::Language& l) { return l.code == wanted; });
-    // No catalog for it (yet): the source language.
+    auto it = std::find_if(all.begin(), all.end(), [&](const i18n::Language& l) { return l.code == wanted; });
+    // Not installed (a pack not downloaded yet): the nearest one there is.
+    if (it == all.end()) {
+        const std::string fallback = i18n::FallbackFor(wanted);
+        it = std::find_if(all.begin(), all.end(), [&](const i18n::Language& l) { return l.code == fallback; });
+    }
     const i18n::Language& chosen = it != all.end() ? *it : all.front();
     if (const Status s = i18n::Use(chosen); !s) {
         log::Warn("Language '{}' not loaded: {}", chosen.code, s.GetError().message);

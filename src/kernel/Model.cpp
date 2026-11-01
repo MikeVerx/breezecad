@@ -4,6 +4,7 @@
 #include <Standard_Version.hxx>
 
 #include "core/FaultGuard.h"
+#include "core/I18n.h"
 #include "core/Log.h"
 #include "document/CoilFeature.h"
 #include "document/SectionFeature.h"
@@ -46,6 +47,9 @@
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepClass3d_SolidClassifier.hxx>
+#include <IntCurvesFace_ShapeIntersector.hxx>
+#include <gp_Lin.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
@@ -69,6 +73,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <mutex>
 
 namespace bz::kernel {
@@ -866,9 +871,16 @@ bool PlaceProjected(sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& pc
 /// Projected model edges follow the model: each is found again on the most
 /// recent body and its curve moved, then the sketch is solved again so what
 /// is constrained to them follows too. Returns false when an edge is lost
-/// (its curve then stays where it was).
+/// (its curve then stays where it was). The lost curves are kept on the
+/// sketch (lostProjections), with the sketch as it was before they broke.
 bool UpdateProjections(doc::SketchFeature& sk, const std::vector<Body>& bodies) {
-    if (sk.projections.empty()) return true;
+    if (sk.projections.empty()) {
+        sk.lostProjections.clear();
+        return true;
+    }
+    const bool wasBroken = sk.HasBrokenProjections();
+    const sketch::Sketch before = sk.sketch;
+    sk.lostProjections.clear();
     bool allFound = true;
     // All edges found in one pass: describing the body's edges is the costly part.
     std::vector<doc::EdgeReference> refs;
@@ -880,9 +892,13 @@ bool UpdateProjections(doc::SketchFeature& sk, const std::vector<Body>& bodies) 
         const std::optional<TopoDS_Edge>& edge = edges[i];
         const Expected<ProjectedCurve> projected =
             edge ? occt::ProjectEdge(*edge, sk.placement.frame) : Expected<ProjectedCurve>(Error{"ребро не найдено"});
-        allFound = projected && PlaceProjected(sk.sketch, p.curve, *projected) && allFound;
+        if (!projected || !PlaceProjected(sk.sketch, p.curve, *projected)) {
+            sk.lostProjections.insert(p.curve);
+            allFound = false;
+        }
     }
     doc::SolveSketch(sk);
+    sk.NoteProjectionsUpdated(before, wasBroken);
     return allFound;
 }
 
@@ -1230,13 +1246,18 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                     sk->status = {FeatureState::Warning, "Грань эскиза не найдена: эскиз остался на прежнем месте"};
                 if (!projectedFound && sk->status.state == FeatureState::Ok)
                     sk->status = {FeatureState::Warning, "Часть проецированных рёбер не найдена: они остались на прежнем месте"};
+                // Edges of other parts lost in the assembly, or constraints on a
+                // projection that no longer hold: the projection is broken too.
+                if (sk->status.state == FeatureState::Ok && sk->HasBrokenProjections())
+                    sk->status = {FeatureState::Warning, N_("Проекция потеряла своё ребро или не сходится с эскизом после изменений выше по дереву")};
             } else if (auto* ex = dynamic_cast<doc::ExtrudeFeature*>(&f)) {
                 ApplySketchSolid(*ex, impl, bodies, ex->status, doc,
                                  [&](const std::vector<TopoDS_Face>& faces, const doc::SketchFeature&, const Frame& frame) {
                                      std::optional<Frame> target;
                                      std::optional<TopoDS_Face> until;
                                      if (ex->extent == doc::ExtentType::ToPlane) {
-                                         if (ex->toPlane) target = PlaneOf(ex->toPlane, doc);
+                                         if (ex->toContext) target = ex->toContext->plane;   // another part's face, as last placed
+                                         else if (ex->toPlane) target = PlaneOf(ex->toPlane, doc);
                                          else if (ex->toFace.IsSet() && ex->toFace.curved) {
                                              for (auto it = bodies.rbegin(); it != bodies.rend() && !until; ++it)
                                                  until = occt::ResolveAnyFace(it->shape, ex->toFace);
@@ -1564,6 +1585,56 @@ Expected<RevolvedProjection> Model::ProjectRevolved(const doc::FaceReference& fa
     const std::optional<TopoDS_Face> found = occt::ResolveAnyFace(body, face);
     if (!found) return Error{"Грань не найдена"};
     return occt::ProjectRevolved(body, *found, plane);
+}
+
+int Model::MaterialSide(const Frame& frame, const std::vector<Vec2>& samples, std::size_t featureIndex) const {
+    const auto& after = myImpl->bodiesAfter;
+    if (featureIndex == 0 || featureIndex > after.size() || after[featureIndex - 1].empty() || samples.empty()) return 0;
+    const std::vector<Body>& bodies = after[featureIndex - 1];
+    constexpr double reach = 1e8;   // mm: any body of a model, however far beside the plane
+    std::vector<std::unique_ptr<BRepClass3d_SolidClassifier>> classifiers;
+    for (const Body& b : bodies) classifiers.push_back(std::make_unique<BRepClass3d_SolidClassifier>(b.shape));
+    const auto inside = [&](Vec3 p) {
+        for (auto& c : classifiers) {
+            c->Perform(gp_Pnt(p.x, p.y, p.z), 1e-7);
+            if (c->State() == TopAbs_IN) return true;
+        }
+        return false;
+    };
+    // Nearest crossing of the bodies' surface along the ray from `at` (none: infinity).
+    std::vector<std::unique_ptr<IntCurvesFace_ShapeIntersector>> rays;
+    for (const Body& b : bodies) {
+        rays.push_back(std::make_unique<IntCurvesFace_ShapeIntersector>());
+        rays.back()->Load(b.shape, 1e-7);
+    }
+    const auto nearest = [&](Vec3 at, Vec3 dir) {
+        double best = std::numeric_limits<double>::infinity();
+        const gp_Lin line(gp_Pnt(at.x, at.y, at.z), gp_Dir(dir.x, dir.y, dir.z));
+        for (auto& r : rays) {
+            r->Perform(line, 1e-6, reach);
+            if (!r->IsDone()) continue;
+            for (int i = 1; i <= r->NbPnt(); ++i) best = std::min(best, r->WParameter(i));
+        }
+        return best;
+    };
+    // Each sample votes for the side where material starts: right at the
+    // plane (a sketch on a face), else the side the bodies are met first
+    // (a plane beside them). In the body on both sides: for neither.
+    int votes = 0;
+    constexpr double kNear = 0.01;
+    for (const Vec2 s : samples) {
+        const Vec3 at = frame.ToWorld(s);
+        const bool up = inside(at + frame.normal * kNear), down = inside(at - frame.normal * kNear);
+        if (up != down) {
+            votes += up ? 1 : -1;
+            continue;
+        }
+        if (up) continue;
+        const double ahead = nearest(at, frame.normal), behind = nearest(at, frame.normal * -1.0);
+        if (ahead < behind) ++votes;
+        else if (behind < ahead) --votes;
+    }
+    return votes > 0 ? 1 : votes < 0 ? -1 : 0;
 }
 
 std::optional<SheetInfo> Model::Sheet(const doc::Document& doc, ObjectId base) const {

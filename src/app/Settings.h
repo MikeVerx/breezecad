@@ -3,9 +3,13 @@
 #include "app/MouseNavigation.h"
 #include "app/TouchNavigation.h"
 #include "app/mobile/Gestures.h"
+#include "core/Expected.h"
+
+#include <nlohmann/json_fwd.hpp>
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace bz::app {
@@ -64,6 +68,14 @@ struct MobileSettings {
 };
 
 /// User preferences, stored as JSON in the config folder.
+/// The radial "hot" menu (viewport/MarkingMenu): how it is called and its
+/// eight commands in each environment, clockwise from the top. An empty
+/// slot list means the built-in set; an empty id, an empty slot.
+struct HotMenuSettings {
+    int trigger = 0;   ///< 0 by the mouse set (free right button: right, else Shift+left), 1 right, 2 Shift+left, 3 off
+    std::vector<std::string> sketch, part, assembly;
+};
+
 struct Settings {
     ThemeChoice theme          = ThemeChoice::System;
     bool        animations     = true;    ///< smooth camera moves
@@ -76,6 +88,7 @@ struct Settings {
     double      orbitSpeed     = 1.0;     ///< view rotation sensitivity, 0.5..2
     bool        invertOrbit    = false;   ///< drag up turns the model down
     bool        turntableOrbit = false;   ///< sideways drag turns about world Z (else about the screen's vertical)
+    bool        middleClickConfirms = true;   ///< a click of the wheel (not a drag) = Enter, as in KOMPAS-3D
     bool        flickGestures  = false;   ///< a quick pull with the right button runs the radial menu's command that way
     int         autosaveMinutes = 5;      ///< 0 turns autosave off
     bool        gridSnap       = true;
@@ -104,8 +117,12 @@ struct Settings {
     std::string mousePreset = "breezecad";
     bool        mouseCustom = false;
     TouchNavigation touch;                       ///< touchpad gestures
+    HotMenuSettings hotMenu;
     MobileSettings  mobile;                      ///< phone layout and touch screen
     std::vector<std::filesystem::path> recentFiles;   ///< most recent first
+    /// Where the last document was saved with the save window: a new
+    /// document is offered there (many parts of one project in a row).
+    std::filesystem::path lastSaveFolder;
     /// Not stored: set by Load when the file was damaged and defaults were used
     /// (Russian template, translated when shown).
     std::string loadProblem;
@@ -122,6 +139,14 @@ struct Settings {
     /// one is copied to "<file>.bak" and `loadProblem` says so).
     static Settings Load(const std::filesystem::path& file);
     bool Save(const std::filesystem::path& file) const;
+    nlohmann::json ToJson() const;
+
+    /// Every setting into a file for another computer, without what belongs
+    /// to this one (window place, recent files, folders, background picture).
+    bool Export(const std::filesystem::path& file, std::string_view version) const;
+    /// Settings from an exported file; this computer's own (see Export)
+    /// stay as in `current`. An error (Russian) for anything else.
+    static Expected<Settings> Import(const std::filesystem::path& file, const Settings& current);
 };
 
 } // namespace bz::app

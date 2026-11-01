@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -23,6 +24,9 @@ public:
     std::vector<std::unique_ptr<Session>> sessions;
     /// Why the last Open failed (empty: it did not), for callers that report it themselves.
     std::string lastOpenError;
+    /// The document in front as a PNG with transparency (empty: none), put
+    /// into the file on saving so the file manager shows the model.
+    std::function<std::vector<std::uint8_t>()> previewMaker;
 
     /// The document in front: a part edited in place in the assembly in
     /// front is that part (every part tool then works on it as is).
@@ -47,6 +51,10 @@ public:
     /// A session for a .bzc file of any kind this version opens (not added).
     static Expected<std::unique_ptr<Session>> LoadSession(const std::filesystem::path& file,
                                                           std::vector<std::string>* warnings);
+
+    /// The folder the save window opens in: the document's own, else the
+    /// last one a document was saved to, else Documents.
+    static std::filesystem::path SaveFolder(const Session& session, const Settings& settings);
 
     /// Opens a .bzc file (or activates it when already open).
     bool Open(const std::filesystem::path& file, Notifications& notes, Settings& settings);

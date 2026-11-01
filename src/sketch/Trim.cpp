@@ -279,11 +279,28 @@ bool Trim(Sketch& sk, IdGenerator& ids, const TrimSpan& span) {
         return true;
     }
 
+    // Projected model geometry cut: what is left is the user's own (it no
+    // longer follows the model) but stays exactly where the model edge was —
+    // its new ends are fixed, not held on the cutter (a sketch line moved
+    // later must not drag a piece of the model's outline along).
+    const bool projected = [&] {
+        if (const Line* l = sk.FindLine(span.curve)) return l->projected;
+        if (const Circle* c = sk.FindCircle(span.curve)) return c->projected;
+        if (const Arc* a = sk.FindArc(span.curve)) return a->projected;
+        return false;
+    }();
     // A point at each cut: the one already there, or a new one held on the cutter.
     const auto pointAt = [&](const Cut& cut) {
-        if (cut.point && sk.FindPoint(cut.point)) return cut.point;
+        if (cut.point)
+            if (const Point* there = sk.FindPoint(cut.point); there && (!projected || there->projected)) return cut.point;
         const ObjectId p = sk.AddPoint(ids, cut.pos);
-        sk.AddConstraint(ids, Make(ConstraintType::PointOnCurve, p, cut.by));
+        if (projected) {
+            Constraint fix = Make(ConstraintType::Fix, p);
+            fix.fixedAt = cut.pos;
+            sk.AddConstraint(ids, fix);
+        } else {
+            sk.AddConstraint(ids, Make(ConstraintType::PointOnCurve, p, cut.by));
+        }
         return p;
     };
     // Shape constraints carry over to the pieces; sizes and positions do not.
@@ -292,7 +309,7 @@ bool Trim(Sketch& sk, IdGenerator& ids, const TrimSpan& span) {
         if (c.References(span.curve) &&
             (c.type == ConstraintType::Horizontal || c.type == ConstraintType::Vertical ||
              c.type == ConstraintType::Parallel || c.type == ConstraintType::Perpendicular ||
-             c.type == ConstraintType::Concentric || c.type == ConstraintType::Radius || c.type == ConstraintType::Diameter))
+             c.type == ConstraintType::Collinear || c.type == ConstraintType::Concentric || c.type == ConstraintType::Radius || c.type == ConstraintType::Diameter))
             kept.push_back(c);
     const auto carry = [&](ObjectId piece, bool first) {
         for (Constraint c : kept) {

@@ -1,4 +1,5 @@
 #include "app/assembly/InPlace.h"
+#include "document/ExtrudeFeature.h"
 
 #include "app/assembly/AssemblyUi.h"
 #include "app/features/OperationEditors.h"
@@ -261,16 +262,10 @@ ObjectId CreatePartAt(AppContext& app, Session& session, const std::string& type
     st.Checkpoint(N_("Создание детали"));
     Component& c = st.assembly.AddComponent(assembly::RelativePartPath(session.path, file), name, placed);
     const ObjectId id = c.id;
-    // Held to the plane it was made on (flush), unless it is the assembly's
-    // first part: that one is fixed in place anyway.
-    if (!c.grounded) {
-        assembly::Constraint flush;
-        flush.type = assembly::ConstraintType::Mate;
-        flush.first = plane;
-        flush.second = *assembly::OriginGeometry(id, doc::origin::kPlaneXY);
-        flush.flipped = true;   // normals the same way: the part's XY lies on the face
-        st.assembly.AddConstraint(flush);
-    }
+    // Fixed where it was made: it is drawn on and by the parts around it, and
+    // a constraint added later must move those, not it (a flush to its plane,
+    // as before, left it free to slide and turn — and drift with what it drew from).
+    c.grounded = true;
     st.parts.push_back({file, std::move(part), true});
     AssemblyState::PartEdit& edit = st.parts.back();
     edit.session->RebuildNow();
@@ -479,9 +474,12 @@ void RenameContext(Session& as, const std::string& from, const std::string& to) 
         const doc::Document* part = st.geometry.PartOf(c.id);
         if (!part) continue;
         bool uses = false;
-        for (const auto& f : part->Features())
+        for (const auto& f : part->Features()) {
             if (const auto* sk = dynamic_cast<const doc::SketchFeature*>(f.get()))
                 for (const doc::ContextProjection& p : sk->contextProjections) uses = uses || p.assembly == from;
+            if (const auto* ex = dynamic_cast<const doc::ExtrudeFeature*>(f.get()); ex && ex->toContext)
+                uses = uses || ex->toContext->assembly == from;
+        }
         if (!uses) continue;
         const std::filesystem::path file = assembly::ResolvePartPath(as.path, c.path);
         if (std::find(done.begin(), done.end(), file) != done.end()) continue;
@@ -496,10 +494,13 @@ void RenameContext(Session& as, const std::string& from, const std::string& to) 
             edit->session->RebuildNow();   // shown from memory from now on: built first
             st.geometry.UsePartInMemory(file, &edit->session->doc, &edit->session->model);
         }
-        for (const auto& f : edit->session->doc.Features())
+        for (const auto& f : edit->session->doc.Features()) {
             if (auto* sk = dynamic_cast<doc::SketchFeature*>(f.get()))
                 for (doc::ContextProjection& p : sk->contextProjections)
                     if (p.assembly == from) p.assembly = to;
+            if (auto* ex = dynamic_cast<doc::ExtrudeFeature*>(f.get()); ex && ex->toContext && ex->toContext->assembly == from)
+                ex->toContext->assembly = to;
+        }
         edit->session->history.MarkUnsaved();   // written with the assembly
     }
     st.ForgetAdaptState();

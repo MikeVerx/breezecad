@@ -38,6 +38,25 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$app/Contents/Framewor
 cp "$BIN/breezecad" "$app/Contents/MacOS/"
 cp -R "$BIN/assets" "$app/Contents/Resources/"
 cp "$HERE/assets/brand/breezecad.icns" "$app/Contents/Resources/"
+# Its file types' icons (Info.plist: CFBundleDocumentTypes), from the same
+# pictures as Windows' and Linux' (scripts/installer/make-icons.py).
+for kind in part assembly project module library; do
+    set_dir="$stage/$kind.iconset"
+    mkdir -p "$set_dir"
+    for size in 16 32 128 256; do
+        sips -z $size $size "$HERE/installer/icons/png/$kind.png" --out "$set_dir/icon_${size}x${size}.png" >/dev/null
+        double=$((size * 2)); [ $double -le 256 ] && sips -z $double $double "$HERE/installer/icons/png/$kind.png" --out "$set_dir/icon_${size}x${size}@2x.png" >/dev/null
+    done
+    iconutil -c icns "$set_dir" -o "$app/Contents/Resources/$kind.icns"
+done
+# Finder's pictures of parts, assemblies and projects: the Quick Look extension.
+if [ -f "$BIN/BreezeCADThumbnails" ]; then
+    appex="$app/Contents/PlugIns/BreezeCADThumbnails.appex"
+    mkdir -p "$appex/Contents/MacOS"
+    cp "$BIN/BreezeCADThumbnails" "$appex/Contents/MacOS/"
+    sed -e "s/@VERSION@/${version:-0.0.0}/" -e "s/@BUILD@/$build/" "$HERE/installer/macos/Info.plist.in" > "$appex/Contents/Info.plist"
+    plutil -lint "$appex/Contents/Info.plist" >/dev/null
+fi
 sed -e "s/@VERSION@/${version:-0.0.0}/" -e "s/@BUILD@/$build/" "$HERE/resources/macos/Info.plist.in" > "$app/Contents/Info.plist"
 printf 'APPL????' > "$app/Contents/PkgInfo"
 plutil -lint "$app/Contents/Info.plist" >/dev/null
@@ -70,6 +89,9 @@ fi
 
 # Sign from the inside out: each library, then the app (which seals the rest).
 for f in "$app"/Contents/Frameworks/*.dylib; do codesign "${SIGN_OPTS[@]}" "$f"; done
+# The extension first (signed inside out), sandboxed as app extensions must be.
+[ -d "$app/Contents/PlugIns/BreezeCADThumbnails.appex" ] &&
+    codesign "${SIGN_OPTS[@]}" --entitlements "$HERE/installer/macos/Thumbnails.entitlements" "$app/Contents/PlugIns/BreezeCADThumbnails.appex"
 codesign "${SIGN_OPTS[@]}" "$app"
 codesign --verify --deep --strict "$app"
 lipo -archs "$app/Contents/MacOS/breezecad" | grep -q arm64
@@ -87,5 +109,40 @@ else
     echo "::notice title=macOS package::BreezeCAD.app $version ($build): $count libraries inside, $(du -sh "$app" | cut -f1), signed: $IDENTITY"
     ditto -c -k --keepParent "$app" "$OUT/BreezeCAD-macos.zip"
     echo "package-macos: $OUT/BreezeCAD-macos.zip"
+    # The disk image: the app and a link to Applications on a picture that
+    # says to drag one onto the other (the window's layout is Finder's: set
+    # by AppleScript when a Finder is there to ask, plain otherwise).
+    dmg="$stage/dmg"
+    mkdir -p "$dmg/.background"
+    cp -R "$app" "$dmg/"
+    ln -s /Applications "$dmg/Applications"
+    cp "$HERE/installer/macos/dmg-background.png" "$dmg/.background/background.png"
+    rw="$stage/rw.dmg"
+    hdiutil create -quiet -volname "BreezeCAD" -srcfolder "$dmg" -fs HFS+ -format UDRW -ov "$rw"
+    device=$(hdiutil attach -readwrite -noverify -noautoopen "$rw" | awk '/\/Volumes\// {print $1; exit}')
+    osascript <<'APPLESCRIPT' || echo "::warning title=package-macos::the disk image window layout was not set (no Finder)"
+tell application "Finder"
+    tell disk "BreezeCAD"
+        open
+        set current view of container window to icon view
+        set toolbar visible of container window to false
+        set statusbar visible of container window to false
+        set the bounds of container window to {200, 120, 840, 520}
+        set opts to the icon view options of container window
+        set arrangement of opts to not arranged
+        set icon size of opts to 112
+        set background picture of opts to file ".background:background.png"
+        set position of item "BreezeCAD.app" of container window to {160, 190}
+        set position of item "Applications" of container window to {480, 190}
+        update without registering applications
+        close
+    end tell
+end tell
+APPLESCRIPT
+    sync
+    hdiutil detach -quiet "$device" || hdiutil detach -force -quiet "$device"
+    hdiutil convert -quiet "$rw" -format UDZO -imagekey zlib-level=9 -o "$OUT/BreezeCAD-macos.dmg"
+    codesign "${SIGN_OPTS[@]}" "$OUT/BreezeCAD-macos.dmg" || true
+    echo "package-macos: $OUT/BreezeCAD-macos.dmg ($(du -h "$OUT/BreezeCAD-macos.dmg" | cut -f1))"
 fi
 rm -rf "$stage"

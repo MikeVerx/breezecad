@@ -46,6 +46,8 @@ public:
     /// True when the operation picks on the body as it was before it (fillet,
     /// shell): the editor calls Viewport::BeginPickingOriginal each frame.
     virtual bool PicksOriginal() const { return false; }
+    /// Clicks choose faces of the other parts too (a part edited in an assembly).
+    virtual bool PicksContextFaces() const { return false; }
     /// True when the viewport should pre-highlight faces under the cursor (hole).
     virtual bool PicksFaces() const { return false; }
     /// True when the operation draws the origin and work planes itself (work plane).

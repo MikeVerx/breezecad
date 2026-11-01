@@ -6,6 +6,7 @@
 #include "document/Feature.h"
 #include "sketch/Sketch.h"
 
+#include <optional>
 #include <unordered_set>
 #include <vector>
 
@@ -63,6 +64,33 @@ public:
         std::unordered_set<ObjectId> fullyDefined;
         std::vector<ObjectId>        failing;                 ///< conflicting constraints
     } analysis;
+
+    // --- Broken projections (Inventor's "sick" projected geometry) ------------
+    // Runtime, never saved: found again on every rebuild and in the assembly.
+
+    /// Curves of `projections` whose edge was not found (or projects as another
+    /// kind of curve now) at the last rebuild: they stayed where they were.
+    std::unordered_set<ObjectId> lostProjections;
+    /// The same for `contextProjections`, at the last following in the assembly.
+    std::unordered_set<ObjectId> lostContextProjections;
+    /// The sketch as it was before its projections broke: what "Восстановить
+    /// эскиз как до изменения" brings back. Kept while they stay broken.
+    std::optional<sketch::Sketch> beforeBreak;
+
+    /// Projected curves drawn red: lost ones, and those the sketch's constraints
+    /// no longer agree with (a constraint on the curve or on its points fails
+    /// after a change above it in the tree).
+    std::unordered_set<ObjectId> BrokenProjections() const;
+    bool HasBrokenProjections() const { return !BrokenProjections().empty(); }
+    /// After projections were placed again and the sketch solved: `before` is
+    /// the sketch from just before, `wasBroken` whether it was broken then.
+    /// Keeps the sketch from before the break; forgets it once all is well.
+    void NoteProjectionsUpdated(const sketch::Sketch& before, bool wasBroken);
+    /// "Восстановить эскиз как до изменения": back to `beforeBreak` (as it is,
+    /// when there is none), every projection unlinked from the model — its
+    /// curves become ordinary geometry, held where they are by a Fix on each
+    /// of their points. False when the sketch has no projections at all.
+    bool RestoreBeforeBreak(IdGenerator& ids);
 
     std::string_view Type() const override { return kType; }
     std::vector<ObjectId> Dependencies() const override;

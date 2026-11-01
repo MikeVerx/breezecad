@@ -152,6 +152,12 @@ public:
                                                const doc::ContextProjection& link, const Frame& plane,
                                                doc::EdgeReference* now = nullptr) const;
 
+    /// Where the flat `face` of `link.component`'s part (in that part's own
+    /// coordinates) lies seen from the part of `target`; nullopt when the
+    /// face is gone. `now`: the face as it is now, described again.
+    std::optional<Frame> SourcePlane(const assembly::Assembly& assembly, ObjectId target, ObjectId source,
+                                     const doc::FaceReference& face, doc::FaceReference* now = nullptr) const;
+
     /// Box of a component in the assembly; nullopt without geometry.
     std::optional<Bounds> ComponentBounds(ObjectId component) const;
 

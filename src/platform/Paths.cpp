@@ -1,6 +1,7 @@
 #include "platform/Paths.h"
 
 #include <cstdlib>
+#include <fstream>
 #include <system_error>
 
 #if defined(__ANDROID__)
@@ -85,6 +86,48 @@ std::filesystem::path ConfigDir() {
     if (base.empty()) base = EnvPath("HOME") / ".config";
     return Ensure(base / "breezecad");
 #endif
+}
+
+bool InstalledCopy() {
+    std::error_code ec;
+    return std::filesystem::exists(ExecutableDir() / "installed.json", ec);
+}
+
+namespace {
+
+/// `name` next to a portable program when it can be written there; empty
+/// otherwise (installed, an app bundle, Android, a read-only folder).
+std::filesystem::path PortableFolder(const char* name) {
+#if defined(__ANDROID__) || defined(__APPLE__)
+    (void)name;
+    return {};   // Android has no such folder; writing into an .app breaks its signature
+#else
+    if (InstalledCopy()) return {};
+    const std::filesystem::path dir = ExecutableDir();
+    if (dir.empty()) return {};
+    const std::filesystem::path folder = dir / name;
+    std::error_code ec;
+    std::filesystem::create_directories(folder, ec);
+    const std::filesystem::path probe = folder / ".bz-write-test";
+    {
+        std::ofstream out(probe, std::ios::trunc);
+        if (!out) return {};
+    }
+    std::filesystem::remove(probe, ec);
+    return folder;
+#endif
+}
+
+} // namespace
+
+std::filesystem::path ModulesDir() {
+    static const std::filesystem::path portable = PortableFolder("module");
+    return portable.empty() ? Ensure(ConfigDir() / "modules") : portable;
+}
+
+std::filesystem::path LanguagesDir() {
+    static const std::filesystem::path portable = PortableFolder("language");
+    return portable.empty() ? Ensure(ConfigDir() / "lang") : portable;
 }
 
 std::filesystem::path AutosaveDir() { return Ensure(ConfigDir() / "autosave"); }

@@ -119,6 +119,9 @@ void RegisterActions(AppContext& app) {
            [&app] { ExportDocument(app, ExportFormat::Stl); }});
     a.Add({"file.export3mf", N_("Экспорт в 3MF"), "export", 0, N_("Современный формат для слайсеров"), hasDoc,
            [&app] { ExportDocument(app, ExportFormat::ThreeMf); }});
+    a.Add({"file.exportProject", N_("Экспорт проекта"), "export", 0, N_("Сборка со всеми деталями в одном файле .bzp — отправить или перенести"),
+           [&app] { const Session* t = app.workspace.ActiveTab(); return t && t->assembly && !app.workspace.ShowsHome(); },
+           [&app] { ExportProject(app); }});
     a.Add({"app.quit", N_("Выход"), "", Ctrl(ImGuiKey_Q), {}, {}, [&app] { app.shell.quitRequested = true; }});
     a.Add({"app.home", N_("Главная страница"), "ui-home", 0, {}, {}, [&app] { app.workspace.ShowHome(true); }});
     a.Add({"app.search", N_("Поиск команд"), "ui-search", Ctrl(ImGuiKey_K), {}, {}, [&app] {
@@ -302,6 +305,7 @@ void RegisterActions(AppContext& app) {
         {SketchTool::Horizontal, "sketch.horizontal", ImGuiKey_None},
         {SketchTool::Vertical, "sketch.vertical", ImGuiKey_None},
         {SketchTool::Parallel, "sketch.parallel", ImGuiKey_None},
+        {SketchTool::Collinear, "sketch.collinear", ImGuiKey_None},
         {SketchTool::Perpendicular, "sketch.perpendicular", ImGuiKey_None},
         {SketchTool::Equal, "sketch.equal", ImGuiKey_None},     {SketchTool::Tangent, "sketch.tangent", ImGuiKey_None},
         {SketchTool::Fix, "sketch.fix", ImGuiKey_None},         {SketchTool::Midpoint, "sketch.midpoint", ImGuiKey_None},

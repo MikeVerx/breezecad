@@ -31,6 +31,13 @@ std::optional<std::filesystem::path> ShowOpenDialog(const std::string& title, co
     return PathFromUtf8(result.front());
 }
 
+std::optional<std::filesystem::path> ShowFolderDialog(const std::string& title, const std::filesystem::path& folder) {
+    const mon::Waiting waiting;
+    const std::string result = pfd::select_folder(title, ToUtf8(folder)).result();
+    if (result.empty()) return std::nullopt;
+    return PathFromUtf8(result);
+}
+
 std::optional<std::filesystem::path> ShowSaveDialog(const std::string& title, const std::filesystem::path& suggested,
                                                     const std::vector<FileFilter>& filters, const std::string& extension) {
     const mon::Waiting waiting;

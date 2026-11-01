@@ -6,6 +6,7 @@
 #include "kernel/AssemblyModel.h"
 
 #include <array>
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -68,6 +69,7 @@ public:
         Vec3                pivot;            ///< rotating: centre of its box
         Vec3                local;            ///< the point pressed, in the component's coordinates
         std::optional<Vec3> target;           ///< moving: where the cursor pulls that point
+        Vec2                lastPixel{-1e9, -1e9};   ///< the cursor the last move was made for
     } drag;
 
     /// A constraint being made: its type, options and what is picked so far.
@@ -78,6 +80,10 @@ public:
         /// "Переопределить": the picks replace the geometry (and type) of
         /// this constraint instead of making a new one.
         ObjectId                redefine;
+        /// All picked: the constraint is already in the assembly (the parts
+        /// moved, to be judged and tuned) until Применить / Готово keep it
+        /// or Отмена / Esc take it back.
+        ObjectId                preview;
     } creating;
 
     /// AutoDrop: a screw from the library waits for a click on a hole's rim.
@@ -105,9 +111,24 @@ public:
     /// Problems found by the last Update (missing part files...), to show once.
     std::vector<std::string> problems;
 
+    /// What is wrong with the assembly now, for the two counters in the
+    /// header: red for part files (missing or unreadable), yellow for the
+    /// assembly itself (constraints that do not hold or repeat others).
+    struct Issue {
+        enum class Kind : unsigned char { MissingFile, BrokenFile, FailedConstraint, RedundantConstraint };
+        Kind        kind;
+        ObjectId    id;        ///< the component or the constraint
+        std::string name;      ///< as in the tree
+        std::string detail;    ///< why (Russian, translated when shown)
+        bool        Red() const { return kind == Kind::MissingFile || kind == Kind::BrokenFile; }
+    };
+    std::vector<Issue> Issues() const;
+
     /// Remembers the assembly as it is, before a change (one undo step).
     void Checkpoint(std::string label);
     bool Undo();
+    /// Undo that leaves nothing to redo: a trial (a constraint previewed) taken back.
+    bool Discard();
     bool Redo();
     bool CanUndo() const { return !myUndo.empty(); }
     bool CanRedo() const { return !myRedo.empty(); }
@@ -172,6 +193,10 @@ public:
 private:
     struct Step {
         std::string json, label;
+        /// Parts that followed their sources because of this step, as they
+        /// were before: undo puts them back too (the sketches with them).
+        std::vector<std::pair<std::filesystem::path, std::string>> partsBefore;
+        std::chrono::steady_clock::time_point at = std::chrono::steady_clock::now();
     };
     std::vector<Step> myUndo, myRedo;
     std::uint64_t     mySaved = 0;
@@ -186,9 +211,24 @@ private:
     /// Adaptivity: per part file, what its projections depended on when it
     /// last followed them, and whether it has any (by its geometry generation).
     std::unordered_map<std::string, std::uint64_t> myAdaptKeys;
-    std::unordered_map<std::string, std::pair<std::uint64_t, bool>> myHasContext;
+    struct ContextInfo {
+        std::uint64_t         generation = 0;
+        bool                  has = false;
+        std::vector<ObjectId> sources;   ///< the components it is drawn from
+    };
+    std::unordered_map<std::string, ContextInfo> myHasContext;
+    /// Whether a part has projections from here, and from where: looked at once per version of it.
+    const ContextInfo& ContextOf(const std::string& key, ObjectId component, const doc::Document& part, std::string_view name);
     /// Parts with projections follow their sources; true when one changed.
     bool Adapt(const std::filesystem::path& file, std::string_view name);
+    /// Rounds of following since the last action: parts that follow each
+    /// other through constraints would go on for ever (and drift away).
+    int  myAdaptRounds = 0;
+    bool myAdaptStopped = false;
+    /// Marks the components whose parts follow others here (Component::follower).
+    void MarkFollowers(const std::filesystem::path& file, std::string_view name);
+    /// What a part was before it followed: kept with the step that made it follow.
+    void RememberPartBefore(const std::filesystem::path& file, std::string json);
     std::array<std::uint64_t, 3>   myContextKey{~std::uint64_t{0}, 0, 0};
 
     void Restore(const std::string& json);

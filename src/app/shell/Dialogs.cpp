@@ -7,6 +7,7 @@
 #include "app/BetaTesting.h"
 #include "app/Format.h"
 #include "app/Language.h"
+#include "app/viewport/MarkingMenu.h"
 #include "app/Materials.h"
 #include "app/Operations.h"
 #include "app/ShortcutPresets.h"
@@ -869,6 +870,71 @@ void DrawModuleSettings(AppContext& app, float width) {
 }
 
 /// The "Мышь" tab: a ready-made set of view gestures, or each one by hand.
+/// "Управление" → "Мышь" → the hot menu: how it is called and its commands.
+void DrawHotMenuSettings(AppContext& app, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    HotMenuSettings& h = app.settings.hotMenu;
+    ImGui::Dummy({0, ui.S(10)});
+    ui::FieldLabel(ui, Tr("Хот-меню"));
+    static constexpr std::array<const char*, 4> triggers{N_("По набору"), N_("ПКМ + движение"), N_("Shift + ЛКМ + движение"), N_("Выключено")};
+    if (const int n = ui::Segmented(ui, "hot-trigger", triggers, h.trigger, 2, width); n != h.trigger) h.trigger = n;
+    {
+        const HotTrigger now = HotMenuTrigger(app.settings);
+        const std::string note = now == HotTrigger::Off ? std::string(Tr("Хот-меню не вызывается движением; удержание ПКМ на месте по-прежнему открывает его."))
+                               : now == HotTrigger::Right ? std::string(Tr("Сейчас: зажмите ПКМ и ведите в сторону — меню появится сразу. Отпустите на команде."))
+                                                          : std::string(Tr("Сейчас: зажмите Shift и ЛКМ и ведите в сторону — меню появится сразу. Отпустите на команде. Щелчок с Shift по-прежнему добавляет к выбору."));
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+        ImGui::TextUnformatted(note.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    }
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Команды хот-меню"));
+    static int env = 1;
+    static constexpr std::array<const char*, 3> envs{N_("Эскиз"), N_("Деталь"), N_("Сборка")};
+    env = ui::Segmented(ui, "hot-env", envs, env, 3, width);
+    const HotEnvironment e = static_cast<HotEnvironment>(env);
+    std::vector<std::string>& own = e == HotEnvironment::Sketch ? h.sketch : e == HotEnvironment::Assembly ? h.assembly : h.part;
+    std::array<std::string, 8> items = HotMenuItems(app.settings, e);
+    static constexpr std::array<const char*, 8> directions{N_("Вверх"), N_("Вверх-вправо"), N_("Вправо"), N_("Вниз-вправо"),
+                                                           N_("Вниз"), N_("Вниз-влево"), N_("Влево"), N_("Вверх-влево")};
+    // The commands to choose from: every one with a name, by name.
+    std::vector<const Action*> all;
+    for (const Action& a : app.actions.All())
+        if (!a.label.empty() && a.run) all.push_back(&a);
+    std::sort(all.begin(), all.end(), [](const Action* a, const Action* b) { return std::string_view(a->Label()) < std::string_view(b->Label()); });
+    const float labelW = ui.S(110);
+    bool changed = false;
+    for (std::size_t i = 0; i < 8; ++i) {
+        ImGui::PushID(static_cast<int>(i));
+        ImGui::AlignTextToFramePadding();
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textSecondary));
+        ImGui::TextUnformatted(Tr(directions[i]));
+        ImGui::PopStyleColor();
+        ImGui::SameLine(labelW);
+        const Action* current = items[i].empty() ? nullptr : app.actions.Find(items[i]);
+        ImGui::SetNextItemWidth(width - labelW);
+        if (ImGui::BeginCombo("##slot", current ? current->Label() : Tr("Пусто"))) {
+            if (ImGui::Selectable(Tr("Пусто"), current == nullptr)) {
+                items[i].clear();
+                changed = true;
+            }
+            for (const Action* a : all)
+                if (ImGui::Selectable(a->Label(), a == current)) {
+                    items[i] = a->id;
+                    changed = true;
+                }
+            ImGui::EndCombo();
+        }
+        ImGui::PopID();
+    }
+    if (changed) own.assign(items.begin(), items.end());
+    if (!own.empty() && ui::SecondaryButton(ui, "##hot-default", Tr("Вернуть набор по умолчанию"), nullptr, {width, ui.S(32)})) own.clear();
+}
+
 void DrawMouseSettings(AppContext& app, float width) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
@@ -908,8 +974,8 @@ void DrawMouseSettings(AppContext& app, float width) {
         }
         ImGui::Dummy({0, ui.S(4)});
     };
-    gestureRow(Tr("Вращение"), "orbit", s.mouse.orbit, false);
-    gestureRow(Tr("Сдвиг"), "pan", s.mouse.pan, false);
+    gestureRow(Tr("Вращение вида"), "orbit", s.mouse.orbit, false);
+    gestureRow(Tr("Сдвиг вида"), "pan", s.mouse.pan, false);
     gestureRow(Tr("Масштаб перетаскиванием (колесо прокрутки масштабирует всегда)"), "zoom", s.mouse.zoom, true);
 
     // Two gestures on the same button and modifiers cannot both work.
@@ -926,6 +992,13 @@ void DrawMouseSettings(AppContext& app, float width) {
     if (const int nw = ui::Segmented(ui, "wheel", wheel, w, 2, width); nw != w) {
         s.mouse.invertWheel = nw == 1;
         s.mouseCustom = true;
+    }
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Щелчок колесом"));
+    {
+        static constexpr std::array<const char*, 2> click{N_("Подтверждает (как Enter)"), N_("Ничего не делает")};
+        const int cur = s.middleClickConfirms ? 0 : 1;
+        if (const int n = ui::Segmented(ui, "middle-click", click, cur, 2, width); n != cur) s.middleClickConfirms = n == 0;
     }
     ImGui::Dummy({0, ui.S(6)});
     ui::FieldLabel(ui, Tr("Скорость вращения"));
@@ -963,12 +1036,12 @@ void DrawMouseSettings(AppContext& app, float width) {
         ui::FontScope font(ui.fonts.caption);
         ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(c.textMuted));
         ImGui::PushTextWrapPos(0);
-        ImGui::TextUnformatted(Tr("Нажмите правую кнопку и резко потяните в сторону — сразу выполнится команда радиального меню в "
-                                  "этом направлении, как в SolidWorks. Медленное движение по-прежнему вращает вид, удержание на "
-                                  "месте открывает меню."));
+        ImGui::TextUnformatted(Tr("Нажмите кнопку хот-меню и резко потяните в сторону — сразу выполнится команда этого направления, "
+                                  "как в SolidWorks, без показа меню."));
         ImGui::PopTextWrapPos();
         ImGui::PopStyleColor();
     }
+    DrawHotMenuSettings(app, width);
 }
 
 /// "Настройки": interface scale and theme; keyboard shortcuts.
@@ -1003,6 +1076,41 @@ void DrawGeneralSettings(AppContext& app, float width) {
         if (minutes[i] == app.settings.autosaveMinutes) a = static_cast<int>(i);
     if (const int n = ui::Segmented(ui, "autosave", autosave, a, 4, width); n != a)
         app.settings.autosaveMinutes = minutes[static_cast<std::size_t>(n)];
+    // Everything above and in the other tabs, as one file for another computer.
+    ImGui::Dummy({0, ui.S(10)});
+    ui::FieldLabel(ui, Tr("Перенос настроек"));
+    const float half = (width - ui.S(8)) / 2;
+    if (ui::SecondaryButton(ui, "##export-settings", Tr("Сохранить в файл…"), nullptr, {half, ui.S(32)})) {
+        if (const auto file = platform::ShowSaveDialog(Tr("Настройки BreezeCAD"), platform::DocumentsDir() / "breezecad-settings.json",
+                                                       {{Tr("Настройки BreezeCAD"), "*.json"}}, ".json")) {
+            if (app.settings.Export(*file, Version()) && platform::FileWritten(*file)) app.notes.Success(Tr("Настройки сохранены в файл"));
+            else app.notes.Error(Tr("Не удалось записать файл в выбранную папку"));
+        }
+    }
+    ImGui::SameLine(0, ui.S(8));
+    if (ui::SecondaryButton(ui, "##import-settings", Tr("Загрузить из файла…"), nullptr, {half, ui.S(32)})) {
+        if (const auto file = platform::ShowOpenDialog(Tr("Настройки BreezeCAD"), {{Tr("Настройки BreezeCAD"), "*.json"}}, {})) {
+            if (Expected<Settings> got = Settings::Import(*file, app.settings); !got) {
+                app.notes.Error(Tr(got.GetError().message));
+            } else {
+                app.settings = std::move(*got);
+                // What is applied once rather than read every frame.
+                app.actions.ResetChords();
+                for (const auto& [id, chord] : app.settings.shortcuts) app.actions.SetChord(id, ActionRegistry::ParseChord(chord));
+                if (const std::string problem = ApplyLanguage(app.settings); !problem.empty()) app.notes.Error(Tr(problem));
+                app.settings.Save(platform::ConfigDir() / "settings.json");
+                app.notes.Success(Tr("Настройки загружены"));
+            }
+        }
+    }
+    {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+        ImGui::TextUnformatted(Tr("Все настройки одним файлом — для другого компьютера. Недавние файлы, папки и положение окна остаются здесь."));
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    }
 }
 
 /// "Управление" → "Клавиатура": the set of shortcuts and each one.

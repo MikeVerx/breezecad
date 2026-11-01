@@ -21,6 +21,10 @@ std::string FileDialogProblem();
 std::optional<std::filesystem::path> ShowOpenDialog(const std::string& title, const std::vector<FileFilter>& filters,
                                                     const std::filesystem::path& folder);
 
+/// Native folder picker. nullopt when cancelled (and on Android, which has
+/// no such window here).
+std::optional<std::filesystem::path> ShowFolderDialog(const std::string& title, const std::filesystem::path& folder);
+
 /// Native "Save as" dialog. Adds `extension` when the user did not type it.
 std::optional<std::filesystem::path> ShowSaveDialog(const std::string& title, const std::filesystem::path& suggested,
                                                     const std::vector<FileFilter>& filters, const std::string& extension);

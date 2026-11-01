@@ -30,14 +30,15 @@ add_library(bz_platform STATIC
     SystemInfo.cpp
     SystemTheme.cpp
     Touchpad.cpp
+    OpenFiles.cpp
     Window.cpp)
 target_link_libraries(bz_platform PUBLIC bz::core PRIVATE glfw OpenGL::GL bz::pfd)
 if(WIN32)
     target_link_libraries(bz_platform PRIVATE shell32 ole32 advapi32 psapi)
 elseif(APPLE)
     # Touchpad gestures come from Cocoa (Objective-C++, ARC).
-    target_sources(bz_platform PRIVATE Touchpad_mac.mm)
-    set_source_files_properties(Touchpad_mac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_sources(bz_platform PRIVATE Touchpad_mac.mm OpenFiles_mac.mm)
+    set_source_files_properties(Touchpad_mac.mm OpenFiles_mac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
     target_link_libraries(bz_platform PRIVATE "-framework CoreFoundation" "-framework Cocoa")
 else()
     # Touchpad gestures: XInput 2 (libXi) on a connection of our own.

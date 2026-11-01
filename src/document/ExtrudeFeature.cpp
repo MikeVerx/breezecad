@@ -49,6 +49,13 @@ void ExtrudeFeature::SaveFields(Json& out) const {
     if (extent == ExtentType::ToPlane) {
         if (toPlane) out["toPlane"] = toPlane.value;
         if (toFace.IsSet()) out["toFace"] = ToJson(toFace);
+        if (toContext)   // 0.2.5: a face of another part of an assembly
+            out["toContext"] = {{"assembly", toContext->assembly},
+                                {"component", toContext->component.value},
+                                {"face", ToJson(toContext->face)},
+                                {"plane", ToJson(toContext->plane)},
+                                {"componentName", toContext->componentName},
+                                {"adaptive", toContext->adaptive}};
     }
 }
 
@@ -63,6 +70,18 @@ Status ExtrudeFeature::LoadFields(const Json& in) {
     if (const auto it = in.find("toPlane"); it != in.end() && it->is_number_unsigned()) f.toPlane = ObjectId{it->get<std::uint64_t>()};
     if (const auto it = in.find("toFace"); it != in.end() && !json_io::Read(*it, f.toFace))
         return Error{"Выдавливание: повреждена грань «до»"};
+    if (const auto it = in.find("toContext"); it != in.end() && it->is_object()) {
+        ContextPlane c;
+        c.assembly = it->value("assembly", std::string{});
+        c.component = ObjectId{it->value("component", std::uint64_t{0})};
+        c.componentName = it->value("componentName", std::string{});
+        c.adaptive = it->value("adaptive", true);
+        const auto face = it->find("face");
+        const auto plane = it->find("plane");
+        if (face == it->end() || plane == it->end() || !json_io::Read(*face, c.face) || !json_io::Read(*plane, c.plane))
+            return Error{"Выдавливание: повреждена грань «до» другой детали"};
+        f.toContext = std::move(c);
+    }
 
     sketch    = f.sketch;
     profiles  = std::move(f.profiles);
@@ -74,6 +93,7 @@ Status ExtrudeFeature::LoadFields(const Json& in) {
     distance2 = std::move(f.distance2);
     toPlane   = f.toPlane;
     toFace    = f.toFace;
+    toContext = std::move(f.toContext);
     return Status::Ok();
 }
 

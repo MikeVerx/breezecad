@@ -114,6 +114,7 @@ enum class ConstraintType : unsigned char {
     Tangent,         ///< line, circle/arc  |  circle/arc, circle/arc
     Concentric,      ///< circle/arc, circle/arc
     Symmetric,       ///< point, point, line — mirror images across the line
+    Collinear,       ///< line, line          — on one straight line
     // dimensional
     Distance,        ///< point, point        — straight distance
     DistanceX,       ///< point, point        — horizontal distance

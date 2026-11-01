@@ -6,6 +6,7 @@
 #include "kernel/ContextProjection.h"
 #include "core/PathText.h"
 #include "assembly/Solver.h"
+#include "document/BzcFile.h"
 #include "core/Monitor.h"
 #include "core/Profile.h"
 
@@ -62,11 +63,63 @@ const kernel::Model* AssemblyState::InPlaceContext() {
     return myContext.get();
 }
 
+constexpr int kMaxAdaptRounds = 6;
+
 void AssemblyState::Checkpoint(std::string label) {
     mon::Action("assembly", label);
-    myUndo.push_back({assembly::AssemblyToJson(assembly), std::move(label)});
+    myUndo.push_back({assembly::AssemblyToJson(assembly), std::move(label), {}});
     if (myUndo.size() > kMaxUndo) myUndo.erase(myUndo.begin());
     myRedo.clear();
+    // A new action: parts may follow their sources again.
+    myAdaptRounds = 0;
+    myAdaptStopped = false;
+}
+
+void AssemblyState::RememberPartBefore(const std::filesystem::path& file, std::string json) {
+    // Only right after an action (its own following, frames later), never an
+    // old step: undoing that must not take back what was done in the part since.
+    if (myUndo.empty() || std::chrono::steady_clock::now() - myUndo.back().at > std::chrono::seconds(5)) return;
+    auto& before = myUndo.back().partsBefore;
+    for (const auto& [f, _] : before)
+        if (f == file) return;   // the earliest state counts
+    before.emplace_back(file, std::move(json));
+}
+
+const AssemblyState::ContextInfo& AssemblyState::ContextOf(const std::string& key, ObjectId component, const doc::Document& part,
+                                                           std::string_view name) {
+    const std::uint64_t generation = geometry.PartGenerationOf(component);
+    ContextInfo& info = myHasContext[key];
+    if (info.generation != generation || generation == 0) {
+        info.generation = generation;
+        info.has = kernel::HasContextProjections(part, name);
+        info.sources = info.has ? kernel::ContextSources(part, name) : std::vector<ObjectId>{};
+    }
+    return info;
+}
+
+void AssemblyState::MarkFollowers(const std::filesystem::path& file, std::string_view name) {
+    // Who is drawn from whom: a part with projections from here follows its
+    // sources (it stays fixed); its sources lead (an impossible set of
+    // constraints does not move them to a compromise the follower would chase).
+    std::unordered_map<ObjectId, bool> follows, leads;
+    for (const assembly::Component& c : assembly.components) {
+        const doc::Document* part = name.empty() ? nullptr : geometry.PartOf(c.id);
+        if (!part) continue;
+        const ContextInfo& info = ContextOf(ToUtf8(assembly::ResolvePartPath(file, c.path)), c.id, *part, name);
+        if (!info.has) continue;
+        follows[c.id] = true;
+        for (ObjectId s : info.sources) leads[s] = true;
+    }
+    bool changed = false;
+    for (assembly::Component& c : assembly.components) {
+        const bool f = follows.count(c.id) > 0, l = leads.count(c.id) > 0;
+        if (c.follower != f || c.leads != l) {
+            c.follower = f;
+            c.leads = l;
+            changed = true;
+        }
+    }
+    if (changed) mySolvedRevision = ~std::uint64_t{0};   // solved again with it fixed (or free)
 }
 
 void AssemblyState::Restore(const std::string& json) {
@@ -155,15 +208,37 @@ void AssemblyState::RollBack(const Mark& mark) {
 
 bool AssemblyState::Undo() {
     if (myUndo.empty()) return false;
-    myRedo.push_back({assembly::AssemblyToJson(assembly), myUndo.back().label});
+    myRedo.push_back({assembly::AssemblyToJson(assembly), myUndo.back().label, {}});
     Restore(myUndo.back().json);
+    // The parts that followed because of that step, as they were (their
+    // sketches too: solving them again where the sources are back would not
+    // bring the free geometry back where it was).
+    for (const auto& [file, json] : myUndo.back().partsBefore) {
+        PartEdit* edit = EditOf(file);
+        if (!edit || !edit->session) continue;
+        Expected<doc::Document> was = doc::DocumentFromJson(json);
+        if (!was) continue;
+        edit->session->doc = std::move(*was);
+        edit->session->doc.MarkChanged(0);
+        edit->session->RebuildNow();
+        edit->session->history.MarkUnsaved();
+    }
+    if (!myUndo.back().partsBefore.empty()) ForgetAdaptState();
     myUndo.pop_back();
+    myAdaptRounds = 0;
+    myAdaptStopped = false;
+    return true;
+}
+
+bool AssemblyState::Discard() {
+    if (!Undo()) return false;
+    myRedo.pop_back();
     return true;
 }
 
 bool AssemblyState::Redo() {
     if (myRedo.empty()) return false;
-    myUndo.push_back({assembly::AssemblyToJson(assembly), myRedo.back().label});
+    myUndo.push_back({assembly::AssemblyToJson(assembly), myRedo.back().label, {}});
     Restore(myRedo.back().json);
     myRedo.pop_back();
     return true;
@@ -216,6 +291,7 @@ const doc::Look& AssemblyState::ShownLook() {
 
 bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view name) {
     if (name.empty() || drag.moving) return false;   // a drag: the parts follow on release
+    if (myAdaptStopped) return false;
     bool changed = false;
     std::vector<std::string> done;
     for (const assembly::Component& c : assembly.components) {
@@ -223,11 +299,7 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
         if (!part) continue;
         const std::filesystem::path partFile = assembly::ResolvePartPath(file, c.path);
         const std::string key = ToUtf8(partFile);
-        // Whether it has projections from here: looked at once per version of the part.
-        const std::uint64_t generation = geometry.PartGenerationOf(c.id);
-        auto& has = myHasContext[key];
-        if (has.first != generation || generation == 0) has = {generation, kernel::HasContextProjections(*part, name)};
-        if (!has.second || std::find(done.begin(), done.end(), key) != done.end()) continue;
+        if (!ContextOf(key, c.id, *part, name).has || std::find(done.begin(), done.end(), key) != done.end()) continue;
         done.push_back(key);   // one component per part: they all show the same part
         const std::uint64_t now = kernel::ContextKey(geometry, assembly, c.id, *part, name);
         if (const auto known = myAdaptKeys.find(key); known != myAdaptKeys.end() && known->second == now) continue;
@@ -235,20 +307,26 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
         PartEdit* edit = EditOf(partFile);
         if (edit && edit->session && edit->session->mode != EditMode::Model) continue;   // its sketch is open: after
         kernel::AdaptResult r;
+        std::string before;
         if (edit) {
+            before = doc::DocumentToJson(edit->session->doc);
             r = kernel::AdaptContextProjections(geometry, assembly, c.id, edit->session->doc, name);
         } else {
             // Read from its file: tried on a copy first. Only when something
             // really moves does the part become an edit in memory (saved with
-            // the assembly) — opening an assembly that is up to date changes nothing.
+            // the assembly) — opening an assembly that is up to date changes
+            // nothing. A broken projection takes it into memory too (unchanged,
+            // nothing to save): that is where its curves are drawn red.
             doc::Document copy = part->Clone();
+            before = doc::DocumentToJson(copy);
             r = kernel::AdaptContextProjections(geometry, assembly, c.id, copy, name);
-            if (r.changed()) {
+            if (r.changed() || r.lost > 0) {
                 auto session = std::make_unique<Session>();
                 session->doc = std::move(copy);
                 session->path = partFile;
                 parts.push_back({partFile, std::move(session), false});
                 edit = &parts.back();
+                if (!r.changed()) edit->session->RebuildNow();   // shown as it was, from memory now
                 geometry.UsePartInMemory(partFile, &edit->session->doc, &edit->session->model);
             }
         }
@@ -257,6 +335,7 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
             problems.push_back(std::format("{}: {} рёбер других деталей не найдено — их проекции остались на месте",
                                            c.name, r.lost));
         if (r.changed() && edit) {
+            RememberPartBefore(partFile, std::move(before));
             // The part changed: it is written with the assembly at the next save.
             edit->session->history.MarkUnsaved();
             edit->session->RebuildNow();
@@ -264,7 +343,43 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
             mon::Action("assembly", std::format("адаптивность: {} ({} кривых)", c.name, r.moved));
         }
     }
+    // Parts that keep following each other round through the constraints
+    // (one moves, the other redraws, the constraint moves the first again):
+    // stopped after a few rounds instead of drifting away for ever.
+    if (changed && ++myAdaptRounds > kMaxAdaptRounds) {
+        myAdaptStopped = true;
+        // The action that started it is taken back whole (the parts too):
+        // nothing is left half way, nothing drifts off. Only that action — an
+        // old step is not undone for a change made since in a part.
+        const bool fresh = !myUndo.empty() && std::chrono::steady_clock::now() - myUndo.back().at < std::chrono::seconds(5);
+        const std::string label = fresh ? myUndo.back().label : std::string();
+        if (fresh) Discard();
+        problems.push_back(fresh ? std::format("«{}» отменено: детали стали бы следовать друг за другом по кругу через зависимости "
+                                               "и разъехались бы. Свяжите их иначе", label)
+                                 : std::string("Детали следуют друг за другом по кругу через зависимости сборки — подстройка "
+                                               "остановлена до следующего действия. Уберите зависимость, которая замыкает круг"));
+        mon::Action("assembly", "адаптивность остановлена: круг");
+        return true;
+    }
     return changed;
+}
+
+std::vector<AssemblyState::Issue> AssemblyState::Issues() const {
+    std::vector<Issue> out;
+    for (const assembly::Component& c : assembly.components) {
+        const std::string problem = geometry.ProblemOf(c.id);
+        if (problem.empty()) continue;
+        const bool missing = problem.rfind("Файл не найден", 0) == 0;
+        out.push_back({missing ? Issue::Kind::MissingFile : Issue::Kind::BrokenFile, c.id, c.name, problem});
+    }
+    for (const assembly::Constraint& c : assembly.constraints) {
+        if (c.suppressed) continue;
+        if (c.state == assembly::ConstraintState::Failed)
+            out.push_back({Issue::Kind::FailedConstraint, c.id, c.name, "Зависимость не выполняется: детали нельзя поставить так, как она требует"});
+        else if (c.state == assembly::ConstraintState::Redundant)
+            out.push_back({Issue::Kind::RedundantConstraint, c.id, c.name, "Лишняя зависимость: повторяет то, что уже задают другие"});
+    }
+    return out;
 }
 
 bool AssemblyState::Update(const std::filesystem::path& file, std::string_view contextName) {
@@ -276,6 +391,7 @@ bool AssemblyState::Update(const std::filesystem::path& file, std::string_view c
         const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
         if (ms > 5.0) mon::Timed("assembly.parts", std::format("компонентов {}", assembly.components.size()), ms);
     }
+    MarkFollowers(file, contextName);   // parts drawn by others stay where they are
     if (assembly.Revision() != mySolvedRevision) {
         prof::Scope scope("asm.solve");
         // While a component is dragged it stays near the cursor and the

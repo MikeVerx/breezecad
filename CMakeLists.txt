@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(BreezeCAD
-    VERSION 0.2.4.1
+    VERSION 0.2.5
     DESCRIPTION "Free offline parametric CAD"
     LANGUAGES C CXX)
 # What the program calls itself: the number above plus a stage ("-Beta";
@@ -34,6 +34,12 @@ option(BZ_BUILD_TESTS "Build unit tests"                          ON)
 option(BZ_BUILD_MCP   "Build the MCP module package (modules/mcp → .bzmod)" OFF)
 # Android: the app is a native library (src/android) packed into an APK by
 # scripts/android/package-apk.sh; the desktop app (BZ_BUILD_APP) is off there.
+# Windows: the installer and the File Explorer previews (installer/).
+if(WIN32)
+    option(BZ_BUILD_INSTALLER "Build BreezeCAD-Setup.exe and bz_thumbs.dll" ON)
+elseif(UNIX AND NOT APPLE AND NOT ANDROID)
+    option(BZ_BUILD_INSTALLER "Build BreezeCAD-Setup-linux" ON)
+endif()
 if(ANDROID)
     option(BZ_BUILD_ANDROID_APP "Build the Android app library (libbreezecad.so)" ON)
 endif()
@@ -50,6 +56,13 @@ include(ThirdParty)
 include(OpenCascade)
 
 add_subdirectory(src)
+
+if(BZ_BUILD_INSTALLER)
+    add_subdirectory(installer)
+endif()
+if(APPLE AND BZ_BUILD_APP)
+    add_subdirectory(installer/macos)
+endif()
 
 if(BZ_BUILD_MCP)   # a separate package, not a part of the program
     add_subdirectory(modules/mcp)

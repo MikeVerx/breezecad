@@ -370,7 +370,8 @@ void AddSketchCommands(Commands& out) {
                    true, &Add});
     out.push_back({"sketch.constrain",
                    "Добавляет связь или размер между элементами эскиза (id из sketch.get). Геометрические: coincident, "
-                   "horizontal, vertical, parallel, perpendicular, equal, fix, pointOnCurve, midpoint, tangent, concentric, "
+                   "horizontal, vertical, parallel, collinear (два отрезка на одной прямой), perpendicular, equal, fix, pointOnCurve, "
+                   "midpoint, tangent, concentric, "
                    "symmetric (точка, точка, линия). Размеры (нужен value): distance, distanceX, distanceY (две точки), "
                    "length (отрезок), pointLineDistance, radius, diameter, angle (два отрезка).",
                    Schema({{"sketch", IdArg("id эскиза.")},
