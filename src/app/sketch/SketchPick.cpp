@@ -325,12 +325,12 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
         if (snap.kind == SnapKind::Midpoint) return snap;
 
         // The curves near the cursor.
-        std::vector<std::pair<ObjectId, CurveShape>> near;
+        std::vector<std::pair<ObjectId, CurveShape>> nearby;
         float bestCurve = CurveRadius();
         const auto tryCurve = [&](ObjectId id) {
             const float d = CurveDistance(sk, view, id, mouse);
             if (d < PointRadius() + 2.0f)
-                if (const auto s = ShapeOf(sk, id)) near.push_back({id, *s});
+                if (const auto s = ShapeOf(sk, id)) nearby.push_back({id, *s});
             if (d < bestCurve) {
                 bestCurve = d;
                 snap.kind = SnapKind::Curve;
@@ -343,9 +343,9 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
 
         // 3. Where two curves cross (their shared ends are points, found above).
         float bestCross = PointRadius() + 2.0f;
-        for (std::size_t i = 0; i < near.size(); ++i)
-            for (std::size_t j = i + 1; j < near.size(); ++j)
-                for (const Vec2& p : Intersections(near[i].second, near[j].second)) {
+        for (std::size_t i = 0; i < nearby.size(); ++i)
+            for (std::size_t j = i + 1; j < nearby.size(); ++j)
+                for (const Vec2& p : Intersections(nearby[i].second, nearby[j].second)) {
                     const float d = Distance(mouse, view.ToScreen(p));
                     if (d >= bestCross) continue;
                     bool atPoint = false;
@@ -354,8 +354,8 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
                     bestCross = d;
                     snap.pos = p;
                     snap.kind = SnapKind::Intersection;
-                    snap.curve = near[i].first;
-                    snap.curve2 = near[j].first;
+                    snap.curve = nearby[i].first;
+                    snap.curve2 = nearby[j].first;
                 }
         if (snap.kind == SnapKind::Intersection) return snap;
 
