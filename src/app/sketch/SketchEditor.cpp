@@ -261,6 +261,7 @@ void SketchEditor::KeepSketchInView(AppContext& app, Session& session) {
 void SketchEditor::SetTool(AppContext& app, Session& session, SketchTool tool) {
     myClicks.clear();
     myPicks.clear();
+    myInferLine = {};
     myOffsetCurve = {};
     myFieldSeed.clear();
     myFocusField = mySeedField = -1;

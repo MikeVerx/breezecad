@@ -28,13 +28,15 @@ void SetPickScale(float scale);
 SketchHit HitTest(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, const UnitSystem& units,
                   ObjectId ignore = {});
 
-enum class SnapKind : unsigned char { None, Point, Midpoint, Curve, Grid };
+enum class SnapKind : unsigned char { None, Point, Midpoint, Curve, Grid, Intersection };
 
 struct Snap {
     Vec2     pos;
     SnapKind kind = SnapKind::None;
     ObjectId point;          ///< SnapKind::Point: existing point to reuse
-    ObjectId curve;          ///< SnapKind::Curve: curve the point lies on; Midpoint: the line
+    ObjectId curve;          ///< SnapKind::Curve: curve the point lies on; Midpoint: the line or arc;
+                             ///< Intersection: the first of the two curves
+    ObjectId curve2;         ///< SnapKind::Intersection: the second curve
     bool     horizontal = false;   ///< aligned horizontally with `from`
     bool     vertical   = false;
     /// Lined up with an existing point (same x / same y), for the dashed
@@ -44,6 +46,12 @@ struct Snap {
     /// where it ends): the position is turned to exactly 90° within a few
     /// degrees, and the line gets a Perpendicular constraint.
     ObjectId perpendicularTo;
+    /// The new line runs parallel to this line (a line the cursor passed
+    /// over during the command, as in Inventor): Parallel constraint.
+    ObjectId parallelTo;
+    /// The new line leaves the end of this arc (or a point on this circle)
+    /// along its tangent: Tangent constraint.
+    ObjectId tangentTo;
 };
 
 struct SnapOptions {
@@ -55,6 +63,7 @@ struct SnapOptions {
     ObjectId            fromCurve;          ///< the line `from` lies on, if it was snapped onto one
     ObjectId            ignore;
     bool                ortho = false;      ///< "Орто": from `from` only horizontally or vertically
+    ObjectId            reference;          ///< a line the cursor rested on this command: parallel/square to it
 };
 
 /// Where a click at `mouse` lands, with the reason for the CAD feedback.

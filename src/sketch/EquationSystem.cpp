@@ -272,6 +272,15 @@ void EquationSystem::AddConstraint(const Sketch& sk, const Constraint& c) {
         }
         case ConstraintType::Midpoint: {
             const int p = P(a);
+            if (const Arc* ar = sk.FindArc(b)) {
+                // On the arc and as far from both ends: the middle of the arc.
+                const int s = P(ar->start), e = P(ar->end);
+                const auto [center, r] = circleParts(b);
+                if (p < 0 || s < 0 || e < 0 || center < 0) return;
+                Add(MakeEq(EqKind::PointDistanceVar, {p, p + 1, center, center + 1, r}, 0, src));
+                Add(MakeEq(EqKind::EqualLength, {p, p + 1, s, s + 1, p, p + 1, e, e + 1}, 0, src));
+                return;
+            }
             const auto [s, e] = lineEnds(b);
             if (p < 0 || s < 0) return;
             Add(MakeLinear({{2, p}, {-1, s}, {-1, e}}, 0, src));

@@ -47,7 +47,9 @@ std::vector<ObjectId> WithHelpers(const Sketch& sk, std::span<const ObjectId> en
             return l && points.contains(l->start) && points.contains(l->end);
         };
         for (const Constraint& c : sk.constraints) {
-            if (c.type == ConstraintType::Midpoint && lineMoves(c.refs[1]) && sk.FindPoint(c.refs[0])) add(c.refs[0]);
+            const Arc* ar = c.type == ConstraintType::Midpoint ? sk.FindArc(c.refs[1]) : nullptr;
+            const bool arcMoves = ar && points.contains(ar->start) && points.contains(ar->end) && points.contains(ar->center);
+            if (c.type == ConstraintType::Midpoint && (lineMoves(c.refs[1]) || arcMoves) && sk.FindPoint(c.refs[0])) add(c.refs[0]);
             if (c.type == ConstraintType::Coincident) {
                 if (points.contains(c.refs[0]) && sk.FindPoint(c.refs[1])) add(c.refs[1]);
                 if (points.contains(c.refs[1]) && sk.FindPoint(c.refs[0])) add(c.refs[0]);

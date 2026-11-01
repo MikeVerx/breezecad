@@ -206,6 +206,13 @@ void DrawSnapMarker(ui::Ui& ui, ImDrawList* dl, ImVec2 at, const Snap& snap) {
         case SnapKind::Curve:
             dl->AddCircleFilled(at, ui.S(3.5f), ui::ToU32(c.constraintGlyph));
             break;
+        case SnapKind::Intersection: {
+            // ✕: where two curves cross.
+            const float r = ui.S(6);
+            dl->AddLine({at.x - r, at.y - r}, {at.x + r, at.y + r}, ui::ToU32(c.constraintGlyph), ui.S(2));
+            dl->AddLine({at.x - r, at.y + r}, {at.x + r, at.y - r}, ui::ToU32(c.constraintGlyph), ui.S(2));
+            break;
+        }
         case SnapKind::Grid:
             dl->AddLine({at.x - ui.S(5), at.y}, {at.x + ui.S(5), at.y}, ui::ToU32(c.sketchHover), ui.S(1.2f));
             dl->AddLine({at.x, at.y - ui.S(5)}, {at.x, at.y + ui.S(5)}, ui::ToU32(c.sketchHover), ui.S(1.2f));
@@ -214,9 +221,13 @@ void DrawSnapMarker(ui::Ui& ui, ImDrawList* dl, ImVec2 at, const Snap& snap) {
             dl->AddCircleFilled(at, ui.S(2.5f), ui::ToU32(c.sketchHover));
             break;
     }
-    if (snap.horizontal || snap.vertical || snap.perpendicularTo)
-        ui.icons.Draw(dl, snap.horizontal ? "c-horizontal" : snap.vertical ? "c-vertical" : "c-perpendicular",
-                      {at.x + ui.S(10), at.y + ui.S(8)}, ui.S(16), {1, 1, 1, 1});
+    const char* glyph = snap.horizontal        ? "c-horizontal"
+                        : snap.vertical        ? "c-vertical"
+                        : snap.perpendicularTo ? "c-perpendicular"
+                        : snap.parallelTo      ? "c-parallel"
+                        : snap.tangentTo       ? "c-tangent"
+                                               : nullptr;
+    if (glyph) ui.icons.Draw(dl, glyph, {at.x + ui.S(10), at.y + ui.S(8)}, ui.S(16), {1, 1, 1, 1});
 }
 
 void DrawSnapGuides(ui::Ui& ui, ImDrawList* dl, const SketchView& view, const Snap& snap) {

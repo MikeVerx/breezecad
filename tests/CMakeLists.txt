@@ -86,7 +86,10 @@ if(TARGET bz_render AND NOT ANDROID)
     target_sources(bz_tests PRIVATE app/AssemblyAdaptTests.cpp
         ${PROJECT_SOURCE_DIR}/src/app/AssemblyState.cpp
         ${PROJECT_SOURCE_DIR}/src/app/Session.cpp
-        ${PROJECT_SOURCE_DIR}/src/app/sketch/SketchRepair.cpp)
+        ${PROJECT_SOURCE_DIR}/src/app/sketch/SketchRepair.cpp
+        app/SketchSnapTests.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/sketch/SketchPick.cpp
+        ${PROJECT_SOURCE_DIR}/src/app/sketch/SketchText.cpp)
     target_link_libraries(bz_tests PRIVATE bz::render bz::ui bz::imgui glfw OpenGL::GL)
 endif()
 if(ANDROID)

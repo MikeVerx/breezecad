@@ -214,8 +214,8 @@ std::optional<sketch::Constraint> ConstraintFromPicks(SketchTool tool, const ske
             return std::nullopt;
         case SketchTool::Midpoint:
             if (picks.size() < 2) { needMore = k0 == EntityKind::Point || k0 == EntityKind::Line; return std::nullopt; }
-            if (k0 == EntityKind::Point && k1 == EntityKind::Line) return Make(ConstraintType::Midpoint, a, b);
-            if (k0 == EntityKind::Line && k1 == EntityKind::Point) return Make(ConstraintType::Midpoint, b, a);
+            if (k0 == EntityKind::Point && (k1 == EntityKind::Line || k1 == EntityKind::Arc)) return Make(ConstraintType::Midpoint, a, b);
+            if ((k0 == EntityKind::Line || k0 == EntityKind::Arc) && k1 == EntityKind::Point) return Make(ConstraintType::Midpoint, b, a);
             return std::nullopt;
         case SketchTool::Concentric:
             if (picks.size() < 2) { needMore = IsRound(k0); return std::nullopt; }
@@ -284,8 +284,10 @@ std::optional<sketch::Constraint> DimensionFromPicks(const sketch::Sketch& sk, c
 } // namespace
 
 SketchEditor::PointRef SketchEditor::RefFromSnap(const Snap& snap) const {
+    const bool cross = snap.kind == SnapKind::Intersection;
     return {snap.kind == SnapKind::Point ? snap.point : ObjectId{}, snap.pos,
-            snap.kind == SnapKind::Curve ? snap.curve : ObjectId{}, snap.kind == SnapKind::Midpoint ? snap.curve : ObjectId{}};
+            snap.kind == SnapKind::Curve || cross ? snap.curve : ObjectId{}, snap.kind == SnapKind::Midpoint ? snap.curve : ObjectId{},
+            cross ? snap.curve2 : ObjectId{}};
 }
 
 ObjectId SketchEditor::Resolve(doc::Document& doc, sketch::Sketch& sk, const PointRef& ref) {
@@ -293,7 +295,9 @@ ObjectId SketchEditor::Resolve(doc::Document& doc, sketch::Sketch& sk, const Poi
     const ObjectId id = sk.AddPoint(doc.Ids(), ref.pos);
     if (ref.onCurve && sk.KindOf(ref.onCurve) != EntityKind::None)
         sk.AddConstraint(doc.Ids(), Make(ConstraintType::PointOnCurve, id, ref.onCurve));
-    if (ref.midOf && sk.KindOf(ref.midOf) == EntityKind::Line)
+    if (ref.onCurve2 && sk.KindOf(ref.onCurve2) != EntityKind::None)
+        sk.AddConstraint(doc.Ids(), Make(ConstraintType::PointOnCurve, id, ref.onCurve2));
+    if (ref.midOf && (sk.KindOf(ref.midOf) == EntityKind::Line || sk.KindOf(ref.midOf) == EntityKind::Arc))
         sk.AddConstraint(doc.Ids(), Make(ConstraintType::Midpoint, id, ref.midOf));
     return id;
 }
@@ -309,8 +313,14 @@ void SketchEditor::HandleDrawing(AppContext& app, Session& session, const Sketch
         options.fromPoint = myClicks.back().id;
         options.fromCurve = myClicks.back().onCurve;
         options.ortho = app.settings.orthoMode;
+        options.reference = myInferLine;
     }
     mySnap = SnapCursor(f->sketch, view, ImGui::GetMousePos(), options);
+    // A line the cursor rests on becomes the reference for parallel / square
+    // directions (as in Inventor), until the tool changes.
+    if (myTool == SketchTool::Line && mySnap.kind == SnapKind::Curve && f->sketch.FindLine(mySnap.curve) &&
+        (myClicks.empty() || mySnap.curve != myClicks.back().onCurve))
+        myInferLine = mySnap.curve;
     TrackArcSweep(mySnap.pos);
     myLastAim = mySnap.pos;
     // Sizes typed before the first click make the whole shape: it hangs on
@@ -1574,6 +1584,12 @@ void SketchEditor::FinishDrawingStep(AppContext& app, Session& session, const Sn
                 if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
             } else if (snap.perpendicularTo && sk.FindLine(snap.perpendicularTo)) {
                 const sketch::Constraint c = Make(ConstraintType::Perpendicular, snap.perpendicularTo, line);
+                if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
+            } else if (snap.parallelTo && sk.FindLine(snap.parallelTo)) {
+                const sketch::Constraint c = Make(ConstraintType::Parallel, snap.parallelTo, line);
+                if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
+            } else if (snap.tangentTo && sk.KindOf(snap.tangentTo) != EntityKind::None) {
+                const sketch::Constraint c = Make(ConstraintType::Tangent, line, snap.tangentTo);
                 if (!sketch::IsRedundant(sk, c)) sk.AddConstraint(ids, c);
             }
             dims.push_back({Make(ConstraintType::Length, line), myOptions.length, {}});

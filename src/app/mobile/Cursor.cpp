@@ -38,7 +38,8 @@ void DrawDropCursor(AppContext& app, ImDrawList* dl) {
     const MobileSettings& ms = app.settings.mobile;
     Session* s = app.Doc();
     const SnapKind snap = s && s->mode == EditMode::Sketch ? app.sketch.CurrentSnap() : SnapKind::None;
-    const bool snapped = snap == SnapKind::Point || snap == SnapKind::Midpoint || snap == SnapKind::Curve;
+    const bool snapped = snap == SnapKind::Point || snap == SnapKind::Midpoint || snap == SnapKind::Curve ||
+                         snap == SnapKind::Intersection;
     const bool precise = ms.cursorSpeed < 0.999;
     const Color ink = snapped ? c.success : precise ? c.warning : c.accent;
     const float gap = 9.0f * k;   // the drop's point ends this far from the tip
@@ -90,7 +91,7 @@ void DrawDropCursor(AppContext& app, ImDrawList* dl) {
         dl->AddRect({tip.x - sq, tip.y - sq}, {tip.x + sq, tip.y + sq}, ui::ToU32(ink), 1.5f * k, 0, 1.6f * k);
     } else if (snap == SnapKind::Midpoint) {
         dl->AddTriangle({tip.x, tip.y - sq * 1.2f}, {tip.x + sq * 1.1f, tip.y + sq * 0.8f}, {tip.x - sq * 1.1f, tip.y + sq * 0.8f}, ui::ToU32(ink), 1.6f * k);
-    } else if (snap == SnapKind::Curve) {
+    } else if (snap == SnapKind::Curve || snap == SnapKind::Intersection) {
         dl->AddLine({tip.x - sq, tip.y - sq}, {tip.x + sq, tip.y + sq}, ui::ToU32(ink), 1.6f * k);
         dl->AddLine({tip.x - sq, tip.y + sq}, {tip.x + sq, tip.y - sq}, ui::ToU32(ink), 1.6f * k);
     }

@@ -233,7 +233,8 @@ private:
         ObjectId id;
         Vec2     pos;
         ObjectId onCurve;
-        ObjectId midOf;   ///< a line whose midpoint this is
+        ObjectId midOf;   ///< a line or arc whose midpoint this is
+        ObjectId onCurve2;   ///< a second curve (a point where two curves cross)
     };
     PointRef RefFromSnap(const Snap& snap) const;
     ObjectId Resolve(doc::Document& doc, sketch::Sketch& sk, const PointRef& ref);
@@ -297,6 +298,7 @@ private:
     /// line that ends where the chain began closes it, and the chain stops.
     ObjectId myChainStart, myChainEnd;
     Snap                  mySnap;
+    ObjectId              myInferLine;   ///< a line the cursor rested on this command (parallel / square to it)
     std::optional<Vec2>   myCursor;
 
     /// Constraints whose glyphs show when not all are shown: those of the
