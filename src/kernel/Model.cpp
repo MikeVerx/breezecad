@@ -47,6 +47,8 @@
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepClass3d_SolidClassifier.hxx>
+#include <IntCurvesFace_ShapeIntersector.hxx>
+#include <gp_Lin.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
@@ -70,6 +72,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <mutex>
 
 namespace bz::kernel {
@@ -1572,11 +1575,7 @@ int Model::MaterialSide(const Frame& frame, const std::vector<Vec2>& samples, st
     const auto& after = myImpl->bodiesAfter;
     if (featureIndex == 0 || featureIndex > after.size() || after[featureIndex - 1].empty() || samples.empty()) return 0;
     const std::vector<Body>& bodies = after[featureIndex - 1];
-    Bnd_Box box;
-    for (const Body& b : bodies) BRepBndLib::Add(b.shape, box);
-    if (box.IsVoid()) return 0;
-    // Far enough to reach the bodies from a plane beside them (an offset work plane).
-    const double reach = 2 * std::sqrt(box.SquareExtent()) + 1;
+    constexpr double reach = 1e8;   // mm: any body of a model, however far beside the plane
     std::vector<std::unique_ptr<BRepClass3d_SolidClassifier>> classifiers;
     for (const Body& b : bodies) classifiers.push_back(std::make_unique<BRepClass3d_SolidClassifier>(b.shape));
     const auto inside = [&](Vec3 p) {
@@ -1586,17 +1585,38 @@ int Model::MaterialSide(const Frame& frame, const std::vector<Vec2>& samples, st
         }
         return false;
     };
-    // Each sample votes for the side where material starts nearer; at the
-    // same distance on both sides (the plane runs through the body) for neither.
+    // Nearest crossing of the bodies' surface along the ray from `at` (none: infinity).
+    std::vector<std::unique_ptr<IntCurvesFace_ShapeIntersector>> rays;
+    for (const Body& b : bodies) {
+        rays.push_back(std::make_unique<IntCurvesFace_ShapeIntersector>());
+        rays.back()->Load(b.shape, 1e-7);
+    }
+    const auto nearest = [&](Vec3 at, Vec3 dir) {
+        double best = std::numeric_limits<double>::infinity();
+        const gp_Lin line(gp_Pnt(at.x, at.y, at.z), gp_Dir(dir.x, dir.y, dir.z));
+        for (auto& r : rays) {
+            r->Perform(line, 1e-6, reach);
+            if (!r->IsDone()) continue;
+            for (int i = 1; i <= r->NbPnt(); ++i) best = std::min(best, r->WParameter(i));
+        }
+        return best;
+    };
+    // Each sample votes for the side where material starts: right at the
+    // plane (a sketch on a face), else the side the bodies are met first
+    // (a plane beside them). In the body on both sides: for neither.
     int votes = 0;
+    constexpr double kNear = 0.01;
     for (const Vec2 s : samples) {
         const Vec3 at = frame.ToWorld(s);
-        for (double step = 0.01; step < reach * 4; step *= 4) {
-            const double d = std::min(step, reach);
-            const bool up = inside(at + frame.normal * d), down = inside(at - frame.normal * d);
-            if (up != down) votes += up ? 1 : -1;
-            if (up || down || d >= reach) break;
+        const bool up = inside(at + frame.normal * kNear), down = inside(at - frame.normal * kNear);
+        if (up != down) {
+            votes += up ? 1 : -1;
+            continue;
         }
+        if (up) continue;
+        const double ahead = nearest(at, frame.normal), behind = nearest(at, frame.normal * -1.0);
+        if (ahead < behind) ++votes;
+        else if (behind < ahead) --votes;
     }
     return votes > 0 ? 1 : votes < 0 ? -1 : 0;
 }
