@@ -206,6 +206,16 @@ void EquationSystem::AddConstraint(const Sketch& sk, const Constraint& c) {
             Add(MakeEq(kind, {s1, s1 + 1, e1, e1 + 1, s2, s2 + 1, e2, e2 + 1}, value, src));
             return;
         }
+        case ConstraintType::Collinear: {
+            // Both ends of the second segment on the line of the first; an end
+            // the two share lies on it already (an equation of zeros otherwise).
+            const auto [s1, e1] = lineEnds(a);
+            const auto [s2, e2] = lineEnds(b);
+            if (s1 < 0 || s2 < 0) return;
+            for (const int p : {s2, e2})
+                if (p != s1 && p != e1) Add(MakeEq(EqKind::PointLine, {p, p + 1, s1, s1 + 1, e1, e1 + 1}, 0, src));
+            return;
+        }
         case ConstraintType::Equal: {
             if (aIsLine && bIsLine) {
                 const auto [s1, e1] = lineEnds(a);

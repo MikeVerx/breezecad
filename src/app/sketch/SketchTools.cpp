@@ -197,6 +197,10 @@ std::optional<sketch::Constraint> ConstraintFromPicks(SketchTool tool, const ske
             if (k0 == EntityKind::Line && k1 == EntityKind::Line)
                 return Make(tool == SketchTool::Parallel ? ConstraintType::Parallel : ConstraintType::Perpendicular, a, b);
             return std::nullopt;
+        case SketchTool::Collinear:
+            if (picks.size() < 2) { needMore = k0 == EntityKind::Line; return std::nullopt; }
+            if (k0 == EntityKind::Line && k1 == EntityKind::Line && a != b) return Make(ConstraintType::Collinear, a, b);
+            return std::nullopt;
         case SketchTool::Equal:
             if (picks.size() < 2) { needMore = IsCurve(k0); return std::nullopt; }
             if ((k0 == EntityKind::Line && k1 == EntityKind::Line) || (IsRound(k0) && IsRound(k1)))

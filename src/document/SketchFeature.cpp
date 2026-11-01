@@ -15,7 +15,7 @@ using json_io::ReadMember;
 using json_io::ToJson;
 using sketch::ConstraintType;
 
-constexpr std::array<std::pair<ConstraintType, std::string_view>, 21> kConstraintIds{{
+constexpr std::array<std::pair<ConstraintType, std::string_view>, 22> kConstraintIds{{
     {ConstraintType::Coincident, "coincident"},
     {ConstraintType::Horizontal, "horizontal"},
     {ConstraintType::Vertical, "vertical"},
@@ -28,6 +28,7 @@ constexpr std::array<std::pair<ConstraintType, std::string_view>, 21> kConstrain
     {ConstraintType::Tangent, "tangent"},
     {ConstraintType::Concentric, "concentric"},
     {ConstraintType::Symmetric, "symmetric"},
+    {ConstraintType::Collinear, "collinear"},
     {ConstraintType::Distance, "distance"},
     {ConstraintType::DistanceX, "distanceX"},
     {ConstraintType::DistanceY, "distanceY"},

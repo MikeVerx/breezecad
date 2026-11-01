@@ -305,6 +305,7 @@ void RegisterActions(AppContext& app) {
         {SketchTool::Horizontal, "sketch.horizontal", ImGuiKey_None},
         {SketchTool::Vertical, "sketch.vertical", ImGuiKey_None},
         {SketchTool::Parallel, "sketch.parallel", ImGuiKey_None},
+        {SketchTool::Collinear, "sketch.collinear", ImGuiKey_None},
         {SketchTool::Perpendicular, "sketch.perpendicular", ImGuiKey_None},
         {SketchTool::Equal, "sketch.equal", ImGuiKey_None},     {SketchTool::Tangent, "sketch.tangent", ImGuiKey_None},
         {SketchTool::Fix, "sketch.fix", ImGuiKey_None},         {SketchTool::Midpoint, "sketch.midpoint", ImGuiKey_None},

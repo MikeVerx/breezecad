@@ -77,7 +77,7 @@ std::vector<ObjectId> EntitiesInBox(const sketch::Sketch& sk, const SketchView& 
 
 namespace {
 
-constexpr std::array<SketchToolInfo, 33> kTools{{
+constexpr std::array<SketchToolInfo, 34> kTools{{
     {SketchTool::Select, N_("Выбор"), "ui-check", N_("Выберите или перетащите элементы эскиза")},
     {SketchTool::Line, N_("Отрезок"), "sk-line", N_("Укажите начальную точку отрезка")},
     {SketchTool::Rectangle, N_("Прямоугольник"), "sk-rectangle", N_("Укажите первый угол прямоугольника")},
@@ -104,6 +104,7 @@ constexpr std::array<SketchToolInfo, 33> kTools{{
     {SketchTool::Horizontal, N_("Горизонтальность"), "c-horizontal", N_("Выберите отрезок или две точки")},
     {SketchTool::Vertical, N_("Вертикальность"), "c-vertical", N_("Выберите отрезок или две точки")},
     {SketchTool::Parallel, N_("Параллельность"), "c-parallel", N_("Выберите два отрезка")},
+    {SketchTool::Collinear, N_("На одной прямой"), "c-collinear", N_("Выберите два отрезка: второй встанет на прямую первого")},
     {SketchTool::Perpendicular, N_("Перпендикулярность"), "c-perpendicular", N_("Выберите два отрезка")},
     {SketchTool::Equal, N_("Равенство"), "c-equal", N_("Выберите два отрезка или две окружности")},
     {SketchTool::Tangent, N_("Касательность"), "c-tangent", N_("Выберите кривую и окружность или дугу")},

@@ -309,7 +309,7 @@ bool Trim(Sketch& sk, IdGenerator& ids, const TrimSpan& span) {
         if (c.References(span.curve) &&
             (c.type == ConstraintType::Horizontal || c.type == ConstraintType::Vertical ||
              c.type == ConstraintType::Parallel || c.type == ConstraintType::Perpendicular ||
-             c.type == ConstraintType::Concentric || c.type == ConstraintType::Radius || c.type == ConstraintType::Diameter))
+             c.type == ConstraintType::Collinear || c.type == ConstraintType::Concentric || c.type == ConstraintType::Radius || c.type == ConstraintType::Diameter))
             kept.push_back(c);
     const auto carry = [&](ObjectId piece, bool first) {
         for (Constraint c : kept) {

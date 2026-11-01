@@ -80,6 +80,7 @@ const char* GlyphIcon(ConstraintType t) {
         case ConstraintType::Vertical:      return "c-vertical";
         case ConstraintType::Parallel:      return "c-parallel";
         case ConstraintType::Perpendicular: return "c-perpendicular";
+        case ConstraintType::Collinear:     return "c-collinear";
         case ConstraintType::Equal:         return "c-equal";
         case ConstraintType::Tangent:       return "c-tangent";
         case ConstraintType::Fix:           return "c-fix";
@@ -314,6 +315,7 @@ std::vector<GlyphPlacement> LayoutGlyphs(const sketch::Sketch& sk, const SketchV
         if (!icon || (only && !only->contains(c.id))) continue;
         // Coincidences show as a dot at the point; the others beside each entity.
         const bool both = c.type == ConstraintType::Parallel || c.type == ConstraintType::Perpendicular ||
+                          c.type == ConstraintType::Collinear ||
                           c.type == ConstraintType::Equal || c.type == ConstraintType::Tangent ||
                           c.type == ConstraintType::Concentric || c.type == ConstraintType::Symmetric;
         if (const auto p = place(c.refs[0])) out.push_back({c.id, *p, icon});

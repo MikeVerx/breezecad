@@ -26,6 +26,7 @@ namespace bz::app {
 enum class SketchTool : unsigned char {
     Select, Line, Rectangle, Circle, Arc, Point, Spline, Text, Project, Trim, Extend, Split, Fillet, Offset, Move, Rotate, Copy, Scale, Mirror, PatternRect, PatternCircular, Dimension,
     Coincident, Horizontal, Vertical, Parallel, Perpendicular, Equal, Tangent, Fix, Midpoint, Concentric, Symmetric,
+    Collinear,
 };
 
 /// Ways to draw with one tool, chosen in the tool panel.

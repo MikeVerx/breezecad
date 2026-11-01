@@ -98,6 +98,7 @@ bool SketchToolNeedsCursor(const AppContext& app) {
         case SketchTool::Horizontal:
         case SketchTool::Vertical:
         case SketchTool::Parallel:
+        case SketchTool::Collinear:
         case SketchTool::Perpendicular:
         case SketchTool::Equal:
         case SketchTool::Tangent:
