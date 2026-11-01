@@ -380,18 +380,42 @@ TEST_CASE("random sets of constraints, many impossible: no component goes far, s
         Assembly a;
         const int n = 2 + static_cast<int>(rnd() * 4);
         std::vector<ObjectId> ids;
-        for (int i = 0; i < n; ++i)
-            ids.push_back(a.AddComponent("p.bzc", "Деталь", {Rotation::AxisAngle(dir(), rnd() * 3), point()}).id);
+        // Every draw in its own statement: the order of function arguments
+        // differs between compilers (clang left to right, GCC right to left),
+        // and the assemblies must be the same everywhere.
+        const auto plane = [&](ObjectId c) { const Vec3 p = point(); const Vec3 d = dir(); return Plane(c, p, d); };
+        const auto axis = [&](ObjectId c) { const Vec3 p = point(); const Vec3 d = dir(); return Axis(c, p, d); };
+        const auto circle = [&](ObjectId c) { const Vec3 p = point(); const Vec3 d = dir(); return Circle(c, p, d, 3); };
+        for (int i = 0; i < n; ++i) {
+            const Vec3 about = dir();
+            const double angle = rnd() * 3;
+            const Vec3 at = point();
+            ids.push_back(a.AddComponent("p.bzc", "Деталь", {Rotation::AxisAngle(about, angle), at}).id);
+        }
         const int m = 1 + static_cast<int>(rnd() * 6);
         for (int j = 0; j < m; ++j) {
             const ObjectId x = ids[static_cast<std::size_t>(rnd() * n) % n];
             ObjectId y = ids[static_cast<std::size_t>(rnd() * n) % n];
             if (x == y) y = ids[(std::find(ids.begin(), ids.end(), x) - ids.begin() + 1) % n];
             const double kind = rnd();
-            if (kind < 0.4) a.AddConstraint(Make(ConstraintType::Mate, Plane(x, point(), dir()), Plane(y, point(), dir()), rnd() < 0.3 ? rnd() * 10 : 0));
-            else if (kind < 0.7) a.AddConstraint(Make(ConstraintType::AxisMate, Axis(x, point(), dir()), Axis(y, point(), dir())));
-            else if (kind < 0.85) a.AddConstraint(Make(ConstraintType::Insert, Circle(x, point(), dir(), 3), Circle(y, point(), dir(), 3)));
-            else a.AddConstraint(Make(ConstraintType::Mate, Axis(x, point(), dir()), Plane(y, point(), dir())));
+            if (kind < 0.4) {
+                const auto e1 = plane(x);
+                const auto e2 = plane(y);
+                const double offset = rnd() < 0.3 ? rnd() * 10 : 0;
+                a.AddConstraint(Make(ConstraintType::Mate, e1, e2, offset));
+            } else if (kind < 0.7) {
+                const auto e1 = axis(x);
+                const auto e2 = axis(y);
+                a.AddConstraint(Make(ConstraintType::AxisMate, e1, e2));
+            } else if (kind < 0.85) {
+                const auto e1 = circle(x);
+                const auto e2 = circle(y);
+                a.AddConstraint(Make(ConstraintType::Insert, e1, e2));
+            } else {
+                const auto e1 = axis(x);
+                const auto e2 = plane(y);
+                a.AddConstraint(Make(ConstraintType::Mate, e1, e2));
+            }
         }
         const std::vector<Placement> start = Placements(a);
         const SolveResult first = Solve(a);

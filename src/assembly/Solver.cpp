@@ -17,6 +17,8 @@ namespace {
 /// weighed alike (a degree at 100 mm is about 1.7 mm).
 constexpr double kScale = 100.0;
 constexpr double kFailed = 1e-4;   ///< mm: a constraint further off than this does not hold
+constexpr double kPullBack = 1e-3;  ///< largest damping that also pulls the free directions back to the start
+constexpr double kMaxStep = 200.0;  ///< mm (rotations at kScale): the longest step of one iteration
 
 struct WorldGeometry {
     GeometryKind kind;
@@ -748,15 +750,36 @@ double SolveSystem(System& s, const SolveOptions& options, int& iterations) {
         for (int tries = 0; tries < 12 && !improved; ++tries) {
             std::vector<double> dy;
             bool solved;
+            // The damping also pulls back towards the start: the step solves
+            // (JᵀJ + λD) (y + dy) = JᵀJ y - Jᵀf, so where the constraints
+            // leave a part free (sliding along an axis, turning about it)
+            // it goes back to where it was, not drifts on step by step —
+            // the solution nearest the start, as a user expects. Heavily
+            // damped (steps refused) the pull fades, or it would undo the
+            // progress made and stall.
+            std::vector<double> rhs = jtf;
+            for (std::size_t p = 0; p < n; ++p) {
+                const double diag = dense ? jtj[p][p] : blocks.At(p / 6, p / 6)[(p % 6) * 6 + p % 6];
+                rhs[p] -= std::min(lambda, kPullBack) * (1.0 + diag) * y[p];
+            }
             if (dense) {
                 Matrix damped = jtj;
                 for (std::size_t p = 0; p < n; ++p) damped[p][p] += lambda * (1.0 + jtj[p][p]);
-                solved = SolveSpd(damped, jtf, dy);
+                solved = SolveSpd(damped, rhs, dy);
             } else {
-                solved = SolveBlocks(blocks, lambda, jtf, dy);
+                solved = SolveBlocks(blocks, lambda, rhs, dy);
             }
             if (!solved) {
                 lambda *= 10;
+                continue;
+            }
+            // A trust region: a step much longer than the parts are apart
+            // comes from a nearly flat direction (an axis almost along a
+            // plane, two almost parallel faces) and would throw the part
+            // metres away for a solution a small turn reaches. Damping more
+            // bends the step towards that turn.
+            if (Norm(dy) > kMaxStep) {
+                lambda *= 8;
                 continue;
             }
             std::vector<double> y1 = y;
