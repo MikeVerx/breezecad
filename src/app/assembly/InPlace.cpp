@@ -262,16 +262,10 @@ ObjectId CreatePartAt(AppContext& app, Session& session, const std::string& type
     st.Checkpoint(N_("Создание детали"));
     Component& c = st.assembly.AddComponent(assembly::RelativePartPath(session.path, file), name, placed);
     const ObjectId id = c.id;
-    // Held to the plane it was made on (flush), unless it is the assembly's
-    // first part: that one is fixed in place anyway.
-    if (!c.grounded) {
-        assembly::Constraint flush;
-        flush.type = assembly::ConstraintType::Mate;
-        flush.first = plane;
-        flush.second = *assembly::OriginGeometry(id, doc::origin::kPlaneXY);
-        flush.flipped = true;   // normals the same way: the part's XY lies on the face
-        st.assembly.AddConstraint(flush);
-    }
+    // Fixed where it was made: it is drawn on and by the parts around it, and
+    // a constraint added later must move those, not it (a flush to its plane,
+    // as before, left it free to slide and turn — and drift with what it drew from).
+    c.grounded = true;
     st.parts.push_back({file, std::move(part), true});
     AssemblyState::PartEdit& edit = st.parts.back();
     edit.session->RebuildNow();

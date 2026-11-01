@@ -181,6 +181,8 @@ void DrawComponentProperties(AppContext& app, Session& session, Component& c, fl
             const double v = ParseLength(app.shell.edit.text, ok);
             if (!ok) {
                 app.notes.Error(Tr("Не число"));
+            } else if (c.follower) {
+                app.notes.Info(Tr("Деталь нарисована по другим деталям сборки и стоит на месте — двигайте те, по которым она построена"));
             } else if (c.grounded) {
                 app.notes.Info(Tr("Компонент закреплён — сначала освободите его"));
             } else {
@@ -202,7 +204,7 @@ void DrawComponentProperties(AppContext& app, Session& session, Component& c, fl
         } turns[] = {{"##rx", "X", {1, 0, 0}}, {"##ry", "Y", {0, 1, 0}}, {"##rz", "Z", {0, 0, 1}}};
         for (int i = 0; i < 3; ++i) {
             if (i > 0) ImGui::SameLine(0, ui.S(4));
-            if (ui::SecondaryButton(ui, turns[i].id, turns[i].label, nullptr, {bw, ui.S(30)}, !c.grounded)) {
+            if (ui::SecondaryButton(ui, turns[i].id, turns[i].label, nullptr, {bw, ui.S(30)}, !st.assembly.IsFixed(c.id))) {
                 st.Checkpoint(N_("Поворот компонента"));
                 RotateComponent(st, c, turns[i].axis, kPi / 2);
             }
@@ -217,7 +219,10 @@ void DrawComponentProperties(AppContext& app, Session& session, Component& c, fl
         st.assembly.Touch();
     }
     ImGui::Dummy({0, ui.S(6)});
-    if (!c.grounded) {
+    if (c.follower)
+        LabelText(ui, Tr("Нарисована по другим деталям этой сборки: стоит на месте, зависимости двигают те, что с ней связаны"),
+                  ui.C().textSecondary);
+    else if (!c.grounded) {
         const auto f = st.freedom.find(c.id);
         if (f != st.freedom.end())
             LabelText(ui, Trf("Свободы: перемещений {}, вращений {}", f->second.translations, f->second.rotations),
@@ -1669,7 +1674,7 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
         drag = {};
         if (hovered) {
             st.selected = hovered;
-            if (const Component* c = st.assembly.FindComponent(hovered); c && !c->grounded) {
+            if (const Component* c = st.assembly.FindComponent(hovered); c && !st.assembly.IsFixed(c->id)) {
                 drag.armed = true;
                 drag.component = hovered;
                 drag.pressAt = pixel;

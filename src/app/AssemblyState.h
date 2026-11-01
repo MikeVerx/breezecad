@@ -6,6 +6,7 @@
 #include "kernel/AssemblyModel.h"
 
 #include <array>
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -191,6 +192,10 @@ public:
 private:
     struct Step {
         std::string json, label;
+        /// Parts that followed their sources because of this step, as they
+        /// were before: undo puts them back too (the sketches with them).
+        std::vector<std::pair<std::filesystem::path, std::string>> partsBefore;
+        std::chrono::steady_clock::time_point at = std::chrono::steady_clock::now();
     };
     std::vector<Step> myUndo, myRedo;
     std::uint64_t     mySaved = 0;
@@ -208,6 +213,14 @@ private:
     std::unordered_map<std::string, std::pair<std::uint64_t, bool>> myHasContext;
     /// Parts with projections follow their sources; true when one changed.
     bool Adapt(const std::filesystem::path& file, std::string_view name);
+    /// Rounds of following since the last action: parts that follow each
+    /// other through constraints would go on for ever (and drift away).
+    int  myAdaptRounds = 0;
+    bool myAdaptStopped = false;
+    /// Marks the components whose parts follow others here (Component::follower).
+    void MarkFollowers(const std::filesystem::path& file, std::string_view name);
+    /// What a part was before it followed: kept with the step that made it follow.
+    void RememberPartBefore(const std::filesystem::path& file, std::string json);
     std::array<std::uint64_t, 3>   myContextKey{~std::uint64_t{0}, 0, 0};
 
     void Restore(const std::string& json);

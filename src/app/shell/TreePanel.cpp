@@ -573,6 +573,9 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
         if (const std::string problem = st.geometry.ProblemOf(id); !problem.empty()) {
             style.statusIcon = "status-error";
             style.statusText = Tr(problem);
+        } else if (comp.follower) {
+            style.meta = Tr("по соседям");
+            style.statusText = Tr("Нарисована по другим деталям этой сборки: стоит на месте, зависимости её не двигают");
         } else if (comp.grounded) {
             style.meta = Tr("закреплён");
             style.statusText = Tr("Закреплён: зависимости и перетаскивание его не двигают");

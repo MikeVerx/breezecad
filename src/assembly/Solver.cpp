@@ -979,9 +979,39 @@ SolveResult Solve(Assembly& a, const SolveOptions& options) {
             const auto ok = [](Vec3 v) { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z) && v.Length() < 1e8; };
             return ok(p.translation) && ok(p.rotation.col[0]) && ok(p.rotation.col[1]) && ok(p.rotation.col[2]);
         };
-        if (!std::ranges::all_of(s.free, [&](ObjectId id) { return finite(a.FindComponent(id)->placement); })) {
+        bool revert = !std::ranges::all_of(s.free, [&](ObjectId id) { return finite(a.FindComponent(id)->placement); });
+        // Constraints that cannot all hold: the solve finds the least bad
+        // compromise, and that compromise often lies far away (two axes that
+        // cannot meet "meet" better and better the further a part slides; a
+        // 5 cm coupling went 8 m). It is taken only when it really helps and
+        // stays near: else the parts stay, the constraints show as not holding.
+        // Solving again from a compromise moves nothing (it used to creep on
+        // with every repaint).
+        double startErr = std::numeric_limits<double>::infinity();
+        if (!revert && err > options.tolerance * 10 && pulled == s.index.end()) {
+            startErr = Norm(s.F(std::vector<double>(s.Unknowns(), 0.0)));
+            double scale = 0.0;   // how big the group is: its parts' origins and the geometry it ties
+            std::vector<Vec3> points;
+            for (const Placement& p : before) points.push_back(p.translation);
+            for (const Constraint* c : s.active)
+                for (const GeometryRef* g : {&c->first, &c->second}) {
+                    // Where it was before this solve (the free ones have moved by now).
+                    const auto at = s.index.find(g->component);
+                    if (at != s.index.end()) points.push_back(before[at->second].Point(g->origin));
+                    else if (const Component* owner = a.FindComponent(g->component)) points.push_back(owner->placement.Point(g->origin));
+                }
+            for (const Vec3& p : points)
+                for (const Vec3& q : points) scale = std::max(scale, (p - q).Length());
+            double farthest = 0.0;
+            for (std::size_t i = 0; i < s.free.size(); ++i)
+                farthest = std::max(farthest, (a.FindComponent(s.free[i])->placement.translation - before[i].translation).Length());
+            const bool helps = err < 0.9 * startErr;
+            const bool near = farthest <= std::max(100.0, 2.0 * scale);
+            revert = !helps || !near;
+        }
+        if (revert) {
             for (std::size_t i = 0; i < s.free.size(); ++i) a.FindComponent(s.free[i])->placement = before[i];
-            err = std::numeric_limits<double>::infinity();
+            err = startErr;
         }
         total += err * err;
         for (std::size_t i = 0; i < s.free.size(); ++i) {
@@ -1019,7 +1049,7 @@ void Analyze(Assembly& a) {
 std::unordered_map<ObjectId, Freedom> AnalyzeFreedom(const Assembly& a) {
     std::unordered_map<ObjectId, Freedom> out;
     auto& mutableAssembly = const_cast<Assembly&>(a);   // the systems only read it here
-    for (const Component& c : a.components) out[c.id] = c.grounded ? Freedom{0, 0} : Freedom{3, 3};
+    for (const Component& c : a.components) out[c.id] = a.IsFixed(c.id) ? Freedom{0, 0} : Freedom{3, 3};
     for (System& s : MakeSystems(mutableAssembly, {})) {
         if (s.free.empty()) continue;
         s.limits = false;
