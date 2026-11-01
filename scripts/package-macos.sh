@@ -76,11 +76,13 @@ done
 # Each search path once: dylibbundler adds @executable_path/../Frameworks/ to
 # libraries that already have it, and the dyld of macOS 15 refuses to load a
 # library with a repeated LC_RPATH ("duplicate LC_RPATH") — the app did not start.
+rpaths() { otool -l "$1" | awk '/LC_RPATH/ {getline; getline; print $2}'; }
 for f in "${binaries[@]}"; do
-    otool -l "$f" | awk '/LC_RPATH/ {getline; getline; print $2}' | sort | uniq -d | while read -r rp; do
+    list=$(rpaths "$f")
+    for rp in $(printf '%s\n' "$list" | sort | uniq -d); do
         # delete_rpath removes one entry (or, in some versions, all): delete
         # until none is left, then put it back once.
-        while otool -l "$f" | awk '/LC_RPATH/ {getline; getline; print $2}' | grep -qxF "$rp"; do
+        while printf '%s\n' "$(rpaths "$f")" | grep -qxF "$rp"; do
             install_name_tool -delete_rpath "$rp" "$f"
         done
         install_name_tool -add_rpath "$rp" "$f"
