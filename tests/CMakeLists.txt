@@ -6,6 +6,7 @@ add_executable(bz_tests
     app/SettingsTests.cpp
     app/GestureTests.cpp
     app/SectionTests.cpp
+    app/ExtrudeDirectionTests.cpp
     # The app is an executable; its OCCT-free pieces are compiled in directly.
     ${PROJECT_SOURCE_DIR}/src/app/Format.cpp
     ${PROJECT_SOURCE_DIR}/src/app/NewTemplates.cpp
@@ -13,10 +14,12 @@ add_executable(bz_tests
     ${PROJECT_SOURCE_DIR}/src/app/sketch/DimensionLayout.cpp
     ${PROJECT_SOURCE_DIR}/src/app/Settings.cpp
     ${PROJECT_SOURCE_DIR}/src/app/mobile/Gestures.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/features/ExtrudeDirection.cpp
     assembly/AssemblyFileTests.cpp
     assembly/InventorConstraintsTests.cpp
     assembly/PartsBesideTests.cpp
     assembly/ProjectPackTests.cpp
+    assembly/RotationAnglesTests.cpp
     assembly/SolverTests.cpp
     core/CrashCodeTests.cpp
     core/ExpressionTests.cpp
@@ -40,6 +43,7 @@ add_executable(bz_tests
     kernel/FilletTests.cpp
     kernel/HoleTests.cpp
     kernel/LoftTests.cpp
+    kernel/MaterialSideTests.cpp
     kernel/MeasureTests.cpp
     kernel/ExtrudeToFaceTests.cpp
     kernel/ExtrudeToCurvedTests.cpp
@@ -65,6 +69,7 @@ add_executable(bz_tests
     sketch/FilletTests.cpp
     sketch/MirrorTests.cpp
     sketch/ClipboardTests.cpp
+    sketch/CollinearTests.cpp
     sketch/MoveTests.cpp
     sketch/OffsetTests.cpp
     sketch/ShapesTests.cpp

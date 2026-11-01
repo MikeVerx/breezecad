@@ -165,43 +165,98 @@ void DrawComponentProperties(AppContext& app, Session& session, Component& c, fl
         ImGui::Dummy({0, ui.S(12)});
     }
 
-    // Position: the part's origin in the assembly.
-    ui::FieldLabel(ui, Tr("Положение начала детали, мм"));
+    // Grounded or free, before the position it decides about: a button
+    // with a lock that shows which it is (a pale segmented switch was missed).
+    {
+        const char* label = c.grounded ? Tr("Закреплён — освободить") : Tr("Закрепить на месте");
+        const ImVec2 size{width, ui.S(32)};
+        const bool clicked = c.grounded ? ui::PrimaryButton(ui, "##c-ground", label, nullptr, size)
+                                        : ui::SecondaryButton(ui, "##c-ground", label, nullptr, size);
+        const ImVec2 at = ImGui::GetItemRectMin();
+        const float is = ui.S(16);
+        ui.icons.Draw(ImGui::GetWindowDrawList(), "ui-lock", {at.x + ui.S(10), at.y + (size.y - is) / 2}, is,
+                      c.grounded ? ui.C().textOnAccent : ui.C().textSecondary);
+        ui::ItemTooltip(ui, c.grounded ? Tr("Зависимости и перетаскивание его не двигают. Щёлкните, чтобы освободить")
+                                       : Tr("Компонент останется на месте: зависимости и перетаскивание его не сдвинут"));
+        if (clicked) {
+            st.Checkpoint(c.grounded ? N_("Освободить") : N_("Закрепить"));
+            c.grounded = !c.grounded;
+            st.assembly.Touch();
+        }
+        ImGui::Dummy({0, ui.S(10)});
+    }
+
+    // Typed position and turn: refused for a part that cannot move.
+    const auto refused = [&] {
+        if (c.follower) {
+            app.notes.Info(Tr("Деталь нарисована по другим деталям сборки и стоит на месте — двигайте те, по которым она построена"));
+            return true;
+        }
+        if (c.grounded) {
+            app.notes.Info(Tr("Компонент закреплён — сначала освободите его"));
+            return true;
+        }
+        return false;
+    };
     const float third = (width - ui.S(8)) / 3;
     const char* axes[] = {"X", "Y", "Z"};
-    for (int i = 0; i < 3; ++i) {
-        double& value = i == 0 ? c.placement.translation.x : i == 1 ? c.placement.translation.y : c.placement.translation.z;
+    // One of three fields in a row; true with the text committed in it.
+    const auto field = [&](const char* kind, int i, const std::string& shown) {
         if (i > 0) ImGui::SameLine(0, ui.S(4));
         ImGui::BeginGroup();
         const ImVec2 p = ImGui::GetCursorScreenPos();
         ImGui::GetWindowDrawList()->AddRect(p, {p.x + third, p.y + ui.S(28)}, ui::ToU32(ui.C().fieldBorder), ui.S(5));
-        const std::string id = std::format("##c-pos{}", i);
-        if (ui::CommitInput(ui, id.c_str(), FormatNumber(value, 3), app.shell.edit, third, true, axes[i])) {
-            bool ok = false;
-            const double v = ParseLength(app.shell.edit.text, ok);
-            if (!ok) {
-                app.notes.Error(Tr("Не число"));
-            } else if (c.follower) {
-                app.notes.Info(Tr("Деталь нарисована по другим деталям сборки и стоит на месте — двигайте те, по которым она построена"));
-            } else if (c.grounded) {
-                app.notes.Info(Tr("Компонент закреплён — сначала освободите его"));
-            } else {
-                st.Checkpoint(N_("Перемещение компонента"));
-                value = v;
+        const std::string id = std::format("##c-{}{}", kind, i);
+        const bool done = ui::CommitInput(ui, id.c_str(), shown, app.shell.edit, third, true, axes[i]);
+        ImGui::EndGroup();
+        return done;
+    };
+
+    // Position: the part's origin in the assembly.
+    ui::FieldLabel(ui, Tr("Положение начала детали, мм"));
+    for (int i = 0; i < 3; ++i) {
+        double& value = i == 0 ? c.placement.translation.x : i == 1 ? c.placement.translation.y : c.placement.translation.z;
+        if (!field("pos", i, FormatNumber(value, 3))) continue;
+        bool ok = false;
+        const double v = ParseLength(app.shell.edit.text, ok);
+        if (!ok) app.notes.Error(Tr("Не число"));
+        else if (!refused()) {
+            st.Checkpoint(N_("Перемещение компонента"));
+            value = v;
+            st.assembly.Touch();
+        }
+    }
+    ImGui::Dummy({0, ui.S(10)});
+
+    // Turn: about the assembly's X, then Y, then Z, around the part's origin
+    // (the point above), as Inventor and KOMPAS show it.
+    ui::FieldLabel(ui, Tr("Поворот вокруг осей сборки, °"));
+    {
+        const Vec3 angles = c.placement.rotation.AnglesXYZ();
+        for (int i = 0; i < 3; ++i) {
+            const double a = (i == 0 ? angles.x : i == 1 ? angles.y : angles.z) * 180.0 / kPi;
+            if (!field("rot", i, FormatNumber(std::abs(a) < 5e-7 ? 0.0 : a, 3))) continue;
+            UnitSystem units;
+            units.angle = AngleUnit::Degree;
+            const Expected<double> v = EvaluateExpression(app.shell.edit.text, Quantity::Angle, units, {});
+            if (!v) app.notes.Error(Tr("Не число"));
+            else if (!refused()) {
+                Vec3 next = angles;
+                (i == 0 ? next.x : i == 1 ? next.y : next.z) = *v;
+                st.Checkpoint(N_("Поворот компонента"));
+                c.placement.rotation = Rotation::FromAnglesXYZ(next);
                 st.assembly.Touch();
             }
         }
-        ImGui::EndGroup();
     }
-    ImGui::Dummy({0, ui.S(10)});
-    ui::FieldLabel(ui, Tr("Повернуть на 90°"));
+    ImGui::Dummy({0, ui.S(6)});
     {
         const float bw = (width - ui.S(8)) / 3;
         const struct {
             const char* id;
             const char* label;
             Vec3        axis;
-        } turns[] = {{"##rx", "X", {1, 0, 0}}, {"##ry", "Y", {0, 1, 0}}, {"##rz", "Z", {0, 0, 1}}};
+        } turns[] = {{"##rx", "X +90°", {1, 0, 0}}, {"##ry", "Y +90°", {0, 1, 0}}, {"##rz", "Z +90°", {0, 0, 1}}};
         for (int i = 0; i < 3; ++i) {
             if (i > 0) ImGui::SameLine(0, ui.S(4));
             if (ui::SecondaryButton(ui, turns[i].id, turns[i].label, nullptr, {bw, ui.S(30)}, !st.assembly.IsFixed(c.id))) {
@@ -209,14 +264,6 @@ void DrawComponentProperties(AppContext& app, Session& session, Component& c, fl
                 RotateComponent(st, c, turns[i].axis, kPi / 2);
             }
         }
-    }
-    ImGui::Dummy({0, ui.S(10)});
-    static constexpr std::array<const char*, 2> fixed{N_("Свободен"), N_("Закреплён")};
-    const int g = ui::Segmented(ui, "grounded", fixed, c.grounded ? 1 : 0, 2, width);
-    if (g != (c.grounded ? 1 : 0)) {
-        st.Checkpoint(g ? N_("Закрепить") : N_("Освободить"));
-        c.grounded = g == 1;
-        st.assembly.Touch();
     }
     ImGui::Dummy({0, ui.S(6)});
     if (c.follower)

@@ -35,6 +35,7 @@
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
 
+#include <optional>
 #include <unordered_map>
 
 namespace bz::app {
@@ -51,6 +52,7 @@ struct RowStyle {
     const char* icon = "";
     std::string meta;
     const char* statusIcon = nullptr;
+    std::optional<Color> statusColor;   ///< for a one-colour icon (a lock); none: as drawn
     std::string statusText;
     bool        hideable = false;   ///< has an eye at the right: hide or show it
     bool        hidden = false;
@@ -124,7 +126,7 @@ RowResult Row(AppContext& app, const char* id, const std::string& name, const Ro
     float right = p.x + width - ui.S(8);
     if (style.statusIcon) {
         right -= ui.S(16);
-        ui.icons.Draw(dl, style.statusIcon, {right, p.y + (h - ui.S(15)) / 2}, ui.S(15), {1, 1, 1, 1});
+        ui.icons.Draw(dl, style.statusIcon, {right, p.y + (h - ui.S(15)) / 2}, ui.S(15), style.statusColor.value_or(Color{1, 1, 1, 1}));
         if (r.clicked && mouse.x >= right - ui.S(4) && mouse.x <= right + ui.S(20)) {
             r.statusClicked = true;
             r.clicked = false;
@@ -577,8 +579,10 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
             style.meta = Tr("по соседям");
             style.statusText = Tr("Нарисована по другим деталям этой сборки: стоит на месте, зависимости её не двигают");
         } else if (comp.grounded) {
-            style.meta = Tr("закреплён");
-            style.statusText = Tr("Закреплён: зависимости и перетаскивание его не двигают");
+            // A lock at the right, as Inventor's pin: seen at a glance, a click frees it.
+            style.statusIcon = "ui-lock";
+            style.statusColor = ui.C().accent;
+            style.statusText = Tr("Закреплён: зависимости и перетаскивание его не двигают. Щелчок по замку — освободить");
         } else if (const auto f = st.freedom.find(id); f != st.freedom.end()) {
             // Remaining degrees of freedom, as Inventor shows them.
             style.meta = f->second.Total() == 0 ? std::string(Tr("определён")) : Trf("{} ст.св.", f->second.Total());
@@ -601,8 +605,11 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
                 }
             });
         if (r.doubleClicked && !picking && !r.eyeClicked) app.Later([&app, &session, id] { EditInPlace(app, session, id); });
-        // The red mark of a part whose file is gone or broken: how to fix it.
-        if (r.statusClicked) {
+        // The lock of a grounded part: frees it.
+        if (r.statusClicked && comp.grounded && st.geometry.ProblemOf(id).empty()) {
+            st.selected = id;
+            app.Later([&app] { ToggleGrounded(app); });
+        } else if (r.statusClicked) {   // the red mark of a part whose file is gone or broken: how to fix it
             st.selected = id;
             ImGui::OpenPopup("##fix-part");
         }

@@ -4,6 +4,7 @@
 
 #include "core/Math.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -47,6 +48,27 @@ struct Rotation {
     }
     /// Re-orthonormalizes after many small steps.
     Rotation Orthonormalized() const { return FromXZ(col[0], col[2]); }
+
+    /// Turns about the assembly's X by a.x, then its Y by a.y, then its Z
+    /// by a.z (radians): the three angles of the component panel, as in
+    /// Inventor and KOMPAS. R = Rz * Ry * Rx.
+    static Rotation FromAnglesXYZ(Vec3 a) {
+        return AxisAngle({0, 0, 1}, a.z) * (AxisAngle({0, 1, 0}, a.y) * AxisAngle({1, 0, 0}, a.x));
+    }
+    /// The angles FromAnglesXYZ makes this rotation from: X and Z in
+    /// (-180°, 180°], Y in [-90°, 90°]. At Y = ±90° X and Z turn about one
+    /// axis; then X is 0 and Z carries the whole turn.
+    Vec3 AnglesXYZ() const {
+        // Element (row i, column j) is col[j][i].
+        const double r20 = col[0].z, r21 = col[1].z, r22 = col[2].z;
+        const double r00 = col[0].x, r10 = col[0].y, r01 = col[1].x, r11 = col[1].y;
+        const double y = std::asin(std::clamp(-r20, -1.0, 1.0));
+        if (std::abs(r20) > 1 - 1e-12) {
+            // cos(y) = 0: R = Rz(z) * Ry(±90°) * Rx(x) depends on z ∓ x only.
+            return {0.0, y, std::atan2(-r01, r11)};
+        }
+        return {std::atan2(r21, r22), y, std::atan2(r10, r00)};
+    }
 };
 
 struct Placement {
