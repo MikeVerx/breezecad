@@ -1006,8 +1006,8 @@ SolveResult Solve(Assembly& a, const SolveOptions& options) {
             for (std::size_t i = 0; i < s.free.size(); ++i)
                 farthest = std::max(farthest, (a.FindComponent(s.free[i])->placement.translation - before[i].translation).Length());
             const bool helps = err < 0.9 * startErr;
-            const bool near = farthest <= std::max(100.0, 2.0 * scale);
-            revert = !helps || !near;
+            const bool closeBy = farthest <= std::max(100.0, 2.0 * scale);
+            revert = !helps || !closeBy;
         }
         if (revert) {
             for (std::size_t i = 0; i < s.free.size(); ++i) a.FindComponent(s.free[i])->placement = before[i];
