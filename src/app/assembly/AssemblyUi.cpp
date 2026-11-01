@@ -1694,7 +1694,11 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
             drag.moving = true;
             st.Checkpoint(st.tool == AssemblyState::Tool::Rotate ? N_("Поворот компонента") : N_("Перемещение компонента"));
         }
-        if (drag.moving)
+        // Only when the cursor moved: re-placing it every frame from where
+        // the press was, against where the solver had put it, shook it.
+        const bool cursorMoved = (pixel - drag.lastPixel).Length() > 0.25;
+        if (drag.moving && cursorMoved) drag.lastPixel = pixel;
+        if (drag.moving && cursorMoved)
             if (Component* c = st.assembly.FindComponent(drag.component)) {
                 const ViewProjection& vp = vf.projection;
                 if (st.tool == AssemblyState::Tool::Rotate) {
@@ -1715,7 +1719,12 @@ void DrawAssemblyViewport(AppContext& app, Session& session, const ViewportFrame
                         // Shifted there first (a part held by nothing just
                         // follows), then pulled there by the solver as far
                         // as its constraints let it: on an axle it turns.
-                        c->placement.translation = drag.start.translation + (at - drag.grab);
+                        // A part tied by nothing simply goes there (the grabbed
+                        // point exactly under the cursor); a tied one stays where
+                        // the solver put it and is only pulled.
+                        bool tied = false;
+                        for (const assembly::Constraint* k : st.assembly.ConstraintsOf(c->id)) tied = tied || !k->suppressed;
+                        if (!tied) c->placement.translation = at - c->placement.rotation * drag.local;
                         drag.target = at;
                     }
                 }

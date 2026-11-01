@@ -69,6 +69,7 @@ public:
         Vec3                pivot;            ///< rotating: centre of its box
         Vec3                local;            ///< the point pressed, in the component's coordinates
         std::optional<Vec3> target;           ///< moving: where the cursor pulls that point
+        Vec2                lastPixel{-1e9, -1e9};   ///< the cursor the last move was made for
     } drag;
 
     /// A constraint being made: its type, options and what is picked so far.
