@@ -7,6 +7,9 @@
 #include "core/PathText.h"
 #include "assembly/Solver.h"
 #include "document/BzcFile.h"
+#include "document/ExtrudeFeature.h"
+#include "document/SketchFeature.h"
+#include "core/I18n.h"
 #include "core/Monitor.h"
 #include "core/Profile.h"
 
@@ -362,6 +365,74 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
         return true;
     }
     return changed;
+}
+
+namespace {
+
+/// Unticks the adaptivity of everything in `d` drawn from the assembly named
+/// `name`: what is left stays where it was last put. How many links it took.
+int TurnOffAdaptivity(doc::Document& d, std::string_view name) {
+    int n = 0;
+    for (std::size_t i = 0; i < d.FeatureCount(); ++i) {
+        doc::Feature* f = d.Features()[i].get();
+        if (auto* ex = dynamic_cast<doc::ExtrudeFeature*>(f); ex && ex->toContext && ex->toContext->adaptive &&
+                                                               ex->toContext->assembly == name) {
+            ex->toContext->adaptive = false;
+            ++n;
+        }
+        auto* sk = dynamic_cast<doc::SketchFeature*>(f);
+        if (!sk) continue;
+        for (doc::ContextProjection& p : sk->contextProjections)
+            if (p.adaptive && p.assembly == name) {
+                p.adaptive = false;
+                sk->lostContextProjections.erase(p.curve);   // no longer looked for: not red
+                ++n;
+            }
+    }
+    return n;
+}
+
+} // namespace
+
+bool AssemblyState::DropAdaptivity(const std::filesystem::path& file, ObjectId component, std::string_view name, std::string* why) {
+    const assembly::Component* c = assembly.FindComponent(component);
+    const doc::Document* part = c && !name.empty() ? geometry.PartOf(component) : nullptr;
+    if (!part) return false;
+    const std::filesystem::path partFile = assembly::ResolvePartPath(file, c->path);
+    const std::string key = ToUtf8(partFile);
+    const std::string label = c->name;
+    PartEdit* edit = EditOf(partFile);
+    if (edit && edit->session && edit->session->mode != EditMode::Model) {
+        if (why) *why = N_("Сначала примите эскиз этой детали");
+        return false;
+    }
+    std::string before;
+    if (edit && edit->session) {
+        before = doc::DocumentToJson(edit->session->doc);
+        if (TurnOffAdaptivity(edit->session->doc, name) == 0) return false;
+    } else {
+        // Read from its file: changed on a copy, which becomes an edit in
+        // memory written with the assembly (as when it follows its sources).
+        doc::Document copy = part->Clone();
+        before = doc::DocumentToJson(copy);
+        if (TurnOffAdaptivity(copy, name) == 0) return false;
+        auto session = std::make_unique<Session>();
+        session->doc = std::move(copy);
+        session->path = partFile;
+        parts.push_back({partFile, std::move(session), false});
+        edit = &parts.back();
+        geometry.UsePartInMemory(partFile, &edit->session->doc, &edit->session->model);
+    }
+    Checkpoint(N_("Снять адаптивность"));
+    RememberPartBefore(partFile, std::move(before));   // undo brings the links back
+    edit->session->history.MarkUnsaved();
+    edit->session->RebuildNow();
+    // Looked at afresh: the part is no longer drawn from the others here.
+    myHasContext.erase(key);
+    myAdaptKeys.erase(key);
+    assembly.Touch();
+    mon::Action("assembly", "адаптивность снята: " + label);
+    return true;
 }
 
 std::vector<AssemblyState::Issue> AssemblyState::Issues() const {
