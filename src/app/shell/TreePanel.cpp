@@ -590,8 +590,12 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
             style.statusIcon = "status-error";
             style.statusText = Tr(problem);
         } else if (comp.follower) {
+            // Inventor's adaptivity mark: seen at a glance, a click offers to untick it.
             style.meta = Tr("по соседям");
-            style.statusText = Tr("Нарисована по другим деталям этой сборки: стоит на месте, зависимости её не двигают");
+            style.statusIcon = "ui-adaptive";
+            style.statusColor = ui.C().accent;
+            style.statusText = Tr("Адаптивна: нарисована по другим деталям этой сборки и следует за ними, зависимости её не двигают. "
+                                  "Щелчок — снять адаптивность");
         } else if (comp.grounded) {
             // A lock at the right, as Inventor's pin: seen at a glance, a click frees it.
             style.statusIcon = "ui-lock";
@@ -619,13 +623,39 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
                 }
             });
         if (r.doubleClicked && !picking && !r.eyeClicked) app.Later([&app, &session, id] { EditInPlace(app, session, id); });
-        // The lock of a grounded part: frees it.
-        if (r.statusClicked && comp.grounded && st.geometry.ProblemOf(id).empty()) {
+        // The adaptivity mark: asks before it is unticked.
+        const auto dropAdaptivity = [&app, &session, id] {
+            app.Later([&app, &session, id] {
+                std::string why;
+                if (session.assembly->DropAdaptivity(session.path, id, session.ContextName(), &why))
+                    app.notes.Success(Tr("Адаптивность снята: деталь больше не следует за другими"));
+                else if (!why.empty())
+                    app.notes.Info(Tr(why));
+            });
+        };
+        if (r.statusClicked && comp.follower && st.geometry.ProblemOf(id).empty()) {
+            st.selected = id;
+            ImGui::OpenPopup("##drop-adaptive");
+        } else if (r.statusClicked && comp.grounded && st.geometry.ProblemOf(id).empty()) {   // the lock of a grounded part: frees it
             st.selected = id;
             app.Later([&app] { ToggleGrounded(app); });
         } else if (r.statusClicked) {   // the red mark of a part whose file is gone or broken: how to fix it
             st.selected = id;
             ImGui::OpenPopup("##fix-part");
+        }
+        {
+            ui::MenuStyle menu(ui);
+            if (ImGui::BeginPopup("##drop-adaptive")) {
+                ui::MenuItem(ui, Tr("Снять адаптивность?"), nullptr, "ui-adaptive", false, false);
+                // What it costs, said before it is chosen.
+                ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
+                ImGui::TextUnformatted(Tr("Деталь перестанет следовать за другими: её эскизы останутся как сейчас"));
+                ImGui::PopStyleColor();
+                ImGui::Separator();
+                if (ui::MenuItem(ui, Tr("Снять"), nullptr, "ui-check")) dropAdaptivity();
+                if (ui::MenuItem(ui, Tr("Отмена"), nullptr, "ui-close")) ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+            }
         }
         {
             ui::MenuStyle menu(ui);
@@ -675,6 +705,7 @@ void DrawAssemblyTree(AppContext& app, Session& session, float width) {
                 }
                 if (ui::MenuItem(ui, comp.grounded ? Tr("Освободить") : Tr("Закрепить"), nullptr, "ui-lock"))
                     app.Later([&app] { ToggleGrounded(app); });
+                if (comp.follower && ui::MenuItem(ui, Tr("Снять адаптивность"), nullptr, "ui-adaptive")) dropAdaptivity();
                 if (ui::MenuItem(ui, comp.visible ? Tr("Скрыть") : Tr("Показать"), nullptr, comp.visible ? "ui-eye-off" : "ui-eye"))
                     app.Later([&st, id] {
                         if (assembly::Component* cc = st.assembly.FindComponent(id)) {

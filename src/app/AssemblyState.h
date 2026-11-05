@@ -178,6 +178,14 @@ public:
     /// memory since are let go; whatever was being picked or dragged is dropped.
     void RollBack(const Mark& mark);
 
+    /// "Снять адаптивность" (Inventor's adaptivity unticked): the part of
+    /// `component` stops following other parts of this assembly (named `name`,
+    /// see Session::ContextName) — its projections and extrusions up to their
+    /// faces stay where they are now. Undone with the assembly's undo; the part
+    /// is written with the assembly. False when it had nothing to turn off or
+    /// could not now (`why` says what to do).
+    bool DropAdaptivity(const std::filesystem::path& file, ObjectId component, std::string_view name, std::string* why = nullptr);
+
     /// Adaptivity starts afresh (the assembly's name for its parts changed).
     void ForgetAdaptState() {
         myAdaptKeys.clear();
