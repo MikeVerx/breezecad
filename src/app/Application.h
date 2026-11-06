@@ -110,6 +110,8 @@ private:
     std::unique_ptr<AppContext> myContext;
     std::unique_ptr<modules::ModuleManager> myModules;   ///< unloaded first in ~Application
     void StartModules();
+    /// The left panel's draggable edge (DrawShell): `panel` its width now, design pixels.
+    void DrawPanelEdge(float x, float y, float height, float panel, float widest);
     void InstallDroppedModules(const std::filesystem::path& dir);
     bool myScaledForPhone = false;   ///< the scale was chosen for the phone layout
 

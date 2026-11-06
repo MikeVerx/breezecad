@@ -917,12 +917,50 @@ void Application::DrawRoot() {
         DrawModeBar(app, {0, y}, width);
         y += myUi->S(m.modeBarHeight);
         y += DrawRibbon(app, *session, {0, y}, width);
-        const float leftWidth = myUi->S(m.railWidth + m.panelWidth);
+        // The panel as wide as the user dragged it, within reason: never under
+        // the theme's narrowest, never over 60 % of the window.
+        const float widest = std::max(220.0f, width / myUi->scale * 0.6f - m.railWidth);
+        const float panel = mySettings.panelWidth > 0 ? std::clamp(static_cast<float>(mySettings.panelWidth), 220.0f, widest)
+                                                       : std::min(m.panelWidth, widest);
+        const float leftWidth = myUi->S(m.railWidth + panel);
         DrawLeftArea(app, *session, {0, y}, {leftWidth, bottom - y});
         DrawViewport(app, *session, {leftWidth, y}, {width - leftWidth, bottom - y});
+        DrawPanelEdge(leftWidth, y, bottom - y, panel, widest);
     }
     DrawProjectTabs(app, {0, bottom}, width);
     DrawStatusBar(app, {0, bottom + myUi->S(m.tabBarHeight)}, width);
+    ImGui::End();
+}
+
+void Application::DrawPanelEdge(float x, float y, float height, float panel, float widest) {
+    // The left panel's edge: dragged (mouse or finger) it makes the panel
+    // wider or narrower; a double click or tap — back to the usual width.
+    // A window of its own on top: the viewport next to it takes the hover otherwise.
+    const ui::ThemeColors& c = myUi->C();
+    const float grip = myUi->S(myShell.mobile.touchScreen ? 18.0f : 6.0f);
+    ImGui::SetNextWindowPos({x - grip / 2, y});
+    ImGui::SetNextWindowSize({grip, height});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+    ImGui::Begin("##panel-edge", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
+    ImGui::PopStyleVar();
+    ImGui::SetCursorScreenPos({x - grip / 2, y});
+    ImGui::InvisibleButton("##edge", {grip, height});
+    const bool hot = ImGui::IsItemHovered() || ImGui::IsItemActive();
+    if (hot) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    if (ImGui::IsItemActive() && ImGui::GetIO().MouseDelta.x != 0) {
+        const float dragged = panel + ImGui::GetIO().MouseDelta.x / myUi->scale;
+        mySettings.panelWidth = std::clamp(dragged, 220.0f, widest);
+    }
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) mySettings.panelWidth = 0;
+    if (hot || myShell.mobile.touchScreen) {
+        // On a touch screen a small handle always shows that the edge moves.
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float mid = y + height / 2;
+        const Color line = hot ? c.accent : c.textMuted.WithAlpha(0.5f);
+        dl->AddRectFilled({x - myUi->S(2), mid - myUi->S(18)}, {x + myUi->S(2), mid + myUi->S(18)}, ui::ToU32(line), myUi->S(2));
+    }
     ImGui::End();
 }
 

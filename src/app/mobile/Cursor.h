@@ -12,5 +12,8 @@ namespace bz::app::mobile {
 
 /// Draws the cursor in the view (its draw list), when it is in use.
 void DrawDropCursor(AppContext& app, ImDrawList* dl);
+/// «Зажать и тянуть»: the ring filling under a held finger, like a loading
+/// circle; full — the first point is down.
+void DrawPressRing(AppContext& app, ImDrawList* dl);
 
 } // namespace bz::app::mobile

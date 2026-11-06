@@ -1353,6 +1353,19 @@ void DrawTouchScreenSettings(AppContext& app, float width) {
     static constexpr std::array<const char*, 4> reachNames{"32 dp", "48 dp", "64 dp", "80 dp"};
     static constexpr std::array<int, 4> reachValues{32, 48, 64, 80};
     choice("cursor-reach", Tr("Кончик курсора над пальцем"), nullptr, m.cursorReach, reachNames, reachValues);
+    static constexpr std::array<const char*, 3> inputNames{N_("Курсор"), N_("Касания"), N_("Зажать и тянуть")};
+    static constexpr std::array<int, 3> inputValues{0, 1, 2};
+    choice("sketch-input", Tr("Рисование в эскизе"),
+           Tr("Курсор — капля и ✓. Касания — тап ставит точку там, где палец: первый — начало, второй — конец, "
+              "дальше цепочка (✕ — закончить). Зажать и тянуть — держите палец, пока не заполнится кружок: "
+              "там первая точка; ведите палец и отпустите — вторая."),
+           m.sketchInput, inputNames, inputValues);
+    static constexpr std::array<const char*, 8> polarNames{N_("выкл"), "5°", "10°", "15°", "22,5°", "30°", "45°", "90°"};
+    static constexpr std::array<double, 8> polarValues{0.0, 5.0, 10.0, 15.0, 22.5, 30.0, 45.0, 90.0};
+    choice("polar-step", Tr("Шаг угла отрезка (полярное отслеживание)"),
+           Tr("Отрезок от предыдущей точки идёт только под углами, кратными шагу, как в AutoCAD; рядом с курсором "
+              "виден угол. «Орто» действует вместо него, когда включено."),
+           app.settings.polarStep, polarNames, polarValues);
 
     ui::FieldLabel(ui, Tr("Кнопки громкости"));
     static constexpr std::array<const char*, 2> volume{N_("Громкость"), N_("Масштаб вида")};
@@ -1628,6 +1641,20 @@ void Sensor(AppContext& app, Grid& g) {
         static constexpr std::array<int, 4> values{32, 48, 64, 80};
         int i = IndexOf(values, m.cursorReach);
         if (Choice(g, "##p-reach", Tr("Кончик курсора"), names, i)) m.cursorReach = values[static_cast<std::size_t>(i)];
+    }
+    {
+        static constexpr std::array<const char*, 3> names{N_("курсор"), N_("касания"), N_("зажать и тянуть")};
+        int i = std::clamp(m.sketchInput, 0, 2);
+        if (Choice(g, "##p-sketch-input", Tr("Рисование в эскизе"), names, i)) m.sketchInput = i;
+    }
+    {
+        static constexpr std::array<const char*, 8> names{N_("выкл"), "5°", "10°", "15°", "22,5°", "30°", "45°", "90°"};
+        static constexpr std::array<double, 8> values{0.0, 5.0, 10.0, 15.0, 22.5, 30.0, 45.0, 90.0};
+        int i = IndexOf(values, app.settings.polarStep);
+        if (Choice(g, "##p-polar", Tr("Шаг угла отрезка"), names, i)) {
+            app.settings.polarStep = values[static_cast<std::size_t>(i)];
+            if (app.settings.polarStep > 0) app.settings.orthoMode = false;
+        }
     }
     Heading(g, Tr("Раскладка"));
     {

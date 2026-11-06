@@ -108,6 +108,8 @@ private:
     const void*    myHoldSession = nullptr;   ///< the document held in (another one shown: let go)
     std::uint64_t  myPutBackFrom = 0;         ///< ✕ while holding: undo when the content moved from this…
     int            myPutBackIn = 0;           ///< …this many frames later (the release is taken first)
+    // «Зажать и тянуть»
+    int            myEndChainIn = 0;          ///< frames until the line's chain ends (the second point's click taken first)
 
     bool   myCanvas = false;      ///< a flat drawing was drawn last frame (MobileState::canvasMin/Max)
     float  mySlop = 10.0f;        ///< the user's tap slop (dp)
@@ -122,7 +124,10 @@ private:
 bool CursorActive(const AppContext& app);
 /// The sketch tool places points (draws, moves, copies): only with the cursor —
 /// a bare finger is too coarse for it (author, 17.10). Picking tools (select,
-/// dimension, trim, constraints…) may go without.
+/// dimension, trim, constraints…) may go without. With «Рисование в эскизе»
+/// set to taps or to hold-and-drag (MobileSettings::sketchInput) none needs it.
 bool SketchToolNeedsCursor(const AppContext& app);
+/// The tool in hand places points (a drawing tool, not a picking one).
+bool SketchToolPlacesPoints(const AppContext& app);
 
 } // namespace bz::app::mobile

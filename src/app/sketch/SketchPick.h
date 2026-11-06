@@ -37,6 +37,10 @@ struct Snap {
     ObjectId curve;          ///< SnapKind::Curve: curve the point lies on; Midpoint: the line or arc;
                              ///< Intersection: the first of the two curves
     ObjectId curve2;         ///< SnapKind::Intersection: the second curve
+    /// Polar tracking held the direction from `from` at this angle (degrees,
+    /// 0…360, counter-clockwise from +X), for the guide and its label.
+    std::optional<double> polarAngle;
+    std::optional<Vec2>   polarFrom;   ///< where the angle is measured from
     bool     horizontal = false;   ///< aligned horizontally with `from`
     bool     vertical   = false;
     /// Lined up with an existing point (same x / same y), for the dashed
@@ -63,6 +67,7 @@ struct SnapOptions {
     ObjectId            fromCurve;          ///< the line `from` lies on, if it was snapped onto one
     ObjectId            ignore;
     bool                ortho = false;      ///< "Орто": from `from` only horizontally or vertically
+    double              polarStep = 0.0;    ///< polar tracking: from `from` at multiples of this angle (degrees), 0 off
     ObjectId            reference;          ///< a line the cursor rested on this command: parallel/square to it
 };
 

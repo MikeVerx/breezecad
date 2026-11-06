@@ -13,9 +13,32 @@
 #include "ui/Widgets.h"
 
 #include <cmath>
+#include <cstdio>
 #include <format>
 
 namespace bz::app {
+
+std::string FormatPolarStep(double step) {
+    char text[16];
+    std::snprintf(text, sizeof text, "%g", step);
+    return text;
+}
+
+void DrawPolarStepMenu(ui::Ui& ui, Settings& settings) {
+    // Polar tracking, as in AutoCAD (the same steps): a line keeps to
+    // multiples of the angle. "Орто" goes first when both are on.
+    if (!ui::BeginSubmenu(ui, Tr("Полярное отслеживание"), {})) return;
+    if (ui::MenuItem(ui, Tr("Выключено"), nullptr, {}, settings.polarStep <= 0)) settings.polarStep = 0;
+    for (const double step : kPolarSteps) {
+        const std::string label = FormatPolarStep(step) + "\xC2\xB0";
+        if (ui::MenuItem(ui, label.c_str(), nullptr, {}, std::abs(settings.polarStep - step) < 1e-6)) {
+            settings.polarStep = step;
+            settings.orthoMode = false;   // the two do not work together
+        }
+    }
+    ImGui::EndMenu();
+}
+
 
 void DrawProjectTabs(AppContext& app, ImVec2 pos, float width) {
     ui::Ui& ui = app.ui;
@@ -195,7 +218,10 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
             dl->AddText(ui.fonts.mono, fs, {right, ty}, ui::ToU32(c.textSecondary), coords.c_str());
             right -= ui.S(18);
         }
-        const std::string snaps = (app.settings.orthoMode ? std::string(Tr("Орто")) + "  \xC2\xB7  " : std::string()) + Trf("Привязки: {}", app.settings.pointSnap && app.settings.gridSnap ? Tr("точки, сетка")
+        const std::string polar = !app.settings.orthoMode && app.settings.polarStep > 0
+                                      ? Trf("Полярное {}°", FormatPolarStep(app.settings.polarStep)) + "  \xC2\xB7  "
+                                      : std::string();
+        const std::string snaps = polar + (app.settings.orthoMode ? std::string(Tr("Орто")) + "  \xC2\xB7  " : std::string()) + Trf("Привязки: {}", app.settings.pointSnap && app.settings.gridSnap ? Tr("точки, сетка")
                                                        : app.settings.pointSnap                       ? Tr("точки")
                                                        : app.settings.gridSnap                        ? Tr("сетка")
                                                                                                       : Tr("выкл"));
@@ -211,6 +237,7 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
                 app.settings.pointSnap = !app.settings.pointSnap;
             if (ui::MenuItem(ui, Tr("Привязка к сетке"), nullptr, {}, app.settings.gridSnap)) app.settings.gridSnap = !app.settings.gridSnap;
             if (ui::MenuItem(ui, Tr("Ортогональный режим"), "F8", {}, app.settings.orthoMode)) app.settings.orthoMode = !app.settings.orthoMode;
+            DrawPolarStepMenu(ui, app.settings);
             ImGui::EndPopup();
         }
     }

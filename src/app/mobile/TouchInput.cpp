@@ -81,11 +81,19 @@ bool CursorActive(const AppContext& app) {
     if (!m.phone) return false;
     const Session* s = app.workspace.Active();
     if (!s || app.workspace.ShowsHome()) return false;
-    if (s->mode == EditMode::Sketch) return m.cursorInSketch || SketchToolNeedsCursor(app);
+    if (s->mode == EditMode::Sketch) {
+        // Taps or hold-and-drag place the points with the finger itself: no drop.
+        if (app.settings.mobile.sketchInput != 0) return false;
+        return m.cursorInSketch || SketchToolNeedsCursor(app);
+    }
     return m.cursorIn3d;
 }
 
 bool SketchToolNeedsCursor(const AppContext& app) {
+    return app.settings.mobile.sketchInput == 0 && SketchToolPlacesPoints(app);
+}
+
+bool SketchToolPlacesPoints(const AppContext& app) {
     switch (app.sketch.Tool()) {
         case SketchTool::Select:
         case SketchTool::Dimension:
@@ -183,7 +191,15 @@ void TouchInput::BeginFrame(AppContext& app, double now) {
     // (the author, 17.10: the sketch turned under the finger with the cursor off).
     if (const Session* s = app.workspace.Active(); s && s->mode == EditMode::Sketch && !cursor && drags.one == FingerDrag::Orbit)
         drags.one = FingerDrag::Pan;
-    myGestures.SetMode({cursor, m.boxMode && !cursor, m.penNear, drags});
+    // «Зажать и тянуть»: in a sketch, with a drawing tool, a held finger draws.
+    const Session* active = app.workspace.Active();
+    const bool drawHold = tune.sketchInput == 2 && !cursor && active && !app.workspace.ShowsHome() &&
+                          active->mode == EditMode::Sketch && SketchToolPlacesPoints(app);
+    myGestures.SetMode({cursor, m.boxMode && !cursor, m.penNear, drags, drawHold});
+    m.pressProgress = 0.0f;
+    // The second point taken: the chain ends there (one line per drag, as asked).
+    if (myEndChainIn > 0 && --myEndChainIn == 0)
+        if (Session* s = app.Doc(); s && s->mode == EditMode::Sketch && app.sketch.Busy()) app.sketch.Escape(app, *s, false);
     mySlop = static_cast<float>(tune.tapSlop);
     myScrollSpeed = static_cast<float>(tune.scrollSpeed);
     myGestures.SetTuning({static_cast<double>(tune.tapSlop), tune.longPress});
@@ -551,6 +567,26 @@ void TouchInput::ApplyGestures(AppContext& app) {
     } else if (step.tap && !TypeDimensionName(app, ToIm(*step.tap))) {
         Click(ToIm(*step.tap), ImGuiMouseButton_Left);
         mon::Action("touch", "касание");
+    }
+    // «Зажать и тянуть»: the ring, the first point, the finger leading the second, the release.
+    if (step.pressAt) {
+        m.pressAt = ToIm(*step.pressAt);
+        m.pressProgress = step.pressProgress;
+    }
+    if (step.drawFrom) {
+        Click(ToIm(*step.drawFrom), ImGuiMouseButton_Left);
+        m.drawDragging = true;
+        mon::Action("touch", "зажать и тянуть");
+    }
+    if (step.drawTo) Pos(ToIm(*step.drawTo));
+    if (step.drawEnded && m.drawDragging) {
+        Click(ToIm(*step.drawTo), ImGuiMouseButton_Left);
+        m.drawDragging = false;
+        myEndChainIn = 6;
+    }
+    if (step.drawCancelled && m.drawDragging) {
+        m.drawDragging = false;
+        if (Session* s = app.Doc(); s && s->mode == EditMode::Sketch) app.sketch.Escape(app, *s, false);   // the first point goes
     }
     if (step.longPress && !m.holding) {
         const ImVec2 at = CursorActive(app) ? m.cursorTip : ToIm(*step.longPress);

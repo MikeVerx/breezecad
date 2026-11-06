@@ -66,9 +66,19 @@ struct GestureStep {
     std::optional<Vec2> boxFrom, boxTo;
     bool boxEnded = false;
 
+    /// "Зажать и тянуть" (Mode::drawHold): a finger held still is filling its
+    /// ring here (0…1 of the long press); then drawFrom — the first point,
+    /// drawTo — where the finger leads the second, drawEnded — it let go
+    /// there; drawCancelled — a second finger came or the system took the touch.
+    std::optional<Vec2> pressAt;
+    float pressProgress = 0.0f;
+    std::optional<Vec2> drawFrom, drawTo;
+    bool drawEnded = false, drawCancelled = false;
+
     bool Empty() const {
         return orbit.x == 0 && orbit.y == 0 && pan.x == 0 && pan.y == 0 && zoom == 1.0 && !orbitStart && !tap && !longPress &&
-               !tap2 && !tap3 && !cursorFinger && !cursorEnded && !cursorRevert && !boxTo && !boxEnded;
+               !tap2 && !tap3 && !cursorFinger && !cursorEnded && !cursorRevert && !boxTo && !boxEnded && !pressAt && !drawFrom &&
+               !drawTo && !drawEnded && !drawCancelled;
     }
 };
 
@@ -79,6 +89,8 @@ public:
         bool boxMode = false;    ///< "Выделение рамкой" is on (cursor off: one finger draws the frame)
         bool fingersOnlyNavigate = false;   ///< a stylus is near (palm rejection): no taps, cursor or frames
         DragMap drags;                      ///< what drags do now (the set for the cursor's state)
+        /// "Зажать и тянуть": a long press starts a drawing drag instead of the context menu.
+        bool drawHold = false;
     };
 
     /// The defaults of the two sets.
@@ -133,6 +145,7 @@ private:
     bool   myCursorLeading = false;   ///< the cursor follows the first finger
     bool   myBoxing = false;
     bool   myOrbiting = false;
+    bool   myDrawing = false;     ///< "Зажать и тянуть": the held finger leads the second point
     // References for the deltas, from the last event (reset when the finger count changes).
     Vec2   myLastCentre{0, 0};
     double myLastSpread = 0.0;

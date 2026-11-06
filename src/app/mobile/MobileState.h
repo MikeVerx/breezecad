@@ -89,6 +89,10 @@ struct MobileState {
 
     // --- This frame's gestures over the view (applied by the viewport) ---
     GestureStep gestures;
+    /// "Зажать и тянуть": the ring filling under a held finger (0 — none).
+    ImVec2 pressAt{0, 0};
+    float  pressProgress = 0.0f;
+    bool   drawDragging = false;   ///< the finger leads the second point now
 
     // --- Block 1 (tree / tool / dimensions) and block 2 ---
     int  block1Tab = 0;          ///< 0 tree, 1 the tool's panel, 2 dimensions (variables)
