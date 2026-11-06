@@ -328,7 +328,7 @@ void RegisterActions(AppContext& app) {
     }
     // The same tool, making a copy that no longer follows the model.
     a.Add({"sketch.projectFixed", N_("Независимая проекция"), "sk-project-fixed", 0,
-           N_("Щёлкните ребро модели или грань — её контур станет обычной закреплённой геометрией эскиза, за моделью не следует"),
+           N_("Щёлкните ребро, грань, вершину, рабочую геометрию или кривую другого эскиза — проекция станет обычной закреплённой геометрией эскиза, за моделью не следует"),
            inSketch, [&app] {
                app.sketch.SetProjectLinked(false);
                app.sketch.SetTool(app, *app.Doc(), SketchTool::Project);
