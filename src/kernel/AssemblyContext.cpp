@@ -9,6 +9,7 @@
 #include "kernel/occt/AssemblyModelImpl.h"
 #include "kernel/occt/EdgeMatch.h"
 #include "kernel/occt/Project.h"
+#include "kernel/occt/SketchSource.h"
 
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
@@ -122,14 +123,22 @@ std::optional<doc::EdgeReference> AssemblyModel::EdgeNear(const assembly::Assemb
 
 Expected<ProjectedCurve> AssemblyModel::ProjectSourceEdge(const assembly::Assembly& a, ObjectId target,
                                                           const doc::ContextProjection& link, const Frame& plane,
-                                                          doc::EdgeReference* now) const {
+                                                          doc::EdgeReference* now, doc::SketchSource* sourceNow) const {
     const Impl::Part* part = myImpl->PartFor(link.component);
     if (!a.FindComponent(link.component)) return Error{"Компонент-источник удалён из сборки"};
     if (!part || part->shape.IsNull()) return Error{"У компонента-источника нет тела"};
     try {
-        const std::optional<TopoDS_Edge> edge = occt::ResolveEdges({link.edge}, part->shape).front();
+        // The source part's profile first (see occt::FollowProjection): a
+        // fillet or chamfer on the other part does not lose the projection.
+        doc::EdgeReference ref = link.edge;
+        doc::SketchSource source = link.source;
+        bool onBody = true;
+        const std::optional<TopoDS_Edge> edge = occt::FollowProjection(
+            part->shape, occt::ResolveEdges({link.edge}, part->shape).front(), part->Doc(), static_cast<std::size_t>(-1), ref,
+            source, &onBody);
         if (!edge) return Error{"Ребро детали-источника не найдено"};
-        if (now) *now = occt::DescribeEdge(*edge, part->shape);
+        if (now) *now = onBody ? occt::DescribeEdge(*edge, part->shape) : ref;
+        if (sourceNow) *sourceNow = source;
         const TopLoc_Location where(ToTrsf(Relative(a, target, link.component)));
         return occt::ProjectEdge(TopoDS::Edge(edge->Moved(where)), plane);
     } catch (const Standard_Failure& f) {
@@ -249,23 +258,30 @@ AdaptResult AdaptContextProjections(const AssemblyModel& geometry, const assembl
         const sketch::Sketch before = sk->sketch;
         sk->lostContextProjections.clear();
         bool moved = false;
+        std::vector<std::pair<ObjectId, ProjectedCurve>> place;   // placed together: lines share their ends
         for (doc::ContextProjection& p : sk->contextProjections) {
             if (!Matches(p, assembly)) continue;
             doc::EdgeReference found = p.edge;
-            const Expected<ProjectedCurve> now = geometry.ProjectSourceEdge(a, target, p, sk->placement.frame, &found);
+            doc::SketchSource source = p.source;
+            const Expected<ProjectedCurve> now = geometry.ProjectSourceEdge(a, target, p, sk->placement.frame, &found, &source);
             if (!now) {
                 ++result.lost;   // the curve stays where it was, drawn red
                 sk->lostContextProjections.insert(p.curve);
                 continue;
             }
+            p.source = source;   // learnt or refreshed: not a change of the sketch by itself
             if (CurveMatches(sk->sketch, p.curve, *now, 1e-7)) continue;
-            if (PlaceProjectedCurve(sk->sketch, p.curve, *now)) {
-                p.edge = found;   // followed from where it is now
+            p.edge = found;   // followed from where it is now
+            place.emplace_back(p.curve, *now);
+        }
+        const std::vector<bool> placed = PlaceProjectedCurves(sk->sketch, place);
+        for (std::size_t k = 0; k < place.size(); ++k) {
+            if (placed[k]) {
                 moved = true;
                 ++result.moved;
             } else {
                 ++result.lost;   // projects as another kind of curve now
-                sk->lostContextProjections.insert(p.curve);
+                sk->lostContextProjections.insert(place[k].first);
             }
         }
         if (moved) doc::SolveSketch(*sk);   // what is tied to the curves follows them

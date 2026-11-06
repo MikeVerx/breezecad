@@ -8,6 +8,7 @@ add_library(bz_kernel STATIC
     occt/Coil.cpp
     occt/Section.cpp
     occt/EdgeMatch.cpp
+    occt/SketchSource.cpp
     occt/Export.cpp
     occt/Extrude.cpp
     occt/FaceMatch.cpp

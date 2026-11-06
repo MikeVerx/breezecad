@@ -8,6 +8,7 @@
 #include "document/Recompute.h"
 #include "document/WorkPlaneFeature.h"
 #include "kernel/AssemblyModel.h"
+#include "document/EdgeFeature.h"
 #include "kernel/ContextProjection.h"
 #include "kernel/Model.h"
 #include "kernel/occt/ModelImpl.h"
@@ -88,7 +89,7 @@ ObjectId ProjectInto(Bench& b, MemoryPart& part, ObjectId target, ObjectId sourc
     REQUIRE(sk);
     const std::optional<doc::EdgeReference> edge = b.m.EdgeNear(b.a, source, worldPoint, 1.0);
     REQUIRE(edge);
-    doc::ContextProjection link{"Узел", source, *edge, {}, true};
+    doc::ContextProjection link{"Узел", source, *edge, {}, true, {}};
     const Expected<kernel::ProjectedCurve> pc = b.m.ProjectSourceEdge(b.a, target, link, sk->placement.frame);
     REQUIRE(pc);
     IdGenerator& ids = part.doc.Ids();
@@ -320,6 +321,66 @@ TEST_CASE("a part projected from its neighbour follows it: the plate changes, th
     CHECK(sk->sketch.PositionOf(c->center).y == Approx(25).epsilon(1e-6));
 }
 
+TEST_CASE("проекция с соседней детали переживает скругление и фаску своего ребра на той детали") {
+    Bench b;
+    MemoryPart cover;
+    test::AddSketch(cover.doc);
+    const ObjectId coverId = b.AddMemoryPart(cover, "Крышка", {Rotation{}, {0, 0, 10}});
+    // The plate's top back edge (y 40), projected into the cover's sketch.
+    const ObjectId curve = ProjectInto(b, cover, coverId, b.plate, {20, 40, 10});
+    cover.Rebuild();
+    b.m.Update(b.a, b.file);
+    const std::string name = "Узел";
+    CHECK(kernel::AdaptContextProjections(b.m, b.a, coverId, cover.doc, name).lost == 0);
+    auto* sk = dynamic_cast<doc::SketchFeature*>(cover.doc.Features()[0].get());
+    REQUIRE(sk->contextProjections.front().source.IsSet());   // learnt: the plate's rectangle line
+
+    const auto lineAt = [&](double y, double x0, double x1) {
+        const sketch::Line* l = sk->sketch.FindLine(curve);
+        REQUIRE(l);
+        const Vec2 p = sk->sketch.PositionOf(l->start), q = sk->sketch.PositionOf(l->end);
+        CHECK(p.y == Approx(y));
+        CHECK(q.y == Approx(y));
+        CHECK(std::min(p.x, q.x) == Approx(x0));
+        CHECK(std::max(p.x, q.x) == Approx(x1));
+    };
+    lineAt(40, 0, 40);
+
+    for (const bool chamfer : {false, true}) {
+        CAPTURE(chamfer);
+        // The plate gets a fillet (a chamfer) on that very edge.
+        MemoryPart plate{Plate(), {}};
+        plate.Rebuild();
+        const std::optional<doc::EdgeReference> edge = b.m.EdgeNear(b.a, b.plate, {20, 40, 10}, 1.0);
+        REQUIRE(edge);
+        std::unique_ptr<doc::EdgeFeature> op;
+        if (chamfer) {
+            auto c = std::make_unique<doc::ChamferFeature>();
+            c->distance.expression = "3";
+            op = std::move(c);
+        } else {
+            auto f = std::make_unique<doc::FilletFeature>();
+            f->radius.expression = "3";
+            op = std::move(f);
+        }
+        op->id = plate.doc.Ids().Next();
+        op->name = "Операция";
+        op->edges = {*edge};
+        doc::EdgeFeature* raw = op.get();
+        plate.doc.Insert(std::move(op), plate.doc.FeatureCount());
+        plate.Rebuild();
+        REQUIRE(raw->status.state == doc::FeatureState::Ok);
+        b.m.UsePartInMemory(b.dir / "plate.bzc", &plate.doc, &plate.model);
+        b.m.Update(b.a, b.file);
+        const kernel::AdaptResult r = kernel::AdaptContextProjections(b.m, b.a, coverId, cover.doc, name);
+        CHECK(r.lost == 0);
+        CHECK(sk->lostContextProjections.empty());
+        lineAt(40, 0, 40);   // the line stays the plate's back line
+        b.m.ForgetPartInMemory(b.dir / "plate.bzc");
+        b.m.Update(b.a, b.file);
+    }
+}
+
 TEST_CASE("a lost source edge keeps its curve where it was; a deleted source component too") {
     Bench b;
     MemoryPart cover;
@@ -453,8 +514,8 @@ TEST_CASE("context projections survive saving the part") {
     e.curve = doc::CurveKind::Circle;
     e.radius = 3;
     e.middle = {4, 2, 0};
-    sk.contextProjections.push_back({"Узел", ObjectId{7}, e, c, true});
-    sk.contextProjections.push_back({"Узел 2", ObjectId{9}, e, c, false});
+    sk.contextProjections.push_back({"Узел", ObjectId{7}, e, c, true, {}});
+    sk.contextProjections.push_back({"Узел 2", ObjectId{9}, e, c, false, {}});
     const std::filesystem::path file = std::filesystem::temp_directory_path() / "bz_context_projection.bzc";
     REQUIRE(doc::SaveBzc(d, file, "tests"));
     Expected<doc::Document> back = doc::LoadBzc(file);

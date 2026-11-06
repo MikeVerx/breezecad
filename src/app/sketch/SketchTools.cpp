@@ -421,7 +421,7 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
                 failure = Tr("Ребро другой детали не найдено");
                 continue;
             }
-            doc::ContextProjection link{name, ce.body, *source, {}, true};
+            doc::ContextProjection link{name, ce.body, *source, {}, true, {}};
             const Expected<kernel::ProjectedCurve> pc = st.geometry.ProjectSourceEdge(st.assembly, target, link, f->placement.frame);
             if (!pc) {
                 failure = Tr(pc.GetError().message);
@@ -541,7 +541,7 @@ void SketchEditor::HandleProject(AppContext& app, Session& session, const Sketch
                 if (e.id == curve) e.construction = true;
         }
         if (myOptions.projectLinked && link) {
-            f->projections.push_back({*link, curve});
+            f->projections.push_back({*link, curve, {}});
         } else if (!myOptions.projectLinked) {
             // Независимая: ordinary geometry held where it is.
             std::vector<ObjectId> own;
