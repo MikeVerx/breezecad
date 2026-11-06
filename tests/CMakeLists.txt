@@ -5,6 +5,7 @@ add_executable(bz_tests
     app/NewTemplatesTests.cpp
     app/SettingsTests.cpp
     app/GestureTests.cpp
+    app/TouchTextTests.cpp
     app/SectionTests.cpp
     app/ExtrudeDirectionTests.cpp
     # The app is an executable; its OCCT-free pieces are compiled in directly.
@@ -14,6 +15,7 @@ add_executable(bz_tests
     ${PROJECT_SOURCE_DIR}/src/app/sketch/DimensionLayout.cpp
     ${PROJECT_SOURCE_DIR}/src/app/Settings.cpp
     ${PROJECT_SOURCE_DIR}/src/app/mobile/Gestures.cpp
+    ${PROJECT_SOURCE_DIR}/src/app/mobile/TouchText.cpp
     ${PROJECT_SOURCE_DIR}/src/app/features/ExtrudeDirection.cpp
     assembly/AssemblyFileTests.cpp
     assembly/InventorConstraintsTests.cpp

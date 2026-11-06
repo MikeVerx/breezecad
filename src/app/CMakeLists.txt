@@ -96,6 +96,7 @@ set(BZ_APP_SOURCES
     mobile/MobileLayout.cpp
     mobile/MobileRibbon.cpp
     mobile/Numpad.cpp
+    mobile/TouchText.cpp
     mobile/PhoneHome.cpp
     mobile/PhoneLibrary.cpp
     mobile/TouchInput.cpp)

@@ -47,12 +47,20 @@ std::vector<ObjectId> Sources(Session& s, const Json& args) {
 const std::vector<std::string> kOperations = {"new_body", "join", "cut", "intersect"};
 
 Json Hole(AppContext& app, const Json& args) {
-    Session&                s    = ActivePart(app);
-    const kernel::FaceInfo& face = FaceArg(s, Required(args, "face"), "face");
-    if (face.kind != doc::SurfaceKind::Plane) Fail("Отверстие ставится на плоскую грань");
-    auto f  = std::make_unique<doc::HoleFeature>();
-    f->face = face.ref;
-    const Frame frame = doc::PlaneFrame(face.ref);
+    Session& s = ActivePart(app);
+    auto     f = std::make_unique<doc::HoleFeature>();
+    // «По эскизу»: the centres of the sketch's circles; the face is found by the rebuild.
+    if (Has(args, "sketch")) {
+        const ObjectId sketch = Id(args, "sketch");
+        if (!s.doc.FindAs<doc::SketchFeature>(sketch)) Fail("«sketch» — не эскиз этой детали");
+        f->sketch = sketch;
+    }
+    if (!f->sketch || Has(args, "face")) {
+        const kernel::FaceInfo& face = FaceArg(s, Required(args, "face"), "face");
+        if (face.kind != doc::SurfaceKind::Plane) Fail("Отверстие ставится на плоскую грань");
+        f->face = face.ref;
+    }
+    const Frame frame = doc::PlaneFrame(f->face);
     for (const Json& c : args.value("centers", Json::array())) {
         const Vec3 p = Point3(c, "centers");
         if (std::abs((p - frame.origin).Dot(frame.normal)) > 0.5) Fail("Центр отверстия не лежит на выбранной грани (проверьте z/нормаль)");
@@ -83,7 +91,7 @@ Json Hole(AppContext& app, const Json& args) {
         f->centres.push_back(frame.ToLocal(point + dir * ((frame.origin - point).Dot(frame.normal) / dir.Dot(frame.normal))));
         f->concentric.push_back(axis);
     }
-    if (f->centres.empty()) Fail("Нужен хотя бы один центр: «centers» (точки на грани) или «coaxial» (кромка или цилиндр)");
+    if (f->centres.empty() && !f->sketch) Fail("Нужен хотя бы один центр: «centers» (точки на грани) или «coaxial» (кромка или цилиндр)");
     static const std::vector<std::string> kTypes = {"simple", "counterbore", "countersink"};
     f->type       = static_cast<doc::HoleType>(Choice(args, "type", kTypes, 0));
     f->throughAll = Flag(args, "through_all", !Has(args, "depth"));
@@ -240,7 +248,9 @@ void AddFeatureCommands(Commands& out) {
                    "Отверстия на плоской грани (номер из part.faces) с центрами в точках модели: простое, с цековкой "
                    "(counterbore) или зенковкой (countersink); насквозь или на глубину. Резьбу в отверстии — потом "
                    "feature.thread по его оси и диаметру. Под метчик M8 — диаметр 6.8.",
-                   OpSchema({{"face", IntegerArg("Плоская грань, на которой начинаются отверстия.")},
+                   OpSchema({{"face", IntegerArg("Плоская грань, на которой начинаются отверстия (не нужна при sketch).")},
+                             {"sketch", IntegerArg("Или эскиз: отверстия в центрах его окружностей (не вспомогательных), "
+                                                   "на грани тела в плоскости эскиза; следуют за эскизом.")},
                              {"centers", {{"type", "array"}, {"items", Point3Arg("Центр.")}, {"description", "Центры на этой грани."}}},
                              {"coaxial",
                               {{"type", "array"},
@@ -255,7 +265,7 @@ void AddFeatureCommands(Commands& out) {
                              {"head_diameter", ExpressionArg("Цековка: диаметр.")},
                              {"head_depth", ExpressionArg("Цековка: глубина.")},
                              {"sink_diameter", ExpressionArg("Зенковка: диаметр на поверхности (конус 90°).")}},
-                            {"face", "diameter"}),
+                            {"diameter"}),
                    true, &Hole});
     out.push_back({"feature.fillet", "Сопряжение (скругление) рёбер радиусом. Рёбра — номера из part.edges.",
                    OpSchema({{"edges", IndexListArg("Номера рёбер.")}, {"radius", ExpressionArg("Радиус, мм.")}}, {"edges", "radius"}), true,
