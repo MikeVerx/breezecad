@@ -248,8 +248,8 @@ void DrawSnapGuides(ui::Ui& ui, ImDrawList* dl, const SketchView& view, const Sn
     // Polar tracking: a dashed ray along the angle held, past the cursor.
     if (snap.polarAngle && snap.polarFrom) {
         const double a = *snap.polarAngle * 3.14159265358979323846 / 180.0;
-        const Vec2   far = *snap.polarFrom + Vec2{std::cos(a), std::sin(a)} * ((snap.pos - *snap.polarFrom).Length() + view.MmPerPixel() * 400.0);
-        DrawSketchSegment(ui, dl, view, *snap.polarFrom, far, guide, 1.0f, true);
+        const Vec2   tip = *snap.polarFrom + Vec2{std::cos(a), std::sin(a)} * ((snap.pos - *snap.polarFrom).Length() + view.MmPerPixel() * 400.0);
+        DrawSketchSegment(ui, dl, view, *snap.polarFrom, tip, guide, 1.0f, true);
     }
     if (snap.alignedX) DrawSketchSegment(ui, dl, view, *snap.alignedX, snap.pos, guide, 1.0f, true);
     if (snap.alignedY) DrawSketchSegment(ui, dl, view, *snap.alignedY, snap.pos, guide, 1.0f, true);
