@@ -151,7 +151,7 @@ void RegisterActions(AppContext& app) {
            [&app] { app.shell.showMassProperties = true; }});
     a.Add({"app.settings", N_("Настройки"), "ui-sliders", 0, N_("Масштаб интерфейса, оформление, сочетания клавиш"), {},
            [&app] { app.shell.showSettings = true; }});
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     {
         // The touch settings, found by search: what people call them.
         Action touch{"app.settingsTouch", N_("Настройки сенсора"), "ui-sliders", 0,

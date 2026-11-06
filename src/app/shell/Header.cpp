@@ -70,7 +70,7 @@ void MainMenu(AppContext& app) {
         if (const Session* t = app.workspace.ActiveTab(); t && t->assembly) MenuAction(app, "file.exportProject");
         ImGui::EndMenu();
     }
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // The phone: files go to and come from the projects folder; "share"
     // hands a document or an export to another app (a slicer, a messenger).
     mobile::PhoneFileMenu(app);

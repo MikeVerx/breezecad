@@ -155,7 +155,7 @@ void Watch() {
         }
         if (stalled < g.seconds || now < quietUntil || now - pausedAt < stalled) continue;
         WriteHangReport(stalled);
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
         // No window of ours here: the watchdog process (":crash") sees the
         // beat stop and offers "wait / close and send a report" (ADR-0004).
         log::Warn("Hang: no response for {:.0f} s (last action: {}); report written", stalled, mon::LastAction());
@@ -219,7 +219,7 @@ const char* ReasonLine() { return gReason; }
 
 bool ShowCrashWindow() {
     if (gShown.exchange(true) || !gProgram[0] || !gReportPath[0]) return false;
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     return false;   // the watchdog process shows the error screen (resources/android/java, Watchdog)
 #elif defined(_WIN32)
     STARTUPINFOW si{};

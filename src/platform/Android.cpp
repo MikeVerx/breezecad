@@ -21,7 +21,9 @@
 
 namespace fs = std::filesystem;
 
-namespace bz::platform::android {
+// platform/Mobile.h on Android; the Android-only calls (platform/Android.h)
+// follow at the end, in bz::platform::android.
+namespace bz::platform::mobile {
 namespace {
 
 android_app* gApp = nullptr;
@@ -157,8 +159,6 @@ fs::path LocalFor(const std::string& uri, const std::string& name) {
 
 } // namespace
 
-void SetApp(android_app* app) { gApp = app; }
-android_app* App() { return gApp; }
 
 fs::path DataDir() {
     return gApp && gApp->activity->internalDataPath ? fs::path(gApp->activity->internalDataPath) : fs::path("/data/local/tmp/breezecad");
@@ -544,6 +544,16 @@ std::string PackageVersion() {
     return version;
 }
 
+} // namespace bz::platform::mobile
+
+namespace bz::platform::android {
+
+using mobile::Activity;
+using mobile::Env;
+
+void SetApp(android_app* app) { mobile::gApp = app; }
+android_app* App() { return mobile::gApp; }
+
 int UnicodeChar(int deviceId, int keyCode, int metaState) {
     JNIEnv* env = Env();
     if (!env || !Activity()) return 0;
@@ -566,7 +576,7 @@ bool VolumeKeysTaken() { return gVolumeTaken; }
 
 // --- Called by Java (BreezeActivity's native methods), on its UI thread -----------
 
-using namespace bz::platform::android;
+using namespace bz::platform::mobile;
 
 extern "C" JNIEXPORT void JNICALL Java_io_github_mikeverx_breezecad_BreezeActivity_nativeScreen(
     JNIEnv* env, jclass, jfloatArray bars, jfloatArray gestures, jfloatArray cutout, jfloat cutoutFrom, jfloat cutoutTo,

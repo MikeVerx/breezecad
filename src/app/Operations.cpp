@@ -188,7 +188,7 @@ void OpenProject(AppContext& app, const std::filesystem::path& file) {
     if (!app.settings.lastSaveFolder.empty() && std::filesystem::is_directory(app.settings.lastSaveFolder, ec)) start = app.settings.lastSaveFolder;
     std::filesystem::path folder;
     if (const auto chosen = platform::ShowFolderDialog(Trf("Куда распаковать проект «{}»", m->name), start)) folder = *chosen;
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     else folder = start;   // no folder window on the phone: the projects folder
 #else
     else return;
@@ -215,7 +215,7 @@ void SaveDocument(AppContext& app, bool saveAs) {
     app.ops.Commit(app, *s);
     // A part edited in place is saved with its assembly (into its file beside it).
     if (s->host) s = s->host;
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // The phone: the first save (and «Сохранить как») asks the name and shows the folder.
     if (s->path.empty() || saveAs) {
         mobile::AskSaveName(app, *s, false);

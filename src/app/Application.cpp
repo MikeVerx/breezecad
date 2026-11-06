@@ -34,7 +34,9 @@
 #include <miniz.h>
 #if defined(__ANDROID__)
 #include "app/android/AndroidInput.h"
-#include "platform/Android.h"
+#endif
+#if defined(BZ_MOBILE)
+#include "platform/Mobile.h"
 #else
 #include <GLFW/glfw3.h>
 #include <imgui_impl_glfw.h>
@@ -51,7 +53,7 @@
 #include <iterator>
 #include <thread>
 
-#if !defined(__ANDROID__)
+#if !defined(BZ_MOBILE)
 // Defined (non-static) in imgui_impl_glfw.cpp but not declared in its header.
 ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(int keycode, int scancode);
 #endif
@@ -92,7 +94,7 @@ void FaultTest(std::string_view kind) {
 
 constexpr GLenum kGlFramebufferSrgb = 0x8DB9;   // GL_FRAMEBUFFER_SRGB (OpenGL 3.0, absent from GL 1.1 headers)
 
-#if !defined(__ANDROID__)
+#if !defined(BZ_MOBILE)
 /// Input callbacks installed before ImGui's, which chain to them.
 Application::InputTap* TapOf(GLFWwindow* window) {
     return static_cast<Application::InputTap*>(glfwGetWindowUserPointer(window));
@@ -141,7 +143,7 @@ Application::~Application() {
     modules::SetCommandHandler({});
     if (myUi) {
         ImGui_ImplOpenGL3_Shutdown();
-#if !defined(__ANDROID__)
+#if !defined(BZ_MOBILE)
         ImGui_ImplGlfw_Shutdown();
 #endif
         ImGui::DestroyContext();
@@ -190,8 +192,8 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     beta::WriteSystemInfo(myWindow, mySettings.language.empty() ? std::string("system") : mySettings.language);
     crash::NoteGraphics(myWindow.OpenGLRenderer() + ", OpenGL " + myWindow.OpenGLVersion());
 
-#if defined(__ANDROID__)
-    StartAndroid();
+#if defined(BZ_MOBILE)
+    StartMobile();
 #else
     glfwSetWindowUserPointer(myWindow.Handle(), &myInput);
     glfwSetCursorPosCallback(myWindow.Handle(), [](GLFWwindow* w, double, double) { OnAnyInput(w, Wake::Cursor); });
@@ -235,11 +237,11 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     // (BZ_IMGUI_IDS=1 turns it on anywhere).
     io.ConfigDebugHighlightIdConflicts = std::string_view(Branch()).starts_with("preview/") || std::getenv("BZ_IMGUI_IDS") != nullptr;
 #endif
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // No platform backend: input comes through mobile::TouchInput and
     // android/AndroidInput; the size and time are set every frame.
     io.BackendPlatformName = "breezecad-android";
-    InstallAndroidClipboard();
+    InstallMobileClipboard();
     ImGui_ImplOpenGL3_Init("#version 300 es");
 #else
     ImGui_ImplGlfw_InitForOpenGL(myWindow.Handle(), true);
@@ -302,7 +304,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
         for (std::size_t i = 1; i < crashes.size(); ++i) beta::Dismiss(crashes[i].dir);   // only the last one is asked about
         myShell.betaReport = {true, true, crashes.front().dir, crashes.front().started, {}, {}};
     }
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     CheckLastExit();
     RunTestCommands();
 #endif
@@ -364,7 +366,7 @@ int Application::Run() {
     // rebuild runs on its own thread; this is the window itself stuck).
     // BZ_HANG_SECONDS changes it, to try the window out.
     const char* hangSetting = std::getenv("BZ_HANG_SECONDS");
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // Sooner than the watchdog's notice (10 s): its error screen finds the report.
     crash::StartHangGuard(8.0);
 #else
@@ -384,8 +386,8 @@ int Application::Run() {
             platform::Window::WaitEvents(wait);
         }
         const double now = platform::Window::Time();
-#if defined(__ANDROID__)
-        if (!AndroidBetweenFrames(now)) break;   // the system is closing the app: the autosave keeps the work
+#if defined(BZ_MOBILE)
+        if (!MobileBetweenFrames(now)) break;   // the system is closing the app: the autosave keeps the work
 #endif
         platform::SetSmoothScrollIsTouchpad(mySettings.touch.smoothIsTouchpad);
         myContext->touch = platform::TakeTouchEvents();
@@ -604,7 +606,7 @@ void Application::UpdateTitle() {
 }
 
 float Application::ChooseScale() const {
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // Coordinates are dp already. The phone layout is sized for the finger
     // at 1.0; a tablet's desktop layout a little bigger than a monitor's.
     const float chosen = mySettings.uiScale > 0 ? static_cast<float>(mySettings.uiScale) : 0.0f;
@@ -690,7 +692,7 @@ void Application::Frame() {
     if (dt > 0 && dt < 1.0) myFps = myFps * 0.9f + static_cast<float>(1.0 / dt) * 0.1f;
 
     ImGui_ImplOpenGL3_NewFrame();
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     {
         ImGuiIO& io = ImGui::GetIO();
         int w = 0, h = 0, fw = 0, fh = 0;
@@ -777,7 +779,7 @@ void Application::Frame() {
     int fbW = 0, fbH = 0;
     myWindow.FramebufferSize(fbW, fbH);
     glViewport(0, 0, fbW, fbH);
-#if !defined(__ANDROID__)
+#if !defined(BZ_MOBILE)
     // UI colours are sRGB values meant to be written as they are. OCCT
     // switches sRGB writes on for its own rendering and does not switch them
     // off, which would make the whole interface look washed out.

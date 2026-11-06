@@ -1,8 +1,8 @@
 // Windows on top of the work: "save changes?", "МЦХ" and "about". All close
 // with Esc.
 
-#if defined(__ANDROID__)
-#include "platform/Android.h"
+#if defined(BZ_MOBILE)
+#include "platform/Mobile.h"
 #endif
 #include "app/BetaTesting.h"
 #include "app/Format.h"
@@ -48,7 +48,7 @@ bool BeginDialog(ui::Ui& ui, const char* id, bool& open, float width) {
     if (open && !ImGui::IsPopupOpen(id)) ImGui::OpenPopup(id);
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowPos({display.x / 2, display.y / 2}, ImGuiCond_Always, {0.5f, 0.5f});
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // A phone held sideways is ~400 dp tall: the dialog fits the screen and
     // scrolls (a swipe) instead of running off it.
     width = std::min(width, display.x - ui.S(24));
@@ -1246,7 +1246,7 @@ void DrawKeyboardSettings(AppContext& app, float width) {
     }
 }
 
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
 /// "Управление" → "Сенсор" (Android): the phone layout and touch (ADR-0004,
 /// "Настройки раскладки"), with "Сбросить".
 void DrawTouchScreenSettings(AppContext& app, float width) {
@@ -1481,7 +1481,7 @@ void DrawAppearanceSettings(AppContext& app, float width) {
     if (ui::LinkButton(ui, "##open-backgrounds", Tr("Выбрать на вкладке «Вид» → «Фон»…"))) app.shell.backgroundMenu = true;
 }
 
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
 // --- Settings on the phone, as in Minecraft (docs/dev/mockups/4, the author 17.10.2026) ---
 // Full screen next to the hotbar: big tabs on the left, the groups as pills
 // on top, the options as a grid of two columns of wide cells. A slider is the
@@ -1855,7 +1855,7 @@ void Draw(AppContext& app) {
 
 void DrawSettings(AppContext& app) {
     ui::Ui& ui = app.ui;
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     if (app.shell.mobile.phone) {   // full screen, as in Minecraft
         if (app.shell.showSettings) phone::Draw(app);
         return;
@@ -1875,7 +1875,7 @@ void DrawSettings(AppContext& app) {
     }
     ImGui::Dummy({0, ui.S(4)});
     if (app.shell.settingsTab == 1) {
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
         // A touch screen instead of a touchpad (ADR-0004): layout, hand, sizes, cursor.
         static constexpr std::array<const char*, 4> subs{N_("Клавиатура"), N_("Мышь"), N_("Сенсор"), N_("Жесты")};
 #else
@@ -1893,7 +1893,7 @@ void DrawSettings(AppContext& app) {
     switch (app.shell.settingsTab) {
         case 1:
             if (app.shell.settingsSub == 1) DrawMouseSettings(app, width);
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
             else if (app.shell.settingsSub == 2) DrawTouchScreenSettings(app, width);
             else if (app.shell.settingsSub == 3) DrawGestureSettings(app, width);
 #else
@@ -1950,10 +1950,10 @@ void DrawBetaReport(AppContext& app) {
         paragraph(Tr("Отправьте этот файл в чат тестеров. Кнопка ниже откроет папку, где он лежит."), c.textSecondary);
         ImGui::Dummy({0, ui.S(8)});
         const float bw = (width - ui.S(8)) / 2;
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
         // No file manager for the app's own folder: the system's "share" sends the zip (ADR-0004).
         if (ui::PrimaryButton(ui, "##beta-show", Tr("Поделиться отчётом"), nullptr, {bw, ui.S(36)}))
-            platform::android::Share(r.packed, "application/zip", "BreezeCAD");
+            platform::mobile::Share(r.packed, "application/zip", "BreezeCAD");
 #else
         if (ui::PrimaryButton(ui, "##beta-show", Tr("Открыть папку с отчётом"), nullptr, {bw, ui.S(36)}))
             if (!platform::OpenFolder(r.packed.parent_path())) app.notes.Error(Tr("Не удалось открыть папку"));
@@ -2026,7 +2026,7 @@ void DrawDialogs(AppContext& app) {
             ImGui::Dummy({0, ui.S(8)});
             const float bw = (ImGui::GetContentRegionAvail().x - ui.S(16)) / 3;
             if (ui::PrimaryButton(ui, "##save", Tr("Сохранить"), nullptr, {bw, ui.S(36)})) {
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
                 if (s->path.empty()) {   // the phone: its name first; the tab closes once saved
                     mobile::AskSaveName(app, *s, true);
                     finish(false);
@@ -2075,17 +2075,17 @@ void DrawDialogs(AppContext& app) {
         // Exactly which build: the commit names it on GitHub.
         std::string build = *Commit() ? Trf("Сборка {} {} от {}", Branch(), Commit(), BuildDate())
                                       : Trf("Сборка от {}", BuildDate());
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
         // The APK's own version and number (the number grows with every build;
         // what a store and "install over" compare).
-        if (const std::string package = platform::android::PackageVersion(); !package.empty()) {
+        if (const std::string package = platform::mobile::PackageVersion(); !package.empty()) {
             const auto tab = package.find('\t');
             build = Trf("Android {}, версия {}", package.substr(0, tab), tab == std::string::npos ? "" : package.substr(tab + 1)) +
                     "\n" + build;
         }
 #endif
         dl->AddText(ui.fonts.mono, ui.S(11), {p.x + ui.S(63), p.y + ui.S(52)}, ui::ToU32(c.textMuted), build.c_str());
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
         ImGui::Dummy({0, ui.S(90)});
 #else
         ImGui::Dummy({0, ui.S(74)});
@@ -2099,7 +2099,7 @@ void DrawDialogs(AppContext& app) {
             ImGui::Dummy({0, ui.S(4)});
             ImGui::TextUnformatted(Tr("Использует: Open CASCADE Technology (LGPL 2.1), Dear ImGui, GLFW, lunasvg, "
                                    "nlohmann/json, miniz, portable-file-dialogs (MIT/zlib), stb_image (public domain), шрифты IBM Plex (OFL)."));
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
             ImGui::Dummy({0, ui.S(4)});
             if (ui::LinkButton(ui, "##privacy", Tr("Политика конфиденциальности")))
                 platform::OpenUrl("https://mikeverx.github.io/breezecad/privacy.html");

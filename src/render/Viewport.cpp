@@ -63,7 +63,7 @@
 #include <gp_Pln.hxx>
 #include <gp_Trsf.hxx>
 
-#if defined(__ANDROID__) || defined(BZ_IOS)
+#if defined(BZ_MOBILE)
 #include <chrono>
 #else
 #include <GLFW/glfw3.h>   // glfwGetTime for camera animation
@@ -678,10 +678,10 @@ struct Viewport::Impl {
 
 namespace {
 /// The clock StepAnimation's `now` comes from: glfwGetTime on the desktop;
-/// on Android and iOS (no GLFW) a steady clock from its epoch — platform::Window::Time
+/// on phones and tablets (no GLFW) a steady clock from its epoch — platform::Window::Time
 /// there is the same (Application passes it to StepAnimation).
 double AnimationClock() {
-#if defined(__ANDROID__) || defined(BZ_IOS)
+#if defined(BZ_MOBILE)
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 #else
     return glfwGetTime();

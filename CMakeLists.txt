@@ -43,6 +43,12 @@ endif()
 if(ANDROID)
     option(BZ_BUILD_ANDROID_APP "Build the Android app library (libbreezecad.so)" ON)
 endif()
+# Phones and tablets, Android and iOS: BZ_MOBILE marks the code they share
+# (the touch layout, no GLFW, files through platform/Mobile.h); __ANDROID__
+# and BZ_IOS what only one of them has.
+if(ANDROID OR IOS)
+    add_compile_definitions(BZ_MOBILE)
+endif()
 # iOS and iPadOS (docs/dev/IOS-PORT.md): the core with its unit tests (run on
 # the simulator) and the app (src/ios) packed into BreezeCAD.app / .ipa by
 # scripts/ios/package-app.sh; the desktop app (BZ_BUILD_APP) is off there.

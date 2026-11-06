@@ -30,7 +30,7 @@ namespace bz::app {
 
 namespace droid = platform::android;   // app::android is the input (android/AndroidInput.h)
 
-void Application::StartAndroid() {
+void Application::StartMobile() {
     myShell.mobile.touchScreen = true;
     myShell.mobile.phone = mobile::WantsPhoneLayout(mySettings, myWindow);
     myStartedAt = platform::Window::Time();
@@ -71,7 +71,7 @@ void Application::StartAndroid() {
     });
 }
 
-void Application::InstallAndroidClipboard() {
+void Application::InstallMobileClipboard() {
     ImGuiPlatformIO& pio = ImGui::GetPlatformIO();
     pio.Platform_SetClipboardTextFn = [](ImGuiContext*, const char* text) { droid::SetClipboard(text ? text : ""); };
     pio.Platform_GetClipboardTextFn = [](ImGuiContext*) -> const char* {
@@ -81,7 +81,7 @@ void Application::InstallAndroidClipboard() {
     };
 }
 
-bool Application::AndroidBetweenFrames(double now) {
+bool Application::MobileBetweenFrames(double now) {
     droid::Heartbeat();
     droid::SetVolumeKeysTaken(mySettings.mobile.volumeZoom);
 
@@ -339,7 +339,7 @@ void Application::RunTestCommands() {
                 myContext->sketch.MakeHoldTest(*s);
                 myActions.Run("view.fit");
                 myShell.mobile.cursorInSketch = true;
-                myTestPlaceCursor = true;   // once the view's place is known (AndroidBetweenFrames)
+                myTestPlaceCursor = true;   // once the view's place is known (MobileBetweenFrames)
             }
         } else if (c == "setup") {
             mobile::StartSetup(*myContext);
