@@ -11,6 +11,8 @@ target_link_libraries(bz_ui
     PRIVATE lunasvg::lunasvg)
 if(ANDROID)
     target_link_libraries(bz_ui PRIVATE GLESv3)
+elseif(IOS)
+    target_link_libraries(bz_ui PRIVATE "-framework OpenGLES")
 else()
     target_link_libraries(bz_ui PRIVATE glfw OpenGL::GL)
 endif()

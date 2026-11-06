@@ -6,7 +6,7 @@ if(ANDROID)
     target_include_directories(bz_android_glue SYSTEM PUBLIC ${BZ_GLUE_DIR})
     add_library(bz_platform STATIC
         Android.cpp
-        FileDialogs_android.cpp
+        FileDialogs_mobile.cpp
         OpenFiles.cpp
         Launch.cpp
         Paths.cpp
@@ -14,9 +14,33 @@ if(ANDROID)
         ProcessInfo.cpp
         SystemInfo.cpp
         SystemTheme.cpp
-        Touchpad_android.cpp
+        Touchpad_mobile.cpp
         Window_android.cpp)
     target_link_libraries(bz_platform PUBLIC bz::core bz_android_glue PRIVATE android EGL GLESv3 log)
+    bz_set_warnings(bz_platform)
+    add_library(bz::platform ALIAS bz_platform)
+    return()
+endif()
+
+if(IOS)
+    # iOS (docs/dev/IOS-PORT.md): the window is the app's view with EAGL;
+    # the program runs on the main thread and pumps its run loop.
+    add_library(bz_platform STATIC
+        FileDialogs_mobile.cpp
+        Launch.cpp
+        Mobile_ios.mm
+        OpenFiles.cpp
+        Paths.cpp
+        Process.cpp
+        ProcessInfo.cpp
+        SystemInfo.cpp
+        SystemTheme.cpp
+        Touchpad_mobile.cpp
+        Window_ios.mm)
+    set_source_files_properties(Mobile_ios.mm Window_ios.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_link_libraries(bz_platform PUBLIC bz::core
+        PRIVATE "-framework Foundation" "-framework UIKit" "-framework QuartzCore" "-framework OpenGLES"
+                "-framework GameController" "-framework UniformTypeIdentifiers")
     bz_set_warnings(bz_platform)
     add_library(bz::platform ALIAS bz_platform)
     return()

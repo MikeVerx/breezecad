@@ -110,7 +110,7 @@ jobs:
           bash scripts/ios/simulator.sh smoke app/BreezeCAD.app shots > smoke.log 2>&1
           status=$?
           cat smoke.log
-          echo "::notice title=iOS app in the simulator::$(grep -E '^(simulator|app alive)|built in|OpenGL ES' smoke.log | tr '\n' ' ')"
+          echo "::notice title=iOS app in the simulator::$(grep -E '^(simulator|step)|Window:' smoke.log | tr '\n' ' ')"
           exit $status
       - name: Report failures
         if: failure()
@@ -150,7 +150,7 @@ jobs:
         run: |
           notes="Сборка для iPhone и iPad: ветка ${GITHUB_REF_NAME}, коммит ${GITHUB_SHA::7}, версия ${{ github.run_number }}, $(date -u '+%Y-%m-%d %H:%M') UTC.
 
-          Пока это шаг 2 порта: 3D-вид детали-примера, вращение одним пальцем, сдвиг и щипок двумя, двойное касание — показать всё. Интерфейса ещё нет.
+          Полная программа с мобильной раскладкой, как на Android (шаг 3 порта). Документы — в папке приложения: в «Файлах» это «На iPad → BreezeCAD».
 
           BreezeCAD-ios.ipa — iOS / iPadOS 16.3 и новее. Подписана временной подписью: перед установкой её переподписывают своим Apple ID.
           Установка с Windows: iTunes + Sideloadly (sideloadly.io) → подключить iPhone/iPad кабелем → перетащить .ipa → ввести Apple ID → Start.
@@ -160,6 +160,10 @@ jobs:
             gh release create ios-build --prerelease --target "$GITHUB_SHA" --title "BreezeCAD для iPhone и iPad — свежая сборка" --notes "$notes"
           fi
           files=(release/BreezeCAD-ios.ipa)
-          [ -f sim/shots/simulator-ios.png ] && files+=(sim/shots/simulator-ios.png)
+          for shot in sim/shots/simulator-ios*.png; do [ -f "$shot" ] && files+=("$shot"); done
+          # Pictures of an older build would mislead.
+          for old in $(gh api "repos/$GH_REPO/releases/tags/ios-build" --jq '.assets[].name' 2>/dev/null | grep '^simulator-ios'); do
+            gh release delete-asset ios-build "$old" -y || true
+          done
           gh release upload ios-build "${files[@]}" --clobber
           gh release edit ios-build --notes "$notes"

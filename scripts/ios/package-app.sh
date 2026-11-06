@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Packs the iOS build into BreezeCAD.app, and for devices into an .ipa
 # (Payload/BreezeCAD.app zipped). No Xcode project: the executable from
-# CMake, Info.plist from resources/ios, the example part and the icon.
+# CMake, Info.plist from resources/ios, the assets (fonts, icons, languages,
+# libraries; read in place: platform::AssetsDir), the example part and the icon.
 #
 # Usage: package-app.sh <build dir> <sdk> <out dir> [build number]
 #   sdk  iphoneos: BreezeCAD.app + BreezeCAD-ios.ipa, ad-hoc signed — to be
@@ -26,13 +27,15 @@ esac
 version=$(sed -n 's/^ *VERSION \([0-9.]*\)$/\1/p' "$SRC/CMakeLists.txt" | head -1)
 
 APP="$OUT/BreezeCAD.app"
-rm -rf "$APP" && mkdir -p "$APP/examples"
+rm -rf "$APP" && mkdir -p "$APP"
 cp "$BUILD/ios/breezecad" "$APP/breezecad"
 sed -e "s/@VERSION@/$version/" -e "s/@BUILD@/$NUMBER/" -e "s/@PLATFORM@/$platform/" -e "s/@MIN_OS@/$MIN_OS/" \
     "$SRC/resources/ios/Info.plist.in" > "$APP/Info.plist"
 plutil -lint "$APP/Info.plist" >/dev/null
 printf 'APPL????' > "$APP/PkgInfo"
-cp "$SRC/tests/data/кронштейн.bzc" "$APP/examples/bracket.bzc"
+cp -R "$SRC/assets" "$APP/assets"
+mkdir -p "$APP/assets/examples"
+cp "$SRC/tests/data/кронштейн.bzc" "$APP/assets/examples/bracket.bzc"   # as in the APK (package-apk.sh)
 
 # The icon from the macOS one (assets/brand/breezecad.icns): iPhone 60 pt
 # @2x/@3x, iPad 76 and 83.5 pt @2x.

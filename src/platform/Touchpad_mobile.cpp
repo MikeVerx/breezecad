@@ -1,4 +1,4 @@
-// Touchpad gestures on Android: none from the system here — touches come
+// Touchpad gestures on phones and tablets: none from the system here — touches come
 // through the window as pointers (app/mobile). The queue stays, so the app's
 // code is the same everywhere.
 #include "platform/Touchpad.h"

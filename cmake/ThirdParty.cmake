@@ -30,9 +30,9 @@ add_library(bz_doctest INTERFACE)
 target_include_directories(bz_doctest SYSTEM INTERFACE ${BZ_THIRD_PARTY}/doctest)
 add_library(bz::doctest ALIAS bz_doctest)
 
-if(ANDROID AND BZ_BUILD_ANDROID_APP)
-    # Android: Dear ImGui on OpenGL ES 3; input comes from the window through
-    # app/mobile (touch, stylus, keys), so no ImGui platform backend.
+if((ANDROID AND BZ_BUILD_ANDROID_APP) OR (IOS AND BZ_BUILD_IOS_APP))
+    # Android and iOS: Dear ImGui on OpenGL ES 3; input comes from the window
+    # through app/mobile (touch, stylus, keys), so no ImGui platform backend.
     set(IMGUI_DIR ${BZ_THIRD_PARTY}/imgui)
     add_library(bz_imgui STATIC
         ${IMGUI_DIR}/imgui.cpp
@@ -44,7 +44,11 @@ if(ANDROID AND BZ_BUILD_ANDROID_APP)
         ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp)
     target_include_directories(bz_imgui SYSTEM PUBLIC ${IMGUI_DIR} ${IMGUI_DIR}/backends ${IMGUI_DIR}/misc/cpp)
     target_compile_definitions(bz_imgui PUBLIC IMGUI_DISABLE_OBSOLETE_FUNCTIONS IMGUI_IMPL_OPENGL_ES3)
-    target_link_libraries(bz_imgui PUBLIC GLESv3 EGL)
+    if(ANDROID)
+        target_link_libraries(bz_imgui PUBLIC GLESv3 EGL)
+    else()
+        target_link_libraries(bz_imgui PUBLIC "-framework OpenGLES")
+    endif()
     add_library(bz::imgui ALIAS bz_imgui)
 
     set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})

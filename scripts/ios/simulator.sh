@@ -5,9 +5,10 @@
 #   simulator.sh tests <build dir> [doctest args]   bz_tests in the simulator
 #                                                   (it sees the Mac's files,
 #                                                   so BZ_SOURCE_DIR works as is)
-#   simulator.sh smoke <BreezeCAD.app> <out dir>    installs and starts the app,
-#                                                   waits for the part, takes a
-#                                                   screenshot, checks it lives
+#   simulator.sh smoke <BreezeCAD.app> <out dir>    installs the app and starts
+#                                                   it three times (home page,
+#                                                   the example, a sketch): log,
+#                                                   screenshot, still alive
 set -euo pipefail
 
 BUNDLE_ID=io.github.mikeverx.breezecad
@@ -54,20 +55,33 @@ case "${1:-}" in
         boot
         xcrun simctl uninstall "$UDID" "$BUNDLE_ID" 2>/dev/null || true
         xcrun simctl install "$UDID" "$APP"
-        xcrun simctl launch --terminate-running-process --stdout="$OUT/stdout.log" --stderr="$OUT/app.log" "$UDID" "$BUNDLE_ID"
-        # The part is built in a few seconds on a Mac; the first start of a
-        # simulator is slower.
-        for _ in $(seq 1 90); do
-            grep -q "built in\|did not start\|cannot open\|refused" "$OUT/app.log" 2>/dev/null && break
-            sleep 1
+        ok=yes
+        # Each start: test commands (Application_mobile.cpp, RunTestCommands;
+        # "home" — the home page as it opens, no first-start setup over it),
+        # the log, a screenshot, and whether the app still lives.
+        for run in home:home example:example example,sketch:sketch; do
+            commands=${run%%:*}
+            shot=${run##*:}
+            log="$OUT/app-$shot.log"
+            SIMCTL_CHILD_BZ_TEST_COMMANDS="$commands" \
+                xcrun simctl launch --terminate-running-process --stdout="$OUT/stdout-$shot.log" --stderr="$log" "$UDID" "$BUNDLE_ID" >/dev/null
+            for _ in $(seq 1 60); do
+                grep -q "test commands\|Crash:\|did not start" "$log" 2>/dev/null && break
+                sleep 1
+            done
+            [ "$commands" = home ] || for _ in $(seq 1 30); do
+                grep -q "Rebuild:\|built in" "$log" 2>/dev/null && break
+                sleep 1
+            done
+            sleep 4   # a few frames after
+            xcrun simctl io "$UDID" screenshot "$OUT/simulator-ios-$shot.png" >/dev/null 2>&1 || true
+            alive=no
+            xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE_ID" && alive=yes
+            echo "step $shot: app alive $alive, $(grep -c ERROR "$log" 2>/dev/null || echo 0) errors"
+            grep -E "ERROR|WARN|Window:|Viewport|test commands|Crash" "$log" 2>/dev/null | head -20
+            [ "$alive" = yes ] && ! grep -q "Crash:\|did not start" "$log" || ok=no
         done
-        sleep 3   # a few frames after the part arrived
-        xcrun simctl io "$UDID" screenshot "$OUT/simulator-ios.png" >/dev/null 2>&1 || true
-        cat "$OUT/app.log" 2>/dev/null || true
-        alive=no
-        xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE_ID" && alive=yes
-        echo "app alive: $alive"
-        grep -q "built in" "$OUT/app.log" && ! grep -q "did not start\|refused" "$OUT/app.log" && [ "$alive" = yes ]
+        [ "$ok" = yes ]
         ;;
     *)
         sed -n '2,10p' "$0" >&2

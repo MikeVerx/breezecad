@@ -77,6 +77,12 @@ void StopProcess(ProcessId id) {
 ProcessId CurrentProcessId() { return static_cast<ProcessId>(::getpid()); }
 
 bool StartProcess(const std::filesystem::path& program, const std::vector<std::string>& args, ProcessId* id) {
+#if defined(BZ_IOS)
+    // An app may not start programs on iOS (the crash and hang windows are
+    // the next start's screen there, as on Android).
+    (void)program, (void)args, (void)id;
+    return false;
+#endif
     // Everything execv needs, made before fork: after it only execv and _exit.
     const std::string path = program.string();
     std::vector<char*> argv;

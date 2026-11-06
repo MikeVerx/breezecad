@@ -122,6 +122,9 @@ private:
     /// file), the keyboard shown or hidden, the background. False when the
     /// system is closing the app.
     bool MobileBetweenFrames(double now);
+    /// The platform's part of the frame's input: the keyboard's text (and on
+    /// Android the volume keys). Application_android.cpp, Application_ios.mm.
+    void FeedSystemInput();
     void CheckLastExit();
     void RunTestCommands();
     /// Test command "saveback": a save reaches the document outside the app (smoke-apk.sh).

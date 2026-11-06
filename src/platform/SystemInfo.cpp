@@ -1,8 +1,8 @@
 #include "platform/SystemInfo.h"
 
-#if !defined(__ANDROID__)
+#if !defined(BZ_MOBILE)
 #include <GLFW/glfw3.h>
-#else
+#elif defined(__ANDROID__)
 #include <sys/system_properties.h>
 #endif
 
@@ -121,7 +121,11 @@ void Unix(std::vector<SystemFact>& out) {
     std::size_t size = sizeof text;
     std::string release;
     if (sysctlbyname("kern.osproductversion", text, &size, nullptr, 0) == 0) release = text;
+#if defined(BZ_IOS)
+    out.push_back({"os", std::format("iOS {} ({} {}, {})", release, u.sysname, u.release, u.machine)});
+#else
     out.push_back({"os", std::format("macOS {} ({} {})", release, u.sysname, u.release)});
+#endif
     size = sizeof text;
     if (sysctlbyname("machdep.cpu.brand_string", text, &size, nullptr, 0) == 0) out.push_back({"cpu", text});
     size = sizeof text;
@@ -172,7 +176,7 @@ std::vector<SystemFact> DescribeSystem(const std::filesystem::path& disk) {
     std::error_code ec;
     if (const auto space = std::filesystem::space(disk, ec); !ec)
         out.push_back({"disk.free", std::format("{} MB", space.available >> 20)});
-#if !defined(__ANDROID__)
+#if !defined(BZ_MOBILE)
     // Screens (GLFW is up by the time reports are written).
     int count = 0;
     if (GLFWmonitor** monitors = glfwGetMonitors(&count))

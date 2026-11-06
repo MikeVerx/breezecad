@@ -5,6 +5,8 @@
 
 #if defined(_WIN32)
 #include <windows.h>
+#elif defined(BZ_IOS)
+#include "platform/Ios.h"
 #elif defined(__APPLE__)
 #include <CoreFoundation/CoreFoundation.h>
 #elif defined(__ANDROID__)
@@ -23,6 +25,8 @@ bool SystemPrefersDark() {
                                         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
                                         L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &value, &size);
     return status == ERROR_SUCCESS && value == 0;
+#elif defined(BZ_IOS)
+    return ios::PrefersDark();
 #elif defined(__APPLE__)
     bool dark = false;
     if (CFStringRef style = static_cast<CFStringRef>(

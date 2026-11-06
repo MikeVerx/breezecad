@@ -23,6 +23,10 @@
     <key>UIStatusBarHidden</key>             <true/>
     <key>UIRequiresFullScreen</key>          <false/>
     <key>UIApplicationSupportsIndirectInputEvents</key> <true/>
+    <!-- The projects folder is the app's Documents: shown in the Files app
+         ("На iPad → BreezeCAD"), documents opened and saved in place. -->
+    <key>UIFileSharingEnabled</key>              <true/>
+    <key>LSSupportsOpeningDocumentsInPlace</key> <true/>
     <key>UISupportedInterfaceOrientations~iphone</key>
     <array>
         <string>UIInterfaceOrientationLandscapeLeft</string>

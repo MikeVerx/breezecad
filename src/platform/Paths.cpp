@@ -7,6 +7,9 @@
 #if defined(BZ_MOBILE)
 #include "platform/Mobile.h"
 #endif
+#if defined(BZ_IOS)
+#include "platform/Ios.h"
+#endif
 #if defined(_WIN32)
 #include <windows.h>
 #include <shlobj.h>
@@ -58,7 +61,9 @@ std::filesystem::path Ensure(const std::filesystem::path& dir) {
 } // namespace
 
 std::filesystem::path AssetsDir() {
-#if defined(BZ_MOBILE)
+#if defined(BZ_IOS)
+    return ios::BundleDir() / "assets";   // in BreezeCAD.app, read-only (scripts/ios/package-app.sh)
+#elif defined(BZ_MOBILE)
     return mobile::DataDir() / "assets";   // unpacked from the APK at start (mobile::UnpackAssets)
 #endif
     const std::filesystem::path exe = ExecutableDir();
