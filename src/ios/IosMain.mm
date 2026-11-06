@@ -26,6 +26,11 @@
 #include "kernel/Model.h"
 #include "render/Viewport.h"
 
+#include <Message.hxx>
+#include <Message_Messenger.hxx>
+#include <Message_Printer.hxx>
+#include <TCollection_AsciiString.hxx>
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -50,6 +55,19 @@ constexpr double kTapSeconds = 0.25, kDoubleTapSeconds = 0.35, kTapSlopPoints = 
 double Now() {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
+
+/// OCCT's own messages (shader errors, OpenGL warnings) into the app's log:
+/// stdout goes nowhere on a device.
+class OcctToLog : public Message_Printer {
+public:
+    OcctToLog() { SetTraceLevel(Message_Trace); }
+
+protected:
+    void send(const TCollection_AsciiString& text, const Message_Gravity gravity) const override {
+        if (gravity < Message_Trace) return;
+        bz::log::Info("OCCT: {}", text.ToCString());
+    }
+};
 
 fs::path ToPath(NSString* s) { return fs::path(s ? std::string([s UTF8String]) : std::string()); }
 
@@ -421,6 +439,8 @@ struct Part {
     bz::log::OpenFile(data / "logs" / "output.log");
     bz::log::Info("BreezeCAD for iOS: start, {} {}, data in {}", std::string(UIDevice.currentDevice.model.UTF8String),
               std::string(UIDevice.currentDevice.systemVersion.UTF8String), data.string());
+
+    Message::DefaultMessenger()->AddPrinter(new OcctToLog());
 
     auto* controller = [[BZViewController alloc] init];
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
