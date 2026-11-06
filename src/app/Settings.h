@@ -120,6 +120,7 @@ struct Settings {
     HotMenuSettings hotMenu;
     MobileSettings  mobile;                      ///< phone layout and touch screen
     std::vector<std::filesystem::path> recentFiles;   ///< most recent first
+    bool        recentAsList = false;            ///< the home page's recent files: a list instead of pictures
     /// Where the last document was saved with the save window: a new
     /// document is offered there (many parts of one project in a row).
     std::filesystem::path lastSaveFolder;
@@ -127,7 +128,7 @@ struct Settings {
     /// (Russian template, translated when shown).
     std::string loadProblem;
 
-    static constexpr std::size_t kMaxRecent = 12;
+    static constexpr std::size_t kMaxRecent = 24;   ///< four rows of pictures on a usual screen
 
     /// The largest side, in pixels, a picture on a face keeps at `textureQuality`.
     static int TextureLimit(int textureQuality);
