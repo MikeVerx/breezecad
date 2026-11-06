@@ -43,9 +43,21 @@ struct SketchSource {
 /// are marked `projected` (fixed for the solver); on every rebuild the kernel
 /// finds the edge again and puts the curve where the edge projects now.
 struct Projection {
-    EdgeReference edge;
-    ObjectId      curve;
-    SketchSource  source;   ///< the profile curve the edge came from, when it has one
+    /// What is projected (Inventor's «Проецировать геометрию»): a model edge
+    /// (a curve), a model vertex (a point), work geometry or the origin (a
+    /// line where a plane crosses the sketch, an axis as a line or a point, a
+    /// point), a curve or point of another sketch of the part, a piece of a
+    /// sheet metal part's flat pattern.
+    enum class Of : unsigned char { Edge, Vertex, Work, Sketch, Flat };
+
+    EdgeReference edge;     ///< Edge; Vertex: an edge that ends at the vertex
+    ObjectId      curve;    ///< the sketch curve, or point (Vertex, a point-like Work or Sketch)
+    SketchSource  source;   ///< Edge: the profile curve the edge came from, when it has one;
+                            ///< Sketch: the other sketch and its curve or point (offset 0, range 0..1)
+    Of            of = Of::Edge;
+    Vec3          at;       ///< Vertex: where the vertex was at the last rebuild
+    ObjectId      work;     ///< Work: the work plane, axis, point or origin element; Flat: the «Лист»
+    int           part = 0; ///< Flat: which curve — the outline's segments (outer loop, then holes), then the bend lines
 };
 
 /// An edge of another part of an assembly, projected into this part's

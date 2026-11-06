@@ -185,6 +185,7 @@ void SketchEditor::CreateAndEdit(AppContext& app, Session& session, const doc::S
     feature->name = session.doc.UniqueFeatureName(Tr("Эскиз"));
     feature->placement = placement;
     feature->sketch.EnsureOrigin(session.doc.Ids());
+    if (app.settings.projectOriginOnCreate) ProjectPartOrigin(session, *feature);
     const ObjectId id = feature->id;
     session.Execute(doc::AddFeature(std::move(feature), session.doc.EndMarker()));
     Edit(app, session, id);
@@ -495,6 +496,11 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
             }
         }
     }
+
+    // «Проецировать геометрию»: work geometry, the origin and the other
+    // sketches shown and found under the cursor (every frame, hovered or not).
+    if (myTool == SketchTool::Project) DrawProjectTargets(app, session, view);
+    else myProjectHot = {};
 
     myClickUsed = false;
     if (myEditDimension) HandleInlineEdit(app, session, view);

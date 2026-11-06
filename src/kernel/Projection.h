@@ -38,6 +38,10 @@ bool PlaceProjectedCurve(sketch::Sketch& sk, ObjectId curve, const ProjectedCurv
 std::vector<bool> PlaceProjectedCurves(sketch::Sketch& sk, const std::vector<std::pair<ObjectId, ProjectedCurve>>& curves);
 /// The sketch curve `curve` is where `projected` says (a line either way
 /// round; within `tolerance`, mm).
+/// A face's outline on the sketch plane whose loops cross or overlap there:
+/// split where they cross, a stretch covered twice kept once (see
+/// occt::TrimOverlaps). `changed` false when it is left as it was.
+std::vector<ProjectedCurve> TrimOverlappingCurves(const std::vector<ProjectedCurve>& curves, bool& changed);
 bool CurveMatches(const sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& projected, double tolerance);
 
 } // namespace bz::kernel

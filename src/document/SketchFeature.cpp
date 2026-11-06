@@ -176,8 +176,26 @@ void SketchFeature::SaveFields(Json& out) const {
     if (!projections.empty()) {
         Json list = Json::array();
         for (const Projection& p : projections) {
-            Json j{{"edge", json_io::ToJson(p.edge)}, {"curve", ToJson(p.curve)}};
+            Json j{{"curve", ToJson(p.curve)}};
+            if (p.of == Projection::Of::Edge || p.of == Projection::Of::Vertex) j["edge"] = json_io::ToJson(p.edge);
             if (p.source.IsSet()) j["source"] = SourceToJson(p.source);
+            switch (p.of) {   // a model edge (the only kind before 0.2.6) writes no "of"
+                case Projection::Of::Edge: break;
+                case Projection::Of::Vertex:
+                    j["of"] = "vertex";
+                    j["at"] = ToJson(p.at);
+                    break;
+                case Projection::Of::Work:
+                    j["of"] = "work";
+                    j["work"] = ToJson(p.work);
+                    break;
+                case Projection::Of::Sketch: j["of"] = "sketch"; break;
+                case Projection::Of::Flat:
+                    j["of"] = "flat";
+                    j["work"] = ToJson(p.work);
+                    j["part"] = p.part;
+                    break;
+            }
             list.push_back(std::move(j));
         }
         out["projections"] = std::move(list);
@@ -333,9 +351,23 @@ Status SketchFeature::LoadFields(const Json& in) {
     std::vector<Projection> projected;
     for (const Json& j : in.value("projections", Json::array())) {
         Projection p;
+        if (!j.is_object() || !ReadMember(j, "curve", p.curve) || !ReadSource(j, p.source)) return Bad("projections");
+        const std::string of = j.value("of", std::string());
+        if (of == "vertex") p.of = Projection::Of::Vertex;
+        else if (of == "work") p.of = Projection::Of::Work;
+        else if (of == "sketch") p.of = Projection::Of::Sketch;
+        else if (of == "flat") p.of = Projection::Of::Flat;
+        else if (!of.empty()) return Bad("projections");
+        const bool byEdge = p.of == Projection::Of::Edge || p.of == Projection::Of::Vertex;
         const auto edge = j.find("edge");
-        if (edge == j.end() || !json_io::Read(*edge, p.edge) || !ReadMember(j, "curve", p.curve) || !ReadSource(j, p.source))
-            return Bad("projections");
+        if (byEdge && (edge == j.end() || !json_io::Read(*edge, p.edge))) return Bad("projections");
+        if (p.of == Projection::Of::Vertex) {
+            const auto at = j.find("at");
+            if (at == j.end() || !json_io::Read(*at, p.at)) return Bad("projections");
+        }
+        if ((p.of == Projection::Of::Work || p.of == Projection::Of::Flat) && !ReadMember(j, "work", p.work)) return Bad("projections");
+        if (p.of == Projection::Of::Flat && !ReadMember(j, "part", p.part)) return Bad("projections");
+        if (p.of == Projection::Of::Sketch && !p.source.IsSet()) return Bad("projections");
         projected.push_back(p);
     }
 

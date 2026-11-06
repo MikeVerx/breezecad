@@ -61,7 +61,10 @@ struct PlaneQuad {
 };
 
 /// What BeginPickingOriginal makes pickable.
-enum class PickTarget : unsigned char { Edges, Faces, EdgesAndFaces, Vertices };
+/// What can be picked on the bodies before an operation. All: vertices, edges
+/// and faces («Проецировать геометрию»: the nearest wins); VerticesAndEdges:
+/// the same without faces (drawing a sketch with edges projected by themselves).
+enum class PickTarget : unsigned char { Edges, Faces, EdgesAndFaces, Vertices, All, VerticesAndEdges };
 
 /// What lies under the cursor.
 struct PickResult {

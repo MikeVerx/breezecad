@@ -1716,7 +1716,9 @@ void Viewport::BeginPickingOriginal(const kernel::Model& model, std::size_t feat
         drawer->SetFaceBoundaryAspect(new Prs3d_LineAspect(ToQuantity(m.colors.edges), Aspect_TOL_SOLID, 1.2));
         ais->SetTransparency(1.0);
         m.context->Display(ais, AIS_Shaded, mode, false);
-        if (target == PickTarget::EdgesAndFaces) m.context->Activate(ais, AIS_Shape::SelectionMode(TopAbs_FACE));
+        if (target == PickTarget::EdgesAndFaces || target == PickTarget::All) m.context->Activate(ais, AIS_Shape::SelectionMode(TopAbs_FACE));
+        if (target == PickTarget::All || target == PickTarget::VerticesAndEdges)
+            m.context->Activate(ais, AIS_Shape::SelectionMode(TopAbs_VERTEX));
         o.targets.push_back(ais);
     }
     o.active = true;
@@ -1755,7 +1757,8 @@ std::optional<doc::EdgeReference> Viewport::PickEdge(Vec2 pixel) {
     for (int i = 1; i <= selector->NbPicked(); ++i) {
         const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
         // With faces pickable too, a face in front hides the edges behind it.
-        if (!owner.IsNull() && owner->Shape().ShapeType() == TopAbs_FACE && m.original.target == PickTarget::EdgesAndFaces)
+        if (!owner.IsNull() && owner->Shape().ShapeType() == TopAbs_FACE &&
+            (m.original.target == PickTarget::EdgesAndFaces || m.original.target == PickTarget::All))
             return std::nullopt;
         if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_EDGE) continue;
         for (std::size_t b = 0; b < m.original.targets.size(); ++b)
@@ -1789,7 +1792,8 @@ std::vector<doc::EdgeReference> Viewport::PickFaceEdges(Vec2 pixel) {
 
 std::optional<Viewport::CylinderPick> Viewport::PickCylinder(Vec2 pixel) {
     Impl& m = *myImpl;
-    if (!m.original.active || (m.original.target != PickTarget::Faces && m.original.target != PickTarget::EdgesAndFaces))
+    if (!m.original.active || (m.original.target != PickTarget::Faces && m.original.target != PickTarget::EdgesAndFaces &&
+                                   m.original.target != PickTarget::All))
         return std::nullopt;
     const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
     const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
@@ -1813,13 +1817,17 @@ std::optional<Viewport::CylinderPick> Viewport::PickCylinder(Vec2 pixel) {
 
 std::optional<Viewport::VertexPick> Viewport::PickVertex(Vec2 pixel) {
     Impl& m = *myImpl;
-    if (!m.original.active || m.original.target != PickTarget::Vertices) return std::nullopt;
+    if (!m.original.active || (m.original.target != PickTarget::Vertices && m.original.target != PickTarget::All &&
+                                   m.original.target != PickTarget::VerticesAndEdges))
+        return std::nullopt;
     const auto px = static_cast<int>(std::lround(pixel.x * m.pixelScale));
     const auto py = static_cast<int>(std::lround(pixel.y * m.pixelScale));
     const Handle(StdSelect_ViewerSelector3d)& selector = m.context->MainSelector();
     selector->Pick(px, py, m.view);
     for (int i = 1; i <= selector->NbPicked(); ++i) {
         const Handle(StdSelect_BRepOwner) owner = Handle(StdSelect_BRepOwner)::DownCast(selector->Picked(i));
+        // With edges and faces pickable too, the nearest thing has to be the vertex.
+        if ((m.original.target == PickTarget::All || m.original.target == PickTarget::VerticesAndEdges) && (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_VERTEX)) return std::nullopt;
         if (owner.IsNull() || owner->Shape().ShapeType() != TopAbs_VERTEX) continue;
         const TopoDS_Vertex& vertex = TopoDS::Vertex(owner->Shape());
         VertexPick pick{ToVec(BRep_Tool::Pnt(vertex).XYZ()), std::nullopt};

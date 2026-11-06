@@ -1046,6 +1046,29 @@ void DrawMouseSettings(AppContext& app, float width) {
 
 /// "Настройки": interface scale and theme; keyboard shortcuts.
 /// "Общие" → what is not about the controls or the picture.
+/// "Управление" → "Эскиз": what projects by itself (as Inventor's sketch options).
+void DrawSketchSettings(AppContext& app, float width) {
+    ui::Ui& ui = app.ui;
+    const auto note = [&](const char* text) {
+        ui::FontScope font(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
+        ImGui::PushTextWrapPos(0);
+        ImGui::TextUnformatted(text);
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    };
+    static constexpr std::array<const char*, 2> onOff{N_("Включено"), N_("Выключено")};
+    ui::FieldLabel(ui, Tr("Автопроецирование рёбер при рисовании"));
+    const int a = app.settings.autoProjectEdges ? 0 : 1;
+    if (const int n = ui::Segmented(ui, "auto-project", onOff, a, 2, width); n != a) app.settings.autoProjectEdges = n == 0;
+    note(Tr("Отрезок, дуга или окружность, начатые или законченные на вершине или ребре модели, сами проецируют их и привязываются к ним."));
+    ImGui::Dummy({0, ui.S(6)});
+    ui::FieldLabel(ui, Tr("Проецировать начало координат при создании эскиза"));
+    const int o = app.settings.projectOriginOnCreate ? 0 : 1;
+    if (const int n = ui::Segmented(ui, "project-origin", onOff, o, 2, width); n != o) app.settings.projectOriginOnCreate = n == 0;
+    note(Tr("Как в Inventor: в новом эскизе сразу есть точка начала координат детали, связанная с ней."));
+}
+
 void DrawGeneralSettings(AppContext& app, float width) {
     ui::Ui& ui = app.ui;
     DrawLanguageSettings(app, width);
@@ -1791,7 +1814,7 @@ void Draw(AppContext& app) {
         const float cx = pos.x + tabsW + ui.S(16), cw = size.x - tabsW - ui.S(32);
         float cy = pos.y + std::max(ui.S(12), ms.insets.top);
         std::vector<const char*> subs;
-        if (app.shell.settingsTab == 1) subs = {Tr("Клавиатура"), Tr("Мышь"), Tr("Сенсор"), Tr("Жесты")};
+        if (app.shell.settingsTab == 1) subs = {Tr("Клавиатура"), Tr("Мышь"), Tr("Сенсор"), Tr("Жесты"), Tr("Эскиз")};
         if (app.shell.settingsTab == 2) subs = {Tr("Внешний вид"), Tr("Качество"), Tr("Производительность")};
         if (!subs.empty()) {
             float px = cx;
@@ -1828,6 +1851,7 @@ void Draw(AppContext& app) {
             switch (app.shell.settingsTab) {
                 case 1:
                     if (app.shell.settingsSub == 1) DrawMouseSettings(app, cw);
+                    else if (app.shell.settingsSub == 4) DrawSketchSettings(app, cw);
                     else DrawKeyboardSettings(app, cw);
                     break;
                 case 2:
@@ -1877,9 +1901,9 @@ void DrawSettings(AppContext& app) {
     if (app.shell.settingsTab == 1) {
 #if defined(__ANDROID__)
         // A touch screen instead of a touchpad (ADR-0004): layout, hand, sizes, cursor.
-        static constexpr std::array<const char*, 4> subs{N_("Клавиатура"), N_("Мышь"), N_("Сенсор"), N_("Жесты")};
+        static constexpr std::array<const char*, 5> subs{N_("Клавиатура"), N_("Мышь"), N_("Сенсор"), N_("Жесты"), N_("Эскиз")};
 #else
-        static constexpr std::array<const char*, 3> subs{N_("Клавиатура"), N_("Мышь"), N_("Тачпад")};
+        static constexpr std::array<const char*, 4> subs{N_("Клавиатура"), N_("Мышь"), N_("Тачпад"), N_("Эскиз")};
 #endif
         app.shell.settingsSub = ui::Segmented(ui, "settings-sub", subs, app.shell.settingsSub, static_cast<int>(subs.size()), width);
         ImGui::Dummy({0, ui.S(4)});
@@ -1896,8 +1920,10 @@ void DrawSettings(AppContext& app) {
 #if defined(__ANDROID__)
             else if (app.shell.settingsSub == 2) DrawTouchScreenSettings(app, width);
             else if (app.shell.settingsSub == 3) DrawGestureSettings(app, width);
+            else if (app.shell.settingsSub == 4) DrawSketchSettings(app, width);
 #else
             else if (app.shell.settingsSub == 2) DrawTouchpadSettings(app, width);
+            else if (app.shell.settingsSub == 3) DrawSketchSettings(app, width);
 #endif
             else DrawKeyboardSettings(app, width);
             break;

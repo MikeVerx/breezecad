@@ -2,7 +2,12 @@
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
+#include <BOPAlgo_Builder.hxx>
 #include <BRepAlgoAPI_Section.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
+#include <gp_Circ.hxx>
+#include <gp_Elips.hxx>
 #include <BRepBndLib.hxx>
 #include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
@@ -430,4 +435,128 @@ Expected<RevolvedProjection> ProjectRevolved(const TopoDS_Shape& body, const Top
     }
 }
 
+std::vector<ProjectedCurve> ProjectSection(const TopoDS_Shape& body, const Frame& frame) {
+    std::vector<ProjectedCurve> out;
+    if (body.IsNull()) return out;
+    try {
+        Bnd_Box box;
+        BRepBndLib::Add(body, box);
+        const double size = box.IsVoid() ? 1.0 : std::sqrt(box.SquareExtent());
+        const double deflection = std::max(size * 2e-3, 1e-3);
+        const gp_Pnt origin(frame.origin.x, frame.origin.y, frame.origin.z);
+        const gp_Dir n(frame.normal.x, frame.normal.y, frame.normal.z);
+        const TopoDS_Shape cut = Section(body, gp_Pln(origin, n));
+        if (!cut.IsNull()) AddCurves(cut, frame, deflection, out);
+    } catch (const Standard_Failure&) {
+        out.clear();
+    }
+    return out;
+}
+
+namespace {
+
+/// A projected curve as an edge in the XY plane (sketch coordinates).
+std::optional<TopoDS_Edge> FlatEdge(const ProjectedCurve& c) {
+    const auto p = [](Vec2 v) { return gp_Pnt(v.x, v.y, 0.0); };
+    const gp_Dir z(0, 0, 1);
+    switch (c.kind) {
+        case ProjectedCurve::Kind::Line: {
+            if ((c.end - c.start).Length() < kLinear) return std::nullopt;
+            BRepBuilderAPI_MakeEdge make(p(c.start), p(c.end));
+            if (make.IsDone()) return make.Edge();
+            return std::nullopt;
+        }
+        case ProjectedCurve::Kind::Circle:
+        case ProjectedCurve::Kind::Arc: {
+            const gp_Circ circle(gp_Ax2(p(c.centre), z), c.radius);
+            BRepBuilderAPI_MakeEdge make = c.kind == ProjectedCurve::Kind::Circle ? BRepBuilderAPI_MakeEdge(circle)
+                                                                                 : BRepBuilderAPI_MakeEdge(circle, p(c.start), p(c.end));
+            if (make.IsDone()) return make.Edge();
+            return std::nullopt;
+        }
+        case ProjectedCurve::Kind::Ellipse: {
+            Vec2 major = c.start - c.centre, minor = c.end - c.centre;
+            if (minor.Length() > major.Length()) std::swap(major, minor);
+            if (minor.Length() < kLinear) return std::nullopt;
+            const gp_Elips e(gp_Ax2(p(c.centre), z, gp_Dir(major.x, major.y, 0.0)), major.Length(), minor.Length());
+            BRepBuilderAPI_MakeEdge make(e);
+            if (make.IsDone()) return make.Edge();
+            return std::nullopt;
+        }
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+std::vector<ProjectedCurve> TrimOverlaps(const std::vector<ProjectedCurve>& curves, bool& changed) {
+    changed = false;
+    if (curves.size() < 2) return curves;
+    try {
+        BOPAlgo_Builder builder;
+        for (const ProjectedCurve& c : curves) {
+            const std::optional<TopoDS_Edge> e = FlatEdge(c);
+            if (!e) return curves;
+            builder.AddArgument(*e);
+        }
+        builder.SetFuzzyValue(1e-6);
+        builder.SetRunParallel(false);
+        builder.Perform();
+        if (builder.HasErrors()) return curves;
+        // Split where they cross; a stretch covered twice is one shared edge.
+        TopTools_IndexedMapOfShape pieces;
+        TopExp::MapShapes(builder.Shape(), TopAbs_EDGE, pieces);
+        if (pieces.Extent() == static_cast<int>(curves.size())) return curves;   // nothing crossed or overlapped
+        const Frame plane{{0, 0, 0}, {1, 0, 0}, {0, 0, 1}};
+        std::vector<ProjectedCurve> out;
+        for (int i = 1; i <= pieces.Extent(); ++i) {
+            const TopoDS_Edge& edge = TopoDS::Edge(pieces(i));
+            if (BRep_Tool::Degenerated(edge)) continue;
+            const Expected<ProjectedCurve> pc = ProjectEdge(edge, plane);
+            if (!pc) return curves;   // a piece of an ellipse: not a sketch curve, the outline stays as it was
+            if (pc->kind == ProjectedCurve::Kind::Line && (pc->end - pc->start).Length() < kLinear) continue;
+            out.push_back(*pc);
+        }
+        // A straight stretch the splitting cut into pieces with nothing else
+        // meeting where they join (a face seen edge-on): one line again.
+        const auto ends = [&](Vec2 p) {
+            int n = 0;
+            for (const ProjectedCurve& c : out) {
+                const bool open = c.kind != ProjectedCurve::Kind::Circle && c.kind != ProjectedCurve::Kind::Ellipse;
+                n += open && (c.start - p).Length() < 1e-6 ? 1 : 0;
+                n += open && (c.end - p).Length() < 1e-6 ? 1 : 0;
+            }
+            return n;
+        };
+        for (bool merged = true; merged;) {
+            merged = false;
+            for (std::size_t i = 0; i < out.size() && !merged; ++i)
+                for (std::size_t j = i + 1; j < out.size() && !merged; ++j) {
+                    ProjectedCurve& a = out[i];
+                    const ProjectedCurve& b = out[j];
+                    if (a.kind != ProjectedCurve::Kind::Line || b.kind != ProjectedCurve::Kind::Line) continue;
+                    const Vec2 da = (a.end - a.start).Normalized(), db = (b.end - b.start).Normalized();
+                    if (std::abs(da.Cross(db)) > 1e-9) continue;
+                    for (const auto& [pa, pb] : {std::pair{&a.start, &b.start}, {&a.start, &b.end}, {&a.end, &b.start}, {&a.end, &b.end}}) {
+                        if ((*pa - *pb).Length() > 1e-6 || ends(*pa) != 2) continue;
+                        *pa = pb == &b.start ? b.end : b.start;   // a grows over b
+                        out.erase(out.begin() + static_cast<std::ptrdiff_t>(j));
+                        merged = true;
+                        break;
+                    }
+                }
+        }
+        changed = true;
+        return out;
+    } catch (const Standard_Failure&) {
+        return curves;
+    }
+}
+
 } // namespace bz::kernel::occt
+
+namespace bz::kernel {
+std::vector<ProjectedCurve> TrimOverlappingCurves(const std::vector<ProjectedCurve>& curves, bool& changed) {
+    return occt::TrimOverlaps(curves, changed);
+}
+} // namespace bz::kernel
