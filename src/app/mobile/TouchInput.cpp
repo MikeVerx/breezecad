@@ -195,7 +195,10 @@ void TouchInput::BeginFrame(AppContext& app, double now) {
     const Session* active = app.workspace.Active();
     const bool drawHold = tune.sketchInput == 2 && !cursor && active && !app.workspace.ShowsHome() &&
                           active->mode == EditMode::Sketch && SketchToolPlacesPoints(app);
-    myGestures.SetMode({cursor, m.boxMode && !cursor, m.penNear, drags, drawHold});
+    const bool drawAim = tune.sketchInput == 3 && !cursor && active && !app.workspace.ShowsHome() &&
+                         active->mode == EditMode::Sketch && SketchToolPlacesPoints(app);
+    myGestures.SetMode({cursor, m.boxMode && !cursor, m.penNear, drags, drawHold, drawAim});
+    if (!drawAim) m.aiming = false;
     m.pressProgress = 0.0f;
     // The second point taken: the chain ends there (one line per drag, as asked).
     if (myEndChainIn > 0 && --myEndChainIn == 0)
@@ -588,6 +591,19 @@ void TouchInput::ApplyGestures(AppContext& app) {
         m.drawDragging = false;
         if (Session* s = app.Doc(); s && s->mode == EditMode::Sketch) app.sketch.Escape(app, *s, false);   // the first point goes
     }
+    // «Прицел»: the aim above the finger, the point where it is when the finger leaves.
+    if (step.aimAt) {
+        m.aimFinger = ToIm(*step.aimAt);
+        m.aimTip = {m.aimFinger.x, m.aimFinger.y - CursorReach(app)};
+        m.aiming = true;
+        Pos(m.aimTip);
+    }
+    if (step.aimEnded && m.aiming) {
+        m.aiming = false;
+        Click(m.aimTip, ImGuiMouseButton_Left);
+        mon::Action("touch", "прицел");
+    }
+    if (step.aimCancelled) m.aiming = false;
     if (step.longPress && !m.holding) {
         const ImVec2 at = CursorActive(app) ? m.cursorTip : ToIm(*step.longPress);
         Click(at, ImGuiMouseButton_Right);   // the context menu

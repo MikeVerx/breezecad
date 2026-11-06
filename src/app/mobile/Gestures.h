@@ -74,11 +74,14 @@ struct GestureStep {
     float pressProgress = 0.0f;
     std::optional<Vec2> drawFrom, drawTo;
     bool drawEnded = false, drawCancelled = false;
+    /// «Прицел»: the finger on the view (the aim stands above it), let go — the point.
+    std::optional<Vec2> aimAt;
+    bool aimEnded = false, aimCancelled = false;
 
     bool Empty() const {
         return orbit.x == 0 && orbit.y == 0 && pan.x == 0 && pan.y == 0 && zoom == 1.0 && !orbitStart && !tap && !longPress &&
                !tap2 && !tap3 && !cursorFinger && !cursorEnded && !cursorRevert && !boxTo && !boxEnded && !pressAt && !drawFrom &&
-               !drawTo && !drawEnded && !drawCancelled;
+               !drawTo && !drawEnded && !drawCancelled && !aimAt && !aimEnded && !aimCancelled;
     }
 };
 
@@ -91,6 +94,7 @@ public:
         DragMap drags;                      ///< what drags do now (the set for the cursor's state)
         /// "Зажать и тянуть": a long press starts a drawing drag instead of the context menu.
         bool drawHold = false;
+        bool drawAim = false;   ///< «Прицел»: one finger leads the aim, letting go places the point
     };
 
     /// The defaults of the two sets.
@@ -145,6 +149,7 @@ private:
     bool   myCursorLeading = false;   ///< the cursor follows the first finger
     bool   myBoxing = false;
     bool   myOrbiting = false;
+    bool   myAiming = false;      ///< «Прицел»: the finger leads the aim
     bool   myDrawing = false;     ///< "Зажать и тянуть": the held finger leads the second point
     // References for the deltas, from the last event (reset when the finger count changes).
     Vec2   myLastCentre{0, 0};

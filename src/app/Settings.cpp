@@ -174,7 +174,7 @@ Settings FromJson(const nlohmann::json& j) {
         o.longPress = std::clamp(m->value("longPress", o.longPress), 0.2, 2.0);
         o.cursorSpeed = std::clamp(m->value("cursorSpeed", o.cursorSpeed), 0.1, 1.0);
         o.cursorReach = std::clamp(m->value("cursorReach", o.cursorReach), 16, 120);
-        o.sketchInput = std::clamp(m->value("sketchInput", o.sketchInput), 0, 2);
+        o.sketchInput = std::clamp(m->value("sketchInput", o.sketchInput), 0, 3);
         o.scrollSpeed = std::clamp(m->value("scrollSpeed", o.scrollSpeed), 0.25, 4.0);
         o.askedNotifications = m->value("askedNotifications", o.askedNotifications);
         o.projectsFolderName = m->value("projectsFolderName", o.projectsFolderName);

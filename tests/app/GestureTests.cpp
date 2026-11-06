@@ -200,3 +200,32 @@ TEST_CASE("Gestures: with a stylus near, fingers only navigate") {
     g.Up(1, {100, 100}, 1.05);
     CHECK_FALSE(g.Take().tap);
 }
+
+TEST_CASE("Gestures: «Прицел» — one finger leads the aim, letting go places the point") {
+    GestureRecognizer g;
+    GestureRecognizer::Mode mode{false, false, false, GestureRecognizer::DefaultDrags(false)};
+    mode.drawAim = true;
+    g.SetMode(mode);
+    g.Down(1, {100, 100}, 0.0);
+    GestureStep s = g.Take();
+    REQUIRE(s.aimAt);
+    g.Move(1, {160, 120}, 0.1);
+    s = g.Take();
+    REQUIRE(s.aimAt);
+    CHECK(s.aimAt->x == doctest::Approx(160));
+    CHECK(s.pan == Vec2{0, 0});   // the finger aims, the view stays
+    g.Tick(2.0);                  // held long: still no context menu
+    CHECK_FALSE(g.Take().longPress);
+    g.Up(1, {170, 130}, 2.1);
+    s = g.Take();
+    CHECK(s.aimEnded);
+    CHECK_FALSE(s.tap);
+    // A second finger: the aim goes, the two fingers move the view.
+    g.Down(1, {100, 100}, 3.0);
+    (void)g.Take();
+    g.Down(2, {200, 100}, 3.05);
+    CHECK(g.Take().aimCancelled);
+    g.Move(1, {130, 100}, 3.1);
+    g.Move(2, {230, 100}, 3.1);
+    CHECK(g.Take().pan.x > 0);
+}

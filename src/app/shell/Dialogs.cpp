@@ -39,6 +39,7 @@
 #include <cmath>
 #include <format>
 #include <nlohmann/json.hpp>
+#include <cstring>
 #include <fstream>
 #include <vector>
 
@@ -60,8 +61,23 @@ bool BeginDialog(ui::Ui& ui, const char* id, bool& open, float width) {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ui.S(8, 8));
     const bool visible = ImGui::BeginPopupModal(id, nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
     ImGui::PopStyleVar(3);
-    if (!visible) open = false;
-    return visible;
+    if (!visible) {
+        open = false;
+        return false;
+    }
+    // A click or tap beside the dialog closes it, as a press of Esc would — unless
+    // a menu of its own is open over it, or it asks about unsaved work (a stray
+    // tap must not throw that question away).
+    if (!ImGui::IsWindowAppearing() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+        !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId) && std::strcmp(id, "##unsaved") != 0) {
+        const ImVec2 p = ImGui::GetIO().MouseClickedPos[0];
+        const ImVec2 a = ImGui::GetWindowPos(), b{a.x + ImGui::GetWindowWidth(), a.y + ImGui::GetWindowHeight()};
+        if (p.x < a.x || p.y < a.y || p.x > b.x || p.y > b.y) {
+            open = false;
+            ImGui::CloseCurrentPopup();
+        }
+    }
+    return true;
 }
 
 namespace {
@@ -1256,6 +1272,16 @@ void DrawTouchScreenSettings(AppContext& app, float width) {
     ui::FieldLabel(ui, Tr("Вид интерфейса"));
     static constexpr std::array<const char*, 3> layouts{N_("По размеру экрана"), N_("Десктопный"), N_("Мобильный")};
     if (const int n = ui::Segmented(ui, "layout", layouts, m.layout, 3, width); n != m.layout) m.layout = n;
+    {
+        // On a tablet «По размеру экрана» is the desktop layout: they look the same there.
+        ui::FontScope small(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+        ImGui::TextUnformatted(Tr("«По размеру экрана» выбирает сам: на планшете — десктопный, на телефоне — "
+                                  "мобильный. Поэтому на планшете первые два варианта выглядят одинаково."));
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    }
     gap();
     ui::FieldLabel(ui, Tr("Рука"));
     static constexpr std::array<const char*, 2> hands{N_("Правая: дерево слева"), N_("Левая: дерево справа")};
@@ -1353,12 +1379,14 @@ void DrawTouchScreenSettings(AppContext& app, float width) {
     static constexpr std::array<const char*, 4> reachNames{"32 dp", "48 dp", "64 dp", "80 dp"};
     static constexpr std::array<int, 4> reachValues{32, 48, 64, 80};
     choice("cursor-reach", Tr("Кончик курсора над пальцем"), nullptr, m.cursorReach, reachNames, reachValues);
-    static constexpr std::array<const char*, 3> inputNames{N_("Курсор"), N_("Касания"), N_("Зажать и тянуть")};
-    static constexpr std::array<int, 3> inputValues{0, 1, 2};
+    static constexpr std::array<const char*, 4> inputNames{N_("Курсор"), N_("Касания"), N_("Зажать и тянуть"), N_("Прицел")};
+    static constexpr std::array<int, 4> inputValues{0, 1, 2, 3};
     choice("sketch-input", Tr("Рисование в эскизе"),
-           Tr("Курсор — капля и ✓. Касания — тап ставит точку там, где палец: первый — начало, второй — конец, "
-              "дальше цепочка (✕ — закончить). Зажать и тянуть — держите палец, пока не заполнится кружок: "
-              "там первая точка; ведите палец и отпустите — вторая."),
+           Tr("Курсор — капля и ✓ (мобильный вид; в десктопном — как касания). Касания — тап ставит точку там, "
+              "где палец: первый — начало, второй — конец, дальше цепочка (✕ — закончить). Зажать и тянуть — "
+              "держите палец, пока не заполнится кружок: там первая точка; ведите палец и отпустите — вторая. "
+              "Прицел — коснитесь вида: над пальцем появится крестик, ведите его, отпустите — точка там, "
+              "где крестик; палец ничего не закрывает. Вид двигают два пальца."),
            m.sketchInput, inputNames, inputValues);
     static constexpr std::array<const char*, 8> polarNames{N_("выкл"), "5°", "10°", "15°", "22,5°", "30°", "45°", "90°"};
     static constexpr std::array<double, 8> polarValues{0.0, 5.0, 10.0, 15.0, 22.5, 30.0, 45.0, 90.0};
@@ -1643,8 +1671,8 @@ void Sensor(AppContext& app, Grid& g) {
         if (Choice(g, "##p-reach", Tr("Кончик курсора"), names, i)) m.cursorReach = values[static_cast<std::size_t>(i)];
     }
     {
-        static constexpr std::array<const char*, 3> names{N_("курсор"), N_("касания"), N_("зажать и тянуть")};
-        int i = std::clamp(m.sketchInput, 0, 2);
+        static constexpr std::array<const char*, 4> names{N_("курсор"), N_("касания"), N_("зажать и тянуть"), N_("прицел")};
+        int i = std::clamp(m.sketchInput, 0, 3);
         if (Choice(g, "##p-sketch-input", Tr("Рисование в эскизе"), names, i)) m.sketchInput = i;
     }
     {

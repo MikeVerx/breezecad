@@ -29,6 +29,7 @@
 #include "ui/Gl.h"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <imgui_impl_opengl3.h>
 #include <lunasvg.h>
 #include <miniz.h>
@@ -937,7 +938,7 @@ void Application::DrawPanelEdge(float x, float y, float height, float panel, flo
     // wider or narrower; a double click or tap — back to the usual width.
     // A window of its own on top: the viewport next to it takes the hover otherwise.
     const ui::ThemeColors& c = myUi->C();
-    const float grip = myUi->S(myShell.mobile.touchScreen ? 18.0f : 6.0f);
+    const float grip = myUi->S(myShell.mobile.touchScreen ? 28.0f : 6.0f);
     ImGui::SetNextWindowPos({x - grip / 2, y});
     ImGui::SetNextWindowSize({grip, height});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
@@ -945,6 +946,11 @@ void Application::DrawPanelEdge(float x, float y, float height, float panel, flo
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
     ImGui::PopStyleVar();
+    // Over the panel and the view on both sides of it, always: a tap on the tree
+    // brought the tree to the front and the edge under it stopped answering.
+    // Not over an open menu or dialog, though.
+    if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
+        ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
     ImGui::SetCursorScreenPos({x - grip / 2, y});
     ImGui::InvisibleButton("##edge", {grip, height});
     const bool hot = ImGui::IsItemHovered() || ImGui::IsItemActive();

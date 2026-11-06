@@ -26,7 +26,7 @@ double GestureRecognizer::Spread() const {
 void GestureRecognizer::Reset() {
     myFingers.clear();
     myMaxFingers = 0;
-    myMoved = myConsumed = myCursorLeading = myBoxing = myOrbiting = myDrawing = false;
+    myMoved = myConsumed = myCursorLeading = myBoxing = myOrbiting = myDrawing = myAiming = false;
 }
 
 void GestureRecognizer::Down(int id, Vec2 at, double time) {
@@ -41,6 +41,11 @@ void GestureRecognizer::Down(int id, Vec2 at, double time) {
     myLastSpread = Spread();
 
     if (myFingers.size() == 1) {
+        if (myMode.drawAim && !myMode.fingersOnlyNavigate) {
+            myAiming = true;
+            myStep.aimAt = at;
+            return;
+        }
         if (myMode.cursorOn && !myMode.fingersOnlyNavigate) {
             // The cursor is called here at once: its circle under the finger.
             myCursorLeading = true;
@@ -50,6 +55,10 @@ void GestureRecognizer::Down(int id, Vec2 at, double time) {
         return;
     }
     // A second finger: the touch is a turn, a move or a zoom now.
+    if (myAiming) {
+        myAiming = false;
+        myStep.aimCancelled = true;
+    }
     if (myDrawing) {
         myDrawing = false;
         myStep.drawCancelled = true;   // the first point goes too
@@ -73,6 +82,10 @@ void GestureRecognizer::Move(int id, Vec2 at, double) {
     if ((at - f->start).Length() > myTuning.tapSlop) myMoved = true;
     if (myDrawing) {
         myStep.drawTo = at;
+        return;
+    }
+    if (myAiming) {
+        myStep.aimAt = at;
         return;
     }
     if (myConsumed) return;
@@ -133,6 +146,12 @@ void GestureRecognizer::Up(int id, Vec2 at, double time) {
     if (!f) return;
     f->at = at;
     const bool last = myFingers.size() == 1;
+    if (last && myAiming) {
+        myStep.aimAt = at;
+        myStep.aimEnded = true;
+        Reset();
+        return;
+    }
     if (last && myDrawing) {
         myStep.drawTo = at;
         myStep.drawEnded = true;
@@ -165,13 +184,14 @@ void GestureRecognizer::Up(int id, Vec2 at, double time) {
 
 void GestureRecognizer::Cancel() {
     if (myDrawing) myStep.drawCancelled = true;
+    if (myAiming) myStep.aimCancelled = true;
     if (myCursorLeading) myStep.cursorEnded = true;
     if (myBoxing) myStep.boxEnded = true;
     Reset();
 }
 
 void GestureRecognizer::Tick(double time) {
-    if (myFingers.size() != 1 || myMaxFingers != 1 || myMoved || myConsumed) return;
+    if (myFingers.size() != 1 || myMaxFingers != 1 || myMoved || myConsumed || myAiming) return;
     const double held = time - myStartTime;
     if (held < myTuning.longPress) {
         // "Зажать и тянуть": the ring fills while the finger stays — shown
