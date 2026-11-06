@@ -123,7 +123,8 @@ void CatchCrashes() {
 
 @implementation BZView {
     NSMutableDictionary<NSValue*, NSNumber*>* _ids;   ///< UITouch → the pointer's id while it is down
-    int _nextId;
+    int     _nextId;
+    UIView* _noKeyboard;   ///< the input view while no system keyboard is wanted: nothing on screen
 }
 
 + (Class)layerClass {
@@ -134,6 +135,10 @@ void CatchCrashes() {
     self = [super initWithFrame:frame];
     if (!self) return nil;
     _ids = [NSMutableDictionary dictionary];
+    _noKeyboard = [[UIView alloc] initWithFrame:CGRectZero];
+    // No shortcut bar over a hardware keyboard either.
+    self.inputAssistantItem.leadingBarButtonGroups = @[];
+    self.inputAssistantItem.trailingBarButtonGroups = @[];
     self.multipleTouchEnabled = YES;
     self.contentScaleFactor = UIScreen.mainScreen.nativeScale;
     self.autocorrectionType = UITextAutocorrectionTypeNo;
@@ -207,10 +212,73 @@ void CatchCrashes() {
 - (void)touchesEnded:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event { [self deliver:touches phase:2]; }
 - (void)touchesCancelled:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event { [self deliver:touches phase:3]; }
 
-// --- The system keyboard (UIKeyInput) --------------------------------------------------
+// --- The keyboard -----------------------------------------------------------------------
+//
+// The view is always the first responder: a hardware keyboard's keys come to
+// it (pressesBegan). The system keyboard shows only while a field wants it —
+// otherwise the input view is an empty one. Characters, from either keyboard,
+// come through UIKeyInput (insertText); keys with a meaning of their own
+// (arrows, Esc, Enter, Backspace, Cmd/Ctrl shortcuts) through the presses.
 
 - (BOOL)canBecomeFirstResponder {
-    return ios::WantsKeyboard();
+    return YES;
+}
+
+- (void)didMoveToWindow {
+    [super didMoveToWindow];
+    if (self.window) [self becomeFirstResponder];
+}
+
+- (UIView*)inputView {
+    return ios::WantsKeyboard() ? nil : _noKeyboard;
+}
+
+/// Whether a press is the program's alone: no character for UIKeyInput to
+/// type (Enter and Backspace too, or they would come twice).
+- (BOOL)takesPress:(UIPress*)press {
+    UIKey* key = press.key;
+    if (!key) return NO;
+    const UIKeyModifierFlags mods = key.modifierFlags;
+    if (mods & (UIKeyModifierCommand | UIKeyModifierControl)) return YES;
+    return key.characters.length == 0 || key.keyCode == UIKeyboardHIDUsageKeyboardReturnOrEnter ||
+           key.keyCode == UIKeyboardHIDUsageKeyboardDeleteOrBackspace || key.keyCode == UIKeyboardHIDUsageKeyboardTab ||
+           key.keyCode == UIKeyboardHIDUsageKeyboardEscape || key.keyCode == UIKeyboardHIDUsageKeyboardDeleteForward;
+}
+
+- (void)deliverPresses:(NSSet<UIPress*>*)presses down:(BOOL)down {
+    for (UIPress* press in presses) {
+        UIKey* key = press.key;
+        if (!key) continue;
+        bz::platform::Window::Key k;
+        k.usage = static_cast<int>(key.keyCode);
+        k.down = down;
+        k.ctrl = (key.modifierFlags & UIKeyModifierControl) != 0;
+        k.shift = (key.modifierFlags & UIKeyModifierShift) != 0;
+        k.alt = (key.modifierFlags & UIKeyModifierAlternate) != 0;
+        k.command = (key.modifierFlags & UIKeyModifierCommand) != 0;
+        ios::DeliverKeyPress(k);
+    }
+}
+
+- (void)pressesBegan:(NSSet<UIPress*>*)presses withEvent:(UIPressesEvent*)event {
+    [self deliverPresses:presses down:YES];
+    NSMutableSet<UIPress*>* rest = [NSMutableSet set];
+    for (UIPress* p in presses)
+        if (![self takesPress:p]) [rest addObject:p];
+    if (rest.count) [super pressesBegan:rest withEvent:event];   // characters: to insertText
+}
+
+- (void)pressesEnded:(NSSet<UIPress*>*)presses withEvent:(UIPressesEvent*)event {
+    [self deliverPresses:presses down:NO];
+    NSMutableSet<UIPress*>* rest = [NSMutableSet set];
+    for (UIPress* p in presses)
+        if (![self takesPress:p]) [rest addObject:p];
+    if (rest.count) [super pressesEnded:rest withEvent:event];
+}
+
+- (void)pressesCancelled:(NSSet<UIPress*>*)presses withEvent:(UIPressesEvent*)event {
+    [self deliverPresses:presses down:NO];
+    [super pressesCancelled:presses withEvent:event];
 }
 - (BOOL)hasText {
     return YES;   // backspace always reaches the field

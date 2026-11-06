@@ -201,9 +201,12 @@ void mobile::ShowKeyboard(bool show) {
         const std::lock_guard lock(S().mutex);
         S().wantsKeyboard = show;
     }
+    // The view stays the first responder (a hardware keyboard's keys come
+    // to it); its input view is the system keyboard only while one is wanted
+    // (app/ios/IosMain.mm, inputView).
     UIView* view = (__bridge UIView*)gView;
-    if (show) [view becomeFirstResponder];
-    else [view resignFirstResponder];
+    [view reloadInputViews];
+    [view becomeFirstResponder];
 }
 
 mobile::TypedText mobile::TakeTypedText() {

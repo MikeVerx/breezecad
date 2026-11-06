@@ -29,6 +29,8 @@ std::filesystem::path BundleDir();
 
 /// A finger, pencil or pointer of the view.
 void DeliverTouch(const Window::Touch& touch);
+/// A key of a hardware keyboard.
+void DeliverKeyPress(const Window::Key& key);
 /// The view's size, safe area or the keyboard changed.
 void ViewChanged();
 /// Text from the system keyboard (UIKeyInput): characters, or a key (see Mobile.h, TypedItem).

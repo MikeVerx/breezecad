@@ -59,6 +59,9 @@ struct IosWindowAccess {
     static void Touch(Window& w, const Window::Touch& t) {
         if (w.myTouch) w.myTouch(t);
     }
+    static void Key(Window& w, const Window::Key& k) {
+        if (w.myKey) w.myKey(k);
+    }
     static void Changed(Window& w) {
         if (!ios::InBackground()) Storage(w);
         if (w.myChanged) w.myChanged();
@@ -67,6 +70,10 @@ struct IosWindowAccess {
 
 void ios::DeliverTouch(const Window::Touch& touch) {
     if (gWindow) IosWindowAccess::Touch(*gWindow, touch);
+}
+
+void ios::DeliverKeyPress(const Window::Key& key) {
+    if (gWindow) IosWindowAccess::Key(*gWindow, key);
 }
 
 void ios::ViewChanged() {
@@ -175,6 +182,7 @@ void Window::WindowSize(int& width, int& height) const {
 bool Window::CanDraw() const { return myContext && !ios::InBackground() && myPixelsWide > 0 && myPixelsHigh > 0; }
 
 void Window::SetTouchHandler(std::function<void(const Touch&)> handler) { myTouch = std::move(handler); }
+void Window::SetKeyHandler(std::function<void(const Key&)> handler) { myKey = std::move(handler); }
 void Window::SetChangeHandler(std::function<void()> handler) { myChanged = std::move(handler); }
 
 double Window::Time() {

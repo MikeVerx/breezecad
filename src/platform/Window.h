@@ -95,6 +95,15 @@ public:
     };
     /// Every touch of the view, on the program's thread. Set once by the application.
     void SetTouchHandler(std::function<void(const Touch&)> handler);
+    /// A key of a hardware keyboard (an iPad's Magic Keyboard, any Bluetooth
+    /// one): its USB HID usage (UIKeyboardHIDUsage) and the modifiers held.
+    /// The characters come as text through the system (Mobile.h, TakeTypedText).
+    struct Key {
+        int  usage = 0;
+        bool down = false;
+        bool ctrl = false, shift = false, alt = false, command = false;
+    };
+    void SetKeyHandler(std::function<void(const Key&)> handler);
     /// Called when the view changed size, the safe area or the keyboard
     /// moved, or the app came back to the front.
     void SetChangeHandler(std::function<void()> handler);
@@ -124,6 +133,7 @@ private:
     float  myDensity = 1.0f;
     bool   myCloseRequested = false;
     std::function<void(const Touch&)> myTouch;
+    std::function<void(const Key&)> myKey;
     std::function<void()> myChanged;
 #endif
 #if defined(__ANDROID__)
