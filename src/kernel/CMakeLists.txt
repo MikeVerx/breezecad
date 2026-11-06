@@ -10,6 +10,7 @@ add_library(bz_kernel STATIC
     occt/Section.cpp
     occt/EdgeMatch.cpp
     occt/SketchSource.cpp
+    occt/PreviewMesh.cpp
     occt/ShareSurfaces.cpp
     occt/Export.cpp
     occt/Extrude.cpp
