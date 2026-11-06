@@ -99,6 +99,8 @@ struct Settings {
     bool        backgroundRebuild = true;   ///< long rebuilds on another thread (the window stays responsive)
     bool        showAllConstraints = false;   ///< sketch: every constraint glyph, or only those of the selection (F8 / F9)
     bool        sketchRegionFill = true;      ///< sketch: tint the closed regions (what would extrude)
+    bool        autoProjectEdges = true;      ///< sketch: a drawing click on a model vertex or edge projects it (Inventor's Autoproject)
+    bool        projectOriginOnCreate = false;   ///< sketch: a new sketch gets a linked point where the part's origin falls
     /// Ribbon groups shown as icons without captions ("sketch:Изменить": the
     /// tab and the group's Russian caption). The rest show the captions.
     std::vector<std::string> ribbonIconsOnly{"sketch:Зависимости"};

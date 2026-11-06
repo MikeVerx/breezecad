@@ -1,4 +1,5 @@
 #include "kernel/occt/Extrude.h"
+#include "kernel/occt/ShareSurfaces.h"
 
 #include "core/FaultGuard.h"
 #include "core/Log.h"
@@ -350,7 +351,11 @@ Expected<TopoDS_Shape> ApplyBoolean(const TopoDS_Shape& target, const std::vecto
     }
 }
 
-TopoDS_Shape Clean(const TopoDS_Shape& shape) {
+TopoDS_Shape Clean(const TopoDS_Shape& input) {
+    // One cylinder made twice (a fillet and the extruded arc projected from
+    // it) is given one surface first: with two frames of opposite hands
+    // UnifySameDomain never finished, and the line between them stayed.
+    const TopoDS_Shape shape = ShareCylinders(input);
     auto* unify = new ShapeUpgrade_UnifySameDomain(shape, true, true, true);
     // Curved faces next to free-form ones (a cylinder cut by a thread
     // groove), or bounded by an intersection curve of two curved surfaces (a
@@ -382,7 +387,7 @@ TopoDS_Shape Clean(const TopoDS_Shape& shape) {
     TopoDS_Shape result;
     if (!guard::RunGuarded([&] { unify->Build(); result = unify->Shape(); })) {
         log::Warn("Clean: OCCT fault in UnifySameDomain, the shape is left as it is");
-        return shape;
+        return input;
     }
     delete unify;
     return result;

@@ -79,6 +79,8 @@ Settings FromJson(const nlohmann::json& j) {
     s.textureQuality  = std::clamp(j.value("textureQuality", s.textureQuality), 0, 2);
     s.showAllConstraints = j.value("showAllConstraints", s.showAllConstraints);
     s.sketchRegionFill = j.value("sketchRegionFill", s.sketchRegionFill);
+    s.autoProjectEdges = j.value("autoProjectEdges", s.autoProjectEdges);
+    s.projectOriginOnCreate = j.value("projectOriginOnCreate", s.projectOriginOnCreate);
     if (const auto r = j.find("ribbonIconsOnly"); r != j.end() && r->is_array()) {
         s.ribbonIconsOnly.clear();
         for (const auto& id : *r)
@@ -242,6 +244,8 @@ nlohmann::json Settings::ToJson() const {
         {"backgroundRebuild", backgroundRebuild},
         {"showAllConstraints", showAllConstraints},
         {"sketchRegionFill", sketchRegionFill},
+        {"autoProjectEdges", autoProjectEdges},
+        {"projectOriginOnCreate", projectOriginOnCreate},
         {"ribbonIconsOnly", ribbonIconsOnly},
         {"finishOnRight", finishOnRight},
         {"gridStep", gridStep},

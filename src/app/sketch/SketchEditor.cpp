@@ -86,7 +86,7 @@ constexpr std::array<SketchToolInfo, 34> kTools{{
     {SketchTool::Point, N_("Точка"), "sk-point", N_("Укажите положение точки")},
     {SketchTool::Spline, N_("Сплайн"), "sk-spline", N_("Щёлкайте точки сплайна. Правый щелчок или Enter — закончить, щелчок по первой точке — замкнуть")},
     {SketchTool::Text, N_("Текст"), "sk-text", N_("Введите текст слева и щёлкните, где он начнётся; щелчок по надписи заменит её текст")},
-    {SketchTool::Project, N_("Проецировать"), "sk-project", N_("Щёлкните ребро модели или грань (весь её контур) — проекция появится в эскизе и будет следовать за моделью")},
+    {SketchTool::Project, N_("Проецировать"), "sk-project", N_("Щёлкните ребро, грань, вершину, рабочую геометрию, начало координат или кривую другого эскиза — проекция появится в эскизе и будет следовать за моделью. Режимы «Сечение» и «Развёртка» — в панели")},
     {SketchTool::Trim, N_("Обрезка"), "sk-trim", N_("Щёлкните лишний кусок кривой — он удалится до ближайших пересечений")},
     {SketchTool::Extend, N_("Удлинение"), "sk-extend", N_("Щёлкните отрезок у конца — он дотянется до ближайшей кривой")},
     {SketchTool::Offset, N_("Эквидистанта"), "sk-offset", N_("Задайте расстояние и щёлкните контур — копия встанет с той стороны, где курсор")},
@@ -185,6 +185,7 @@ void SketchEditor::CreateAndEdit(AppContext& app, Session& session, const doc::S
     feature->name = session.doc.UniqueFeatureName(Tr("Эскиз"));
     feature->placement = placement;
     feature->sketch.EnsureOrigin(session.doc.Ids());
+    if (app.settings.projectOriginOnCreate) ProjectPartOrigin(session, *feature);
     const ObjectId id = feature->id;
     session.Execute(doc::AddFeature(std::move(feature), session.doc.EndMarker()));
     Edit(app, session, id);
@@ -495,6 +496,11 @@ void SketchEditor::Frame(AppContext& app, Session& session, const ViewportFrame&
             }
         }
     }
+
+    // «Проецировать геометрию»: work geometry, the origin and the other
+    // sketches shown and found under the cursor (every frame, hovered or not).
+    if (myTool == SketchTool::Project) DrawProjectTargets(app, session, view);
+    else myProjectHot = {};
 
     myClickUsed = false;
     if (myEditDimension) HandleInlineEdit(app, session, view);

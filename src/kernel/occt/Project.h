@@ -23,4 +23,15 @@ Expected<ProjectedCurve> ProjectEdge(const TopoDS_Edge& edge, const Frame& frame
 /// revolution.
 Expected<RevolvedProjection> ProjectRevolved(const TopoDS_Shape& body, const TopoDS_Face& face, const Frame& frame);
 
+/// "Проецировать сечение" (Inventor's Project Cut Edges): where the plane of
+/// `frame` cuts `body`, in its coordinates. Lines and circles as they are,
+/// curves that are really lines or arcs as those, the rest as short lines.
+/// Empty when the plane misses the body.
+std::vector<ProjectedCurve> ProjectSection(const TopoDS_Shape& body, const Frame& frame);
+/// A face's outline on the sketch plane whose loops cross or overlap there
+/// (a hole reaching the edge seen at a slant, the rims of a cylinder from
+/// the side): the curves split where they cross, a stretch covered twice
+/// kept once. `changed` false (and `curves` as they are) when nothing
+/// crossed, or the pieces are not sketch curves (a piece of an ellipse).
+std::vector<ProjectedCurve> TrimOverlaps(const std::vector<ProjectedCurve>& curves, bool& changed);
 } // namespace bz::kernel::occt

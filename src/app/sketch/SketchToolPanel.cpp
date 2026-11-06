@@ -6,6 +6,7 @@
 #include "app/sketch/SketchEditor.h"
 #include "app/features/ToolChoice.h"
 #include "core/Expression.h"
+#include "document/SheetMetalFeature.h"
 #include "core/I18n.h"
 #include "kernel/TextGeometry.h"
 #include "ui/Widgets.h"
@@ -161,17 +162,56 @@ void SketchEditor::DrawToolPanel(AppContext& app, Session& session, float width)
         if (chosen != current) myOptions.style = static_cast<LineStyle>(chosen);
     }
 
-    // Проецирование: linked to the model or a fixed copy.
+    // «Проецировать геометрию»: what it projects, then linked to the model or a fixed copy.
     if (myTool == SketchTool::Project) {
+        const doc::SketchFeature* sketch = Active(session);
+        const int index = sketch ? session.doc.IndexOf(sketch->id) : -1;
+        bool sheet = false;
+        for (int i = 0; i < index; ++i)
+            sheet = sheet || dynamic_cast<const doc::SheetMetalFeature*>(session.doc.Features()[static_cast<std::size_t>(i)].get());
+        if (!sheet && myOptions.projectMode == ProjectMode::Flat) myOptions.projectMode = ProjectMode::Geometry;
+        static constexpr std::array<ChoiceItem, 3> modes{{{"sk-project", N_("Геометрия: рёбра, грани, вершины, рабочая геометрия, другие эскизы")},
+                                                          {"sk-project-cut", N_("Сечение: всё, что режет плоскость эскиза")},
+                                                          {"sk-project-flat", N_("Развёртка листовой детали")}}};
+        const int mode = static_cast<int>(myOptions.projectMode);
+        if (const int chosen = ToolChoice(app, "project-mode", N_("Режим"), modes, mode, inner, sheet ? 0 : 0b100); chosen != mode)
+            myOptions.projectMode = static_cast<ProjectMode>(chosen);
+        if (!sheet) Caption(ui, Tr("Развёртка: нет листового тела выше эскиза."), inner);
+        ImGui::Dummy({0, ui.S(4)});
+        const bool cut = myOptions.projectMode == ProjectMode::Cut;
         static constexpr std::array<ChoiceItem, 2> links{{{"sk-project", N_("Зависимая: следует за моделью")},
                                                           {"sk-project-fixed", N_("Независимая копия")}}};
-        const int current = myOptions.projectLinked ? 0 : 1;
-        if (const int chosen = ToolChoice(app, "project-link", N_("Связь с моделью"), links, current, inner); chosen != current)
+        const int current = cut || !myOptions.projectLinked ? 1 : 0;
+        if (const int chosen = ToolChoice(app, "project-link", N_("Связь с моделью"), links, current, inner, cut ? 0b01 : 0);
+            chosen != current && !cut)
             myOptions.projectLinked = chosen == 0;
         ImGui::Dummy({0, ui.S(4)});
-        Caption(ui, myOptions.projectLinked ? Tr("Проекция следует за моделью: изменится деталь — изменится и эскиз.")
-                                                 : Tr("Проекция становится обычной закреплённой геометрией и за моделью не следует."),
-                    inner);
+        Caption(ui, cut                       ? Tr("Сечение — всегда независимая копия, как в Inventor.")
+                    : myOptions.projectLinked ? Tr("Проекция следует за моделью: изменится деталь — изменится и эскиз.")
+                                              : Tr("Проекция становится обычной закреплённой геометрией и за моделью не следует."),
+                inner);
+        ImGui::Dummy({0, ui.S(8)});
+        switch (myOptions.projectMode) {
+            case ProjectMode::Geometry:
+                Caption(ui, Tr("Щёлкните ребро (кривая), грань (контур), вершину (точка), рабочую плоскость (линия пересечения), "
+                               "ось или точку, начало координат (оно и в дереве), кривую или точку другого видимого эскиза."),
+                        inner);
+                break;
+            case ProjectMode::Cut:
+                if (ui::PrimaryButton(ui, "##project-cut", Tr("Спроецировать сечение"), nullptr, {inner, ui.S(34)}))
+                    ProjectCut(app, session);
+                ImGui::Dummy({0, ui.S(4)});
+                Caption(ui, Tr("Одно нажатие — весь контур, где плоскость эскиза режет деталь. Повторно не задваивается."), inner);
+                break;
+            case ProjectMode::Flat: {
+                static constexpr std::array<const char*, 2> bends{N_("С линиями сгиба"), N_("Только контур")};
+                const int b = myOptions.projectBends ? 0 : 1;
+                if (const int n = ui::Segmented(ui, "project-bends", bends, b, 2, inner); n != b) myOptions.projectBends = n == 0;
+                ImGui::Dummy({0, ui.S(4)});
+                Caption(ui, Tr("Щёлкните листовую деталь: спроецируется её развёртка, линии сгиба — осевыми."), inner);
+                break;
+            }
+        }
         ImGui::Dummy({0, ui.S(8)});
     }
 

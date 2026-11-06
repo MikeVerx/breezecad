@@ -27,6 +27,7 @@
 #include "kernel/occt/Coil.h"
 #include "kernel/occt/Section.h"
 #include "kernel/occt/EdgeMatch.h"
+#include "kernel/occt/SketchSource.h"
 #include "kernel/occt/Extrude.h"
 #include "kernel/occt/FaceMatch.h"
 #include "kernel/occt/Fillet.h"
@@ -38,6 +39,7 @@
 #include "kernel/occt/ModelImpl.h"
 #include "kernel/occt/Project.h"
 #include "kernel/occt/Revolve.h"
+#include "kernel/ProjectionSources.h"
 #include "kernel/occt/Sweep.h"
 #include "kernel/occt/Thread.h"
 
@@ -51,6 +53,8 @@
 #include <IntCurvesFace_ShapeIntersector.hxx>
 #include <gp_Lin.hxx>
 #include <TopExp_Explorer.hxx>
+#include <BRep_Tool.hxx>
+#include <TopExp.hxx>
 #include <TopoDS_Vertex.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
@@ -65,6 +69,7 @@
 #include <Standard_Failure.hxx>
 #include <Message_Messenger.hxx>
 #include <Message_Printer.hxx>
+#include <unordered_map>
 #include <format>
 #include <gp_Ax1.hxx>
 #include <gp_Ax2.hxx>
@@ -829,6 +834,7 @@ void PlaceWorkPlane(doc::WorkPlaneFeature& wp, const doc::Document& doc, const s
 
 /// Puts a projected sketch curve where its edge projects now. False when the
 /// curve is gone or the edge now projects as a different kind of curve.
+/// Lines go as they come: see PlaceProjectedCurves for which way round.
 bool PlaceProjected(sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& pc) {
     const auto move = [&](ObjectId point, Vec2 to) {
         if (sketch::Point* p = sk.FindPoint(point)) p->pos = to;
@@ -873,30 +879,133 @@ bool PlaceProjected(sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& pc
 /// is constrained to them follows too. Returns false when an edge is lost
 /// (its curve then stays where it was). The lost curves are kept on the
 /// sketch (lostProjections), with the sketch as it was before they broke.
-bool UpdateProjections(doc::SketchFeature& sk, const std::vector<Body>& bodies) {
+bool IsSheetOperationOf(const doc::Feature& f, ObjectId base);
+
+/// Where projection `p` (not of a model edge) lies now, or why it is lost.
+/// `sheets` and `index`: the sheet metal parts built before the sketch.
+Expected<ProjectedItem> FollowOther(const doc::Projection& p, const doc::SketchFeature& sk, const doc::Document& doc, std::size_t index,
+                                    const std::unordered_map<ObjectId, SheetInfo>& sheets) {
+    const Frame& plane = sk.placement.frame;
+    switch (p.of) {
+        case doc::Projection::Of::Work: {
+            // A line keeps the length it has in the sketch (the user may have trimmed it).
+            double half = 50.0;
+            if (const sketch::Line* l = sk.sketch.FindLine(p.curve))
+                half = std::max((sk.sketch.PositionOf(l->end) - sk.sketch.PositionOf(l->start)).Length() / 2.0, 1e-3);
+            return ProjectWork(doc, p.work, plane, half);
+        }
+        case doc::Projection::Of::Sketch: {
+            // Only a sketch above this one in the tree: below, it is not built yet.
+            const int other = doc.IndexOf(p.source.sketch);
+            if (other < 0 || static_cast<std::size_t>(other) >= index) return Error{"Эскиз-источник ниже по дереву"};
+            return ProjectSketchEntity(doc, p.source, plane);
+        }
+        case doc::Projection::Of::Flat: {
+            const SheetInfo* sheet = nullptr;
+            for (std::size_t k = std::min(index, doc.Features().size()); k-- > 0;) {
+                const doc::Feature& g = *doc.Features()[k];
+                if (!doc.IsActive(k) || g.suppressed || !IsSheetOperationOf(g, p.work)) continue;
+                if (const auto it = sheets.find(g.id); it != sheets.end()) sheet = &it->second;
+                break;
+            }
+            if (!sheet) return Error{"Листовая деталь не построена"};
+            const std::vector<PlanarCurve> curves = FlatPatternCurves(*sheet);
+            if (p.part < 0 || static_cast<std::size_t>(p.part) >= curves.size()) return Error{"Развёртка изменилась: этой кривой больше нет"};
+            return ProjectPlanar(sheet->frame, curves[static_cast<std::size_t>(p.part)], plane);
+        }
+        default: return Error{"не тот вид проекции"};
+    }
+}
+
+/// Projected model edges follow the model: each is found again on the most
+/// recent body and its curve moved, then the sketch is solved again so what
+/// is constrained to them follows too. Returns false when an edge is lost
+/// (its curve then stays where it was). The lost curves are kept on the
+/// sketch (lostProjections), with the sketch as it was before they broke.
+/// Vertices, work geometry, other sketches and flat patterns follow the same way.
+bool UpdateProjections(doc::SketchFeature& sk, const std::vector<Body>& bodies, const doc::Document& doc, std::size_t index,
+                       const std::unordered_map<ObjectId, SheetInfo>& sheets) {
     if (sk.projections.empty()) {
         sk.lostProjections.clear();
         return true;
     }
+    using Of = doc::Projection::Of;
     const bool wasBroken = sk.HasBrokenProjections();
     const sketch::Sketch before = sk.sketch;
     sk.lostProjections.clear();
     bool allFound = true;
     // All edges found in one pass: describing the body's edges is the costly part.
     std::vector<doc::EdgeReference> refs;
-    for (const doc::Projection& p : sk.projections) refs.push_back(p.edge);
-    const std::vector<std::optional<TopoDS_Edge>> edges =
-        bodies.empty() ? std::vector<std::optional<TopoDS_Edge>>(refs.size()) : occt::ResolveEdges(refs, bodies.back().shape);
+    std::vector<std::size_t> byEdge;   // the projections that go by an edge
+    for (std::size_t i = 0; i < sk.projections.size(); ++i)
+        if (sk.projections[i].of == Of::Edge || sk.projections[i].of == Of::Vertex) {
+            refs.push_back(sk.projections[i].edge);
+            byEdge.push_back(i);
+        }
+    const std::vector<std::optional<TopoDS_Edge>> found =
+        bodies.empty() || refs.empty() ? std::vector<std::optional<TopoDS_Edge>>(refs.size()) : occt::ResolveEdges(refs, bodies.back().shape);
+    std::vector<std::optional<TopoDS_Edge>> edges(sk.projections.size());
+    for (std::size_t k = 0; k < byEdge.size(); ++k) edges[byEdge[k]] = found[k];
+    const TopoDS_Shape body = bodies.empty() ? TopoDS_Shape() : bodies.back().shape;
+    std::vector<std::pair<ObjectId, ProjectedCurve>> place;
+    const auto lose = [&](ObjectId curve) {
+        sk.lostProjections.insert(curve);
+        allFound = false;
+    };
+    const auto movePoint = [&](ObjectId point, Vec2 to) {
+        sketch::Point* pt = sk.sketch.FindPoint(point);
+        if (!pt) return false;
+        pt->pos = to;
+        return true;
+    };
     for (std::size_t i = 0; i < sk.projections.size(); ++i) {
-        const doc::Projection& p = sk.projections[i];
-        const std::optional<TopoDS_Edge>& edge = edges[i];
-        const Expected<ProjectedCurve> projected =
-            edge ? occt::ProjectEdge(*edge, sk.placement.frame) : Expected<ProjectedCurve>(Error{"ребро не найдено"});
-        if (!projected || !PlaceProjected(sk.sketch, p.curve, *projected)) {
-            sk.lostProjections.insert(p.curve);
-            allFound = false;
+        doc::Projection& p = sk.projections[i];
+        if (p.of == Of::Edge || p.of == Of::Vertex) {
+            // A projection that knows the profile its edge was made from follows
+            // the profile: a fillet or chamfer on the edge does not lose it.
+            const std::optional<TopoDS_Edge> edge = occt::FollowProjection(body, edges[i], &doc, index, p.edge, p.source);
+            if (p.of == Of::Vertex) {
+                // The end of the edge nearest where the vertex was.
+                if (!edge) {
+                    lose(p.curve);
+                    continue;
+                }
+                TopoDS_Vertex v0, v1;
+                TopExp::Vertices(*edge, v0, v1);
+                if (v0.IsNull() || v1.IsNull()) {
+                    lose(p.curve);
+                    continue;
+                }
+                const gp_Pnt a = BRep_Tool::Pnt(v0), b = BRep_Tool::Pnt(v1);
+                const gp_Pnt was(p.at.x, p.at.y, p.at.z);
+                const gp_Pnt now = a.Distance(was) <= b.Distance(was) ? a : b;
+                p.at = {now.X(), now.Y(), now.Z()};
+                if (!movePoint(p.curve, sk.placement.frame.ToLocal(p.at))) lose(p.curve);
+                continue;
+            }
+            const Expected<ProjectedCurve> projected =
+                edge ? occt::ProjectEdge(*edge, sk.placement.frame) : Expected<ProjectedCurve>(Error{"ребро не найдено"});
+            if (projected) place.emplace_back(p.curve, *projected);
+            else lose(p.curve);
+            continue;
+        }
+        const Expected<ProjectedItem> item = FollowOther(p, sk, doc, index, sheets);
+        // A point stays a point, a curve a curve (an axis turned square to the sketch is lost).
+        const bool isPoint = sk.sketch.KindOf(p.curve) == sketch::EntityKind::Point;
+        if (!item || isPoint != item->point.has_value()) {
+            lose(p.curve);
+            continue;
+        }
+        if (item->point) {
+            if (!movePoint(p.curve, *item->point)) lose(p.curve);
+        } else {
+            place.emplace_back(p.curve, *item->curve);
         }
     }
+    // All at once: a line's ends are shared with its neighbours.
+    const std::vector<bool> placed = PlaceProjectedCurves(sk.sketch, place);
+    for (std::size_t i = 0; i < place.size(); ++i)
+        if (!placed[i]) lose(place[i].first);
     doc::SolveSketch(sk);
     sk.NoteProjectionsUpdated(before, wasBroken);
     return allFound;
@@ -1234,7 +1343,7 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
         const bool survived = skip || guard::RunGuarded([&] { try {
             if (auto* sk = dynamic_cast<doc::SketchFeature*>(&f)) {
                 const bool placed = FollowSupport(*sk, doc, bodies);
-                const bool projectedFound = UpdateProjections(*sk, bodies);
+                const bool projectedFound = UpdateProjections(*sk, bodies, doc, i, impl.sheets);
                 Expected<occt::SketchProfile> profile = occt::BuildProfile(*sk);
                 if (profile) {
                     impl.sketches[sk->id] = std::move(*profile);
@@ -1578,6 +1687,17 @@ Expected<ProjectedCurve> Model::ProjectEdge(const doc::EdgeReference& edge, cons
     return occt::ProjectEdge(*found, plane);
 }
 
+std::vector<ProjectedCurve> Model::ProjectSection(const Frame& plane, std::size_t featureIndex) const {
+    const auto& after = myImpl->bodiesAfter;
+    if (featureIndex == 0 || featureIndex > after.size()) return {};
+    std::vector<ProjectedCurve> out;
+    for (const Body& b : after[featureIndex - 1]) {
+        std::vector<ProjectedCurve> cut = occt::ProjectSection(b.shape, plane);
+        out.insert(out.end(), cut.begin(), cut.end());
+    }
+    return out;
+}
+
 Expected<RevolvedProjection> Model::ProjectRevolved(const doc::FaceReference& face, const Frame& plane, std::size_t featureIndex) const {
     const auto& after = myImpl->bodiesAfter;
     if (featureIndex == 0 || featureIndex > after.size() || after[featureIndex - 1].empty()) return Error{"Нет тела, с которого проецировать"};
@@ -1643,6 +1763,17 @@ std::optional<SheetInfo> Model::Sheet(const doc::Document& doc, ObjectId base) c
         const doc::Feature& g = *features[k];
         if (!doc.IsActive(k) || g.suppressed || !IsSheetOperationOf(g, base)) continue;
         if (const auto it = myImpl->sheets.find(g.id); it != myImpl->sheets.end()) return it->second;
+    }
+    return std::nullopt;
+}
+
+std::optional<SheetInfo> Model::SheetBefore(const doc::Document& doc, ObjectId base, std::size_t index) const {
+    const auto& features = doc.Features();
+    for (std::size_t k = std::min(index, features.size()); k-- > 0;) {
+        const doc::Feature& g = *features[k];
+        if (!doc.IsActive(k) || g.suppressed || !IsSheetOperationOf(g, base)) continue;
+        if (const auto it = myImpl->sheets.find(g.id); it != myImpl->sheets.end()) return it->second;
+        return std::nullopt;
     }
     return std::nullopt;
 }
@@ -1744,7 +1875,85 @@ double Model::Volume() const {
 std::string GeometryKernelVersion() { return std::string("OpenCASCADE ") + OCC_VERSION_COMPLETE; }
 
 bool PlaceProjectedCurve(sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& projected) {
-    return PlaceProjected(sk, curve, projected);
+    return PlaceProjectedCurves(sk, {{curve, projected}}).front();
+}
+
+std::vector<bool> PlaceProjectedCurves(sketch::Sketch& sk, const std::vector<std::pair<ObjectId, ProjectedCurve>>& curves) {
+    // An edge has a direction, a sketch line has its start and end: after a
+    // rebuild the same edge may come the other way round. Put as it came,
+    // the line's ends swapped places and dragged every curve sharing them —
+    // an arc's end 50 mm away, a sketch of projections "contradicting"
+    // itself with no constraint in it. So each line takes the way round that
+    // agrees with what the other curves put at its ends; where nothing else
+    // is at an end, with where the end was.
+    struct Target {
+        std::size_t item;
+        Vec2        at;
+    };
+    std::unordered_map<ObjectId, std::vector<Target>> wanted;   // point -> what the curves want of it
+    const auto want = [&](std::size_t item, ObjectId point, Vec2 at) { wanted[point].push_back({item, at}); };
+    std::vector<int> reversed(curves.size(), -1);   // lines: -1 undecided, 0 as it came, 1 the other way
+    for (std::size_t i = 0; i < curves.size(); ++i) {
+        const auto& [curve, pc] = curves[i];
+        if (pc.kind == ProjectedCurve::Kind::Line) {
+            if (sk.FindLine(curve)) reversed[i] = 0;
+            continue;
+        }
+        if (pc.kind == ProjectedCurve::Kind::Circle) {
+            if (const sketch::Circle* c = sk.FindCircle(curve)) want(i, c->center, pc.centre);
+        } else if (pc.kind == ProjectedCurve::Kind::Arc) {
+            if (const sketch::Arc* a = sk.FindArc(curve)) {
+                want(i, a->center, pc.centre);
+                want(i, a->start, pc.start);
+                want(i, a->end, pc.end);
+            }
+        } else if (const sketch::Ellipse* e = sk.FindEllipse(curve)) {
+            want(i, e->center, pc.centre);
+            want(i, e->major, pc.start);
+            want(i, e->minor, pc.end);
+        }
+    }
+    // How far an end at `at` is from what the others want of `point`.
+    const auto misfit = [&](std::size_t self, ObjectId point, Vec2 at) {
+        double best = -1;
+        if (const auto it = wanted.find(point); it != wanted.end())
+            for (const Target& t : it->second)
+                if (t.item != self) {
+                    const double d = (t.at - at).Length();
+                    best = best < 0 ? d : std::min(best, d);
+                }
+        if (best >= 0) return best;
+        const sketch::Point* p = sk.FindPoint(point);
+        return p ? (p->pos - at).Length() : 0.0;
+    };
+    // Lines decide in turns: one next to an arc first, then those next to
+    // them, until nothing changes (a few rounds even for long chains).
+    for (int round = 0; round < 8; ++round) {
+        bool changed = false;
+        for (std::size_t i = 0; i < curves.size(); ++i) {
+            if (reversed[i] < 0) continue;
+            const sketch::Line* l = sk.FindLine(curves[i].first);
+            const ProjectedCurve& pc = curves[i].second;
+            const double asCame = misfit(i, l->start, pc.start) + misfit(i, l->end, pc.end);
+            const double turned = misfit(i, l->start, pc.end) + misfit(i, l->end, pc.start);
+            const int now = turned + 1e-9 < asCame ? 1 : 0;
+            if (round > 0 && now == reversed[i]) continue;
+            // Replace what this line wanted of its ends.
+            for (ObjectId point : {l->start, l->end}) std::erase_if(wanted[point], [&](const Target& t) { return t.item == i; });
+            want(i, l->start, now ? pc.end : pc.start);
+            want(i, l->end, now ? pc.start : pc.end);
+            changed = changed || now != reversed[i];
+            reversed[i] = now;
+        }
+        if (!changed && round > 0) break;
+    }
+    std::vector<bool> out(curves.size(), false);
+    for (std::size_t i = 0; i < curves.size(); ++i) {
+        ProjectedCurve pc = curves[i].second;
+        if (reversed[i] == 1) std::swap(pc.start, pc.end);
+        out[i] = PlaceProjected(sk, curves[i].first, pc);
+    }
+    return out;
 }
 
 bool CurveMatches(const sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& pc, double tolerance) {
@@ -1753,8 +1962,9 @@ bool CurveMatches(const sketch::Sketch& sk, ObjectId curve, const ProjectedCurve
         return p && (p->pos - want).Length() <= tolerance;
     };
     switch (pc.kind) {
-        case ProjectedCurve::Kind::Line:
-            if (const sketch::Line* l = sk.FindLine(curve)) return at(l->start, pc.start) && at(l->end, pc.end);
+        case ProjectedCurve::Kind::Line:   // either way round: a line has no direction of its own
+            if (const sketch::Line* l = sk.FindLine(curve))
+                return (at(l->start, pc.start) && at(l->end, pc.end)) || (at(l->start, pc.end) && at(l->end, pc.start));
             return false;
         case ProjectedCurve::Kind::Circle:
             if (const sketch::Circle* c = sk.FindCircle(curve)) return at(c->center, pc.centre) && std::abs(c->radius - pc.radius) <= tolerance;

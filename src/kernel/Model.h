@@ -146,6 +146,9 @@ public:
     /// A model edge as it would appear on `plane`, taken from the bodies as
     /// they were before feature number `featureIndex` (a sketch projecting it).
     Expected<ProjectedCurve> ProjectEdge(const doc::EdgeReference& edge, const Frame& plane, std::size_t featureIndex) const;
+    /// "Проецировать сечение": where `plane` cuts the bodies as they were before
+    /// feature number `featureIndex`, on it. Empty when it misses them.
+    std::vector<ProjectedCurve> ProjectSection(const Frame& plane, std::size_t featureIndex) const;
     /// The body of revolution with the face `face` (of the body before
     /// feature `featureIndex`) on `plane`: axis, outline and cut by the plane.
     Expected<RevolvedProjection> ProjectRevolved(const doc::FaceReference& face, const Frame& plane, std::size_t featureIndex) const;
@@ -158,6 +161,9 @@ public:
     /// The sheet metal part of the «Лист» `base` after its last active
     /// operation in `doc`; nullopt when it was not built.
     std::optional<SheetInfo> Sheet(const doc::Document& doc, ObjectId base) const;
+    /// The sheet metal part of the «Лист» `base` as the operations above
+    /// feature number `index` left it (a sketch projecting its flat pattern).
+    std::optional<SheetInfo> SheetBefore(const doc::Document& doc, ObjectId base, std::size_t index) const;
     /// The sheet metal part right after the «Лист» or «Отбортовка» `operation`.
     std::optional<SheetInfo> SheetAt(ObjectId operation) const;
 

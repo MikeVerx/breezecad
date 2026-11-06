@@ -32,7 +32,16 @@ struct RevolvedProjection {
 /// Moves the sketch curve `curve` (and its points) to `projected`. False when
 /// the sketch has no such curve of that kind.
 bool PlaceProjectedCurve(sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& projected);
-/// The sketch curve `curve` is where `projected` says (within `tolerance`, mm).
+/// Moves several projected curves of one sketch at once. A line may come the
+/// other way round than it was drawn: each takes the way that agrees with
+/// the curves sharing its ends. Per entry: placed (false as for PlaceProjectedCurve).
+std::vector<bool> PlaceProjectedCurves(sketch::Sketch& sk, const std::vector<std::pair<ObjectId, ProjectedCurve>>& curves);
+/// The sketch curve `curve` is where `projected` says (a line either way
+/// round; within `tolerance`, mm).
+/// A face's outline on the sketch plane whose loops cross or overlap there:
+/// split where they cross, a stretch covered twice kept once (see
+/// occt::TrimOverlaps). `changed` false when it is left as it was.
+std::vector<ProjectedCurve> TrimOverlappingCurves(const std::vector<ProjectedCurve>& curves, bool& changed);
 bool CurveMatches(const sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& projected, double tolerance);
 
 } // namespace bz::kernel

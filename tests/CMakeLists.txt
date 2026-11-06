@@ -7,6 +7,7 @@ add_executable(bz_tests
     app/GestureTests.cpp
     app/SectionTests.cpp
     app/ExtrudeDirectionTests.cpp
+    app/ProjectIntoTests.cpp
     # The app is an executable; its OCCT-free pieces are compiled in directly.
     ${PROJECT_SOURCE_DIR}/src/app/Format.cpp
     ${PROJECT_SOURCE_DIR}/src/app/NewTemplates.cpp
@@ -51,6 +52,8 @@ add_executable(bz_tests
     kernel/ModelTests.cpp
     kernel/PatternTests.cpp
     kernel/ProjectionTests.cpp
+    kernel/SketchSourceTests.cpp
+    kernel/ProjectGeometryTests.cpp
     kernel/ProjectionRepairTests.cpp
     kernel/RevolvedProjectionTests.cpp
     kernel/RevolveTests.cpp

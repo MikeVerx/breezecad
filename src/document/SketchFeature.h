@@ -23,13 +23,41 @@ struct SketchPlacement {
     FaceReference face;      ///< onFace: the face as picked
 };
 
+/// The sketch curve a model edge was made from: an edge of an extrusion's
+/// cap is the curve of its profile, moved along the sketch's normal. A
+/// projection that knows it follows the curve rather than the edge, so a
+/// fillet, chamfer, shell or any change that leaves the profile alone does
+/// not break it: the line may get shorter, but it stays the line it was.
+struct SketchSource {
+    ObjectId sketch;            ///< the sketch feature (of the part the edge belongs to)
+    ObjectId curve;             ///< its line, circle or arc
+    double   offset = 0.0;      ///< where the edge was, along the sketch's normal, mm
+    double   from = 0.0;        ///< the part of the curve the edge covered (0..1 along it;
+    double   to = 1.0;          ///< a line from start to end, an arc counter-clockwise)
+
+    bool IsSet() const { return sketch.IsValid() && curve.IsValid(); }
+};
+
 /// A model edge projected into the sketch ("Проецировать геометрию"): the
 /// edge it shows and the sketch curve that shows it. The curve and its points
 /// are marked `projected` (fixed for the solver); on every rebuild the kernel
 /// finds the edge again and puts the curve where the edge projects now.
 struct Projection {
-    EdgeReference edge;
-    ObjectId      curve;
+    /// What is projected (Inventor's «Проецировать геометрию»): a model edge
+    /// (a curve), a model vertex (a point), work geometry or the origin (a
+    /// line where a plane crosses the sketch, an axis as a line or a point, a
+    /// point), a curve or point of another sketch of the part, a piece of a
+    /// sheet metal part's flat pattern.
+    enum class Of : unsigned char { Edge, Vertex, Work, Sketch, Flat };
+
+    EdgeReference edge;     ///< Edge; Vertex: an edge that ends at the vertex
+    ObjectId      curve;    ///< the sketch curve, or point (Vertex, a point-like Work or Sketch)
+    SketchSource  source;   ///< Edge: the profile curve the edge came from, when it has one;
+                            ///< Sketch: the other sketch and its curve or point (offset 0, range 0..1)
+    Of            of = Of::Edge;
+    Vec3          at;       ///< Vertex: where the vertex was at the last rebuild
+    ObjectId      work;     ///< Work: the work plane, axis, point or origin element; Flat: the «Лист»
+    int           part = 0; ///< Flat: which curve — the outline's segments (outer loop, then holes), then the bend lines
 };
 
 /// An edge of another part of an assembly, projected into this part's
@@ -43,6 +71,7 @@ struct ContextProjection {
     EdgeReference edge;              ///< in the source part's own coordinates
     ObjectId      curve;
     bool          adaptive = true;   ///< follows the source; off: stays where it is
+    SketchSource  source;            ///< the source part's profile curve the edge came from
 };
 
 class SketchFeature final : public FeatureBase<SketchFeature> {

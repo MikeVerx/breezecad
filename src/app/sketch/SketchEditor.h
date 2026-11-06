@@ -43,10 +43,18 @@ enum class ArcMode : unsigned char { CentreEnds, ThreePoints };
 /// (helps, makes nothing), осевая (an axis for revolve and coil; lines only).
 enum class LineStyle : unsigned char { Normal, Construction, Centerline };
 
+/// «Проецировать геометрию»: what it projects (icons in its panel, as Inventor's
+/// three commands): geometry clicked (edges, faces, vertices, work geometry,
+/// the origin, curves of other sketches), the cut of the part by the sketch
+/// plane (Project Cut Edges: an independent copy), a sheet metal flat pattern.
+enum class ProjectMode : unsigned char { Geometry, Cut, Flat };
+
 /// The tool panel's settings. Typed sizes lock the cursor while drawing
 /// and become dimensions of what is drawn.
 struct DrawOptions {
     bool projectLinked = true;   ///< Проецирование: follows the model (зависимое) or a fixed copy (независимое)
+    ProjectMode projectMode = ProjectMode::Geometry;
+    bool        projectBends = true;   ///< Развёртка: the bend lines too (as осевые)
     LineStyle     style = LineStyle::Normal;
     RectangleMode rectangle = RectangleMode::Corners;
     CircleMode    circle = CircleMode::CentreRadius;
@@ -180,6 +188,36 @@ private:
     void HandleDrawing(AppContext& app, Session& session, const SketchView& view);
     /// "Проецировать": a click on a model edge adds its projection.
     void HandleProject(AppContext& app, Session& session, const SketchView& view);
+    /// What the cursor points at for «Проецировать геометрию» besides the
+    /// model itself: work geometry, the origin, a curve or point of another
+    /// sketch. Found and drawn every frame (DrawProjectTargets).
+    struct ProjectTarget {
+        enum class Kind : unsigned char { None, Work, Sketch } kind = Kind::None;
+        ObjectId    id;       ///< Work: the element; Sketch: the curve or point
+        ObjectId    sketch;   ///< Sketch: its sketch
+        bool        point = false;   ///< a point-like element (wins over model edges)
+        std::string label;
+    };
+    ProjectTarget myProjectHot;
+    /// Work geometry, the origin and the other visible sketches drawn while
+    /// projecting, the one under the cursor stronger; a work element or the
+    /// origin chosen in the tree is projected at once.
+    void DrawProjectTargets(AppContext& app, Session& session, const SketchView& view);
+    /// «Проецировать сечение»: the cut of the part by the sketch plane.
+    void ProjectCut(AppContext& app, Session& session);
+    /// «Проецировать развёртку»: the flat pattern of the sheet metal part under `pixel`.
+    void ProjectFlat(AppContext& app, Session& session, const SketchView& view, Vec2 pixel);
+public:
+    /// «Автопроецирование рёбер при рисовании»: a drawing click with no sketch
+    /// snap that lands on a model vertex or edge projects it (linked) and
+    /// snaps there. False when there is nothing of the model under `pixel`.
+    bool AutoProject(AppContext& app, Session& session, const SketchView& view, Vec2 pixel, Snap& snap);
+    /// «Проецировать начало координат при создании эскиза»: a linked point
+    /// where the part's origin falls, unless the sketch's own origin is there.
+    static void ProjectPartOrigin(Session& session, doc::SketchFeature& sketch);
+    /// The panel's mode of «Проецировать геометрию».
+    ProjectMode ProjectingMode() const { return myOptions.projectMode; }
+private:
     /// "Обрезка": the piece under the cursor is shown, a click removes it.
     void HandleTrim(AppContext& app, Session& session, const SketchView& view);
     void HandleExtend(AppContext& app, Session& session, const SketchView& view);

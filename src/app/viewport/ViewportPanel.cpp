@@ -338,10 +338,17 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     // Model edges are picked on the bodies before an operation (fillet,
     // shell) or before the sketch that projects them.
     const bool projecting = session.mode == EditMode::Sketch && app.sketch.Tool() == SketchTool::Project;
+    // «Автопроецирование рёбер при рисовании»: drawing finds model vertices and edges too.
+    const SketchTool drawingTool = app.sketch.Tool();
+    const bool autoProjecting = session.mode == EditMode::Sketch && app.settings.autoProjectEdges &&
+                                (drawingTool == SketchTool::Line || drawingTool == SketchTool::Rectangle || drawingTool == SketchTool::Circle ||
+                                 drawingTool == SketchTool::Arc || drawingTool == SketchTool::Point);
     const bool pickingOriginal = (operation && operation->PicksOriginal()) || projecting;
-    if (projecting) {
+    if (projecting || autoProjecting) {
         if (const int index = session.doc.IndexOf(session.activeSketch); index >= 0) {
-            app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index), render::PickTarget::EdgesAndFaces);
+            // Vertices, edges and faces (the nearest wins): a vertex projects as a point.
+            app.viewport.BeginPickingOriginal(session.model, static_cast<std::size_t>(index),
+                                              projecting ? render::PickTarget::All : render::PickTarget::VerticesAndEdges);
             app.viewport.SetMarkedEdges({});
         }
     } else {
@@ -357,7 +364,7 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
     app.viewport.SetMeasuring(measuring);
     // Pre-highlight the face (or, for fillets, the edge) under the cursor.
     const bool hoverMatters =
-        projecting || (session.mode != EditMode::Sketch && (!operation || pickingOriginal || operation->PicksFaces()));
+        projecting || autoProjecting || (session.mode != EditMode::Sketch && (!operation || pickingOriginal || operation->PicksFaces()));
     {
         const double start = platform::Window::Time();
         app.viewport.Hover(vf.hovered && hoverMatters ? std::optional<Vec2>(vf.ToLocal(ImGui::GetMousePos())) : std::nullopt);

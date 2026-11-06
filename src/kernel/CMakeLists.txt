@@ -5,9 +5,12 @@ add_library(bz_kernel STATIC
     AutoDrop.cpp
     ComponentPattern.cpp
     Model.cpp
+    ProjectionSources.cpp
     occt/Coil.cpp
     occt/Section.cpp
     occt/EdgeMatch.cpp
+    occt/SketchSource.cpp
+    occt/ShareSurfaces.cpp
     occt/Export.cpp
     occt/Extrude.cpp
     occt/FaceMatch.cpp

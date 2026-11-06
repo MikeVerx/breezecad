@@ -82,6 +82,7 @@ set(BZ_APP_SOURCES
     sketch/SketchText.cpp
     sketch/SketchPick.cpp
     sketch/SketchTools.cpp
+    sketch/SketchProject.cpp
     sketch/SketchToolPanel.cpp
     viewport/MarkingMenu.cpp
     viewport/Measure.cpp
