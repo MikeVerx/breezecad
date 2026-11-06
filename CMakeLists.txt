@@ -43,6 +43,14 @@ endif()
 if(ANDROID)
     option(BZ_BUILD_ANDROID_APP "Build the Android app library (libbreezecad.so)" ON)
 endif()
+# iOS and iPadOS (docs/dev/IOS-PORT.md): the core with its unit tests (run on
+# the simulator) and the app (src/ios) packed into BreezeCAD.app / .ipa by
+# scripts/ios/package-app.sh; the desktop app (BZ_BUILD_APP) is off there.
+# BZ_IOS marks the code that differs (TargetConditionals.h is Apple-only).
+if(IOS)
+    add_compile_definitions(BZ_IOS GLES_SILENCE_DEPRECATION)
+    option(BZ_BUILD_IOS_APP "Build the iOS app (BreezeCAD.app)" ON)
+endif()
 
 # All binaries land in one folder so the app finds assets next to itself.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)

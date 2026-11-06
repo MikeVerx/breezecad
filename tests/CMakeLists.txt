@@ -92,6 +92,13 @@ if(TARGET bz_render AND NOT ANDROID)
         ${PROJECT_SOURCE_DIR}/src/app/sketch/SketchText.cpp)
     target_link_libraries(bz_tests PRIVATE bz::render bz::ui bz::imgui glfw OpenGL::GL)
 endif()
+if(IOS)
+    # The tests run on the iOS simulator (scripts/ios/run-tests.sh): it sees
+    # the Mac's files, so the paths below are the build machine's. OCCT is
+    # static there and its toolkits want these system frameworks.
+    target_link_libraries(bz_tests PRIVATE "-framework Foundation" "-framework CoreFoundation" "-framework CoreGraphics"
+                                           "-framework CoreText" "-framework UIKit")
+endif()
 if(ANDROID)
     # The tests run on a phone or the emulator, not where they were built:
     # scripts/android/run-tests.sh copies the sources' data (assets, src,

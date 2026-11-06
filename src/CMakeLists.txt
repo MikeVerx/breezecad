@@ -27,6 +27,11 @@ if(BZ_BUILD_ANDROID_APP)   # Android: the same app as a library run by the activ
     add_subdirectory(app)
 endif()
 
+if(BZ_BUILD_IOS_APP)   # iOS: the 3D view for now, step 2 of the port (docs/dev/IOS-PORT.md)
+    add_subdirectory(render)
+    add_subdirectory(ios)
+endif()
+
 if(BZ_BUILD_APP)
     add_subdirectory(platform)
     add_subdirectory(render)
