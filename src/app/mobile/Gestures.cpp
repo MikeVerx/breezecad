@@ -44,6 +44,8 @@ void GestureRecognizer::Down(int id, Vec2 at, double time) {
         if (myMode.drawAim && !myMode.fingersOnlyNavigate) {
             myAiming = true;
             myStep.aimAt = at;
+            myStillAt = at;
+            myStillSince = time;
             return;
         }
         if (myMode.cursorOn && !myMode.fingersOnlyNavigate) {
@@ -75,19 +77,24 @@ void GestureRecognizer::Down(int id, Vec2 at, double time) {
     myOrbiting = false;
 }
 
-void GestureRecognizer::Move(int id, Vec2 at, double) {
+void GestureRecognizer::Move(int id, Vec2 at, double time) {
     Finger* f = Find(id);
     if (!f) return;
     f->at = at;
     if ((at - f->start).Length() > myTuning.tapSlop) myMoved = true;
+    if (myAiming) {
+        myStep.aimAt = at;
+        // Aiming moves the finger; the ring starts again where it stops.
+        if (!myDrawing && (at - myStillAt).Length() > myTuning.tapSlop) {
+            myStillAt = at;
+            myStillSince = time;
+        }
+    }
     if (myDrawing) {
         myStep.drawTo = at;
         return;
     }
-    if (myAiming) {
-        myStep.aimAt = at;
-        return;
-    }
+    if (myAiming) return;
     if (myConsumed) return;
 
     const Vec2   centre = Centre();
@@ -147,8 +154,12 @@ void GestureRecognizer::Up(int id, Vec2 at, double time) {
     f->at = at;
     const bool last = myFingers.size() == 1;
     if (last && myAiming) {
-        myStep.aimAt = at;
+        // Let go before the ring filled: no point, the aim just goes.
         myStep.aimEnded = true;
+        if (myDrawing) {
+            myStep.drawTo = at;
+            myStep.drawEnded = true;
+        }
         Reset();
         return;
     }
@@ -191,7 +202,21 @@ void GestureRecognizer::Cancel() {
 }
 
 void GestureRecognizer::Tick(double time) {
-    if (myFingers.size() != 1 || myMaxFingers != 1 || myMoved || myConsumed || myAiming) return;
+    if (myAiming) {
+        if (myDrawing || myFingers.size() != 1 || myMaxFingers != 1) return;
+        const double still = time - myStillSince;
+        if (still < myTuning.longPress) {
+            if (still > 0.12) {
+                myStep.pressAt = myFingers[0].at;
+                myStep.pressProgress = static_cast<float>(still / myTuning.longPress);
+            }
+            return;
+        }
+        myDrawing = true;
+        myStep.drawFrom = myFingers[0].at;
+        return;
+    }
+    if (myFingers.size() != 1 || myMaxFingers != 1 || myMoved || myConsumed) return;
     const double held = time - myStartTime;
     if (held < myTuning.longPress) {
         // "Зажать и тянуть": the ring fills while the finger stays — shown

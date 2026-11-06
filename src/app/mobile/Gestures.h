@@ -74,7 +74,9 @@ struct GestureStep {
     float pressProgress = 0.0f;
     std::optional<Vec2> drawFrom, drawTo;
     bool drawEnded = false, drawCancelled = false;
-    /// «Прицел»: the finger on the view (the aim stands above it), let go — the point.
+    /// «Прицел»: the finger on the view (the aim stands above it). Held still
+    /// it fills the ring and puts the first point (drawFrom), then leads the
+    /// second (drawTo) until let go (drawEnded) — «Зажать и тянуть» with an aim.
     std::optional<Vec2> aimAt;
     bool aimEnded = false, aimCancelled = false;
 
@@ -94,7 +96,7 @@ public:
         DragMap drags;                      ///< what drags do now (the set for the cursor's state)
         /// "Зажать и тянуть": a long press starts a drawing drag instead of the context menu.
         bool drawHold = false;
-        bool drawAim = false;   ///< «Прицел»: one finger leads the aim, letting go places the point
+        bool drawAim = false;   ///< «Прицел»: as drawHold, the finger aiming before and while it holds
     };
 
     /// The defaults of the two sets.
@@ -152,6 +154,8 @@ private:
     bool   myAiming = false;      ///< «Прицел»: the finger leads the aim
     bool   myDrawing = false;     ///< "Зажать и тянуть": the held finger leads the second point
     // References for the deltas, from the last event (reset when the finger count changes).
+    Vec2   myStillAt{0, 0};       ///< «Прицел»: where the finger stopped (the ring counts from then)
+    double myStillSince = 0.0;
     Vec2   myLastCentre{0, 0};
     double myLastSpread = 0.0;
 };

@@ -571,19 +571,28 @@ void TouchInput::ApplyGestures(AppContext& app) {
         Click(ToIm(*step.tap), ImGuiMouseButton_Left);
         mon::Action("touch", "касание");
     }
-    // «Зажать и тянуть»: the ring, the first point, the finger leading the second, the release.
+    // «Зажать и тянуть» and «Прицел»: the ring, the first point, the finger leading
+    // the second, the release. With the aim every point is where the cross is, above the finger.
+    const bool aim = myGestures.GetMode().drawAim;
+    const auto spot = [&](Vec2 finger) { return aim ? TipOf(m, ToIm(finger), CursorReach(app)) : ToIm(finger); };
+    if (step.aimAt) {
+        m.aimFinger = ToIm(*step.aimAt);
+        m.aimTip = spot(*step.aimAt);   // never off the view (a click there would hit the ribbon)
+        m.aiming = true;
+        if (!step.drawTo) Pos(m.aimTip);
+    }
     if (step.pressAt) {
-        m.pressAt = ToIm(*step.pressAt);
+        m.pressAt = spot(*step.pressAt);
         m.pressProgress = step.pressProgress;
     }
     if (step.drawFrom) {
-        Click(ToIm(*step.drawFrom), ImGuiMouseButton_Left);
+        Click(spot(*step.drawFrom), ImGuiMouseButton_Left);
         m.drawDragging = true;
-        mon::Action("touch", "зажать и тянуть");
+        mon::Action("touch", aim ? "прицел" : "зажать и тянуть");
     }
-    if (step.drawTo) Pos(ToIm(*step.drawTo));
+    if (step.drawTo) Pos(spot(*step.drawTo));
     if (step.drawEnded && m.drawDragging) {
-        Click(ToIm(*step.drawTo), ImGuiMouseButton_Left);
+        Click(spot(*step.drawTo), ImGuiMouseButton_Left);
         m.drawDragging = false;
         myEndChainIn = 6;
     }
@@ -591,19 +600,7 @@ void TouchInput::ApplyGestures(AppContext& app) {
         m.drawDragging = false;
         if (Session* s = app.Doc(); s && s->mode == EditMode::Sketch) app.sketch.Escape(app, *s, false);   // the first point goes
     }
-    // «Прицел»: the aim above the finger, the point where it is when the finger leaves.
-    if (step.aimAt) {
-        m.aimFinger = ToIm(*step.aimAt);
-        m.aimTip = {m.aimFinger.x, m.aimFinger.y - CursorReach(app)};
-        m.aiming = true;
-        Pos(m.aimTip);
-    }
-    if (step.aimEnded && m.aiming) {
-        m.aiming = false;
-        Click(m.aimTip, ImGuiMouseButton_Left);
-        mon::Action("touch", "прицел");
-    }
-    if (step.aimCancelled) m.aiming = false;
+    if (step.aimEnded || step.aimCancelled) m.aiming = false;
     if (step.longPress && !m.holding) {
         const ImVec2 at = CursorActive(app) ? m.cursorTip : ToIm(*step.longPress);
         Click(at, ImGuiMouseButton_Right);   // the context menu

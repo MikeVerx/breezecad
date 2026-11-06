@@ -64,7 +64,8 @@ struct MobileSettings {
     /// a point where the finger was, 2 — hold and drag: a held press (a ring
     /// fills) puts the first point there, the finger leads the second, and
     /// letting go puts it, 3 — the aim: a finger on the view shows a cross a
-    /// little above it (the finger hides nothing), letting go puts the point there.
+    /// little above it (the finger hides nothing); held still it puts the first
+    /// point, dragged it leads the second, letting go puts it (as 2, with the aim).
     int    sketchInput = 0;
     double scrollSpeed = 1.0;     ///< lists scroll this much per finger travel
     std::vector<std::string> hotbar;   ///< actions added to the panel at the camera, in order
