@@ -87,6 +87,28 @@ case "${1:-}" in
             grep -E "ERROR|WARN|Window:|Viewport|test commands|Crash" "$log" 2>/dev/null | head -20
             [ "$alive" = yes ] && ! grep -q "Crash:\|did not start" "$log" || ok=no
         done
+        if [ "$ok" != yes ]; then
+            # Why it died: the program's own report (crash::ReportPath, in its
+            # data) and the system's crash log of the simulator's process.
+            data=$(xcrun simctl get_app_container "$UDID" "$BUNDLE_ID" data 2>/dev/null || true)
+            for r in "$data/Library/Application Support/reports/"crash-*.txt "$data/Library/Application Support/reports/"hang-*.txt; do
+                [ -f "$r" ] && { echo "== report $(basename "$r")"; head -60 "$r"; }
+            done
+            ips=$(ls -t "$HOME/Library/Logs/DiagnosticReports/"breezecad*.ips 2>/dev/null | head -1)
+            [ -n "$ips" ] && { echo "== system crash log $(basename "$ips")"; python3 -c '
+import json, sys
+text = open(sys.argv[1]).read()
+head, _, body = text.partition("\n")
+d = json.loads(body)
+print("exception:", d.get("exception"), "termination:", d.get("termination", {}).get("indicator"))
+images = d.get("usedImages", [])
+for t in d.get("threads", []):
+    if not t.get("triggered"): continue
+    for f in t.get("frames", [])[:40]:
+        img = images[f["imageIndex"]]["name"] if f.get("imageIndex") is not None and f["imageIndex"] < len(images) else "?"
+        print(" ", img, f.get("symbol", hex(f.get("imageOffset", 0))), "+", f.get("symbolLocation", ""))
+' "$ips" 2>&1 | head -60; }
+        fi
         [ "$ok" = yes ]
         ;;
     *)
