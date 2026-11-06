@@ -81,8 +81,12 @@ case "${1:-}" in
                 sips -Z 900 -s format jpeg -s formatOptions 60 "$OUT/simulator-ios-$shot.png" --out "$OUT/small-$shot.jpg" >/dev/null 2>&1 &&
                     { echo "SHOT-BEGIN $shot"; base64 -i "$OUT/small-$shot.jpg" | fold -w 4000; echo "SHOT-END $shot"; }
             fi
+            # The list first, then the search: "| grep -q" stops reading at the
+            # first match, launchctl dies of SIGPIPE, and with pipefail a live
+            # app read as dead (the sketch step "failed" so, 2026-11-06).
             alive=no
-            xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE_ID" && alive=yes
+            running=$(xcrun simctl spawn "$UDID" launchctl list 2>/dev/null || true)
+            case "$running" in *"$BUNDLE_ID"*) alive=yes ;; esac
             echo "step $shot: app alive $alive, $(grep -c ERROR "$log" 2>/dev/null || echo 0) errors"
             grep -E "ERROR|WARN|Window:|Viewport|test commands|Crash" "$log" 2>/dev/null | head -20
             if [ "$alive" != yes ] || grep -q "Crash:\|did not start" "$log"; then
