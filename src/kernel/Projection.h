@@ -32,7 +32,12 @@ struct RevolvedProjection {
 /// Moves the sketch curve `curve` (and its points) to `projected`. False when
 /// the sketch has no such curve of that kind.
 bool PlaceProjectedCurve(sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& projected);
-/// The sketch curve `curve` is where `projected` says (within `tolerance`, mm).
+/// Moves several projected curves of one sketch at once. A line may come the
+/// other way round than it was drawn: each takes the way that agrees with
+/// the curves sharing its ends. Per entry: placed (false as for PlaceProjectedCurve).
+std::vector<bool> PlaceProjectedCurves(sketch::Sketch& sk, const std::vector<std::pair<ObjectId, ProjectedCurve>>& curves);
+/// The sketch curve `curve` is where `projected` says (a line either way
+/// round; within `tolerance`, mm).
 bool CurveMatches(const sketch::Sketch& sk, ObjectId curve, const ProjectedCurve& projected, double tolerance);
 
 } // namespace bz::kernel

@@ -57,7 +57,7 @@ struct Cylinder {
         s.FindPoint(centre)->projected = true;
         circle = s.AddCircle(ids, centre, pc->radius);
         s.FindCircle(circle)->projected = true;
-        sk->projections.push_back({rim, circle});
+        sk->projections.push_back({rim, circle, {}});
         start = s.AddPoint(ids, {10, 0});
         end = s.AddPoint(ids, {30, 0});
         s.AddLine(ids, start, end);

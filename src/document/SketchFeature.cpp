@@ -42,6 +42,27 @@ constexpr std::array<std::pair<ConstraintType, std::string_view>, 22> kConstrain
 
 Error Bad(std::string_view what) { return Error{std::format("Эскиз: повреждено поле «{}»", what)}; }
 
+Json SourceToJson(const SketchSource& s) {
+    Json j{{"sketch", ToJson(s.sketch)}, {"curve", ToJson(s.curve)}, {"offset", s.offset}};
+    if (s.from != 0.0 || s.to != 1.0) j["range"] = Json::array({s.from, s.to});
+    return j;
+}
+
+/// The member "source" of a projection; absent (older files): unset.
+bool ReadSource(const Json& projection, SketchSource& out) {
+    const auto it = projection.find("source");
+    if (it == projection.end()) return true;
+    if (!it->is_object() || !ReadMember(*it, "sketch", out.sketch) || !ReadMember(*it, "curve", out.curve) ||
+        !ReadMember(*it, "offset", out.offset))
+        return false;
+    if (const auto r = it->find("range"); r != it->end()) {
+        if (!r->is_array() || r->size() != 2 || !(*r)[0].is_number() || !(*r)[1].is_number()) return false;
+        out.from = (*r)[0].get<double>();
+        out.to = (*r)[1].get<double>();
+    }
+    return true;
+}
+
 } // namespace
 
 std::string_view ConstraintTypeId(ConstraintType type) {
@@ -154,7 +175,11 @@ void SketchFeature::SaveFields(Json& out) const {
     if (placement.face.IsSet()) out["placement"]["face"] = json_io::ToJson(placement.face);
     if (!projections.empty()) {
         Json list = Json::array();
-        for (const Projection& p : projections) list.push_back({{"edge", json_io::ToJson(p.edge)}, {"curve", ToJson(p.curve)}});
+        for (const Projection& p : projections) {
+            Json j{{"edge", json_io::ToJson(p.edge)}, {"curve", ToJson(p.curve)}};
+            if (p.source.IsSet()) j["source"] = SourceToJson(p.source);
+            list.push_back(std::move(j));
+        }
         out["projections"] = std::move(list);
     }
     if (!contextProjections.empty()) {
@@ -163,6 +188,7 @@ void SketchFeature::SaveFields(Json& out) const {
             Json j{{"assembly", p.assembly}, {"component", ToJson(p.component)}, {"edge", json_io::ToJson(p.edge)},
                    {"curve", ToJson(p.curve)}};
             if (!p.adaptive) j["adaptive"] = false;
+            if (p.source.IsSet()) j["source"] = SourceToJson(p.source);
             list.push_back(std::move(j));
         }
         out["contextProjections"] = std::move(list);
@@ -308,7 +334,8 @@ Status SketchFeature::LoadFields(const Json& in) {
     for (const Json& j : in.value("projections", Json::array())) {
         Projection p;
         const auto edge = j.find("edge");
-        if (edge == j.end() || !json_io::Read(*edge, p.edge) || !ReadMember(j, "curve", p.curve)) return Bad("projections");
+        if (edge == j.end() || !json_io::Read(*edge, p.edge) || !ReadMember(j, "curve", p.curve) || !ReadSource(j, p.source))
+            return Bad("projections");
         projected.push_back(p);
     }
 
@@ -319,7 +346,7 @@ Status SketchFeature::LoadFields(const Json& in) {
         const auto edge = j.find("edge");
         if (!j.is_object() || edge == j.end() || !json_io::Read(*edge, p.edge) || !ReadMember(j, "curve", p.curve) ||
             !ReadMember(j, "assembly", p.assembly) || !ReadMember(j, "component", p.component) ||
-            !ReadMember(j, "adaptive", p.adaptive))
+            !ReadMember(j, "adaptive", p.adaptive) || !ReadSource(j, p.source))
             return Bad("contextProjections");
         fromAssembly.push_back(std::move(p));
     }
