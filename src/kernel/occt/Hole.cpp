@@ -57,6 +57,12 @@ Status CheckSizes(const doc::HoleFeature& f) {
         return Error{"Цековка должна быть шире отверстия и иметь глубину"};
     if (f.type == doc::HoleType::Countersink && f.sinkDiameter.value <= f.diameter.value)
         return Error{"Зенковка должна быть шире отверстия"};
+    // A blind hole shallower than its head: the head's cone or step went past
+    // the bottom and the bottom came out wrong (#26).
+    if (!f.throughAll && f.type == doc::HoleType::Counterbore && f.headDepth.value >= f.depth.value)
+        return Error{"Цековка глубже отверстия: увеличьте глубину отверстия или уменьшите цековку"};
+    if (!f.throughAll && f.type == doc::HoleType::Countersink && (f.sinkDiameter.value - f.diameter.value) / 2 >= f.depth.value)
+        return Error{"Зенковка глубже отверстия: увеличьте глубину отверстия или уменьшите зенковку"};
     return Status::Ok();
 }
 

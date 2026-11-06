@@ -6,6 +6,7 @@
 #include "app/shell/Shell.h"
 #include "app/sketch/SketchEditor.h"
 #include "app/sketch/SketchRepair.h"
+#include "app/mobile/TouchText.h"
 #include "core/I18n.h"
 #include "kernel/Model.h"
 #include "document/SketchFeature.h"
@@ -13,9 +14,32 @@
 #include "ui/Widgets.h"
 
 #include <cmath>
+#include <cstdio>
 #include <format>
 
 namespace bz::app {
+
+std::string FormatPolarStep(double step) {
+    char text[16];
+    std::snprintf(text, sizeof text, "%g", step);
+    return text;
+}
+
+void DrawPolarStepMenu(ui::Ui& ui, Settings& settings) {
+    // Polar tracking, as in AutoCAD (the same steps): a line keeps to
+    // multiples of the angle. "Орто" goes first when both are on.
+    if (!ui::BeginSubmenu(ui, Tr("Полярное отслеживание"), {})) return;
+    if (ui::MenuItem(ui, Tr("Выключено"), nullptr, {}, settings.polarStep <= 0)) settings.polarStep = 0;
+    for (const double step : kPolarSteps) {
+        const std::string label = FormatPolarStep(step) + "\xC2\xB0";
+        if (ui::MenuItem(ui, label.c_str(), nullptr, {}, std::abs(settings.polarStep - step) < 1e-6)) {
+            settings.polarStep = step;
+            settings.orthoMode = false;   // the two do not work together
+        }
+    }
+    ImGui::EndMenu();
+}
+
 
 void DrawProjectTabs(AppContext& app, ImVec2 pos, float width) {
     ui::Ui& ui = app.ui;
@@ -103,7 +127,9 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
     Session* s = app.Doc();
     if (!s || app.workspace.ShowsHome()) {
         text(Tr("Главная страница"), c.text, ui.fonts.medium);
-        text(Tr("Создайте документ (Ctrl+N) или откройте его (Ctrl+O)"), c.textSecondary);
+        const bool fingers = app.shell.mobile.touchScreen && !app.shell.mobile.hardKeyboard;
+        const std::string home = Tr("Создайте документ (Ctrl+N) или откройте его (Ctrl+O)");
+        text(fingers ? mobile::TouchHint(home) : home, c.textSecondary);
         EndArea();
         return;
     }
@@ -123,7 +149,11 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
         const MouseNavigation& m = app.settings.mouse;
         hint = Trf("{} — вращение, {} — сдвиг, прокрутка — масштаб, двойной щелчок в дереве — редактировать",
                    GestureText(m.orbit), GestureText(m.pan));
+        if (app.shell.mobile.touchScreen)
+            hint = Tr("Один палец — вращение, два — сдвиг, разведите пальцы — масштаб, двойное касание в дереве — редактировать");
     }
+    // Fingers and no keyboard: no keys in the hints, taps instead of clicks.
+    if (app.shell.mobile.touchScreen && !app.shell.mobile.hardKeyboard) hint = mobile::TouchHint(std::move(hint));
     text(mode, c.text, ui.fonts.medium);
 
     // Right side first (it must stay visible), then the hint takes the rest.
@@ -195,7 +225,10 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
             dl->AddText(ui.fonts.mono, fs, {right, ty}, ui::ToU32(c.textSecondary), coords.c_str());
             right -= ui.S(18);
         }
-        const std::string snaps = (app.settings.orthoMode ? std::string(Tr("Орто")) + "  \xC2\xB7  " : std::string()) + Trf("Привязки: {}", app.settings.pointSnap && app.settings.gridSnap ? Tr("точки, сетка")
+        const std::string polar = !app.settings.orthoMode && app.settings.polarStep > 0
+                                      ? Trf("Полярное {}°", FormatPolarStep(app.settings.polarStep)) + "  \xC2\xB7  "
+                                      : std::string();
+        const std::string snaps = polar + (app.settings.orthoMode ? std::string(Tr("Орто")) + "  \xC2\xB7  " : std::string()) + Trf("Привязки: {}", app.settings.pointSnap && app.settings.gridSnap ? Tr("точки, сетка")
                                                        : app.settings.pointSnap                       ? Tr("точки")
                                                        : app.settings.gridSnap                        ? Tr("сетка")
                                                                                                       : Tr("выкл"));
@@ -211,6 +244,7 @@ void DrawStatusBar(AppContext& app, ImVec2 pos, float width) {
                 app.settings.pointSnap = !app.settings.pointSnap;
             if (ui::MenuItem(ui, Tr("Привязка к сетке"), nullptr, {}, app.settings.gridSnap)) app.settings.gridSnap = !app.settings.gridSnap;
             if (ui::MenuItem(ui, Tr("Ортогональный режим"), "F8", {}, app.settings.orthoMode)) app.settings.orthoMode = !app.settings.orthoMode;
+            DrawPolarStepMenu(ui, app.settings);
             ImGui::EndPopup();
         }
     }

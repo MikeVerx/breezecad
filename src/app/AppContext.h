@@ -42,6 +42,8 @@ struct ShellState {
     RibbonTab ribbonTab = RibbonTab::Model;
     bool      handleHot = false;      ///< a drag handle in the view is under the cursor or held (no radial menu)
     float     ribbonScroll = 0.0f;   ///< sideways scroll of a ribbon wider than the window
+    bool      ribbonSwipe = false;   ///< a finger is scrolling the ribbon (its buttons do not get that touch)
+    float     ribbonFling = 0.0f;    ///< the ribbon's coasting speed after a swipe, pixels a frame
     float     ribbonContent = 0.0f;  ///< the ribbon's laid-out width in the last frame
     /// Ribbon groups folding to icons: 0 with captions … 1 icons only, moving
     /// towards Settings::ribbonIconsOnly over half a second (Ribbon.cpp).

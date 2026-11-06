@@ -25,7 +25,8 @@ struct WindowConfig {
 };
 
 /// The main application window with an OpenGL 3.3 context (desktop, GLFW;
-/// Window.cpp) or OpenGL ES 3 (Android, EGL; Window_android.cpp).
+/// Window.cpp) or OpenGL ES 3 (Android, EGL; Window_android.cpp — iOS,
+/// EAGL; Window_ios.mm).
 class Window {
 public:
     Window() = default;
@@ -83,6 +84,33 @@ public:
     /// the background and its surface is gone). Always true on the desktop.
     bool CanDraw() const;
 
+#if defined(BZ_IOS)
+    /// One finger, pencil or pointer of the view (UITouch), in points.
+    struct Touch {
+        int    id = 0;
+        int    phase = 0;        ///< 0 down, 1 move, 2 up, 3 cancelled
+        int    tool = 0;         ///< 0 finger, 1 Apple Pencil, 2 mouse or trackpad pointer
+        float  x = 0, y = 0;
+        double time = 0;         ///< Window::Time
+    };
+    /// Every touch of the view, on the program's thread. Set once by the application.
+    void SetTouchHandler(std::function<void(const Touch&)> handler);
+    /// A key of a hardware keyboard (an iPad's Magic Keyboard, any Bluetooth
+    /// one): its USB HID usage (UIKeyboardHIDUsage) and the modifiers held.
+    /// The characters come as text through the system (Mobile.h, TakeTypedText).
+    struct Key {
+        int  usage = 0;
+        bool down = false;
+        bool ctrl = false, shift = false, alt = false, command = false;
+    };
+    void SetKeyHandler(std::function<void(const Key&)> handler);
+    /// Called when the view changed size, the safe area or the keyboard
+    /// moved, or the app came back to the front.
+    void SetChangeHandler(std::function<void()> handler);
+    /// Points per pixel of the screen (2 or 3).
+    float Density() const { return myDensity; }
+#endif
+
 #if defined(__ANDROID__)
     /// Every input event of the window (an AInputEvent*); returns 1 when
     /// taken. Set once by the application.
@@ -95,6 +123,19 @@ public:
 #endif
 
 private:
+#if defined(BZ_IOS)
+    friend struct IosWindowAccess;
+    void*  myView = nullptr;       ///< the app's BZView (UIView with a CAEAGLLayer), not owned
+    void*  myContext = nullptr;    ///< EAGLContext (retained): lives as long as the window object
+    unsigned myFramebuffer = 0;    ///< the window: the layer's colour buffer
+    unsigned myColorBuffer = 0;
+    int    myPixelsWide = 0, myPixelsHigh = 0;
+    float  myDensity = 1.0f;
+    bool   myCloseRequested = false;
+    std::function<void(const Touch&)> myTouch;
+    std::function<void(const Key&)> myKey;
+    std::function<void()> myChanged;
+#endif
 #if defined(__ANDROID__)
     bool CreateSurface();
     void DestroySurface();

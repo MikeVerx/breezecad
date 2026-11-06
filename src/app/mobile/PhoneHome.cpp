@@ -23,8 +23,8 @@
 #include <fstream>
 #include <map>
 
-#if defined(__ANDROID__)
-#include "platform/Android.h"
+#if defined(BZ_MOBILE)
+#include "platform/Mobile.h"
 #endif
 
 namespace bz::app::mobile {
@@ -251,15 +251,15 @@ float DrawRecovery(AppContext& app, ImVec2 at, float width) {
 std::vector<Card> Projects(AppContext& app, bool byName, bool& noFolder) {
     std::vector<Card> cards;
     noFolder = false;
-#if defined(__ANDROID__)
-    const std::string folder = platform::android::ProjectsFolder();
+#if defined(BZ_MOBILE)
+    const std::string folder = platform::mobile::ProjectsFolder();
     noFolder = folder.empty();
     // Read again now and then, not every frame (the system answers slowly).
-    static std::vector<platform::android::FolderEntry> entries;
+    static std::vector<platform::mobile::FolderEntry> entries;
     static double readAt = -100;
     static std::string readFrom;
     if (folder != readFrom || app.now - readAt > 5.0) {
-        entries = folder.empty() ? std::vector<platform::android::FolderEntry>{} : platform::android::ListProjects();
+        entries = folder.empty() ? std::vector<platform::mobile::FolderEntry>{} : platform::mobile::ListProjects();
         readAt = app.now;
         readFrom = folder;
     }
@@ -285,9 +285,9 @@ std::vector<Card> Projects(AppContext& app, bool byName, bool& noFolder) {
 }
 
 void Open(AppContext& app, const Card& card) {
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     app.Later([&app, card] {
-        if (const auto local = platform::android::Import(card.uri, card.name); !local.empty()) OpenDocument(app, local);
+        if (const auto local = platform::mobile::Import(card.uri, card.name); !local.empty()) OpenDocument(app, local);
     });
 #else
     app.Later([&app, card] { OpenDocument(app, card.path); });
@@ -366,13 +366,13 @@ void DrawProjects(AppContext& app, ImVec2 pos, ImVec2 size) {
     const float segW = ui.S(190);
     ImGui::SetCursorScreenPos({right - rowH - ui.S(8) - segW, y});
     order = ui::Segmented(ui, "home-order", orders, order, 2, segW);
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // The folder, as a chip: its name and "сменить".
     {
         const std::string folderName = app.settings.mobile.projectsFolderName.empty()
-                                           ? std::string(platform::android::ProjectsFolder().empty() ? Tr("Папка не выбрана") : Tr("Папка проектов"))
+                                           ? std::string(platform::mobile::ProjectsFolder().empty() ? Tr("Папка не выбрана") : Tr("Папка проектов"))
                                            : app.settings.mobile.projectsFolderName;
-        const std::string change = platform::android::ProjectsFolder().empty() ? Tr("выбрать") : Tr("сменить");
+        const std::string change = platform::mobile::ProjectsFolder().empty() ? Tr("выбрать") : Tr("сменить");
         const float room = right - rowH - ui.S(16) - segW - hx;
         if (room > ui.S(110)) {
             const ImVec2 ns = ui.fonts.bodySmall->CalcTextSizeA(ui.S(12), FLT_MAX, 0, folderName.c_str());
@@ -388,7 +388,7 @@ void DrawProjects(AppContext& app, ImVec2 pos, ImVec2 size) {
             ui::FittedText(dl, ui.fonts.bodySmall, ui.S(12), {tx, y + (rowH - ns.y) / 2}, cx - ui.S(8), ui::ToU32(c.textSecondary),
                            folderName.c_str());
             dl->AddText(ui.fonts.bodySmall, ui.S(12), {cx, y + (rowH - cs.y) / 2}, ui::ToU32(c.selection), change.c_str());
-            if (clicked) platform::android::ChooseProjectsFolder();
+            if (clicked) platform::mobile::ChooseProjectsFolder();
         }
     }
 #else
@@ -419,12 +419,12 @@ void DrawProjects(AppContext& app, ImVec2 pos, ImVec2 size) {
                                                             : Tr("Проектов пока нет. Самое время творить!"));
         ImGui::PopStyleColor();
         ImGui::PopTextWrapPos();
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
         if (noFolder) {
             ImGui::Dummy({0, ui.S(8)});
             ImGui::SetCursorScreenPos({x, ImGui::GetCursorScreenPos().y});
             if (ui::PrimaryButton(ui, "##home-choose-folder", Tr("Выбрать папку…"), nullptr, ui.S(170, 40)))
-                platform::android::ChooseProjectsFolder();
+                platform::mobile::ChooseProjectsFolder();
         }
 #endif
     } else {

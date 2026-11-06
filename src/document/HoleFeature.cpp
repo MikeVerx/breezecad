@@ -52,6 +52,7 @@ void HoleFeature::SaveFields(Json& out) const {
     out["headDiameter"] = json_io::ToJson(headDiameter);
     out["headDepth"]    = json_io::ToJson(headDepth);
     out["sinkDiameter"] = json_io::ToJson(sinkDiameter);
+    if (sketch) out["sketch"] = json_io::ToJson(sketch);
     if (!concentric.empty()) {
         Json axes = Json::array();
         for (const HoleAxis& a : concentric) {
@@ -99,7 +100,9 @@ Status HoleFeature::LoadFields(const Json& in) {
         if (a.centre >= f.centres.size() || (!a.edge && !a.cylinder)) continue;   // nothing to hold: a free centre
         f.concentric.push_back(a);
     }
+    if (in.contains("sketch") && !json_io::ReadMember(in, "sketch", f.sketch)) return Error{"Отверстие: повреждена ссылка на эскиз"};
     // Only the type's own fields: id, name and suppressed are already read.
+    sketch       = f.sketch;
     face         = f.face;
     centres      = std::move(f.centres);
     concentric   = std::move(f.concentric);

@@ -36,6 +36,8 @@ private:
     doc::HoleFeature* Feature(Session& session) const;
     void DrawFaceSection(AppContext& app, Session& session, doc::HoleFeature& f, float width);
     void DrawCentres(AppContext& app, Session& session, doc::HoleFeature& f, float width);
+    /// «По эскизу»: the sketches above the hole that have circles, to choose from.
+    void DrawSketchChoice(AppContext& app, Session& session, doc::HoleFeature& f, float width);
     void DrawSizes(AppContext& app, Session& session, doc::HoleFeature& f, float width);
     /// A click on the model: choose the face or add a centre on it.
     void ClickModel(AppContext& app, Session& session, doc::HoleFeature& f, const ViewportFrame& vf);
@@ -47,6 +49,7 @@ private:
     std::optional<int> myHoveredCentre;
     DragArrow          myArrow;   ///< depth
     bool               myCoaxial = false;   ///< clicks make coaxial centres
+    bool               myFromSketch = false;   ///< «По эскизу»: the centres of a sketch's circles
 };
 
 } // namespace bz::app

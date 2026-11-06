@@ -452,8 +452,14 @@ void DrawViewport(AppContext& app, Session& session, ImVec2 pos, ImVec2 size) {
         ImDrawList* front = ImGui::GetForegroundDrawList();
         front->PushClipRect(pos, {pos.x + size.x, pos.y + size.y + ui.S(60)});
         mobile::DrawDropCursor(app, front);
+        mobile::DrawPressRing(app, front);
+        mobile::DrawAim(app, front);
         front->PopClipRect();
     } else {
+        if (app.shell.mobile.touchScreen) {   // a tablet
+            mobile::DrawPressRing(app, ImGui::GetForegroundDrawList());
+            mobile::DrawAim(app, ImGui::GetForegroundDrawList());
+        }
         const ui::ViewCubeAction cube = ui::DrawViewCube(ui, vf.projection, pos, {pos.x + size.x, pos.y + size.y}, app.settings.showTriad);
         if (cube.lookFrom) LookFrom(app, cube.lookFrom->first, cube.lookFrom->second);
         if (cube.home) HomeView(app);

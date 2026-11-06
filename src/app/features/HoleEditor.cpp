@@ -3,9 +3,11 @@
 
 #include "app/Format.h"
 #include "app/sketch/SketchView.h"
+#include "document/SketchFeature.h"
 #include "core/I18n.h"
 #include "ui/Widgets.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>
@@ -75,6 +77,7 @@ doc::HoleFeature* HoleEditor::Feature(Session& session) const { return dynamic_c
 bool HoleEditor::CanEdit(const doc::Feature& f) const { return dynamic_cast<const doc::HoleFeature*>(&f) != nullptr; }
 
 std::string HoleEditor::Hint() const {
+    if (myFromSketch) return Tr("Выберите эскиз с окружностями в панели — отверстия встанут в их центры. Enter — готово, Esc — отмена");
     if (myCoaxial)
         return Tr("Щёлкните круглую кромку или цилиндрическую грань — отверстие встанет соосно с ней. Enter — готово, Esc — отмена");
     return Tr("Щёлкните плоскую грань — там встанет центр; ещё щелчки добавляют центры, щелчок по центру убирает. "
@@ -115,6 +118,7 @@ bool HoleEditor::ShowStatus(const doc::Feature& feature) const {
 
 void HoleEditor::LoadTexts(const doc::Feature& feature) {
     const auto& f = static_cast<const doc::HoleFeature&>(feature);
+    if (f.sketch) myFromSketch = true;
     myDiameter = f.diameter.expression;
     myDepth = f.depth.expression;
     myHeadDiameter = f.headDiameter.expression;
@@ -180,6 +184,7 @@ void HoleEditor::DrawInViewport(AppContext& app, Session& session, const Viewpor
     }
 
     if (!vf.hovered || !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) return;
+    if (f->sketch || myFromSketch) return;   // the centres come from the sketch
     if (myHoveredCentre) {
         f->RemoveCentre(static_cast<std::size_t>(*myHoveredCentre));
         myHoveredCentre.reset();
@@ -275,20 +280,40 @@ void HoleEditor::DrawFaceSection(AppContext& app, Session& session, doc::HoleFea
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(34);
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        const bool ready = HasFace(f) && !f.centres.empty();
+        const bool fromSketch = myFromSketch || f.sketch;
+        const bool ready = fromSketch ? f.sketch && !f.centres.empty() : HasFace(f) && !f.centres.empty();
         dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoft), ui.S(8));
         dl->AddRect(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoftBorder), ui.S(8));
         ui.icons.Draw(dl, ready ? "ui-check" : "status-warning", {p.x + ui.S(10), p.y + (h - ui.S(14)) / 2}, ui.S(14), c.accent);
-        const std::string chip = !HasFace(f) ? std::string(Tr("Грань не выбрана"))
-                                             : Trf("Грань выбрана \xC2\xB7 центров: {}", f.centres.size());
+        const std::string chip = fromSketch ? (f.sketch ? Trf("Эскиз выбран \xC2\xB7 центров: {}", f.centres.size())
+                                                        : std::string(Tr("Эскиз не выбран")))
+                                 : !HasFace(f) ? std::string(Tr("Грань не выбрана"))
+                                               : Trf("Грань выбрана \xC2\xB7 центров: {}", f.centres.size());
         dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(32), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), chip.c_str());
         ImGui::Dummy({width, h});
     }
     {
-        static constexpr std::array<ChoiceItem, 2> modes{{{"hole-at-click", N_("Центр по щелчку")}, {"hole-coaxial", N_("Соосно")}}};
-        const int current = myCoaxial ? 1 : 0;
-        if (const int chosen = ToolChoice(app, "centre-mode", N_("Центр"), modes, current, width); chosen != current) myCoaxial = chosen == 1;
+        static constexpr std::array<ChoiceItem, 3> modes{
+            {{"hole-at-click", N_("Центр по щелчку")}, {"hole-coaxial", N_("Соосно")}, {"sketch", N_("По эскизу")}}};
+        if (f.sketch) myFromSketch = true;
+        const int current = myFromSketch ? 2 : myCoaxial ? 1 : 0;
+        if (const int chosen = ToolChoice(app, "centre-mode", N_("Центр"), modes, current, width); chosen != current) {
+            myCoaxial = chosen == 1;
+            myFromSketch = chosen == 2;
+            if (!myFromSketch && f.sketch) {   // back to centres of its own: they start where the sketch put them
+                f.sketch = {};
+                Changed(session);
+            }
+        }
         ImGui::Dummy({0, ui.S(4)});
+    }
+    if (myFromSketch) {
+        Caption(app,
+                Tr("Отверстия встанут в центры окружностей эскиза (кроме вспомогательных) и будут следовать за ним. "
+                   "Грань — плоская грань тела в плоскости эскиза."),
+                width);
+        DrawSketchChoice(app, session, f, width);
+        return;
     }
     if (myCoaxial)
         Caption(app,
@@ -309,6 +334,40 @@ void HoleEditor::DrawFaceSection(AppContext& app, Session& session, doc::HoleFea
             Changed(session);
         }
     }
+}
+
+void HoleEditor::DrawSketchChoice(AppContext& app, Session& session, doc::HoleFeature& f, float width) {
+    ui::Ui& ui = app.ui;
+    const ui::ThemeColors& c = ui.C();
+    const int own = session.doc.IndexOf(f.id);
+    bool any = false;
+    for (int i = 0; i < (own < 0 ? static_cast<int>(session.doc.FeatureCount()) : own); ++i) {
+        const auto* sk = dynamic_cast<const doc::SketchFeature*>(session.doc.Features()[static_cast<std::size_t>(i)].get());
+        if (!sk || sk->suppressed) continue;
+        const auto circles = std::count_if(sk->sketch.circles.begin(), sk->sketch.circles.end(),
+                                           [](const sketch::Circle& k) { return !k.construction; });
+        if (circles == 0) continue;
+        any = true;
+        const bool chosen = f.sketch == sk->id;
+        const std::string label = Trf("{} Â· окружностей: {}", sk->name, circles);
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+        const float h = ui.S(34);
+        ImGui::PushID(static_cast<int>(sk->id.value));
+        if (ImGui::InvisibleButton("##sketch", {width, h}) && !chosen) {
+            f.sketch = sk->id;
+            Changed(session);
+        }
+        const bool hot = ImGui::IsItemHovered();
+        ImGui::PopID();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(chosen ? c.accentSoft : hot ? c.hover : c.field), ui.S(8));
+        dl->AddRect(p, {p.x + width, p.y + h}, ui::ToU32(chosen ? c.accentSoftBorder : c.fieldBorder), ui.S(8));
+        ui.icons.Draw(dl, chosen ? "ui-check" : "tree-sketch", {p.x + ui.S(10), p.y + (h - ui.S(16)) / 2}, ui.S(16),
+                      chosen ? c.accent : c.textSecondary);
+        dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(34), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), label.c_str());
+        ImGui::Dummy({0, ui.S(2)});
+    }
+    if (!any) Caption(app, Tr("Выше отверстия нет эскизов с окружностями. Нарисуйте окружности в эскизе на грани и вернитесь."), width);
 }
 
 void HoleEditor::DrawCentres(AppContext& app, Session& session, doc::HoleFeature& f, float width) {

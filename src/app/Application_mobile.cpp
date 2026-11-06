@@ -1,0 +1,322 @@
+// The mobile part of Application, Android and iOS alike (docs/ADR/0004-mobile-touch-ui.md,
+// docs/dev/IOS-PORT.md): the system's answers between frames, the keyboard,
+// the background, the check of how the last run ended, the test commands.
+// Where the input comes from is the platform's: Application_android.cpp,
+// Application_ios.mm (StartMobile, FeedSystemInput).
+#if defined(BZ_MOBILE)
+
+#include "app/Application.h"
+#include "app/Operations.h"
+#include "app/mobile/MobileLayout.h"
+#include "app/mobile/TouchInput.h"
+#include "app/sketch/SketchPick.h"
+#include "core/CrashCode.h"
+#include "core/I18n.h"
+#include "core/Log.h"
+#include "core/PathText.h"
+#include "document/BzcFile.h"
+#include "document/Origin.h"
+#include "platform/Mobile.h"
+#include "platform/Paths.h"
+
+#include <imgui.h>
+#include <imgui_impl_opengl3.h>
+
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+
+namespace bz::app {
+
+namespace droid = platform::mobile;   // the system (platform/Mobile.h)
+
+void Application::InstallMobileClipboard() {
+    ImGuiPlatformIO& pio = ImGui::GetPlatformIO();
+    pio.Platform_SetClipboardTextFn = [](ImGuiContext*, const char* text) { droid::SetClipboard(text ? text : ""); };
+    pio.Platform_GetClipboardTextFn = [](ImGuiContext*) -> const char* {
+        static std::string text;
+        text = droid::Clipboard();
+        return text.c_str();
+    };
+}
+
+bool Application::MobileBetweenFrames(double now) {
+    droid::Heartbeat();
+
+    // In the background the system may end the app at any moment without a
+    // word: everything unsaved goes to the autosave at once.
+    const bool background = !myWindow.CanDraw();
+    if ((background && !myInBackground) || myWindow.ShouldClose()) {
+        for (auto& s : myWorkspace.sessions) myAutosave->WriteNow(*s, now);
+        mySettings.Save(platform::ConfigDir() / "settings.json");
+        log::Info("Mobile: {} — work kept in the autosave", myWindow.ShouldClose() ? "the system closes the app" : "in the background");
+    }
+    if (myWindow.ShouldClose()) return false;
+    if (!background && myInBackground) myFramesToDraw = std::max(myFramesToDraw, 3);
+    myInBackground = background;
+
+    // The test "holdtest": the cursor's tip on the line (the view's middle), once the view is laid out.
+    if (myTestPlaceCursor && myShell.mobile.viewMax.x > myShell.mobile.viewMin.x + 50) {
+        myTestPlaceCursor = false;
+        mobile::MobileState& m = myShell.mobile;
+        m.cursorShown = true;
+        m.cursorTip = {(m.viewMin.x + m.viewMax.x) / 2, (m.viewMin.y + m.viewMax.y) / 2};
+        m.cursorFinger = {m.cursorTip.x, m.cursorTip.y + mobile::CursorReach(*myContext)};
+        log::Info("Touch: drop at {:.0f},{:.0f}", m.cursorFinger.x, m.cursorFinger.y);
+        myFramesToDraw = std::max(myFramesToDraw, 3);
+    }
+    // The screen around the window: cut-out, bars, corners, keyboard.
+    const droid::Screen screen = droid::CurrentScreen();
+    if (screen.revision != myScreenRevision) {
+        myScreenRevision = screen.revision;
+        mobile::MobileState& m = myShell.mobile;
+        // In landscape the camera is on the left or the right (it moves when the phone turns over).
+        m.cutoutSide = screen.cutout.left > 0.5f ? -1 : screen.cutout.right > 0.5f ? 1 : 0;
+        m.cutoutFrom = screen.cutoutFrom;
+        m.cutoutTo = screen.cutoutTo;
+        m.cornerRadius = screen.cornerRadius;
+        m.insets = {std::max(screen.cutout.left, screen.bars.left), std::max(screen.cutout.top, screen.bars.top),
+                    std::max(screen.cutout.right, screen.bars.right),
+                    std::max({screen.cutout.bottom, screen.bars.bottom, screen.gestures.bottom * 0.5f})};
+        m.keyboardHeight = screen.ime.bottom;
+        m.hardKeyboard = screen.hardKeyboard && !myTestTouchKeys;   // the emulator has one; its check needs the numpad
+        myFramesToDraw = std::max(myFramesToDraw, 3);
+    }
+    FeedSystemInput();   // the keyboard's text, the volume keys (the platform's)
+
+    // An answer of the system's picker that no dialog waited for: the projects folder.
+    if (auto picked = droid::TakePickResult()) {
+        if (picked->kind == droid::PickResult::Kind::Folder && !picked->uri.empty()) {
+            mySettings.mobile.projectsFolderName = picked->name;
+            myNotes.Success(Trf("Папка проектов: {}", picked->name));
+        } else if (picked->kind == droid::PickResult::Kind::Open && !picked->uri.empty()) {
+            if (const auto local = droid::Import(picked->uri, picked->name); !local.empty()) OpenDropped(*myContext, local);
+        }
+        myFramesToDraw = std::max(myFramesToDraw, 3);
+    }
+
+    // The keyboard: the numpad in block 1 for values on the phone, the
+    // system's keyboard for names and search (or when asked with ⌨); none
+    // when a hardware keyboard is there.
+    mobile::MobileState& m = myShell.mobile;
+    // A bare finger picks sketch lines from ~3 mm; the cursor's tip is precise.
+    SetPickScale(m.phone && !mobile::CursorActive(*myContext) ? 3.0f : 1.0f);
+    myContext->sketch.SetAutoArrange(m.phone);   // new dimensions placed clear of the others
+    const bool typing = ImGui::GetCurrentContext() && ImGui::GetIO().WantTextInput;
+    const bool words = myShell.paletteOpen || myShell.renaming || myShell.treeSearch || m.fullKeyboard || !m.phone;
+    myUi->keyHints = m.hardKeyboard;   // Ctrl+N or Esc mean nothing on a touch screen without a keyboard
+    static bool wasTyping = false;   // the log: a field took or left the keyboard
+    if (typing != wasTyping) {
+        log::Info("Keyboard: typing {}", typing ? "on" : "off");
+        wasTyping = typing;
+    }
+    const bool hadNumpad = m.numpad;
+    // A tablet (the desktop layout): the numpad for the values of an operation
+    // (extrude and the rest) and of a sketch, floating over the view's corner;
+    // names, search and dialogs keep the system keyboard.
+    const Session* active = myWorkspace.Active();
+    const bool tabletValue = !m.phone && !myShell.paletteOpen && !myShell.renaming && !myShell.treeSearch && !m.fullKeyboard &&
+                             !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel) &&
+                             active && !myWorkspace.ShowsHome() && (myOps.Active() || active->mode == EditMode::Sketch);
+    m.numpad = typing && !m.hardKeyboard && (m.phone ? !words : tabletValue);
+    if (!m.numpad && !m.phone) m.numpadKeys.clear();
+    // A value left any way (↵, the OK button, another field): it is "пред." for the next one.
+    if (hadNumpad && !m.numpad && !m.editingText.empty()) m.previousValue = m.editingText;
+    if (hadNumpad != m.numpad) log::Info("Keyboard: numpad {}", m.numpad ? "on" : "off");
+    const bool keyboard = typing && !m.numpad && !m.hardKeyboard;
+    if (!typing) m.fullKeyboard = false;
+    if (keyboard != myKeyboardUp) {
+        log::Info("Keyboard: system {}", keyboard ? "on" : "off");
+        droid::ShowKeyboard(keyboard);
+        myKeyboardUp = keyboard;
+    }
+
+    // The watchdog's notice needs a permission (Android 13+): asked once, a
+    // little after the start rather than over the splash.
+    if (!mySettings.mobile.askedNotifications && now - myStartedAt > 3.0) {
+        mySettings.mobile.askedNotifications = true;
+        droid::AskNotifications();
+    }
+    return true;
+}
+
+void Application::CheckLastExit() {
+    // Layer 3 (ADR-0004): how the last run ended, as the system says, and a
+    // report our handler or the hang guard left. Either one: the error
+    // screen, then the recovery on the home page as on the desktop.
+    const std::string reason = droid::LastExitReason();
+    const std::filesystem::path dir = platform::ConfigDir() / "reports";
+    std::filesystem::path newest;
+    std::filesystem::file_time_type newestTime{};
+    std::error_code ec;
+    for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
+        const std::string name = ToUtf8(e.path().filename());
+        if (!(name.starts_with("crash-") || name.starts_with("hang-")) || !name.ends_with(".txt")) continue;
+        const auto t = e.last_write_time(ec);
+        if (newest.empty() || t > newestTime) {
+            newest = e.path();
+            newestTime = t;
+        }
+    }
+    // A report is news once: its name is noted when shown.
+    const std::filesystem::path seenFile = dir / ".shown";
+    std::string seen;
+    std::getline(std::ifstream(seenFile), seen);
+    const bool newReport = !newest.empty() && ToUtf8(newest.filename()) != seen;
+    const bool systemSaysCrash = reason == "crash" || reason == "native crash" || reason == "anr";
+    if (!newReport && !systemSaysCrash) return;
+
+    mobile::MobileState::LastCrash& c = myShell.mobile.lastCrash;
+    c.open = true;
+    c.reason = reason;
+    if (newReport) {
+        std::ifstream in(newest, std::ios::binary);
+        std::ostringstream text;
+        text << in.rdbuf();
+        c.report = text.str();
+        c.file = ToUtf8(newest);
+        c.hang = ToUtf8(newest.filename()).starts_with("hang-");
+        std::ofstream(seenFile, std::ios::trunc) << ToUtf8(newest.filename());
+    } else {
+        c.report = "BreezeCAD: the system reports the last run ended with: " + reason + "\n";
+        c.hang = reason == "anr";
+    }
+    c.code = crash::ErrorCode(c.report);
+    myShell.crashedLastTime = true;
+    log::Warn("Mobile: the last run ended badly ({}), code {}", reason.empty() ? "a report was left" : reason, c.code);
+}
+
+void Application::TestSaveBack() {
+    // A save to a document outside the app, end to end, as "Сохранить" does it
+    // (0.2.3.2: it never reached the projects folder, which kept an empty
+    // file). The projects folder needs a person to pick it: a file:// URI
+    // stands for its document here, through the same copy back and forth.
+    namespace fs = std::filesystem;
+    const auto bytes = [](const fs::path& p) {
+        std::error_code ec;
+        const auto n = fs::file_size(p, ec);
+        return ec ? std::uintmax_t{0} : n;
+    };
+    std::error_code ec;
+    const fs::path folder = droid::DataDir() / "saveback";
+    fs::remove_all(folder, ec);
+    fs::create_directories(folder, ec);
+    const fs::path remote = folder / "saveback.bzc";
+    std::ofstream(remote, std::ios::binary).close();   // empty, as the folder's new document is made
+    const std::string uri = "file://" + remote.string();
+
+    NewDocument(*myContext);
+    Session* s = myWorkspace.Active();
+    if (!s) {
+        log::Error("Saveback: FAILED — no document");
+        return;
+    }
+    const fs::path local = droid::LocalCopyFor(uri, "saveback.bzc");
+    droid::Link(local, uri);
+    s->path = local;            // as after the first "Сохранить" into the projects folder
+    s->history.MarkUnsaved();
+    myActions.Run("file.save");   // Ctrl+S / the button: SaveDocument → Workspace::Save
+    const bool saved = !s->IsModified();
+    const std::uintmax_t written = bytes(remote);
+    const bool opens = static_cast<bool>(doc::LoadBzc(remote));
+    log::Info("Saveback: saved {}, the document has {} bytes, opens {}", saved, written, opens);
+
+    // The empty document of 0.2.3.1 opened: the copy here must stay, and go back to it.
+    fs::resize_file(remote, 0, ec);
+    const fs::path again = droid::Import(uri, "saveback.bzc");
+    const bool kept = again == local && bytes(local) > 0;
+    const bool healed = bytes(remote) > 0 && static_cast<bool>(doc::LoadBzc(remote));
+    log::Info("Saveback: the empty document kept the copy {}, got it back {}", kept, healed);
+
+    // A document that cannot be written: an error, and the work stays unsaved.
+    const fs::path lost = droid::LocalCopyFor("file:///nonexistent/saveback.bzc", "lost.bzc");
+    droid::Link(lost, "file:///nonexistent/saveback.bzc");
+    s->path = lost;
+    s->history.MarkUnsaved();
+    myActions.Run("file.save");
+    const bool refused = s->IsModified();
+    log::Info("Saveback: an unwritable document left the work unsaved {}", refused);
+
+    const bool ok = saved && written > 0 && opens && kept && healed && refused;
+    if (ok) log::Info("Saveback: ok");
+    else log::Error("Saveback: FAILED");
+    s->path = local;
+    s->history.MarkSaved();
+}
+
+void Application::RunTestCommands() {
+    // A test run on the emulator (scripts/android/smoke-apk.sh): what to open
+    // and do, so its screenshots show the program at work. Never set by a person.
+    const std::string commands = droid::TestCommands();
+    if (commands.empty()) return;
+    log::Info("Mobile: test commands \"{}\"", commands);
+    std::istringstream list(commands);
+    for (std::string c; std::getline(list, c, ',');) {
+        if (c == "example") {
+            OpenDocument(*myContext, platform::AssetsDir() / "examples" / "bracket.bzc");
+        } else if (c == "new") {
+            NewDocument(*myContext);
+        } else if (c == "sketch") {
+            if (myWorkspace.Active() == nullptr) NewDocument(*myContext);
+            if (Session* s = myWorkspace.Active()) {
+                s->selectedFeature = doc::origin::kPlaneXY;   // "start a sketch" takes the chosen plane
+                myActions.Run("sketch.start");
+                myShell.ribbonTab = RibbonTab::Sketch;
+            }
+        } else if (c == "line") {
+            myActions.Run("sketch.line");
+        } else if (c == "cursor") {
+            myShell.mobile.cursorIn3d = true;
+        } else if (c == "lefty") {
+            mySettings.mobile.leftHanded = true;
+        } else if (c == "icons") {
+            mySettings.mobile.iconsOnly = true;
+        } else if (c == "desktop") {
+            mySettings.mobile.layout = 1;
+        } else if (c == "phone") {
+            mySettings.mobile.layout = 2;
+        } else if (c == "settings") {
+            myShell.showSettings = true;
+        } else if (c == "touchkeys") {
+            myTestTouchKeys = true;   // as on a phone with no keyboard plugged in
+        } else if (c == "dims") {
+            // A rectangle with two dimensions, the second one being typed: the
+            // emulator taps the first one and expects its name in the field.
+            if (Session* s = myWorkspace.Active(); s && s->mode == EditMode::Sketch) {
+                myContext->sketch.MakeDimensionTest(*s);
+                // Fitted: in the new document's view the 40x20 rectangle was a few
+                // pixels and the labels lay over each other (the tap hit the typed one).
+                myActions.Run("view.fit");
+            }
+        } else if (c == "extrude") {
+            myActions.Run("feature.extrude");   // its distance field: the emulator taps it (smoke-apk.sh)
+        } else if (c == "numpad") {
+            myShell.mobile.block1Tab = 1;
+        } else if (c == "strip") {
+            myShell.mobile.flyGroup = "*";   // compact block 2: the first group with more opens its strip
+        } else if (c == "layout") {
+            mobile::OpenLayoutEditor(*myContext);
+        } else if (c == "home") {
+            // Nothing: the home page as it opens, but a test run (no first-start setup over it).
+        } else if (c == "holdtest") {
+            // «Зажать» (smoke-apk.sh): a line through the view's middle, chosen; the
+            // cursor's tip put on it.
+            if (Session* s = myWorkspace.Active(); s && s->mode == EditMode::Sketch) {
+                myContext->sketch.MakeHoldTest(*s);
+                myActions.Run("view.fit");
+                myShell.mobile.cursorInSketch = true;
+                myTestPlaceCursor = true;   // once the view's place is known (MobileBetweenFrames)
+            }
+        } else if (c == "setup") {
+            mobile::StartSetup(*myContext);
+        } else if (c == "saveback") {
+            myContext->Later([this] { TestSaveBack(); });   // between frames, as a tap on "Сохранить" runs
+        }
+    }
+    myFramesToDraw = std::max(myFramesToDraw, 5);
+}
+
+} // namespace bz::app
+
+#endif

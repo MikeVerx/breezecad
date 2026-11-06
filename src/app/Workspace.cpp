@@ -14,8 +14,8 @@
 #include "document/ThreadFeature.h"
 #include "platform/FileDialogs.h"
 #include "platform/Paths.h"
-#if defined(__ANDROID__)
-#include "platform/Android.h"
+#if defined(BZ_MOBILE)
+#include "platform/Mobile.h"
 #endif
 
 #include <algorithm>
@@ -219,10 +219,10 @@ bool Workspace::SaveTo(Session& session, const std::filesystem::path& requested,
     // Android: a projects-folder document whose copy lies apart from the
     // others (made by 0.2.3.x) is saved beside them from now on.
     const std::filesystem::path target = platform::SettledDocument(requested);
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // The local copy of a document lives in the app's cache, which the system
     // may clear while the app is away: its folder made again.
-    if (platform::android::IsImported(target)) {
+    if (platform::mobile::IsImported(target)) {
         std::error_code ec;
         std::filesystem::create_directories(target.parent_path(), ec);
     }
@@ -344,10 +344,10 @@ bool Workspace::ExportTo(Session& session, ExportFormat format, const std::files
     // A long export (a threaded part as STEP on a phone) is work, not a hang: no hang
     // report, and on Android the watchdog does not offer to close the app meanwhile.
     const mon::Waiting waiting;
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     struct Busy {
-        Busy() { platform::android::SetWatchdogState("wait"); }
-        ~Busy() { platform::android::SetWatchdogState("fg"); }
+        Busy() { platform::mobile::SetWatchdogState("wait"); }
+        ~Busy() { platform::mobile::SetWatchdogState("fg"); }
     } busy;
 #endif
     session.RebuildNow();   // a rebuild may still be under way in slices

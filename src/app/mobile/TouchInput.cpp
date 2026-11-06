@@ -81,11 +81,19 @@ bool CursorActive(const AppContext& app) {
     if (!m.phone) return false;
     const Session* s = app.workspace.Active();
     if (!s || app.workspace.ShowsHome()) return false;
-    if (s->mode == EditMode::Sketch) return m.cursorInSketch || SketchToolNeedsCursor(app);
+    if (s->mode == EditMode::Sketch) {
+        // Taps or hold-and-drag place the points with the finger itself: no drop.
+        if (app.settings.mobile.sketchInput != 0) return false;
+        return m.cursorInSketch || SketchToolNeedsCursor(app);
+    }
     return m.cursorIn3d;
 }
 
 bool SketchToolNeedsCursor(const AppContext& app) {
+    return app.settings.mobile.sketchInput == 0 && SketchToolPlacesPoints(app);
+}
+
+bool SketchToolPlacesPoints(const AppContext& app) {
     switch (app.sketch.Tool()) {
         case SketchTool::Select:
         case SketchTool::Dimension:
@@ -183,7 +191,18 @@ void TouchInput::BeginFrame(AppContext& app, double now) {
     // (the author, 17.10: the sketch turned under the finger with the cursor off).
     if (const Session* s = app.workspace.Active(); s && s->mode == EditMode::Sketch && !cursor && drags.one == FingerDrag::Orbit)
         drags.one = FingerDrag::Pan;
-    myGestures.SetMode({cursor, m.boxMode && !cursor, m.penNear, drags});
+    // «Зажать и тянуть»: in a sketch, with a drawing tool, a held finger draws.
+    const Session* active = app.workspace.Active();
+    const bool drawHold = tune.sketchInput == 2 && !cursor && active && !app.workspace.ShowsHome() &&
+                          active->mode == EditMode::Sketch && SketchToolPlacesPoints(app);
+    const bool drawAim = tune.sketchInput == 3 && !cursor && active && !app.workspace.ShowsHome() &&
+                         active->mode == EditMode::Sketch && SketchToolPlacesPoints(app);
+    myGestures.SetMode({cursor, m.boxMode && !cursor, m.penNear, drags, drawHold, drawAim});
+    if (!drawAim) m.aiming = false;
+    m.pressProgress = 0.0f;
+    // The second point taken: the chain ends there (one line per drag, as asked).
+    if (myEndChainIn > 0 && --myEndChainIn == 0)
+        if (Session* s = app.Doc(); s && s->mode == EditMode::Sketch && app.sketch.Busy()) app.sketch.Escape(app, *s, false);
     mySlop = static_cast<float>(tune.tapSlop);
     myScrollSpeed = static_cast<float>(tune.scrollSpeed);
     myGestures.SetTuning({static_cast<double>(tune.tapSlop), tune.longPress});
@@ -552,6 +571,36 @@ void TouchInput::ApplyGestures(AppContext& app) {
         Click(ToIm(*step.tap), ImGuiMouseButton_Left);
         mon::Action("touch", "касание");
     }
+    // «Зажать и тянуть» and «Прицел»: the ring, the first point, the finger leading
+    // the second, the release. With the aim every point is where the cross is, above the finger.
+    const bool aim = myGestures.GetMode().drawAim;
+    const auto spot = [&](Vec2 finger) { return aim ? TipOf(m, ToIm(finger), CursorReach(app)) : ToIm(finger); };
+    if (step.aimAt) {
+        m.aimFinger = ToIm(*step.aimAt);
+        m.aimTip = spot(*step.aimAt);   // never off the view (a click there would hit the ribbon)
+        m.aiming = true;
+        if (!step.drawTo) Pos(m.aimTip);
+    }
+    if (step.pressAt) {
+        m.pressAt = spot(*step.pressAt);
+        m.pressProgress = step.pressProgress;
+    }
+    if (step.drawFrom) {
+        Click(spot(*step.drawFrom), ImGuiMouseButton_Left);
+        m.drawDragging = true;
+        mon::Action("touch", aim ? "прицел" : "зажать и тянуть");
+    }
+    if (step.drawTo) Pos(spot(*step.drawTo));
+    if (step.drawEnded && m.drawDragging) {
+        Click(spot(*step.drawTo), ImGuiMouseButton_Left);
+        m.drawDragging = false;
+        myEndChainIn = 6;
+    }
+    if (step.drawCancelled && m.drawDragging) {
+        m.drawDragging = false;
+        if (Session* s = app.Doc(); s && s->mode == EditMode::Sketch) app.sketch.Escape(app, *s, false);   // the first point goes
+    }
+    if (step.aimEnded || step.aimCancelled) m.aiming = false;
     if (step.longPress && !m.holding) {
         const ImVec2 at = CursorActive(app) ? m.cursorTip : ToIm(*step.longPress);
         Click(at, ImGuiMouseButton_Right);   // the context menu

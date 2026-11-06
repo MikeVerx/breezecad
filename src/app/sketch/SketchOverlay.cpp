@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <span>
 #include <unordered_set>
 
@@ -228,10 +229,28 @@ void DrawSnapMarker(ui::Ui& ui, ImDrawList* dl, ImVec2 at, const Snap& snap) {
                         : snap.tangentTo       ? "c-tangent"
                                                : nullptr;
     if (glyph) ui.icons.Draw(dl, glyph, {at.x + ui.S(10), at.y + ui.S(8)}, ui.S(16), {1, 1, 1, 1});
+    // Polar tracking: the angle held, as AutoCAD shows it ("45°") — on the
+    // far side from the glyph, so neither covers the other.
+    if (snap.polarAngle && !snap.horizontal && !snap.vertical) {
+        char text[16];
+        std::snprintf(text, sizeof text, "%g\xC2\xB0", std::round(*snap.polarAngle * 10.0) / 10.0);
+        const float fs = ui.S(13);
+        const ImVec2 size = ImGui::GetFont()->CalcTextSizeA(fs, FLT_MAX, 0, text);
+        const ImVec2 box{at.x - ui.S(12) - size.x, at.y + ui.S(8)};
+        dl->AddRectFilled({box.x - ui.S(4), box.y - ui.S(2)}, {box.x + size.x + ui.S(4), box.y + size.y + ui.S(2)},
+                          ui::ToU32(ui.C().panel.WithAlpha(0.9f)), ui.S(4));
+        dl->AddText(ImGui::GetFont(), fs, box, ui::ToU32(c.constraintGlyph), text);
+    }
 }
 
 void DrawSnapGuides(ui::Ui& ui, ImDrawList* dl, const SketchView& view, const Snap& snap) {
     const Color guide = ui.C().constraintGlyph.WithAlpha(0.7f);
+    // Polar tracking: a dashed ray along the angle held, past the cursor.
+    if (snap.polarAngle && snap.polarFrom) {
+        const double a = *snap.polarAngle * 3.14159265358979323846 / 180.0;
+        const Vec2   tip = *snap.polarFrom + Vec2{std::cos(a), std::sin(a)} * ((snap.pos - *snap.polarFrom).Length() + view.MmPerPixel() * 400.0);
+        DrawSketchSegment(ui, dl, view, *snap.polarFrom, tip, guide, 1.0f, true);
+    }
     if (snap.alignedX) DrawSketchSegment(ui, dl, view, *snap.alignedX, snap.pos, guide, 1.0f, true);
     if (snap.alignedY) DrawSketchSegment(ui, dl, view, *snap.alignedY, snap.pos, guide, 1.0f, true);
 }

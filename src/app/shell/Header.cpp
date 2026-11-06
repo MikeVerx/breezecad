@@ -70,7 +70,7 @@ void MainMenu(AppContext& app) {
         if (const Session* t = app.workspace.ActiveTab(); t && t->assembly) MenuAction(app, "file.exportProject");
         ImGui::EndMenu();
     }
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // The phone: files go to and come from the projects folder; "share"
     // hands a document or an export to another app (a slicer, a messenger).
     mobile::PhoneFileMenu(app);
@@ -285,11 +285,16 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
     app.ops.appearance.DrawToolbarPicker(app, app.workspace.ShowsHome() ? nullptr : app.Doc(), {x, cy}, ui.S(170), ui.S(30));
     x += ui.S(176);
 
-    // Right side: search and stats.
-    const float statsWidth = ui.S(190);
-    const float searchWidth = ui.S(240);
+    // Right side: search and stats. A narrow window (an iPad held upright, a
+    // small laptop) gives up the stats first, then narrows the search, and
+    // drops it last: nothing lies over the toolbar.
     const float right = pos.x + width - ui.S(10);
-    {
+    const float room = right - x - ui.S(8);
+    float statsWidth = ui.S(190);
+    float searchWidth = ui.S(240);
+    if (room < statsWidth + searchWidth) statsWidth = 0;
+    if (room < statsWidth + searchWidth) searchWidth = room >= ui.S(120) ? room : 0;
+    if (statsWidth > 0) {
         ui::FontScope font(ui.fonts.mono);
         Session* s = app.Doc();
         const int objects = s ? static_cast<int>(s->doc.FeatureCount()) : 0;
@@ -356,7 +361,7 @@ void DrawHeader(AppContext& app, ImVec2 pos, float width) {
         }
     }
 
-    CommandSearch(app, {searchX, pos.y + (h - ui.S(28)) / 2}, searchWidth);
+    if (searchWidth > 0) CommandSearch(app, {searchX, pos.y + (h - ui.S(28)) / 2}, searchWidth);
     EndArea();
 }
 

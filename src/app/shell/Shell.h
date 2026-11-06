@@ -61,6 +61,11 @@ bool  BeginDialog(ui::Ui& ui, const char* id, bool& open, float width);
 /// The "Создать" window (NewDocumentDialog.cpp); opened by OpenNewDocumentDialog.
 void  DrawNewDocumentDialog(AppContext& app);
 
+/// Polar tracking (Settings::polarStep): its step as text ("22.5") and the
+/// submenu that chooses it (Bars.cpp; the status bar's snap menu, the touch settings).
+std::string FormatPolarStep(double step);
+void        DrawPolarStepMenu(ui::Ui& ui, Settings& settings);
+
 // Panels of the left area (LeftPanels.cpp, TreePanel.cpp).
 void DrawTreePanel(AppContext& app, Session& session, float width);
 void DrawAssemblyTree(AppContext& app, Session& session, float width);

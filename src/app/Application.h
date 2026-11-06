@@ -110,17 +110,23 @@ private:
     std::unique_ptr<AppContext> myContext;
     std::unique_ptr<modules::ModuleManager> myModules;   ///< unloaded first in ~Application
     void StartModules();
+    /// The left panel's draggable edge (DrawShell): `panel` its width now, design pixels.
+    void DrawPanelEdge(float x, float y, float height, float panel, float widest);
     void InstallDroppedModules(const std::filesystem::path& dir);
     bool myScaledForPhone = false;   ///< the scale was chosen for the phone layout
 
-#if defined(__ANDROID__)
-    // Android (docs/ADR/0004-mobile-touch-ui.md); Application_android.cpp.
-    void StartAndroid();
-    void InstallAndroidClipboard();
+#if defined(BZ_MOBILE)
+    // Phones and tablets (docs/ADR/0004-mobile-touch-ui.md, docs/dev/IOS-PORT.md):
+    // Application_android.cpp, Application_ios.mm.
+    void StartMobile();
+    void InstallMobileClipboard();
     /// Between frames: the system's answers (insets, keyboard text, a picked
     /// file), the keyboard shown or hidden, the background. False when the
     /// system is closing the app.
-    bool AndroidBetweenFrames(double now);
+    bool MobileBetweenFrames(double now);
+    /// The platform's part of the frame's input: the keyboard's text (and on
+    /// Android the volume keys). Application_android.cpp, Application_ios.mm.
+    void FeedSystemInput();
     void CheckLastExit();
     void RunTestCommands();
     /// Test command "saveback": a save reaches the document outside the app (smoke-apk.sh).

@@ -428,6 +428,27 @@ Snap SnapCursor(const sketch::Sketch& sk, const SketchView& view, ImVec2 mouse, 
                 snap.pos.x = options.from->x;
                 snap.vertical = true;
                 lockedDir = Vec2{0, 1};
+            } else if (options.polarStep > 0) {
+                // Polar tracking: the direction always at the nearest multiple
+                // of the step (a finger cannot hold an angle by itself), the
+                // length along it as the cursor gives it.
+                const double step = options.polarStep * kPi / 180.0;
+                const double angle = std::round(std::atan2(d.y, d.x) / step) * step;
+                const Vec2   dir{std::cos(angle), std::sin(angle)};
+                snap.pos = OntoDirection(*options.from, snap.pos, dir);
+                double degrees = std::fmod(angle * 180.0 / kPi + 360.0, 360.0);
+                if (std::abs(degrees - 360.0) < 1e-6) degrees = 0.0;
+                snap.polarAngle = degrees;
+                snap.polarFrom = *options.from;
+                // Along an axis: the line is horizontal or vertical, with its constraint.
+                if (std::abs(std::fmod(degrees, 180.0)) < 1e-6) {
+                    snap.pos.y = options.from->y;
+                    snap.horizontal = true;
+                } else if (std::abs(std::fmod(degrees, 180.0) - 90.0) < 1e-6) {
+                    snap.pos.x = options.from->x;
+                    snap.vertical = true;
+                }
+                lockedDir = dir;
             }
         }
     }

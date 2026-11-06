@@ -110,4 +110,45 @@ void DrawDropCursor(AppContext& app, ImDrawList* dl) {
     }
 }
 
+void DrawAim(AppContext& app, ImDrawList* dl) {
+    const MobileState& m = app.shell.mobile;
+    if (!m.aiming) return;
+    const ui::ThemeColors& c = app.ui.C();
+    const float k = static_cast<float>(app.settings.mobile.labelScale) * app.ui.scale;
+    const ImVec2 f = m.aimFinger, t = m.aimTip;
+    // Where the finger is: a soft ring; from it up to the aim, a thin line.
+    dl->AddCircleFilled(f, 22.0f * k, ui::ToU32(c.accent.WithAlpha(0.12f)), 32);
+    dl->AddCircle(f, 22.0f * k, ui::ToU32(c.accent.WithAlpha(0.45f)), 32, 1.5f * k);
+    dl->AddLine({f.x, f.y - 22.0f * k}, {t.x, t.y + 6.0f * k}, ui::ToU32(c.accent.WithAlpha(0.45f)), 1.0f * k);
+    // The aim: a cross with a gap in the middle, so the point under it stays seen.
+    const float arm = 16.0f * k, gap = 4.0f * k, w = 2.0f * k;
+    const ImU32 ink = ui::ToU32(c.accent);
+    const ImU32 halo = ui::ToU32(c.panel.WithAlpha(0.85f));
+    const auto cross = [&](ImU32 col, float width) {
+        dl->AddLine({t.x - arm, t.y}, {t.x - gap, t.y}, col, width);
+        dl->AddLine({t.x + gap, t.y}, {t.x + arm, t.y}, col, width);
+        dl->AddLine({t.x, t.y - arm}, {t.x, t.y - gap}, col, width);
+        dl->AddLine({t.x, t.y + gap}, {t.x, t.y + arm}, col, width);
+    };
+    cross(halo, w + 2.0f * k);
+    cross(ink, w);
+    dl->AddCircleFilled(t, 1.5f * k, ink);
+}
+
+void DrawPressRing(AppContext& app, ImDrawList* dl) {
+    const MobileState& m = app.shell.mobile;
+    if (m.pressProgress <= 0.0f) return;
+    const ui::ThemeColors& c = app.ui.C();
+    const float k = static_cast<float>(app.settings.mobile.labelScale) * app.ui.scale;
+    // Above the finger's spot, so the finger does not hide it.
+    const ImVec2 at{m.pressAt.x, m.pressAt.y};
+    const float  radius = 30.0f * k, width = 5.0f * k;
+    const float  t = std::clamp(m.pressProgress, 0.0f, 1.0f);
+    dl->AddCircle(at, radius, ui::ToU32(c.textSecondary.WithAlpha(0.35f)), 48, width);
+    constexpr float kTop = -1.5707963f, kTurn = 6.2831853f;
+    dl->PathArcTo(at, radius, kTop, kTop + kTurn * t, 48);
+    dl->PathStroke(ui::ToU32(c.accent), 0, width);
+    dl->AddCircleFilled(at, 3.0f * k, ui::ToU32(c.accent));
+}
+
 } // namespace bz::app::mobile

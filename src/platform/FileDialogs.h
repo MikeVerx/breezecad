@@ -35,7 +35,7 @@ std::optional<std::filesystem::path> ShowSaveDialog(const std::string& title, co
 /// projects-folder file): it is copied back there. False when that copy
 /// failed — the file is NOT where the user expects it, say so. On the
 /// desktop the file is already in its place: always true.
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
 [[nodiscard]] bool FileWritten(const std::filesystem::path& file);
 #else
 [[nodiscard]] inline bool FileWritten(const std::filesystem::path&) { return true; }

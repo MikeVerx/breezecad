@@ -1075,6 +1075,40 @@ void ApplyFlange(doc::FlangeFeature& f, Model::Impl& impl, std::vector<Body>& bo
     PutSheet(std::move(info), f.id, f.sheet, impl, bodies, f.status, added);
 }
 
+/// «Отверстие по эскизу»: the hole's centres are the centres of its sketch's
+/// circles (not construction ones), and its face the body's flat face lying
+/// in the sketch's plane — the one facing along the sketch's normal or against
+/// it, whichever is nearer (a sketch on the bottom face of a plate faces into it).
+Status HoleCentresFromSketch(const TopoDS_Shape& body, const doc::Document& doc, const Model::Impl& impl, doc::HoleFeature& hole) {
+    const auto* sk = doc.FindAs<doc::SketchFeature>(hole.sketch);
+    if (!sk || sk->status.state == FeatureState::Error) return Error{"Эскиз отверстия не найден или с ошибками"};
+    const auto solved = impl.sketches.find(hole.sketch);
+    const Frame& frame = solved != impl.sketches.end() ? solved->second.frame : sk->placement.frame;
+    std::vector<Vec3> world;
+    for (const sketch::Circle& c : sk->sketch.circles)
+        if (!c.construction) world.push_back(frame.ToWorld(sk->sketch.PositionOf(c.center)));
+    if (world.empty()) return Error{"В эскизе отверстия нет окружностей: центры отверстий — их центры"};
+    std::optional<doc::FaceReference> best;
+    double bestOffset = 1e300;
+    for (const double side : {1.0, -1.0}) {
+        const doc::FaceReference face{frame.normal * side, frame.origin};
+        const std::optional<Frame> plane = occt::ResolvePlaneFrame(body, face);
+        if (!plane) continue;
+        const double offset = std::abs((plane->origin - frame.origin).Dot(frame.normal));
+        if (offset < bestOffset - 1e-6) {
+            best = face;
+            bestOffset = offset;
+        }
+    }
+    if (!best) return Error{"У тела нет плоской грани, параллельной эскизу отверстия"};
+    hole.face = *best;
+    hole.concentric.clear();
+    hole.centres.clear();
+    const Frame plane = doc::PlaneFrame(hole.face);
+    for (const Vec3& p : world) hole.centres.push_back(plane.ToLocal(p));
+    return Status::Ok();
+}
+
 /// «Вырез»: the sketch's contours, on a face of the sheet, through it.
 void ApplySheetCut(doc::SheetCutFeature& f, Model::Impl& impl, std::vector<Body>& bodies, const doc::Document& doc, std::size_t index) {
     std::string error;
@@ -1291,6 +1325,11 @@ bool Model::RebuildSlice(doc::Document& doc, std::size_t last, Stopped shown, do
                 ApplyToBody(bodies, hole->status, "Нет тела, в котором делать отверстие",
                                 [&](const TopoDS_Shape& body) { return FaceMiss(body, hole->face); },
                                 [&](const TopoDS_Shape& body) -> Expected<TopoDS_Shape> {
+                                    // «По эскизу»: the centres of the sketch's circles, on the body's
+                                    // flat face in the sketch's plane (facing either way).
+                                    if (hole->sketch) {
+                                        if (Status s = HoleCentresFromSketch(body, doc, impl, *hole); !s) return s.GetError();
+                                    }
                                     // Keep the reference on the face as it is now, so the
                                     // panel draws the centres where the holes are.
                                     if (const auto plane = occt::ResolvePlaneFrame(body, hole->face)) {

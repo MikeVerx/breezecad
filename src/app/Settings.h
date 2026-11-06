@@ -59,6 +59,14 @@ struct MobileSettings {
     double longPress = 0.5;       ///< s held still for the context menu
     double cursorSpeed = 1.0;     ///< the cursor's tip moves this part of the finger's travel (less: precise)
     int    cursorReach = 48;      ///< dp from the finger up to the tip
+    /// How sketch tools take their points ("Рисование в эскизе"):
+    /// 0 — the drop cursor and ✓ (the author's, ADR-0004), 1 — taps: a tap is
+    /// a point where the finger was, 2 — hold and drag: a held press (a ring
+    /// fills) puts the first point there, the finger leads the second, and
+    /// letting go puts it, 3 — the aim: a finger on the view shows a cross a
+    /// little above it (the finger hides nothing); held still it puts the first
+    /// point, dragged it leads the second, letting go puts it (as 2, with the aim).
+    int    sketchInput = 0;
     double scrollSpeed = 1.0;     ///< lists scroll this much per finger travel
     std::vector<std::string> hotbar;   ///< actions added to the panel at the camera, in order
     std::vector<std::string> recentLooks;  ///< the colours chosen last on the phone, newest first («Недавние»)
@@ -75,6 +83,9 @@ struct HotMenuSettings {
     int trigger = 0;   ///< 0 by the mouse set (free right button: right, else Shift+left), 1 right, 2 Shift+left, 3 off
     std::vector<std::string> sketch, part, assembly;
 };
+
+/// The steps of polar tracking offered (Settings::polarStep), degrees: AutoCAD's.
+inline constexpr double kPolarSteps[] = {5.0, 10.0, 15.0, 22.5, 30.0, 45.0, 90.0};
 
 struct Settings {
     ThemeChoice theme          = ThemeChoice::System;
@@ -94,6 +105,13 @@ struct Settings {
     bool        gridSnap       = true;
     bool        pointSnap      = true;
     bool        orthoMode      = false;   ///< "Орто" (F8): lines only horizontal or vertical
+    /// Polar tracking, as in AutoCAD: a line from its previous point keeps to
+    /// multiples of this angle (degrees: 5, 10, 15, 22.5, 30, 45, 90); 0 — off.
+    /// "Орто" goes first when both are on.
+    double      polarStep      = 0.0;   ///< see kPolarSteps
+    /// The left panel's width (tree, properties, variables), design pixels:
+    /// dragged at its edge; 0 — the theme's (ThemeMetrics::panelWidth).
+    double      panelWidth     = 0.0;
     int         graphics       = 0;       ///< 0 high, 1 balanced, 2 for weak computers (smoothing, round faces)
     int         textureQuality = 0;   ///< pictures on faces: 0 high, 1 medium, 2 low (TextureLimit)
     bool        backgroundRebuild = true;   ///< long rebuilds on another thread (the window stays responsive)

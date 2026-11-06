@@ -24,8 +24,8 @@
 #include <cstdlib>
 #include <cstring>
 
-#if defined(__ANDROID__)
-#include "platform/Android.h"
+#if defined(BZ_MOBILE)
+#include "platform/Mobile.h"
 #endif
 
 namespace bz::app::mobile {
@@ -981,7 +981,7 @@ void DrawStrip(AppContext& app, ImVec2 pos, ImVec2 size) {
 } // namespace
 
 bool WantsPhoneLayout(const Settings& settings, const platform::Window& window) {
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     if (settings.mobile.layout == 1) return false;
     if (settings.mobile.layout == 2) return true;
     int w = 0, h = 0;
@@ -1001,13 +1001,13 @@ void DrawPhoneRoot(AppContext& app) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     MobileState& m = app.shell.mobile;
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // The first start on a phone: the sensitivity, then the layout (the author, 17.10.2026).
     // Not in the emulator's test runs (their commands drive the program themselves).
     static bool setupChecked = false;
     if (!setupChecked) {
         setupChecked = true;
-        if (!app.settings.mobile.firstStartDone && !m.lastCrash.open && platform::android::TestCommands().empty()) StartSetup(app);
+        if (!app.settings.mobile.firstStartDone && !m.lastCrash.open && platform::mobile::TestCommands().empty()) StartSetup(app);
     }
 #endif
     const ImGuiIO& io = ImGui::GetIO();
@@ -1230,9 +1230,9 @@ void DrawLastCrash(AppContext& app) {
     ImGui::Spacing();
     if (ui::SecondaryButton(ui, "##copy-code", Tr("Скопировать код"), nullptr, ui.S(170, 38))) ImGui::SetClipboardText(c.code.c_str());
     ImGui::SameLine(0, ui.S(8));
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     if (!c.file.empty() && ui::SecondaryButton(ui, "##share-report", Tr("Поделиться отчётом"), nullptr, ui.S(190, 38)))
-        platform::android::Share(PathFromUtf8(c.file), "text/plain", "BreezeCAD " + c.code);
+        platform::mobile::Share(PathFromUtf8(c.file), "text/plain", "BreezeCAD " + c.code);
     ImGui::SameLine(0, ui.S(8));
 #endif
     if (ui::PrimaryButton(ui, "##close-crash", Tr("Понятно"), nullptr, ui.S(120, 38))) {
@@ -1257,7 +1257,7 @@ void DrawSaveAsk(AppContext& app) {
     MobileState::SaveAsk& a = m.saveAsk;
     if (!a.open) return;
     Session* session = nullptr;
-    int index = -1;
+    [[maybe_unused]] int index = -1;   // used on Android and iOS only
     for (std::size_t i = 0; i < app.workspace.sessions.size(); ++i)
         if (app.workspace.sessions[i].get() == a.session) {
             session = app.workspace.sessions[i].get();
@@ -1300,15 +1300,15 @@ void DrawSaveAsk(AppContext& app) {
     std::string folder;
     bool exists = false;
     const std::string file = a.name + ext;
-#if defined(__ANDROID__)
-    const bool haveFolder = !platform::android::ProjectsFolder().empty();
+#if defined(BZ_MOBILE)
+    const bool haveFolder = !platform::mobile::ProjectsFolder().empty();
     folder = haveFolder ? (app.settings.mobile.projectsFolderName.empty() ? Tr("папка проектов") : app.settings.mobile.projectsFolderName)
                         : Tr("не выбрана");
     // The same name in the folder (it is read again now and then, not every frame).
-    static std::vector<platform::android::FolderEntry> entries;
+    static std::vector<platform::mobile::FolderEntry> entries;
     static double readAt = -100;
     if (haveFolder && app.now - readAt > 2.0) {
-        entries = platform::android::ListProjects();
+        entries = platform::mobile::ListProjects();
         readAt = app.now;
     }
     for (const auto& e : entries)
@@ -1330,8 +1330,8 @@ void DrawSaveAsk(AppContext& app) {
         const char* change = Tr("изменить ›");
         const float cw = ImGui::CalcTextSize(change).x;
         dl->AddText({p.x + rw - cw - ui.S(12), p.y + (rh - ImGui::GetTextLineHeight()) / 2}, ui::ToU32(c.accent), change);
-#if defined(__ANDROID__)
-        if (tapped) platform::android::ChooseProjectsFolder();   // the answer comes as the projects folder
+#if defined(BZ_MOBILE)
+        if (tapped) platform::mobile::ChooseProjectsFolder();   // the answer comes as the projects folder
 #else
         (void)tapped;
 #endif
@@ -1351,8 +1351,8 @@ void DrawSaveAsk(AppContext& app) {
                       (entered && canSave);
     ImGui::EndDisabled();
     if (save) {
-#if defined(__ANDROID__)
-        const std::filesystem::path local = platform::android::CreateInProjects(file);
+#if defined(BZ_MOBILE)
+        const std::filesystem::path local = platform::mobile::CreateInProjects(file);
         bool taken = false;
         for (const auto& other : app.workspace.sessions)
             if (other.get() != session && !other->path.empty() && other->path == local) taken = true;
@@ -1377,9 +1377,9 @@ void DrawSaveAsk(AppContext& app) {
 }
 
 void PhoneFileMenu(AppContext& app) {
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     ui::Ui& ui = app.ui;
-    if (ui::MenuItem(ui, Tr("Папка проектов…"), nullptr, "ui-folder")) platform::android::ChooseProjectsFolder();
+    if (ui::MenuItem(ui, Tr("Папка проектов…"), nullptr, "ui-folder")) platform::mobile::ChooseProjectsFolder();
     Session* s = app.Doc();
     if (ui::BeginSubmenu(ui, Tr("Поделиться"), "ui-share", s != nullptr)) {
         struct Choice {
@@ -1394,7 +1394,7 @@ void PhoneFileMenu(AppContext& app) {
             app.Later([&app, format] {
                 Session* doc = app.Doc();
                 if (!doc) return;
-                const std::filesystem::path dir = platform::android::CacheDir() / "share";
+                const std::filesystem::path dir = platform::mobile::CacheDir() / "share";
                 std::error_code ec;
                 std::filesystem::create_directories(dir, ec);
                 const char* ext = format < 0 ? (doc->assembly ? ".bza" : ".bzc")
@@ -1409,7 +1409,7 @@ void PhoneFileMenu(AppContext& app) {
                 const char* mime = format < 0 ? "application/octet-stream"
                                  : format == static_cast<int>(ExportFormat::Stl) ? "model/stl"
                                  : format == static_cast<int>(ExportFormat::Step) ? "model/step" : "model/3mf";
-                platform::android::Share(file, mime, doc->Title());
+                platform::mobile::Share(file, mime, doc->Title());
             });
         }
         ImGui::EndMenu();

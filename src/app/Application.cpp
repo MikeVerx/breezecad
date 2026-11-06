@@ -29,12 +29,15 @@
 #include "ui/Gl.h"
 
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <imgui_impl_opengl3.h>
 #include <lunasvg.h>
 #include <miniz.h>
 #if defined(__ANDROID__)
 #include "app/android/AndroidInput.h"
-#include "platform/Android.h"
+#endif
+#if defined(BZ_MOBILE)
+#include "platform/Mobile.h"
 #else
 #include <GLFW/glfw3.h>
 #include <imgui_impl_glfw.h>
@@ -51,7 +54,7 @@
 #include <iterator>
 #include <thread>
 
-#if !defined(__ANDROID__)
+#if !defined(BZ_MOBILE)
 // Defined (non-static) in imgui_impl_glfw.cpp but not declared in its header.
 ImGuiKey ImGui_ImplGlfw_KeyToImGuiKey(int keycode, int scancode);
 #endif
@@ -92,7 +95,7 @@ void FaultTest(std::string_view kind) {
 
 constexpr GLenum kGlFramebufferSrgb = 0x8DB9;   // GL_FRAMEBUFFER_SRGB (OpenGL 3.0, absent from GL 1.1 headers)
 
-#if !defined(__ANDROID__)
+#if !defined(BZ_MOBILE)
 /// Input callbacks installed before ImGui's, which chain to them.
 Application::InputTap* TapOf(GLFWwindow* window) {
     return static_cast<Application::InputTap*>(glfwGetWindowUserPointer(window));
@@ -141,7 +144,7 @@ Application::~Application() {
     modules::SetCommandHandler({});
     if (myUi) {
         ImGui_ImplOpenGL3_Shutdown();
-#if !defined(__ANDROID__)
+#if !defined(BZ_MOBILE)
         ImGui_ImplGlfw_Shutdown();
 #endif
         ImGui::DestroyContext();
@@ -190,8 +193,8 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     beta::WriteSystemInfo(myWindow, mySettings.language.empty() ? std::string("system") : mySettings.language);
     crash::NoteGraphics(myWindow.OpenGLRenderer() + ", OpenGL " + myWindow.OpenGLVersion());
 
-#if defined(__ANDROID__)
-    StartAndroid();
+#if defined(BZ_MOBILE)
+    StartMobile();
 #else
     glfwSetWindowUserPointer(myWindow.Handle(), &myInput);
     glfwSetCursorPosCallback(myWindow.Handle(), [](GLFWwindow* w, double, double) { OnAnyInput(w, Wake::Cursor); });
@@ -235,11 +238,11 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
     // (BZ_IMGUI_IDS=1 turns it on anywhere).
     io.ConfigDebugHighlightIdConflicts = std::string_view(Branch()).starts_with("preview/") || std::getenv("BZ_IMGUI_IDS") != nullptr;
 #endif
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // No platform backend: input comes through mobile::TouchInput and
     // android/AndroidInput; the size and time are set every frame.
     io.BackendPlatformName = "breezecad-android";
-    InstallAndroidClipboard();
+    InstallMobileClipboard();
     ImGui_ImplOpenGL3_Init("#version 300 es");
 #else
     ImGui_ImplGlfw_InitForOpenGL(myWindow.Handle(), true);
@@ -302,7 +305,7 @@ bool Application::Init(const std::vector<std::filesystem::path>& files) {
         for (std::size_t i = 1; i < crashes.size(); ++i) beta::Dismiss(crashes[i].dir);   // only the last one is asked about
         myShell.betaReport = {true, true, crashes.front().dir, crashes.front().started, {}, {}};
     }
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     CheckLastExit();
     RunTestCommands();
 #endif
@@ -364,7 +367,7 @@ int Application::Run() {
     // rebuild runs on its own thread; this is the window itself stuck).
     // BZ_HANG_SECONDS changes it, to try the window out.
     const char* hangSetting = std::getenv("BZ_HANG_SECONDS");
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // Sooner than the watchdog's notice (10 s): its error screen finds the report.
     crash::StartHangGuard(8.0);
 #else
@@ -384,8 +387,8 @@ int Application::Run() {
             platform::Window::WaitEvents(wait);
         }
         const double now = platform::Window::Time();
-#if defined(__ANDROID__)
-        if (!AndroidBetweenFrames(now)) break;   // the system is closing the app: the autosave keeps the work
+#if defined(BZ_MOBILE)
+        if (!MobileBetweenFrames(now)) break;   // the system is closing the app: the autosave keeps the work
 #endif
         platform::SetSmoothScrollIsTouchpad(mySettings.touch.smoothIsTouchpad);
         myContext->touch = platform::TakeTouchEvents();
@@ -604,7 +607,7 @@ void Application::UpdateTitle() {
 }
 
 float Application::ChooseScale() const {
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // Coordinates are dp already. The phone layout is sized for the finger
     // at 1.0; a tablet's desktop layout a little bigger than a monitor's.
     const float chosen = mySettings.uiScale > 0 ? static_cast<float>(mySettings.uiScale) : 0.0f;
@@ -690,7 +693,7 @@ void Application::Frame() {
     if (dt > 0 && dt < 1.0) myFps = myFps * 0.9f + static_cast<float>(1.0 / dt) * 0.1f;
 
     ImGui_ImplOpenGL3_NewFrame();
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     {
         ImGuiIO& io = ImGui::GetIO();
         int w = 0, h = 0, fw = 0, fh = 0;
@@ -738,7 +741,10 @@ void Application::Frame() {
         myRecovery.Remember(app);
         myRecovery.RunInterface(app, [&] {
             if (myShell.mobile.phone) mobile::DrawPhoneRoot(app);
-            else DrawRoot();
+            else {
+                DrawRoot();
+                mobile::DrawTabletNumpad(app);   // a tablet typing a value (never on the desktop)
+            }
             fault_test::HitInInterface();   // a test hook (debug.fault); nothing otherwise
             DrawDialogs(app);
             mobile::DrawLastCrash(app);   // Android: the last run crashed or hung (never set on the desktop)
@@ -777,7 +783,7 @@ void Application::Frame() {
     int fbW = 0, fbH = 0;
     myWindow.FramebufferSize(fbW, fbH);
     glViewport(0, 0, fbW, fbH);
-#if !defined(__ANDROID__)
+#if !defined(BZ_MOBILE)
     // UI colours are sRGB values meant to be written as they are. OCCT
     // switches sRGB writes on for its own rendering and does not switch them
     // off, which would make the whole interface look washed out.
@@ -915,12 +921,58 @@ void Application::DrawRoot() {
         DrawModeBar(app, {0, y}, width);
         y += myUi->S(m.modeBarHeight);
         y += DrawRibbon(app, *session, {0, y}, width);
-        const float leftWidth = myUi->S(m.railWidth + m.panelWidth);
+        // The panel as wide as the user dragged it, within reason: never under
+        // the theme's narrowest, never over 60 % of the window.
+        const float widest = std::max(220.0f, width / myUi->scale * 0.6f - m.railWidth);
+        // Not dragged: the theme's width, narrower on a narrow window (an upright
+        // tablet: the panel took 40 % of it and the model got squeezed).
+        const float usual = std::max(220.0f, std::min(m.panelWidth, width / myUi->scale * 0.3f));
+        const float panel = mySettings.panelWidth > 0 ? std::clamp(static_cast<float>(mySettings.panelWidth), 220.0f, widest)
+                                                       : std::min(usual, widest);
+        const float leftWidth = myUi->S(m.railWidth + panel);
         DrawLeftArea(app, *session, {0, y}, {leftWidth, bottom - y});
         DrawViewport(app, *session, {leftWidth, y}, {width - leftWidth, bottom - y});
+        DrawPanelEdge(leftWidth, y, bottom - y, panel, widest);
     }
     DrawProjectTabs(app, {0, bottom}, width);
     DrawStatusBar(app, {0, bottom + myUi->S(m.tabBarHeight)}, width);
+    ImGui::End();
+}
+
+void Application::DrawPanelEdge(float x, float y, float height, float panel, float widest) {
+    // The left panel's edge: dragged (mouse or finger) it makes the panel
+    // wider or narrower; a double click or tap — back to the usual width.
+    // A window of its own on top: the viewport next to it takes the hover otherwise.
+    const ui::ThemeColors& c = myUi->C();
+    const float grip = myUi->S(myShell.mobile.touchScreen ? 28.0f : 6.0f);
+    ImGui::SetNextWindowPos({x - grip / 2, y});
+    ImGui::SetNextWindowSize({grip, height});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0, 0});
+    ImGui::Begin("##panel-edge", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
+    ImGui::PopStyleVar();
+    // Over the panel and the view on both sides of it, always: a tap on the tree
+    // brought the tree to the front and the edge under it stopped answering.
+    // Not over an open menu or dialog, though.
+    if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
+        ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+    ImGui::SetCursorScreenPos({x - grip / 2, y});
+    ImGui::InvisibleButton("##edge", {grip, height});
+    const bool hot = ImGui::IsItemHovered() || ImGui::IsItemActive();
+    if (hot) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    if (ImGui::IsItemActive() && ImGui::GetIO().MouseDelta.x != 0) {
+        const float dragged = panel + ImGui::GetIO().MouseDelta.x / myUi->scale;
+        mySettings.panelWidth = std::clamp(dragged, 220.0f, widest);
+    }
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) mySettings.panelWidth = 0;
+    if (hot || myShell.mobile.touchScreen) {
+        // On a touch screen a small handle always shows that the edge moves.
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float mid = y + height / 2;
+        const Color line = hot ? c.accent : c.textMuted.WithAlpha(0.5f);
+        dl->AddRectFilled({x - myUi->S(2), mid - myUi->S(18)}, {x + myUi->S(2), mid + myUi->S(18)}, ui::ToU32(line), myUi->S(2));
+    }
     ImGui::End();
 }
 

@@ -8,6 +8,8 @@
 #include "ui/Menus.h"
 #include "ui/Widgets.h"
 
+#include <imgui_internal.h>
+
 #include <algorithm>
 #include <cmath>
 #include <span>
@@ -652,6 +654,37 @@ float DrawRibbon(AppContext& app, Session& session, ImVec2 pos, float width) {
     const bool overRibbon = ImGui::IsMouseHoveringRect(pos, {pos.x + width, pos.y + h});
     if (overflow > 0 && overRibbon)
         scroll -= (ImGui::GetIO().MouseWheel + ImGui::GetIO().MouseWheelH) * ui.S(60);
+
+    // A touch screen: a finger dragged along the ribbon scrolls it, and it
+    // coasts a little after the finger leaves. Past a few pixels of travel the
+    // touch is a swipe, so the button it started on is not pressed.
+    if (app.shell.mobile.touchScreen && overflow > 0 && !app.shell.finishDrag) {
+        const ImGuiIO& io = ImGui::GetIO();
+        bool& swipe = app.shell.ribbonSwipe;
+        float& fling = app.shell.ribbonFling;
+        const bool startedHere = ImGui::IsMouseHoveringRect(pos, {pos.x + width, pos.y + h}, false) &&
+                                 io.MouseClickedPos[0].y >= pos.y && io.MouseClickedPos[0].y < pos.y + h &&
+                                 io.MouseClickedPos[0].x >= start && io.MouseClickedPos[0].x < end;
+        if (ImGui::IsMouseDown(ImGuiMouseButton_Left) && startedHere) {
+            if (!swipe && std::abs(io.MousePos.x - io.MouseClickedPos[0].x) > ui.S(10)) {
+                swipe = true;
+                ImGui::ClearActiveID();   // the button under the finger lets go
+            }
+            if (swipe) {
+                scroll -= io.MouseDelta.x;
+                fling = -io.MouseDelta.x;
+            }
+        } else {
+            swipe = false;
+            if (std::abs(fling) > 0.5f) {
+                scroll += fling;
+                fling *= 0.9f;
+            } else {
+                fling = 0;
+            }
+        }
+        scroll = std::clamp(scroll, 0.0f, overflow);
+    }
 
     // Carrying "Принять эскиз": both ends show where it can go, the nearer
     // one stronger; it lands there when the button is let go.

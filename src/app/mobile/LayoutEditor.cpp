@@ -35,8 +35,8 @@
 #include <cmath>
 #include <format>
 
-#if defined(__ANDROID__)
-#include "platform/Android.h"
+#if defined(BZ_MOBILE)
+#include "platform/Mobile.h"
 #endif
 
 namespace bz::app::mobile {
@@ -190,9 +190,9 @@ const char* NameOf(Part p) {
 
 /// Opens the example part for the setup or the editor when nothing is open (Android).
 void EnsureDocument(AppContext& app) {
-    MobileState& m = app.shell.mobile;
     if (app.workspace.Active() && !app.workspace.ShowsHome()) return;
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
+    MobileState& m = app.shell.mobile;
     const std::filesystem::path example = platform::AssetsDir() / "examples" / "bracket.bzc";
     std::error_code ec;
     if (std::filesystem::exists(example, ec)) {

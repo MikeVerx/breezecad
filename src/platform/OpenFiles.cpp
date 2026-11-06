@@ -1,6 +1,6 @@
 #include "platform/OpenFiles.h"
 
-#ifndef __APPLE__
+#if !defined(__APPLE__) || defined(BZ_IOS)   // iOS: files come through the projects folder
 namespace bz::platform {
 void ListenForOpenRequests() {}
 std::vector<std::filesystem::path> TakeOpenRequests() { return {}; }

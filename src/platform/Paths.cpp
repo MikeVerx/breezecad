@@ -4,8 +4,11 @@
 #include <fstream>
 #include <system_error>
 
-#if defined(__ANDROID__)
-#include "platform/Android.h"
+#if defined(BZ_MOBILE)
+#include "platform/Mobile.h"
+#endif
+#if defined(BZ_IOS)
+#include "platform/Ios.h"
 #endif
 #if defined(_WIN32)
 #include <windows.h>
@@ -58,8 +61,10 @@ std::filesystem::path Ensure(const std::filesystem::path& dir) {
 } // namespace
 
 std::filesystem::path AssetsDir() {
-#if defined(__ANDROID__)
-    return android::DataDir() / "assets";   // unpacked from the APK at start (android::UnpackAssets)
+#if defined(BZ_IOS)
+    return ios::BundleDir() / "assets";   // in BreezeCAD.app, read-only (scripts/ios/package-app.sh)
+#elif defined(BZ_MOBILE)
+    return mobile::DataDir() / "assets";   // unpacked from the APK at start (mobile::UnpackAssets)
 #endif
     const std::filesystem::path exe = ExecutableDir();
     for (const auto& candidate : {exe / "assets", exe / ".." / "share" / "breezecad" / "assets",
@@ -71,8 +76,8 @@ std::filesystem::path AssetsDir() {
 }
 
 std::filesystem::path ConfigDir() {
-#if defined(__ANDROID__)
-    return Ensure(android::DataDir());
+#if defined(BZ_MOBILE)
+    return Ensure(mobile::DataDir());
 #elif defined(_WIN32)
     PWSTR path = nullptr;
     std::filesystem::path base;
@@ -98,7 +103,7 @@ namespace {
 /// `name` next to a portable program when it can be written there; empty
 /// otherwise (installed, an app bundle, Android, a read-only folder).
 std::filesystem::path PortableFolder(const char* name) {
-#if defined(__ANDROID__) || defined(__APPLE__)
+#if defined(BZ_MOBILE) || defined(__APPLE__)
     (void)name;
     return {};   // Android has no such folder; writing into an .app breaks its signature
 #else
@@ -133,8 +138,8 @@ std::filesystem::path LanguagesDir() {
 std::filesystem::path AutosaveDir() { return Ensure(ConfigDir() / "autosave"); }
 
 std::filesystem::path DocumentsDir() {
-#if defined(__ANDROID__)
-    return Ensure(android::CacheDir() / "documents");   // local copies; the user's files are in the projects folder (SAF)
+#if defined(BZ_MOBILE)
+    return Ensure(mobile::CacheDir() / "documents");   // local copies; the user's files are in the projects folder (SAF)
 #elif defined(_WIN32)
     PWSTR path = nullptr;
     std::filesystem::path docs;

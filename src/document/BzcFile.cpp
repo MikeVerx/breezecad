@@ -110,7 +110,7 @@ std::string DocumentToJson(const Document& doc) {
         // wrote its kind as "type" and could not be opened again).
         Json fields = Json::object();
         f->SaveFields(fields);
-        for (const char* reserved : {"id", "type", "name", "suppressed", "hidden"})
+        for ([[maybe_unused]] const char* reserved : {"id", "type", "name", "suppressed", "hidden"})
             assert(!fields.contains(reserved) && "SaveFields wrote a reserved key");
         j.update(fields);
         features.push_back(std::move(j));

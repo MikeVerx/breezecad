@@ -1,8 +1,8 @@
 // Windows on top of the work: "save changes?", "МЦХ" and "about". All close
 // with Esc.
 
-#if defined(__ANDROID__)
-#include "platform/Android.h"
+#if defined(BZ_MOBILE)
+#include "platform/Mobile.h"
 #endif
 #include "app/BetaTesting.h"
 #include "app/Format.h"
@@ -39,6 +39,7 @@
 #include <cmath>
 #include <format>
 #include <nlohmann/json.hpp>
+#include <cstring>
 #include <fstream>
 #include <vector>
 
@@ -48,7 +49,7 @@ bool BeginDialog(ui::Ui& ui, const char* id, bool& open, float width) {
     if (open && !ImGui::IsPopupOpen(id)) ImGui::OpenPopup(id);
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowPos({display.x / 2, display.y / 2}, ImGuiCond_Always, {0.5f, 0.5f});
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     // A phone held sideways is ~400 dp tall: the dialog fits the screen and
     // scrolls (a swipe) instead of running off it.
     width = std::min(width, display.x - ui.S(24));
@@ -60,8 +61,23 @@ bool BeginDialog(ui::Ui& ui, const char* id, bool& open, float width) {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ui.S(8, 8));
     const bool visible = ImGui::BeginPopupModal(id, nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
     ImGui::PopStyleVar(3);
-    if (!visible) open = false;
-    return visible;
+    if (!visible) {
+        open = false;
+        return false;
+    }
+    // A click or tap beside the dialog closes it, as a press of Esc would — unless
+    // a menu of its own is open over it, or it asks about unsaved work (a stray
+    // tap must not throw that question away).
+    if (!ImGui::IsWindowAppearing() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+        !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId) && std::strcmp(id, "##unsaved") != 0) {
+        const ImVec2 p = ImGui::GetIO().MouseClickedPos[0];
+        const ImVec2 a = ImGui::GetWindowPos(), b{a.x + ImGui::GetWindowWidth(), a.y + ImGui::GetWindowHeight()};
+        if (p.x < a.x || p.y < a.y || p.x > b.x || p.y > b.y) {
+            open = false;
+            ImGui::CloseCurrentPopup();
+        }
+    }
+    return true;
 }
 
 namespace {
@@ -1246,7 +1262,7 @@ void DrawKeyboardSettings(AppContext& app, float width) {
     }
 }
 
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
 /// "Управление" → "Сенсор" (Android): the phone layout and touch (ADR-0004,
 /// "Настройки раскладки"), with "Сбросить".
 void DrawTouchScreenSettings(AppContext& app, float width) {
@@ -1256,6 +1272,16 @@ void DrawTouchScreenSettings(AppContext& app, float width) {
     ui::FieldLabel(ui, Tr("Вид интерфейса"));
     static constexpr std::array<const char*, 3> layouts{N_("По размеру экрана"), N_("Десктопный"), N_("Мобильный")};
     if (const int n = ui::Segmented(ui, "layout", layouts, m.layout, 3, width); n != m.layout) m.layout = n;
+    {
+        // On a tablet «По размеру экрана» is the desktop layout: they look the same there.
+        ui::FontScope small(ui.fonts.caption);
+        ImGui::PushStyleColor(ImGuiCol_Text, ui::ToVec4(ui.C().textMuted));
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+        ImGui::TextUnformatted(Tr("«По размеру экрана» выбирает сам: на планшете — десктопный, на телефоне — "
+                                  "мобильный. Поэтому на планшете первые два варианта выглядят одинаково."));
+        ImGui::PopTextWrapPos();
+        ImGui::PopStyleColor();
+    }
     gap();
     ui::FieldLabel(ui, Tr("Рука"));
     static constexpr std::array<const char*, 2> hands{N_("Правая: дерево слева"), N_("Левая: дерево справа")};
@@ -1353,6 +1379,22 @@ void DrawTouchScreenSettings(AppContext& app, float width) {
     static constexpr std::array<const char*, 4> reachNames{"32 dp", "48 dp", "64 dp", "80 dp"};
     static constexpr std::array<int, 4> reachValues{32, 48, 64, 80};
     choice("cursor-reach", Tr("Кончик курсора над пальцем"), nullptr, m.cursorReach, reachNames, reachValues);
+    static constexpr std::array<const char*, 4> inputNames{N_("Курсор"), N_("Касания"), N_("Зажать и тянуть"), N_("Прицел")};
+    static constexpr std::array<int, 4> inputValues{0, 1, 2, 3};
+    choice("sketch-input", Tr("Рисование в эскизе"),
+           Tr("Курсор — капля и ✓ (мобильный вид; в десктопном — как касания). Касания — тап ставит точку там, "
+              "где палец: первый — начало, второй — конец, дальше цепочка (✕ — закончить). Зажать и тянуть — "
+              "держите палец, пока не заполнится кружок: там первая точка; ведите палец и отпустите — вторая. "
+              "Прицел — как «зажать и тянуть», но с крестиком над пальцем: коснитесь вида, наведите крестик, "
+              "задержите палец, пока не заполнится кружок, — первая точка; ведите и отпустите — вторая. "
+              "Палец ничего не закрывает. Вид двигают два пальца."),
+           m.sketchInput, inputNames, inputValues);
+    static constexpr std::array<const char*, 8> polarNames{N_("выкл"), "5°", "10°", "15°", "22,5°", "30°", "45°", "90°"};
+    static constexpr std::array<double, 8> polarValues{0.0, 5.0, 10.0, 15.0, 22.5, 30.0, 45.0, 90.0};
+    choice("polar-step", Tr("Шаг угла отрезка (полярное отслеживание)"),
+           Tr("Отрезок от предыдущей точки идёт только под углами, кратными шагу, как в AutoCAD; рядом с курсором "
+              "виден угол. «Орто» действует вместо него, когда включено."),
+           app.settings.polarStep, polarNames, polarValues);
 
     ui::FieldLabel(ui, Tr("Кнопки громкости"));
     static constexpr std::array<const char*, 2> volume{N_("Громкость"), N_("Масштаб вида")};
@@ -1481,7 +1523,7 @@ void DrawAppearanceSettings(AppContext& app, float width) {
     if (ui::LinkButton(ui, "##open-backgrounds", Tr("Выбрать на вкладке «Вид» → «Фон»…"))) app.shell.backgroundMenu = true;
 }
 
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
 // --- Settings on the phone, as in Minecraft (docs/dev/mockups/4, the author 17.10.2026) ---
 // Full screen next to the hotbar: big tabs on the left, the groups as pills
 // on top, the options as a grid of two columns of wide cells. A slider is the
@@ -1628,6 +1670,20 @@ void Sensor(AppContext& app, Grid& g) {
         static constexpr std::array<int, 4> values{32, 48, 64, 80};
         int i = IndexOf(values, m.cursorReach);
         if (Choice(g, "##p-reach", Tr("Кончик курсора"), names, i)) m.cursorReach = values[static_cast<std::size_t>(i)];
+    }
+    {
+        static constexpr std::array<const char*, 4> names{N_("курсор"), N_("касания"), N_("зажать и тянуть"), N_("прицел")};
+        int i = std::clamp(m.sketchInput, 0, 3);
+        if (Choice(g, "##p-sketch-input", Tr("Рисование в эскизе"), names, i)) m.sketchInput = i;
+    }
+    {
+        static constexpr std::array<const char*, 8> names{N_("выкл"), "5°", "10°", "15°", "22,5°", "30°", "45°", "90°"};
+        static constexpr std::array<double, 8> values{0.0, 5.0, 10.0, 15.0, 22.5, 30.0, 45.0, 90.0};
+        int i = IndexOf(values, app.settings.polarStep);
+        if (Choice(g, "##p-polar", Tr("Шаг угла отрезка"), names, i)) {
+            app.settings.polarStep = values[static_cast<std::size_t>(i)];
+            if (app.settings.polarStep > 0) app.settings.orthoMode = false;
+        }
     }
     Heading(g, Tr("Раскладка"));
     {
@@ -1855,7 +1911,7 @@ void Draw(AppContext& app) {
 
 void DrawSettings(AppContext& app) {
     ui::Ui& ui = app.ui;
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
     if (app.shell.mobile.phone) {   // full screen, as in Minecraft
         if (app.shell.showSettings) phone::Draw(app);
         return;
@@ -1875,7 +1931,7 @@ void DrawSettings(AppContext& app) {
     }
     ImGui::Dummy({0, ui.S(4)});
     if (app.shell.settingsTab == 1) {
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
         // A touch screen instead of a touchpad (ADR-0004): layout, hand, sizes, cursor.
         static constexpr std::array<const char*, 4> subs{N_("Клавиатура"), N_("Мышь"), N_("Сенсор"), N_("Жесты")};
 #else
@@ -1893,7 +1949,7 @@ void DrawSettings(AppContext& app) {
     switch (app.shell.settingsTab) {
         case 1:
             if (app.shell.settingsSub == 1) DrawMouseSettings(app, width);
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
             else if (app.shell.settingsSub == 2) DrawTouchScreenSettings(app, width);
             else if (app.shell.settingsSub == 3) DrawGestureSettings(app, width);
 #else
@@ -1950,10 +2006,10 @@ void DrawBetaReport(AppContext& app) {
         paragraph(Tr("Отправьте этот файл в чат тестеров. Кнопка ниже откроет папку, где он лежит."), c.textSecondary);
         ImGui::Dummy({0, ui.S(8)});
         const float bw = (width - ui.S(8)) / 2;
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
         // No file manager for the app's own folder: the system's "share" sends the zip (ADR-0004).
         if (ui::PrimaryButton(ui, "##beta-show", Tr("Поделиться отчётом"), nullptr, {bw, ui.S(36)}))
-            platform::android::Share(r.packed, "application/zip", "BreezeCAD");
+            platform::mobile::Share(r.packed, "application/zip", "BreezeCAD");
 #else
         if (ui::PrimaryButton(ui, "##beta-show", Tr("Открыть папку с отчётом"), nullptr, {bw, ui.S(36)}))
             if (!platform::OpenFolder(r.packed.parent_path())) app.notes.Error(Tr("Не удалось открыть папку"));
@@ -2026,7 +2082,7 @@ void DrawDialogs(AppContext& app) {
             ImGui::Dummy({0, ui.S(8)});
             const float bw = (ImGui::GetContentRegionAvail().x - ui.S(16)) / 3;
             if (ui::PrimaryButton(ui, "##save", Tr("Сохранить"), nullptr, {bw, ui.S(36)})) {
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
                 if (s->path.empty()) {   // the phone: its name first; the tab closes once saved
                     mobile::AskSaveName(app, *s, true);
                     finish(false);
@@ -2075,17 +2131,17 @@ void DrawDialogs(AppContext& app) {
         // Exactly which build: the commit names it on GitHub.
         std::string build = *Commit() ? Trf("Сборка {} {} от {}", Branch(), Commit(), BuildDate())
                                       : Trf("Сборка от {}", BuildDate());
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
         // The APK's own version and number (the number grows with every build;
         // what a store and "install over" compare).
-        if (const std::string package = platform::android::PackageVersion(); !package.empty()) {
+        if (const std::string package = platform::mobile::PackageVersion(); !package.empty()) {
             const auto tab = package.find('\t');
             build = Trf("Android {}, версия {}", package.substr(0, tab), tab == std::string::npos ? "" : package.substr(tab + 1)) +
                     "\n" + build;
         }
 #endif
         dl->AddText(ui.fonts.mono, ui.S(11), {p.x + ui.S(63), p.y + ui.S(52)}, ui::ToU32(c.textMuted), build.c_str());
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
         ImGui::Dummy({0, ui.S(90)});
 #else
         ImGui::Dummy({0, ui.S(74)});
@@ -2099,7 +2155,7 @@ void DrawDialogs(AppContext& app) {
             ImGui::Dummy({0, ui.S(4)});
             ImGui::TextUnformatted(Tr("Использует: Open CASCADE Technology (LGPL 2.1), Dear ImGui, GLFW, lunasvg, "
                                    "nlohmann/json, miniz, portable-file-dialogs (MIT/zlib), stb_image (public domain), шрифты IBM Plex (OFL)."));
-#if defined(__ANDROID__)
+#if defined(BZ_MOBILE)
             ImGui::Dummy({0, ui.S(4)});
             if (ui::LinkButton(ui, "##privacy", Tr("Политика конфиденциальности")))
                 platform::OpenUrl("https://mikeverx.github.io/breezecad/privacy.html");

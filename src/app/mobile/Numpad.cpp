@@ -58,6 +58,16 @@ void Press(ImGuiKey key, bool shift = false, bool ctrl = false) {
 
 float NumpadHeight(const ui::Ui& ui) { return ui.S(30 + 4 * 46 + 4); }
 
+void DrawTabletNumpad(AppContext& app) {
+    const ui::Ui& ui = app.ui;
+    const MobileState& m = app.shell.mobile;
+    if (!m.numpad || m.phone) return;
+    const ImVec2 lo = m.viewMin, hi = app.shell.viewportMax.x > 0 ? app.shell.viewportMax : ImGui::GetIO().DisplaySize;
+    const float w = std::min(ui.S(7 * 58), hi.x - lo.x - ui.S(24));
+    const float h = NumpadHeight(ui);
+    DrawNumpad(app, {hi.x - w - ui.S(12), hi.y - h - ui.S(12)}, {w, h});
+}
+
 void DrawNumpad(AppContext& app, ImVec2 pos, ImVec2 size) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();

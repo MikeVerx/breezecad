@@ -200,3 +200,52 @@ TEST_CASE("Gestures: with a stylus near, fingers only navigate") {
     g.Up(1, {100, 100}, 1.05);
     CHECK_FALSE(g.Take().tap);
 }
+
+TEST_CASE("Gestures: «Прицел» — aim, hold still for the first point, drag to the second") {
+    GestureRecognizer g;
+    GestureRecognizer::Mode mode{false, false, false, GestureRecognizer::DefaultDrags(false)};
+    mode.drawAim = true;
+    g.SetMode(mode);
+    g.Down(1, {100, 100}, 0.0);
+    GestureStep s = g.Take();
+    REQUIRE(s.aimAt);
+    // Aiming: the cross follows, the view stays, no point yet.
+    g.Move(1, {160, 120}, 0.3);
+    s = g.Take();
+    REQUIRE(s.aimAt);
+    CHECK(s.aimAt->x == doctest::Approx(160));
+    CHECK(s.pan == Vec2{0, 0});
+    g.Tick(0.6);   // moved at 0.3: the ring starts again from there
+    s = g.Take();
+    CHECK_FALSE(s.drawFrom);
+    CHECK(s.pressProgress > 0.0f);
+    g.Tick(0.9);   // held still long enough: the first point
+    s = g.Take();
+    REQUIRE(s.drawFrom);
+    CHECK(s.drawFrom->x == doctest::Approx(160));
+    CHECK_FALSE(s.longPress);
+    g.Move(1, {220, 160}, 1.0);
+    s = g.Take();
+    REQUIRE(s.drawTo);
+    g.Up(1, {230, 170}, 1.1);
+    s = g.Take();
+    CHECK(s.drawEnded);
+    CHECK(s.aimEnded);
+    CHECK_FALSE(s.tap);
+    // Let go before the ring filled: no point.
+    g.Down(1, {100, 100}, 2.0);
+    (void)g.Take();
+    g.Up(1, {100, 100}, 2.1);
+    s = g.Take();
+    CHECK(s.aimEnded);
+    CHECK_FALSE(s.drawEnded);
+    CHECK_FALSE(s.tap);
+    // A second finger: the aim goes, the two fingers move the view.
+    g.Down(1, {100, 100}, 3.0);
+    (void)g.Take();
+    g.Down(2, {200, 100}, 3.05);
+    CHECK(g.Take().aimCancelled);
+    g.Move(1, {130, 100}, 3.1);
+    g.Move(2, {230, 100}, 3.1);
+    CHECK(g.Take().pan.x > 0);
+}

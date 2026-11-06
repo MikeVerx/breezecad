@@ -36,6 +36,10 @@ public:
     FaceReference     face;
     std::vector<Vec2> centres;      ///< in PlaneFrame(face)
     std::vector<HoleAxis> concentric;   ///< centres held on an axis (optional, 0.2.2)
+    /// «По эскизу»: the centres are the centres of this sketch's circles (not
+    /// construction), taken again on every rebuild; the face is the body's flat
+    /// face in the sketch's plane. Empty: centres placed by hand or on an axis.
+    ObjectId          sketch;
     HoleType          type = HoleType::Simple;
     bool              throughAll = false;
     Parameter diameter{.name = "", .expression = "6.6", .quantity = Quantity::Length, .value = 6.6, .error = {}};
@@ -47,6 +51,10 @@ public:
     Parameter sinkDiameter{.name = "", .expression = "13", .quantity = Quantity::Length, .value = 13.0, .error = {}};
 
     std::string_view Type() const override { return kType; }
+    std::vector<ObjectId> Dependencies() const override {
+        if (sketch) return {sketch};
+        return {};
+    }
     /// Removes centre `index` and the axis that held it.
     void RemoveCentre(std::size_t index);
     /// The axis holding centre `index`, if any.

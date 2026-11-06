@@ -96,6 +96,7 @@ set(BZ_APP_SOURCES
     mobile/MobileLayout.cpp
     mobile/MobileRibbon.cpp
     mobile/Numpad.cpp
+    mobile/TouchText.cpp
     mobile/PhoneHome.cpp
     mobile/PhoneLibrary.cpp
     mobile/TouchInput.cpp)
@@ -105,7 +106,7 @@ if(ANDROID)
     # crash and splash windows are processes and windows of their own on the
     # desktop; on Android the watchdog (":crash") and the app's start do that.
     list(REMOVE_ITEM BZ_APP_SOURCES shell/CrashWindow.cpp shell/Splash.cpp)
-    add_library(breezecad SHARED android/AndroidMain.cpp android/AndroidInput.cpp Application_android.cpp shell/Splash_android.cpp
+    add_library(breezecad SHARED android/AndroidMain.cpp android/AndroidInput.cpp Application_android.cpp Application_mobile.cpp shell/Splash_android.cpp
                 ${BZ_APP_SOURCES})
     target_link_libraries(breezecad PRIVATE
         bz::core bz::document bz::assembly bz::kernel bz::modules bz::render bz::ui bz::platform
@@ -121,6 +122,24 @@ if(ANDROID)
     target_include_directories(bzcrash PRIVATE ${PROJECT_SOURCE_DIR}/src)
     set_target_properties(bzcrash PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/android)
     bz_set_warnings(bzcrash)
+    return()
+endif()
+
+if(IOS)
+    # BreezeCAD.app's executable (scripts/ios/package-app.sh packs it): the
+    # same program as on Android, started by UIKit (ios/IosMain.mm). No
+    # crash and splash windows of their own, as on Android.
+    list(REMOVE_ITEM BZ_APP_SOURCES shell/CrashWindow.cpp shell/Splash.cpp)
+    add_executable(breezecad ios/IosMain.mm Application_mobile.cpp Application_ios.mm shell/Splash_android.cpp ${BZ_APP_SOURCES})
+    set_source_files_properties(ios/IosMain.mm Application_ios.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_link_libraries(breezecad PRIVATE
+        bz::core bz::document bz::assembly bz::kernel bz::modules bz::render bz::ui bz::platform
+        bz::imgui bz::miniz bz::json lunasvg::lunasvg bz::occt_visual
+        # OCCT is static on iOS: the system frameworks its toolkits use come here.
+        "-framework Foundation" "-framework CoreFoundation" "-framework CoreGraphics" "-framework CoreText"
+        "-framework UIKit" "-framework QuartzCore" "-framework OpenGLES")
+    set_target_properties(breezecad PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/ios)
+    bz_set_warnings(breezecad)
     return()
 endif()
 
