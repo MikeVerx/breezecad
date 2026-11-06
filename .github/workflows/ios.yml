@@ -135,7 +135,10 @@ jobs:
     # A push or manual run refreshes the pre-release "ios-build": a stable
     # link to the newest .ipa (and the simulator's screenshot).
     needs: [build]
-    if: ${{ github.event_name != 'pull_request' }}
+    # The device's .ipa goes out even when the simulator's check failed: a
+    # real iPad is the better judge (the simulator draws in software). The
+    # download below fails if the device build itself did not make one.
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -143,6 +146,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: BreezeCAD-ios, path: release }
       - uses: actions/download-artifact@v4
+        continue-on-error: true   # no screenshots: the .ipa still goes out
         with: { name: ios-iphonesimulator-logs, path: sim }
       - name: Publish the .ipa to ios-build
         env:

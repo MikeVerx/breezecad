@@ -85,7 +85,11 @@ case "${1:-}" in
             xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE_ID" && alive=yes
             echo "step $shot: app alive $alive, $(grep -c ERROR "$log" 2>/dev/null || echo 0) errors"
             grep -E "ERROR|WARN|Window:|Viewport|test commands|Crash" "$log" 2>/dev/null | head -20
-            [ "$alive" = yes ] && ! grep -q "Crash:\|did not start" "$log" || ok=no
+            if [ "$alive" != yes ] || grep -q "Crash:\|did not start" "$log"; then
+                ok=no
+                echo "== the end of the log of step $shot"
+                tail -25 "$log"
+            fi
         done
         if [ "$ok" != yes ]; then
             # Why it died: the program's own report (crash::ReportPath, in its
@@ -94,7 +98,9 @@ case "${1:-}" in
             for r in "$data/Library/Application Support/reports/"crash-*.txt "$data/Library/Application Support/reports/"hang-*.txt; do
                 [ -f "$r" ] && { echo "== report $(basename "$r")"; head -60 "$r"; }
             done
-            ips=$(ls -t "$HOME/Library/Logs/DiagnosticReports/"breezecad*.ips 2>/dev/null | head -1)
+            sleep 15   # the system writes its crash log a little later
+            ls -lt "$HOME/Library/Logs/DiagnosticReports/" 2>/dev/null | head -8
+            ips=$(ls -t "$HOME/Library/Logs/DiagnosticReports/"*.ips 2>/dev/null | head -1)
             [ -n "$ips" ] && { echo "== system crash log $(basename "$ips")"; python3 -c '
 import json, sys
 text = open(sys.argv[1]).read()
