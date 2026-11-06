@@ -7,6 +7,7 @@
 #include "core/Monitor.h"
 #include "app/Operations.h"
 #include "app/shell/Shell.h"
+#include "app/shell/FilePreviews.h"
 #include "app/shell/Splash.h"
 #include "app/Backgrounds.h"
 #include "modules/ModuleHost.h"
@@ -568,7 +569,8 @@ void Application::ReportRedraws(double now) {
 bool Application::WaitsForBackground() const {
     // Only the document on screen: another one takes its result when shown.
     const Session* s = myWorkspace.Active();
-    return s && s->RebuildingInBackground();
+    if (s && s->RebuildingInBackground()) return true;
+    return FilePreviewsBusy();   // the home page's pictures, read on another thread
 }
 
 void Application::HandleCloseRequests() {

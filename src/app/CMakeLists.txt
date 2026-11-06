@@ -66,6 +66,7 @@ set(BZ_APP_SOURCES
     shell/SaveToLibrary.cpp
     shell/NewDocumentDialog.cpp
     shell/Header.cpp
+    shell/FilePreviews.cpp
     shell/HomeScreen.cpp
     shell/LeftPanels.cpp
     shell/Ribbon.cpp

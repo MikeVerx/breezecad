@@ -473,6 +473,7 @@ bool Register(const Choices& c, const std::string& version, std::uint64_t sizeBy
         const std::wstring prog = classes + t.progId;
         SetString(HKEY_CURRENT_USER, prog, nullptr, *typeNames[i]);
         SetString(HKEY_CURRENT_USER, prog + L"\\DefaultIcon", nullptr, (c.dir / L"shell" / t.icon).wstring());
+        SetString(HKEY_CURRENT_USER, prog, L"TypeOverlay", L"");   // the preview has its own mark (no second one)
         SetString(HKEY_CURRENT_USER, prog + L"\\shell\\open\\command", nullptr, command);
         SetString(HKEY_CURRENT_USER, classes + t.ext + L"\\OpenWithProgids", t.progId, L"");
         SetString(HKEY_CURRENT_USER, classes + L"Applications\\breezecad.exe\\SupportedTypes", t.ext, L"");
