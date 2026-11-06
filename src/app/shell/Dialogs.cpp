@@ -20,6 +20,7 @@
 #include "core/Version.h"
 #include "document/Commands.h"
 #include "app/assembly/AssemblyUi.h"
+#include "app/assembly/ChangeDialog.h"
 #include "document/StandardPacks.h"
 #include "document/StandardParts.h"
 #include "core/PathText.h"
@@ -1995,6 +1996,7 @@ void DrawDialogs(AppContext& app) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
     DrawNewDocumentDialog(app);
+    DrawChangeDialog(app);
 
     // --- Save changes? ---
     bool unsavedOpen = app.shell.closeRequest.has_value();

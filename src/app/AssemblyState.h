@@ -4,6 +4,7 @@
 
 #include "assembly/Assembly.h"
 #include "kernel/AssemblyModel.h"
+#include "kernel/ContextProjection.h"
 
 #include <array>
 #include <chrono>
@@ -182,7 +183,40 @@ public:
     void ForgetAdaptState() {
         myAdaptKeys.clear();
         myHasContext.clear();
+        mySourcePrints.clear();
+        changes.clear();
     }
+
+    // --- «Обнаружено изменение, затрагивающее другие детали» (ADR-0009) --------
+    /// A part whose source sketch changed: it does not follow quietly but
+    /// waits for the author's choice in the window. Found once the edit of the
+    /// source is over (nothing is asked while a part is edited in place).
+    struct SourceChange {
+        std::filesystem::path               partFile;
+        ObjectId                            component;      ///< a component showing the part
+        std::string                         part;           ///< its name, as in the tree
+        std::string                         source;         ///< the changed part, as in the tree
+        std::string                         sourceSketch;   ///< its sketch that changed
+        std::vector<kernel::AffectedSketch> sketches;
+        kernel::SourcePrints                now;            ///< the sources as they are now
+    };
+    std::vector<SourceChange> changes;
+    /// «Ручное редактирование»: the sketches of a part to open one by one.
+    struct ManualEdit {
+        ObjectId              component;
+        std::vector<ObjectId> sketches;   ///< still to open, in tree order
+        bool                  rollback = true;   ///< «Откатить зависимости эскиза до изменения»
+    } manual;
+    /// Applies `choice` (with the gap, for Mimic) to `changes[index]` and takes
+    /// it off the list: one undo step for the assembly and the part. Manual
+    /// follows the sources like Adapt (the broken sketches keep what they were
+    /// before) and fills `manual`. An error message (Russian) when it cannot be
+    /// done; the change then stays.
+    std::string ResolveChange(std::size_t index, kernel::ChangeChoice choice, double gap, bool rollback,
+                              const std::filesystem::path& file, std::string_view contextName);
+    /// The document `choice` would make of the part of `changes[index]`, for
+    /// the preview: a copy, nothing of the assembly changes.
+    Expected<doc::Document> TryChange(std::size_t index, kernel::ChangeChoice choice, double gap, std::string_view contextName) const;
 
     /// The other components, placed as they stand around the part edited in
     /// place, in that part's coordinates: the context shown faded while it is
@@ -217,6 +251,11 @@ private:
         std::vector<ObjectId> sources;   ///< the components it is drawn from
     };
     std::unordered_map<std::string, ContextInfo> myHasContext;
+    /// Per part file: its projections' source prints at its last following.
+    std::unordered_map<std::string, kernel::SourcePrints> mySourcePrints;
+    /// Applies a choice to `doc` (the part of `change`).
+    Expected<int> Apply(const SourceChange& change, kernel::ChangeChoice choice, double gap, doc::Document& doc,
+                        std::string_view contextName) const;
     /// Whether a part has projections from here, and from where: looked at once per version of it.
     const ContextInfo& ContextOf(const std::string& key, ObjectId component, const doc::Document& part, std::string_view name);
     /// Parts with projections follow their sources; true when one changed.

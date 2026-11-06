@@ -14,6 +14,7 @@
 #include "ui/Ui.h"
 #include "ui/Widgets.h"
 
+#include <memory>
 #include <functional>
 #include <optional>
 #include <set>
@@ -35,6 +36,8 @@ struct OperationEditors;
 
 enum class LeftTab : unsigned char { Tree, Properties, Variables, Mate };
 enum class RibbonTab : unsigned char { Model, Sketch, View };
+
+struct ChangeDialogState;   // app/assembly/ChangeDialog.cpp
 
 /// UI state of the window chrome that outlives a frame.
 struct ShellState {
@@ -130,6 +133,8 @@ struct ShellState {
     bool measuring = false;   ///< "Измерить" is on
     int  measureSlot = 0;     ///< which of its two fields the next click fills
     bool interference = false;   ///< "Коллизии": overlaps of the bodies shown
+    /// «Обнаружено изменение, затрагивающее другие детали»: choices, preview.
+    std::shared_ptr<ChangeDialogState> changeDialog;
 
     /// Choosing faces with the left button (see viewport/FaceSelection).
     struct FaceSelecting {

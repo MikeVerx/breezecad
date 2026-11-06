@@ -10,6 +10,7 @@ set(BZ_APP_SOURCES
     assembly/AssemblyIssues.cpp
     assembly/AssemblyUi.cpp
     assembly/InPlace.cpp
+    assembly/ChangeDialog.cpp
     Backgrounds.cpp
     BetaTesting.cpp
     CrashGuard.cpp
