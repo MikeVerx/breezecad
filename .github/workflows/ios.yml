@@ -21,7 +21,7 @@ name: ios
 
 on:
   push:
-    branches: [next, main, 'feat/ios*', 'ci/ios-*', 'preview/ios-*']
+    branches: [next, main, 'feat/ios*', 'feat/mobile*', 'ci/ios-*', 'preview/ios-*']
     paths-ignore: ['docs/**', 'translations/**', '**/*.md']
   pull_request:
     paths-ignore: ['docs/**', 'translations/**', '**/*.md']
