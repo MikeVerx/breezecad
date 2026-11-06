@@ -10,6 +10,8 @@
 #include "core/Monitor.h"
 #include "core/Profile.h"
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <format>
 
@@ -289,6 +291,17 @@ const doc::Look& AssemblyState::ShownLook() {
     return myShownLook;
 }
 
+namespace {
+/// A component's name without its instance number: «Короб:2» is the part «Короб».
+std::string PartName(const std::string& component) {
+    const std::size_t colon = component.rfind(':');
+    if (colon == std::string::npos || colon + 1 == component.size()) return component;
+    for (std::size_t i = colon + 1; i < component.size(); ++i)
+        if (component[i] < '0' || component[i] > '9') return component;
+    return component.substr(0, colon);
+}
+} // namespace
+
 bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view name) {
     if (name.empty() || drag.moving) return false;   // a drag: the parts follow on release
     if (myAdaptStopped) return false;
@@ -306,11 +319,33 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
 
         PartEdit* edit = EditOf(partFile);
         if (edit && edit->session && edit->session->mode != EditMode::Model) continue;   // its sketch is open: after
+
+        // Its source sketch changed (not a fillet, not a move): the author
+        // decides in the window, once no part is edited in place any more.
+        if (std::any_of(changes.begin(), changes.end(), [&](const SourceChange& ch) { return ch.partFile == partFile; })) continue;
+        kernel::SourcePrints prints = kernel::SourcePrintsOf(geometry, *part, name);
+        if (const auto was = mySourcePrints.find(key); was != mySourcePrints.end()) {
+            std::vector<kernel::AffectedSketch> hit = kernel::FindAffectedSketches(*part, name, was->second, prints);
+            if (!hit.empty()) {
+                if (inPlace) continue;   // the edit of the source is not over yet
+                SourceChange change{partFile, c.id, PartName(c.name), {}, {}, std::move(hit), std::move(prints)};
+                if (const assembly::Component* from = assembly.FindComponent(change.sketches.front().sourceComponent)) {
+                    change.source = PartName(from->name);
+                    if (const doc::Document* fromPart = geometry.PartOf(from->id))
+                        if (const doc::Feature* f = fromPart->Find(change.sketches.front().sourceSketch)) change.sourceSketch = f->name;
+                }
+                mon::Action("assembly", std::format("изменение источника: {} ({} эскизов)", c.name, change.sketches.size()));
+                changes.push_back(std::move(change));
+                continue;
+            }
+        }
         kernel::AdaptResult r;
         std::string before;
+        kernel::SourcePrints learnt;
         if (edit) {
             before = doc::DocumentToJson(edit->session->doc);
             r = kernel::AdaptContextProjections(geometry, assembly, c.id, edit->session->doc, name);
+            learnt = kernel::SourcePrintsOf(geometry, edit->session->doc, name);
         } else {
             // Read from its file: tried on a copy first. Only when something
             // really moves does the part become an edit in memory (saved with
@@ -320,6 +355,7 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
             doc::Document copy = part->Clone();
             before = doc::DocumentToJson(copy);
             r = kernel::AdaptContextProjections(geometry, assembly, c.id, copy, name);
+            learnt = kernel::SourcePrintsOf(geometry, copy, name);   // its sources learnt, even if it stays on disk
             if (r.changed() || r.lost > 0) {
                 auto session = std::make_unique<Session>();
                 session->doc = std::move(copy);
@@ -331,6 +367,7 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
             }
         }
         myAdaptKeys[key] = now;
+        mySourcePrints[key] = std::move(learnt);
         if (r.lost > 0)
             problems.push_back(std::format("{}: {} рёбер других деталей не найдено — их проекции остались на месте",
                                            c.name, r.lost));
@@ -362,6 +399,71 @@ bool AssemblyState::Adapt(const std::filesystem::path& file, std::string_view na
         return true;
     }
     return changed;
+}
+
+Expected<int> AssemblyState::Apply(const SourceChange& change, kernel::ChangeChoice choice, double gap, doc::Document& doc,
+                                   std::string_view contextName) const {
+    switch (choice) {
+        case kernel::ChangeChoice::Ignore:
+            return kernel::IgnoreSourceChange(doc, contextName, change.sketches);
+        case kernel::ChangeChoice::Mimic:
+            return kernel::MimicSourceChange(geometry, assembly, change.component, doc, contextName, change.sketches, gap);
+        case kernel::ChangeChoice::Adapt:
+        case kernel::ChangeChoice::Manual:
+            return kernel::AdaptContextProjections(geometry, assembly, change.component, doc, contextName).moved;
+    }
+    return 0;
+}
+
+Expected<doc::Document> AssemblyState::TryChange(std::size_t index, kernel::ChangeChoice choice, double gap,
+                                                  std::string_view contextName) const {
+    if (index >= changes.size()) return Error{"Нет такого изменения"};
+    const doc::Document* part = geometry.PartOf(changes[index].component);
+    if (!part) return Error{"Деталь не найдена"};
+    doc::Document copy = part->Clone();
+    if (const Expected<int> done = Apply(changes[index], choice, gap, copy, contextName); !done) return done.GetError();
+    return copy;
+}
+
+std::string AssemblyState::ResolveChange(std::size_t index, kernel::ChangeChoice choice, double gap, bool rollback,
+                                         const std::filesystem::path& file, std::string_view contextName) {
+    if (index >= changes.size()) return "Нет такого изменения";
+    const SourceChange change = changes[index];
+    const doc::Document* part = geometry.PartOf(change.component);
+    if (!part) return "Деталь не найдена";
+    doc::Document copy = part->Clone();
+    const std::string before = doc::DocumentToJson(copy);
+    if (const Expected<int> done = Apply(change, choice, gap, copy, contextName); !done) return done.GetError().message;
+
+    static constexpr std::array<const char*, 4> kLabels{"Игнорировать изменения", "Автоматическое адаптирование",
+                                                         "Мимикрирование с зазором", "Ручное редактирование"};
+    Checkpoint(std::format("{}: {}", change.part, kLabels[static_cast<std::size_t>(choice)]));
+    PartEdit* edit = EditOf(change.partFile);
+    if (edit && edit->session) {
+        edit->session->doc = std::move(copy);
+    } else {
+        // Read from its file: an edit in memory from now on, saved with the assembly.
+        auto session = std::make_unique<Session>();
+        session->doc = std::move(copy);
+        session->path = change.partFile;
+        parts.push_back({change.partFile, std::move(session), false});
+        edit = &parts.back();
+        geometry.UsePartInMemory(change.partFile, &edit->session->doc, &edit->session->model);
+    }
+    RememberPartBefore(change.partFile, before);
+    edit->session->doc.MarkChanged(0);
+    edit->session->history.MarkUnsaved();
+    edit->session->RebuildNow();
+    const std::string key = ToUtf8(change.partFile);
+    mySourcePrints[key] = kernel::SourcePrintsOf(geometry, edit->session->doc, contextName);
+    myAdaptKeys.erase(key);   // looked at afresh: what is left follows quietly
+    changes.erase(changes.begin() + static_cast<std::ptrdiff_t>(index));
+    if (choice == kernel::ChangeChoice::Manual) {
+        manual = {change.component, {}, rollback};
+        for (const kernel::AffectedSketch& s : change.sketches) manual.sketches.push_back(s.sketch);
+    }
+    geometry.Update(assembly, file);
+    return {};
 }
 
 std::vector<AssemblyState::Issue> AssemblyState::Issues() const {
