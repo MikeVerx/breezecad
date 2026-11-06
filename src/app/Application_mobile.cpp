@@ -112,11 +112,19 @@ bool Application::MobileBetweenFrames(double now) {
         wasTyping = typing;
     }
     const bool hadNumpad = m.numpad;
-    m.numpad = m.phone && typing && !words && !m.hardKeyboard;
+    // A tablet (the desktop layout): the numpad for the values of an operation
+    // (extrude and the rest) and of a sketch, floating over the view's corner;
+    // names, search and dialogs keep the system keyboard.
+    const Session* active = myWorkspace.Active();
+    const bool tabletValue = !m.phone && !myShell.paletteOpen && !myShell.renaming && !myShell.treeSearch && !m.fullKeyboard &&
+                             !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel) &&
+                             active && !myWorkspace.ShowsHome() && (myOps.Active() || active->mode == EditMode::Sketch);
+    m.numpad = typing && !m.hardKeyboard && (m.phone ? !words : tabletValue);
+    if (!m.numpad && !m.phone) m.numpadKeys.clear();
     // A value left any way (↵, the OK button, another field): it is "пред." for the next one.
     if (hadNumpad && !m.numpad && !m.editingText.empty()) m.previousValue = m.editingText;
     if (hadNumpad != m.numpad) log::Info("Keyboard: numpad {}", m.numpad ? "on" : "off");
-    const bool keyboard = typing && words && !m.hardKeyboard;
+    const bool keyboard = typing && !m.numpad && !m.hardKeyboard;
     if (!typing) m.fullKeyboard = false;
     if (keyboard != myKeyboardUp) {
         log::Info("Keyboard: system {}", keyboard ? "on" : "off");

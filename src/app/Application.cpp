@@ -741,7 +741,10 @@ void Application::Frame() {
         myRecovery.Remember(app);
         myRecovery.RunInterface(app, [&] {
             if (myShell.mobile.phone) mobile::DrawPhoneRoot(app);
-            else DrawRoot();
+            else {
+                DrawRoot();
+                mobile::DrawTabletNumpad(app);   // a tablet typing a value (never on the desktop)
+            }
             fault_test::HitInInterface();   // a test hook (debug.fault); nothing otherwise
             DrawDialogs(app);
             mobile::DrawLastCrash(app);   // Android: the last run crashed or hung (never set on the desktop)

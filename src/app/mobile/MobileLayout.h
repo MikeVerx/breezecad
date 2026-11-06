@@ -65,6 +65,8 @@ void StartSetup(AppContext& app);
 /// The numpad (Numpad.cpp): its height, drawing it, and a key typed.
 float NumpadHeight(const ui::Ui& ui);
 void  DrawNumpad(AppContext& app, ImVec2 pos, ImVec2 size);
+/// The numpad on a tablet (the desktop layout): over the bottom right corner of the view.
+void  DrawTabletNumpad(AppContext& app);
 void  FireNumpadKey(AppContext& app, int code);
 
 /// Files on the phone, in the main menu: the projects folder and "share".
