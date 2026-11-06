@@ -35,6 +35,7 @@ add_executable(bz_tests
     document/SaveTests.cpp
     document/StandardPacksTests.cpp
     kernel/AssemblyDesignTests.cpp
+    kernel/ChangeDialogTests.cpp
     kernel/AssemblyModelTests.cpp
     kernel/AutoDropTests.cpp
     kernel/ComponentPatternTests.cpp

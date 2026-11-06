@@ -1,5 +1,6 @@
 add_library(bz_kernel STATIC
     AssemblyContext.cpp
+    ContextChanges.cpp
     AssemblyModel.cpp
     AssemblyReadApi.cpp
     AutoDrop.cpp
