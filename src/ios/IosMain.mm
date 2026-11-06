@@ -26,6 +26,7 @@
 #include "kernel/Model.h"
 #include "render/Viewport.h"
 
+#include <BRepMesh_IncrementalMeshFactory.hxx>
 #include <Message.hxx>
 #include <Message_Messenger.hxx>
 #include <Message_Printer.hxx>
@@ -441,6 +442,11 @@ struct Part {
               std::string(UIDevice.currentDevice.systemVersion.UTF8String), data.string());
 
     Message::DefaultMessenger()->AddPrinter(new OcctToLog());
+    // OCCT is static here: its mesher ("FastDiscret") registers itself from
+    // a static object the linker leaves out when nothing refers to its file.
+    // Without it no face is meshed and the view shows only edges (seen on
+    // the simulator and an iPad, 2026-11-06). Registered by hand instead.
+    static const Handle(BRepMesh_IncrementalMeshFactory) mesher = new BRepMesh_IncrementalMeshFactory();
 
     auto* controller = [[BZViewController alloc] init];
     self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
