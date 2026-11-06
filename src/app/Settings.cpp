@@ -193,6 +193,7 @@ Settings FromJson(const nlohmann::json& j) {
     for (const auto& r : j.value("recentFiles", nlohmann::json::array()))
         if (r.is_string()) s.recentFiles.push_back(PathFromUtf8(r.get<std::string>()));
     s.lastSaveFolder = PathFromUtf8(j.value("lastSaveFolder", std::string{}));
+    s.recentAsList = j.value("recentAsList", s.recentAsList);
     return s;
 }
 
@@ -311,6 +312,7 @@ nlohmann::json Settings::ToJson() const {
         {"shortcutsCustom", shortcutsCustom},
         {"recentFiles", recent},
         {"lastSaveFolder", ToUtf8(lastSaveFolder)},
+        {"recentAsList", recentAsList},
     };
     return j;
 }

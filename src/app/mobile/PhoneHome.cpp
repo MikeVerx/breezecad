@@ -2,6 +2,7 @@
 
 #include "app/Operations.h"
 #include "app/assembly/AssemblyUi.h"
+#include "app/shell/FilePreviews.h"
 #include "app/shell/Shell.h"
 #include "core/I18n.h"
 #include "core/Log.h"
@@ -319,6 +320,13 @@ void DrawCard(AppContext& app, const Card& card, ImVec2 p, ImVec2 size) {
         }
         const ImVec2 a{p.x + 1 + (aw - w) / 2, p.y + 1 + (ah - h) / 2};
         dl->AddImage(static_cast<ImTextureID>(tex), a, {a.x + w, a.y + h});
+    } else if (const FilePreview pic = card.path.empty() ? FilePreview{} : FilePreviewOf(card.path); pic.texture && pic.width > 0) {
+        // The picture saved in the file itself (the desktop's recent files).
+        const float aw = size.x - ui.S(12), ah = thumbH - ui.S(10);
+        const float k = std::min(aw / static_cast<float>(pic.width), ah / static_cast<float>(pic.height));
+        const float w = static_cast<float>(pic.width) * k, h = static_cast<float>(pic.height) * k;
+        const ImVec2 a{p.x + (size.x - w) / 2, p.y + (thumbH - h) / 2};
+        dl->AddImage(static_cast<ImTextureID>(pic.texture), a, {a.x + w, a.y + h});
     } else {
         const float is = ui.S(34);
         ui.icons.Draw(dl, card.assembly ? "tree-assembly" : "tree-part", {p.x + (size.x - is) / 2, p.y + (thumbH - is) / 2}, is,
@@ -342,10 +350,12 @@ void DrawCard(AppContext& app, const Card& card, ImVec2 p, ImVec2 size) {
 void DrawProjects(AppContext& app, ImVec2 pos, ImVec2 size) {
     ui::Ui& ui = app.ui;
     const ui::ThemeColors& c = ui.C();
-    BeginArea("##home-projects", pos, size, c.appBackground);
+    // Scrolls (a finger's drag up or down is the wheel here: mobile/TouchInput);
+    // everything is placed in screen coordinates, so the scroll moves it.
+    BeginArea("##home-projects", pos, size, c.appBackground, true);
     const float pad = ui.S(16);
     const float x = pos.x + pad, inner = size.x - 2 * pad;
-    float y = pos.y + ui.S(12);
+    float y = pos.y - ImGui::GetScrollY() + ui.S(12);
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
     // The header: "Проекты", the folder, recent or all, search.
