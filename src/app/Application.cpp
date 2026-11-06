@@ -924,8 +924,11 @@ void Application::DrawRoot() {
         // The panel as wide as the user dragged it, within reason: never under
         // the theme's narrowest, never over 60 % of the window.
         const float widest = std::max(220.0f, width / myUi->scale * 0.6f - m.railWidth);
+        // Not dragged: the theme's width, narrower on a narrow window (an upright
+        // tablet: the panel took 40 % of it and the model got squeezed).
+        const float usual = std::max(220.0f, std::min(m.panelWidth, width / myUi->scale * 0.3f));
         const float panel = mySettings.panelWidth > 0 ? std::clamp(static_cast<float>(mySettings.panelWidth), 220.0f, widest)
-                                                       : std::min(m.panelWidth, widest);
+                                                       : std::min(usual, widest);
         const float leftWidth = myUi->S(m.railWidth + panel);
         DrawLeftArea(app, *session, {0, y}, {leftWidth, bottom - y});
         DrawViewport(app, *session, {leftWidth, y}, {width - leftWidth, bottom - y});

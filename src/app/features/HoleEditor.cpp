@@ -280,12 +280,15 @@ void HoleEditor::DrawFaceSection(AppContext& app, Session& session, doc::HoleFea
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float h = ui.S(34);
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        const bool ready = HasFace(f) && !f.centres.empty();
+        const bool fromSketch = myFromSketch || f.sketch;
+        const bool ready = fromSketch ? f.sketch && !f.centres.empty() : HasFace(f) && !f.centres.empty();
         dl->AddRectFilled(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoft), ui.S(8));
         dl->AddRect(p, {p.x + width, p.y + h}, ui::ToU32(c.accentSoftBorder), ui.S(8));
         ui.icons.Draw(dl, ready ? "ui-check" : "status-warning", {p.x + ui.S(10), p.y + (h - ui.S(14)) / 2}, ui.S(14), c.accent);
-        const std::string chip = !HasFace(f) ? std::string(Tr("Грань не выбрана"))
-                                             : Trf("Грань выбрана \xC2\xB7 центров: {}", f.centres.size());
+        const std::string chip = fromSketch ? (f.sketch ? Trf("Эскиз выбран \xC2\xB7 центров: {}", f.centres.size())
+                                                        : std::string(Tr("Эскиз не выбран")))
+                                 : !HasFace(f) ? std::string(Tr("Грань не выбрана"))
+                                               : Trf("Грань выбрана \xC2\xB7 центров: {}", f.centres.size());
         dl->AddText(ui.fonts.medium, ui.S(13), {p.x + ui.S(32), p.y + (h - ui.S(13)) / 2 - ui.S(1)}, ui::ToU32(c.text), chip.c_str());
         ImGui::Dummy({width, h});
     }
