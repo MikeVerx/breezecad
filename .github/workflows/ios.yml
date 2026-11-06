@@ -109,7 +109,8 @@ jobs:
           set +e
           bash scripts/ios/simulator.sh smoke app/BreezeCAD.app shots > smoke.log 2>&1
           status=$?
-          cat smoke.log
+          grep -v '^[A-Za-z0-9+/=]\{200,\}$' smoke.log   # the pictures' base64 at the end
+          sed -n '/^SHOT-BEGIN/,/^SHOT-END/p' smoke.log
           echo "::notice title=iOS app in the simulator::$(grep -E '^(simulator|step)|Window:' smoke.log | tr '\n' ' ')"
           exit $status
       - name: Report failures

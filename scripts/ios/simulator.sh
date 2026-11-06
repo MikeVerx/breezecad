@@ -75,6 +75,12 @@ case "${1:-}" in
             done
             sleep 4   # a few frames after
             xcrun simctl io "$UDID" screenshot "$OUT/simulator-ios-$shot.png" >/dev/null 2>&1 || true
+            # A small copy of the picture in the log itself: a pull request
+            # publishes no release, and its artifacts need a login to fetch.
+            if [ -f "$OUT/simulator-ios-$shot.png" ]; then
+                sips -Z 900 -s format jpeg -s formatOptions 60 "$OUT/simulator-ios-$shot.png" --out "$OUT/small-$shot.jpg" >/dev/null 2>&1 &&
+                    { echo "SHOT-BEGIN $shot"; base64 -i "$OUT/small-$shot.jpg" | fold -w 4000; echo "SHOT-END $shot"; }
+            fi
             alive=no
             xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE_ID" && alive=yes
             echo "step $shot: app alive $alive, $(grep -c ERROR "$log" 2>/dev/null || echo 0) errors"

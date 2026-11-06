@@ -14,7 +14,7 @@
   `BRepMesh_IncrementalMeshFactory`) линкер выбрасывает — без сеточника видны
   только рёбра. Сеточник регистрируется в `IosMain.mm` вручную; на шаге 3
   проверить так же провайдеры обмена данными (STEP/STL через DE).
-- Дальше — шаг 3: полное приложение с мобильной раскладкой (см. «Что дальше»).
+- **Шаг 3** — полная программа с мобильной раскладкой: см. ниже.
 
 ## Решения (Михаил, 06.11.2026)
 
@@ -73,19 +73,47 @@
 5. Бесплатный Apple ID: приложение работает 7 дней, до 3 таких приложений,
    до 10 App ID за 7 дней. Ставить заново поверх (не удалять — пропадут данные).
 
+## Шаг 3 — полная программа (ветка `feat/mobile`, PR #87 поверх #85)
+
+Михаил, 06.11.2026: «делай общую мобильную ветку и в ней раздели по андроид и иос».
+
+- **Общий слой.** `BZ_MOBILE` (Android и iOS) вместо `__ANDROID__` там, где
+  речь о телефоне и планшете; `__ANDROID__` / `BZ_IOS` — только своё.
+  `platform/Mobile.h` — интерфейс системы (папки, экран, клавиатура, файлы,
+  «поделиться», сбои, буфер обмена): Android — `platform/Android.cpp`, iOS —
+  `platform/Mobile_ios.mm`. Только Android — `platform/Android.h`, только
+  iOS — `platform/Ios.h`. `android::X` в коде Android по-прежнему работает.
+- **Application.** Общее — `Application_mobile.cpp` (между кадрами, клавиатура,
+  фон, прошлый сбой, тестовые команды); своё — `StartMobile` и
+  `FeedSystemInput` в `Application_android.cpp` / `Application_ios.mm`.
+- **Окно iOS** — `platform/Window_ios.mm`: вид приложения (`CAEAGLLayer`, EAGL
+  ES 3), свой framebuffer (на iOS нет framebuffer 0: `ReclaimDrawable`
+  привязывает его обратно после 3D-вида). **Программа идёт на главном
+  потоке** и крутит его run loop в `WaitEvents` (`CFRunLoopRunInMode`), как
+  SDL на iOS: касания, клавиатура и ответы системы приходят между кадрами
+  на том же потоке, без очередей между потоками.
+- **Вход** — `app/ios/IosMain.mm`: UIKit-приложение, вид с пальцами и Apple
+  Pencil (`UITouch` → `Window::Touch` → `mobile::PointerEvent`), системная
+  клавиатура (`UIKeyInput`; Enter/Backspace — кодами Android, как в
+  `Mobile.h`), уход в фон (никакого OpenGL в фоне), отчёт о сбое.
+- **Файлы.** Папка проектов — «Документы» приложения: с `UIFileSharingEnabled`
+  и `LSSupportsOpeningDocumentsInPlace` «Файлы» показывают её как
+  «На iPad → BreezeCAD». Документы открываются и сохраняются на месте (без
+  копий, как нужно на Android для SAF); «Открыть другой…» —
+  `UIDocumentPicker` (копия), «Сохранить как» — в ту же папку под свободным
+  именем.
+- **Сбои.** Сторожевого процесса на iOS нет: отчёт пишет обработчик сигнала
+  (`IosMain.mm`), следующий запуск показывает его (`CheckLastExit`).
+- **Проверка в CI:** симулятор запускает программу трижды с тестовыми
+  командами (`BZ_TEST_COMMANDS`: главная, пример, эскиз) — лог, снимок, жива ли.
+
 ## Что дальше
 
-- **Шаг 3 — полное приложение.** Мобильная раскладка (`app/mobile`) общая, но
-  обвязка Android (`app/android`, `platform/*_android.cpp`, `platform/Android.h`)
-  завязана на `__ANDROID__` (~70 мест). Предложение автору: общий макрос
-  «мобильная версия» и интерфейс платформы (файлы, клавиатура, вырезы,
-  буфер обмена, «поделиться»), под ним Android (JNI) и iOS (UIKit).
-  Обсудить до начала.
-- Окно iOS для `Application`: `platform/Window_ios.mm` (EAGL, как
-  `Window_android.cpp`), цикл программы — на своём потоке, события UIKit — в
-  очередь (как `android_native_app_glue`).
-- Файлы — `UIDocumentPickerViewController` (аналог SAF), «Папка проектов» —
-  security-scoped bookmark.
+- Проверить на живом iPad: жесты, курсор-капля, нампад, клавиатура, Pencil,
+  «Файлы», «поделиться».
+- Аппаратная клавиатура iPad (`pressesBegan` → сочетания клавиш), наведение
+  Pencil и трекпада (`UIHoverGestureRecognizer`).
+- Скругление углов экрана и «вырез» iPhone — сейчас только безопасная зона.
 - Metal: ANGLE (GLES поверх Metal) или собственный бэкенд — после шага 3.
 - TestFlight: платный аккаунт Apple Developer, секреты подписи в CI, fastlane.
 - Хвост: `HostInfo::Detect` на iOS говорит `os = "macos"` (как Android —
