@@ -1257,8 +1257,12 @@ void DrawSaveAsk(AppContext& app) {
     MobileState::SaveAsk& a = m.saveAsk;
     if (!a.open) return;
     Session* session = nullptr;
-    for (const auto& s : app.workspace.sessions)
-        if (s.get() == a.session) session = s.get();
+    [[maybe_unused]] int index = -1;   // used on Android and iOS only
+    for (std::size_t i = 0; i < app.workspace.sessions.size(); ++i)
+        if (app.workspace.sessions[i].get() == a.session) {
+            session = app.workspace.sessions[i].get();
+            index = static_cast<int>(i);
+        }
     if (!session) {   // the document closed meanwhile
         a.open = false;
         return;
