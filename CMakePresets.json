@@ -85,6 +85,34 @@
       "displayName": "Android x86_64 (emulator), core + tests",
       "inherits": "android",
       "cacheVariables": { "ANDROID_ABI": "x86_64" }
+    },
+    {
+      "name": "ios",
+      "hidden": true,
+      "description": "iOS / iPadOS (docs/dev/IOS-PORT.md): core, unit tests and the app (src/ios). On a Mac with Xcode; BZ_IOS_DEPS — the prefix of scripts/ios/build-deps.sh for the same SDK.",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_SYSTEM_NAME": "iOS",
+        "CMAKE_OSX_ARCHITECTURES": "arm64",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "16.3",
+        "CMAKE_MACOSX_BUNDLE": "OFF",
+        "CMAKE_FIND_ROOT_PATH": "$env{BZ_IOS_DEPS}",
+        "OpenCASCADE_DIR": "$env{BZ_IOS_DEPS}/lib/cmake/opencascade",
+        "BZ_BUILD_APP": "OFF"
+      }
+    },
+    {
+      "name": "ios-device",
+      "displayName": "iOS / iPadOS devices (arm64): core, tests, app",
+      "inherits": "ios",
+      "cacheVariables": { "CMAKE_OSX_SYSROOT": "iphoneos" }
+    },
+    {
+      "name": "ios-simulator",
+      "displayName": "iOS simulator (Apple Silicon): core, tests, app",
+      "inherits": "ios",
+      "cacheVariables": { "CMAKE_OSX_SYSROOT": "iphonesimulator" }
     }
   ],
   "buildPresets": [
@@ -95,7 +123,9 @@
     { "name": "windows-mingw-debug", "configurePreset": "windows-mingw-debug" },
     { "name": "macos",               "configurePreset": "macos" },
     { "name": "android-arm64",       "configurePreset": "android-arm64" },
-    { "name": "android-x86_64",      "configurePreset": "android-x86_64" }
+    { "name": "android-x86_64",      "configurePreset": "android-x86_64" },
+    { "name": "ios-device",          "configurePreset": "ios-device" },
+    { "name": "ios-simulator",       "configurePreset": "ios-simulator" }
   ],
   "testPresets": [
     { "name": "linux-debug",   "configurePreset": "linux-debug",   "output": { "outputOnFailure": true } },

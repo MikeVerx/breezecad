@@ -80,7 +80,7 @@ add_executable(bz_tests
     sketch/TrimTests.cpp)
 target_link_libraries(bz_tests PRIVATE bz::miniz bz::core bz::sketch bz::document bz::assembly bz::kernel bz::sheetmetal bz::modules bz::doctest bz::json)
 add_dependencies(bz_tests bz_example_module bz_example_module_fail)
-if(TARGET bz_render AND NOT ANDROID)
+if(TARGET bz_render AND NOT ANDROID AND NOT IOS)   # the app's pieces: desktop only (GLFW)
     # The assembly as the program runs it (solving, adaptivity, undo): its
     # state and the part sessions in it, without a window.
     target_sources(bz_tests PRIVATE app/AssemblyAdaptTests.cpp
@@ -91,6 +91,13 @@ if(TARGET bz_render AND NOT ANDROID)
         ${PROJECT_SOURCE_DIR}/src/app/sketch/SketchPick.cpp
         ${PROJECT_SOURCE_DIR}/src/app/sketch/SketchText.cpp)
     target_link_libraries(bz_tests PRIVATE bz::render bz::ui bz::imgui glfw OpenGL::GL)
+endif()
+if(IOS)
+    # The tests run on the iOS simulator (scripts/ios/run-tests.sh): it sees
+    # the Mac's files, so the paths below are the build machine's. OCCT is
+    # static there and its toolkits want these system frameworks.
+    target_link_libraries(bz_tests PRIVATE "-framework Foundation" "-framework CoreFoundation" "-framework CoreGraphics"
+                                           "-framework CoreText" "-framework UIKit")
 endif()
 if(ANDROID)
     # The tests run on a phone or the emulator, not where they were built:

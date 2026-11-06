@@ -1,0 +1,165 @@
+# iOS and iPadOS (docs/dev/IOS-PORT.md): the core with its unit tests and
+# the app (src/ios) packed into BreezeCAD.app / BreezeCAD-ios.ipa.
+#
+#   iphonesimulator  the tests run in an iPad simulator, then the app: it
+#                    starts, builds the example; a screenshot goes with the
+#                    release
+#   iphoneos         BreezeCAD-ios.ipa for iPhone and iPad (arm64), ad-hoc
+#                    signed: sign it again with your Apple ID on the way to
+#                    the device (Sideloadly or AltStore; a free Apple ID —
+#                    7 days, 3 apps). TestFlight needs a paid developer
+#                    account and signing secrets: not set up yet.
+#
+# A push or manual run refreshes the pre-release "ios-build" with the .ipa.
+#
+# FreeType and OCCT for iOS come from scripts/ios/build-deps.sh (about an
+# hour per SDK the first time) and stay in the Actions cache.
+#
+# Separate from build.yml and android.yml on purpose: it never holds up or
+# breaks the other builds and their releases.
+name: ios
+
+on:
+  push:
+    branches: [next, main, 'feat/ios*', 'ci/ios-*', 'preview/ios-*']
+    paths-ignore: ['docs/**', 'translations/**', '**/*.md']
+  pull_request:
+    paths-ignore: ['docs/**', 'translations/**', '**/*.md']
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (${{ matrix.sdk }})
+    runs-on: macos-15
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk: [iphonesimulator, iphoneos]
+    env:
+      BZ_IOS_DEPS: ${{ github.workspace }}/.ios-deps/${{ matrix.sdk }}
+      PRESET: ${{ matrix.sdk == 'iphoneos' && 'ios-device' || 'ios-simulator' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          brew list ninja >/dev/null 2>&1 || brew install ninja
+          xcode=$(xcodebuild -version | head -1 | tr -d ' ')
+          echo "XCODE=$xcode" >> "$GITHUB_ENV"
+          echo "::notice title=iOS toolchain::$(xcodebuild -version | tr '\n' ' '), SDK $(xcrun --sdk ${{ matrix.sdk }} --show-sdk-version), CMake $(cmake --version | head -1 | awk '{print $3}')"
+      - name: Restore FreeType and OCCT
+        id: deps
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.BZ_IOS_DEPS }}
+          key: ios-deps-${{ matrix.sdk }}-${{ env.XCODE }}-${{ hashFiles('scripts/ios/build-deps.sh') }}
+      - name: Build FreeType and OCCT (first run, about an hour)
+        if: steps.deps.outputs.cache-hit != 'true'
+        run: |
+          set +e
+          bash scripts/ios/build-deps.sh ${{ matrix.sdk }} "$BZ_IOS_DEPS" > deps.log 2>&1
+          status=$?
+          tail -20 deps.log
+          exit $status
+      # Saved before BreezeCAD builds: a failing BreezeCAD build must not
+      # cost the hour of OCCT again.
+      - name: Save FreeType and OCCT
+        if: steps.deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.BZ_IOS_DEPS }}
+          key: ${{ steps.deps.outputs.cache-primary-key }}
+      - name: Configure
+        run: |
+          set +e
+          cmake --preset $PRESET > configure.log 2>&1
+          status=$?
+          grep -E "OpenCASCADE|Error|error" configure.log | head -10
+          exit $status
+      - name: Build
+        run: |
+          set +e
+          cmake --build --preset $PRESET -j 3 > build.log 2>&1
+          status=$?
+          tail -30 build.log
+          exit $status
+      - name: Run bz_tests in the simulator
+        if: matrix.sdk == 'iphonesimulator'
+        run: |
+          set +e
+          bash scripts/ios/simulator.sh tests build/$PRESET > test.log 2>&1
+          status=$?
+          tail -15 test.log
+          echo "::notice title=bz_tests on the iOS simulator::$(grep -m1 '^simulator:' test.log) — $(grep -E '^\[doctest\] (test cases|assertions)' test.log | tr '\n' ' ')"
+          exit $status
+      - name: Package the app
+        run: |
+          set +e
+          bash scripts/ios/package-app.sh build/$PRESET ${{ matrix.sdk }} app ${{ github.run_number }} > package.log 2>&1
+          status=$?
+          cat package.log
+          exit $status
+      - name: Start the app in the simulator
+        if: matrix.sdk == 'iphonesimulator'
+        run: |
+          set +e
+          bash scripts/ios/simulator.sh smoke app/BreezeCAD.app shots > smoke.log 2>&1
+          status=$?
+          cat smoke.log
+          echo "::notice title=iOS app in the simulator::$(grep -E '^(simulator|app alive)|built in|OpenGL ES' smoke.log | tr '\n' ' ')"
+          exit $status
+      - name: Report failures
+        if: failure()
+        run: bash scripts/ci-annotate.sh deps.log configure.log build.log test.log package.log smoke.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-${{ matrix.sdk }}-logs
+          path: |
+            *.log
+            shots
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: matrix.sdk == 'iphoneos'
+        with:
+          name: BreezeCAD-ios
+          path: app/BreezeCAD-ios.ipa
+          retention-days: 14
+
+  publish:
+    # A push or manual run refreshes the pre-release "ios-build": a stable
+    # link to the newest .ipa (and the simulator's screenshot).
+    needs: [build]
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: BreezeCAD-ios, path: release }
+      - uses: actions/download-artifact@v4
+        with: { name: ios-iphonesimulator-logs, path: sim }
+      - name: Publish the .ipa to ios-build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          notes="Сборка для iPhone и iPad: ветка ${GITHUB_REF_NAME}, коммит ${GITHUB_SHA::7}, версия ${{ github.run_number }}, $(date -u '+%Y-%m-%d %H:%M') UTC.
+
+          Пока это шаг 2 порта: 3D-вид детали-примера, вращение одним пальцем, сдвиг и щипок двумя, двойное касание — показать всё. Интерфейса ещё нет.
+
+          BreezeCAD-ios.ipa — iOS / iPadOS 16.3 и новее. Подписана временной подписью: перед установкой её переподписывают своим Apple ID.
+          Установка с Windows: iTunes + Sideloadly (sideloadly.io) → подключить iPhone/iPad кабелем → перетащить .ipa → ввести Apple ID → Start.
+          На устройстве: Настройки → Конфиденциальность и безопасность → Режим разработчика; затем Основные → VPN и управление устройством → доверять своему Apple ID.
+          С бесплатным Apple ID приложение работает 7 дней, потом его ставят заново поверх."
+          if ! gh release view ios-build >/dev/null 2>&1; then
+            gh release create ios-build --prerelease --target "$GITHUB_SHA" --title "BreezeCAD для iPhone и iPad — свежая сборка" --notes "$notes"
+          fi
+          files=(release/BreezeCAD-ios.ipa)
+          [ -f sim/shots/simulator-ios.png ] && files+=(sim/shots/simulator-ios.png)
+          gh release upload ios-build "${files[@]}" --clobber
+          gh release edit ios-build --notes "$notes"

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- BreezeCAD.app on iOS and iPadOS: filled in by scripts/ios/package-app.sh
+     (@VERSION@, @BUILD@, @PLATFORM@, @MIN_OS@). Same bundle id as the
+     Android package. Phones always landscape (ADR-0004), tablets any way. -->
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>     <string>ru</string>
+    <key>CFBundleDisplayName</key>           <string>BreezeCAD</string>
+    <key>CFBundleName</key>                  <string>BreezeCAD</string>
+    <key>CFBundleExecutable</key>            <string>breezecad</string>
+    <key>CFBundleIdentifier</key>            <string>io.github.mikeverx.breezecad</string>
+    <key>CFBundleInfoDictionaryVersion</key> <string>6.0</string>
+    <key>CFBundlePackageType</key>           <string>APPL</string>
+    <key>CFBundleShortVersionString</key>    <string>@VERSION@</string>
+    <key>CFBundleVersion</key>               <string>@BUILD@</string>
+    <key>CFBundleSupportedPlatforms</key>    <array><string>@PLATFORM@</string></array>
+    <key>MinimumOSVersion</key>              <string>@MIN_OS@</string>
+    <key>LSRequiresIPhoneOS</key>            <true/>
+    <key>UIDeviceFamily</key>                <array><integer>1</integer><integer>2</integer></array>
+    <key>UIRequiredDeviceCapabilities</key>  <array><string>arm64</string></array>
+    <key>UILaunchScreen</key>                <dict/>
+    <key>UIStatusBarHidden</key>             <true/>
+    <key>UIRequiresFullScreen</key>          <false/>
+    <key>UIApplicationSupportsIndirectInputEvents</key> <true/>
+    <key>UISupportedInterfaceOrientations~iphone</key>
+    <array>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+    </array>
+    <key>CFBundleIcons</key>
+    <dict>
+        <key>CFBundlePrimaryIcon</key>
+        <dict>
+            <key>CFBundleIconFiles</key> <array><string>AppIcon60x60</string></array>
+            <key>CFBundleIconName</key>  <string>AppIcon</string>
+        </dict>
+    </dict>
+    <key>CFBundleIcons~ipad</key>
+    <dict>
+        <key>CFBundlePrimaryIcon</key>
+        <dict>
+            <key>CFBundleIconFiles</key> <array><string>AppIcon60x60</string><string>AppIcon76x76</string><string>AppIcon83.5x83.5</string></array>
+            <key>CFBundleIconName</key>  <string>AppIcon</string>
+        </dict>
+    </dict>
+</dict>
+</plist>
