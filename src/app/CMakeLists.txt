@@ -10,6 +10,7 @@ set(BZ_APP_SOURCES
     assembly/AssemblyIssues.cpp
     assembly/AssemblyUi.cpp
     assembly/InPlace.cpp
+    assembly/ChangeDialog.cpp
     Backgrounds.cpp
     BetaTesting.cpp
     CrashGuard.cpp
@@ -66,6 +67,7 @@ set(BZ_APP_SOURCES
     shell/SaveToLibrary.cpp
     shell/NewDocumentDialog.cpp
     shell/Header.cpp
+    shell/FilePreviews.cpp
     shell/HomeScreen.cpp
     shell/LeftPanels.cpp
     shell/Ribbon.cpp

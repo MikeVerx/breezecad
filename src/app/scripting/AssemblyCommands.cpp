@@ -485,7 +485,7 @@ Json ProjectEdgeCommand(AppContext& app, const Json& args) {
     const std::optional<doc::EdgeReference> edge =
         st.geometry.EdgeNear(st.assembly, source, Point3(Required(args, "point"), "point"), Number(args, "tolerance", 1.0));
     if (!edge) Fail("Около этой точки нет ребра компонента (точка — в координатах сборки)");
-    doc::ContextProjection link{name, source, *edge, {}, Flag(args, "adaptive", true)};
+    doc::ContextProjection link{name, source, *edge, {}, Flag(args, "adaptive", true), {}};
     const Expected<kernel::ProjectedCurve> pc = st.geometry.ProjectSourceEdge(st.assembly, target, link, f->placement.frame);
     if (!pc) Fail(Tr(pc.GetError().message));
     std::unique_ptr<doc::Feature> before = f->Clone();

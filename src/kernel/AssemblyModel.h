@@ -148,9 +148,11 @@ public:
     /// Where the source edge of `link` projects onto `plane` of the part of
     /// `target` with the components where they stand now. `now`: the edge as
     /// it is now, described again (so it is followed from there next time).
+    /// The source part's profile curve the edge came from (link.source) wins
+    /// over the edge's look; `sourceNow`: that curve, learnt or refreshed.
     Expected<ProjectedCurve> ProjectSourceEdge(const assembly::Assembly& assembly, ObjectId target,
                                                const doc::ContextProjection& link, const Frame& plane,
-                                               doc::EdgeReference* now = nullptr) const;
+                                               doc::EdgeReference* now = nullptr, doc::SketchSource* sourceNow = nullptr) const;
 
     /// Where the flat `face` of `link.component`'s part (in that part's own
     /// coordinates) lies seen from the part of `target`; nullopt when the

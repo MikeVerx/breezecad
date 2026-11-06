@@ -39,6 +39,10 @@ constexpr CLSID kClsid = {0x6e7b4a2f, 0x3c1d, 0x4f8e, {0x9b, 0x5a, 0x0d, 0x2c, 0
 constexpr wchar_t kClsidText[] = L"{6E7B4A2F-3C1D-4F8E-9B5A-0D2C7E91B4A3}";
 constexpr wchar_t kThumbnailHandler[] = L"{e357fccd-a995-4576-b01f-234630154e96}";   // IThumbnailProvider
 constexpr const wchar_t* kExtensions[] = {L".bzc", L".bza", L".bzp"};
+// Their kinds (installer/setup/Install.cpp): an empty TypeOverlay there keeps
+// Explorer from putting the program's icon over the preview as well — the
+// preview has its own mark (Badge.h), two of them overlapped.
+constexpr const wchar_t* kProgIds[] = {L"BreezeCAD.Part", L"BreezeCAD.Assembly", L"BreezeCAD.Project"};
 constexpr std::uint64_t kLargestFile = 512ull << 20;   // past that Explorer gets the plain icon
 
 HMODULE           gModule = nullptr;
@@ -242,6 +246,7 @@ HRESULT WINAPI DllRegisterServer() {
               SetValue(clsid + L"\\InprocServer32", L"ThreadingModel", L"Apartment");
     for (const wchar_t* ext : kExtensions)
         ok = ok && SetValue(std::wstring(L"Software\\Classes\\") + ext + L"\\ShellEx\\" + kThumbnailHandler, nullptr, kClsidText);
+    for (const wchar_t* prog : kProgIds) ok = ok && SetValue(std::wstring(L"Software\\Classes\\") + prog, L"TypeOverlay", L"");
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return ok ? S_OK : E_FAIL;
 }
@@ -249,6 +254,8 @@ HRESULT WINAPI DllRegisterServer() {
 HRESULT WINAPI DllUnregisterServer() {
     for (const wchar_t* ext : kExtensions)
         RegDeleteTreeW(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + ext + L"\\ShellEx\\" + kThumbnailHandler).c_str());
+    for (const wchar_t* prog : kProgIds)
+        RegDeleteKeyValueW(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\") + prog).c_str(), L"TypeOverlay");
     RegDeleteTreeW(HKEY_CURRENT_USER, (std::wstring(L"Software\\Classes\\CLSID\\") + kClsidText).c_str());
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     return S_OK;

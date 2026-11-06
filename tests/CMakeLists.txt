@@ -35,6 +35,7 @@ add_executable(bz_tests
     document/SaveTests.cpp
     document/StandardPacksTests.cpp
     kernel/AssemblyDesignTests.cpp
+    kernel/ChangeDialogTests.cpp
     kernel/AssemblyModelTests.cpp
     kernel/AutoDropTests.cpp
     kernel/ComponentPatternTests.cpp
@@ -51,6 +52,7 @@ add_executable(bz_tests
     kernel/ModelTests.cpp
     kernel/PatternTests.cpp
     kernel/ProjectionTests.cpp
+    kernel/SketchSourceTests.cpp
     kernel/ProjectionRepairTests.cpp
     kernel/RevolvedProjectionTests.cpp
     kernel/RevolveTests.cpp
@@ -83,7 +85,7 @@ add_dependencies(bz_tests bz_example_module bz_example_module_fail)
 if(TARGET bz_render AND NOT ANDROID)
     # The assembly as the program runs it (solving, adaptivity, undo): its
     # state and the part sessions in it, without a window.
-    target_sources(bz_tests PRIVATE app/AssemblyAdaptTests.cpp
+    target_sources(bz_tests PRIVATE app/AssemblyAdaptTests.cpp app/ChangeQueueTests.cpp
         ${PROJECT_SOURCE_DIR}/src/app/AssemblyState.cpp
         ${PROJECT_SOURCE_DIR}/src/app/Session.cpp
         ${PROJECT_SOURCE_DIR}/src/app/sketch/SketchRepair.cpp

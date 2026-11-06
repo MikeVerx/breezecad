@@ -10,11 +10,15 @@
 #include "kernel/occt/ModelImpl.h"
 #include "kernel/occt/FaceMatch.h"
 
+#include <BRepAdaptor_Curve.hxx>
+#include <BRepAdaptor_Surface.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <doctest.h>
+
+#include <chrono>
 
 using namespace bz;
 using namespace bz::test;
@@ -208,4 +212,108 @@ TEST_CASE("шов: отрезок от стороны внутрь контур�
     CHECK(model.Volume() == doctest::Approx(kBox).epsilon(1e-6));
     CHECK(Count(model, TopAbs_FACE) == 6);
     CHECK(Count(model, TopAbs_EDGE) == 12);
+}
+
+namespace {
+
+/// Брусок 40×20×10 со скруглёнными r 3 вертикальными рёбрами и под ним —
+/// выдавливание вниз на 10 контура его верхней грани, спроецированного в
+/// эскиз на XY: стопка, как «колпак» из выдавливаний спроецированных
+/// контуров. Цилиндр скругления и цилиндр из спроецированной дуги — один
+/// цилиндр, но OCCT строит их в системах разной «руки».
+struct FilletStack {
+    doc::Document d;
+    kernel::Model model;
+    doc::ExtrudeFeature* down = nullptr;
+
+    explicit FilletStack(bool baseDown = false) {
+        auto& base = AddSketch(d);
+        AddRect(d, base, {0, 0}, {40, 20});
+        AddExtrude(d, base.id, "10").reversed = baseDown;
+        model.Rebuild(d);
+        auto f = std::make_unique<doc::FilletFeature>();
+        f->id = d.Ids().Next();
+        f->name = "Скругление";
+        f->radius.expression = "3";
+        const TopoDS_Shape& body = model.GetImpl().bodies.back().shape;
+        TopTools_IndexedMapOfShape edges;
+        TopExp::MapShapes(body, TopAbs_EDGE, edges);
+        for (int i = 1; i <= edges.Extent(); ++i) {
+            const BRepAdaptor_Curve c(TopoDS::Edge(edges(i)));
+            if (c.GetType() == GeomAbs_Line && std::abs(c.Line().Direction().Z()) > 0.99)
+                f->edges.push_back(kernel::occt::DescribeEdge(TopoDS::Edge(edges(i)), body));
+        }
+        REQUIRE(f->edges.size() == 4);
+        auto* fillet = f.get();
+        d.Insert(std::move(f), d.FeatureCount());
+        model.Rebuild(d);
+        REQUIRE(fillet->status.state == FeatureState::Ok);
+
+        // Верхняя грань — все её рёбра в эскиз на XY, связанные с моделью.
+        auto& sk = AddSketch(d);
+        const TopoDS_Shape& filleted = model.GetImpl().bodies.back().shape;
+        TopoDS_Face top;
+        for (TopExp_Explorer e(filleted, TopAbs_FACE); e.More(); e.Next()) {
+            const auto n = kernel::occt::PlanarNormal(TopoDS::Face(e.Current()));
+            if (n && n->z > 0.99) top = TopoDS::Face(e.Current());
+        }
+        REQUIRE(!top.IsNull());
+        TopTools_IndexedMapOfShape outline;
+        TopExp::MapShapes(top, TopAbs_EDGE, outline);
+        IdGenerator& ids = d.Ids();
+        sketch::Sketch& s = sk.sketch;
+        const auto point = [&](Vec2 at) {
+            for (const sketch::Point& p : s.points)
+                if (p.projected && (p.pos - at).Length() < 1e-6) return p.id;
+            const ObjectId id = s.AddPoint(ids, at);
+            s.FindPoint(id)->projected = true;
+            return id;
+        };
+        const std::size_t index = static_cast<std::size_t>(d.IndexOf(sk.id));
+        for (int i = 1; i <= outline.Extent(); ++i) {
+            const doc::EdgeReference ref = kernel::occt::DescribeEdge(TopoDS::Edge(outline(i)), filleted);
+            const auto pc = model.ProjectEdge(ref, sk.placement.frame, index);
+            REQUIRE(pc);
+            ObjectId curve;
+            if (pc->kind == kernel::ProjectedCurve::Kind::Line) {
+                curve = s.AddLine(ids, point(pc->start), point(pc->end));
+                s.FindLine(curve)->projected = true;
+            } else {
+                REQUIRE(pc->kind == kernel::ProjectedCurve::Kind::Arc);
+                curve = s.AddArc(ids, point(pc->centre), point(pc->start), point(pc->end));
+                for (auto& a : s.arcs)
+                    if (a.id == curve) a.projected = true;
+            }
+            sk.projections.push_back({ref, curve, {}});
+        }
+        auto& ex = AddExtrude(d, sk.id, "10", doc::BooleanOp::Join);
+        ex.reversed = !baseDown;   // по другую сторону эскиза от бруска
+        down = &ex;
+        d.MarkChanged(index);
+        model.Rebuild(d);
+    }
+};
+
+std::size_t CountCylinders(const kernel::Model& model) {
+    std::size_t n = 0;
+    for (TopExp_Explorer e(model.GetImpl().bodies.back().shape, TopAbs_FACE); e.More(); e.Next())
+        if (BRepAdaptor_Surface(TopoDS::Face(e.Current())).GetType() == GeomAbs_Cylinder) ++n;
+    return n;
+}
+
+} // namespace
+
+TEST_CASE("шов: скругление и выдавленный рядом спроецированный контур — один цилиндр на угол, без зависания") {
+    for (const bool baseDown : {false, true}) {
+        CAPTURE(baseDown);
+        const auto t0 = std::chrono::steady_clock::now();
+        FilletStack s(baseDown);
+        const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        REQUIRE(s.down->status.state == FeatureState::Ok);
+        CHECK(s.model.GetImpl().bodies.size() == 1);
+        CHECK(CountCylinders(s.model) == 4);               // по одному цилиндру на угол, без линии посередине
+        CHECK(Count(s.model, TopAbs_FACE) == 4 + 4 + 2);   // 4 стенки, 4 скругления, верх и низ
+        CHECK(seconds < 20.0);
+        CHECK(s.model.Volume() == doctest::Approx((40.0 * 20 - (4 - kPi) * 9) * 20).epsilon(1e-6));
+    }
 }

@@ -111,7 +111,7 @@ struct Scene {
     doc::ContextProjection Link(ObjectId source, Vec3 world) {
         const std::optional<doc::EdgeReference> edge = st.geometry.EdgeNear(st.assembly, source, world, 1.0);
         REQUIRE(edge);
-        return {context, source, *edge, {}, true};
+        return {context, source, *edge, {}, true, {}};
     }
     std::pair<ObjectId, ObjectId> ProjectLine(Vec3 world) {
         auto& sk = Sketch();
